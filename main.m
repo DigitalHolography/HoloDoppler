@@ -13,7 +13,7 @@ pix_per_image = nx * ny;
 % image batches constants
 % interferogram images are processed in batches
 % each batch produces a single momentum image
-j_win = 64; % number of images in each batch
+j_win = 512; % number of images in each batch
 j_step = 512; % index offset between two image batches
 
 fs = 60; % input video sampling frequency
@@ -31,21 +31,15 @@ x_step = 28e-6;
 y_step = 28e-6;
 
 lambda = 789e-9; % laser wavelength
+z = 0.13; % reconstruction distance
 
-%% evaluate base functions on grid
-% construct disc grid in polar coordinates
-x = linspace(-1, 1, nx);
-y = linspace(-1, 1, ny);
-[X, Y] = meshgrid(x, y);
-[theta, r] = cart2pol(X, Y);
-indices = r <= sqrt(2); % [-1; 1] square excircle
-
-% evaluate base functions
-zernike_values = zeros(nx, ny, numel(n));
-for k = 1:numel(n) % k= 1,2,3
-    y = zernfun(n(k), m(k), r(indices), theta(indices), 'norm');
-    zernike_values(:, :, k) = reshape(y(indices), nx, ny);
-end
+% wave propagation kernel
+u_step = 1 / (nx * x_step);
+v_step = 1 / (ny * y_step);
+u = ((1:nx) - 1 - round(nx / 2)) * u_step;
+v = ((1:nx) - 1 - round(ny / 2)) * v_step;
+[U, V] = meshgrid(u, v);
+kernel = exp(2 * 1i * pi * z / lambda * sqrt(1 - lambda^2 * U.^2 - lambda^2 * V.^2));
 
 %% optimization parameters
 % zernike base parameters
@@ -63,6 +57,31 @@ max_constraint = [30 30 1];
 
 % initial coefficients guess
 initial_guess = [0 0 0]; % no correction initially
+
+%% evaluate base functions on grid
+% construct disc grid in polar coordinates
+x = linspace(-1, 1, nx);
+y = linspace(-1, 1, ny);
+[X, Y] = meshgrid(x, y);
+[theta, r] = cart2pol(X, Y);
+indices = r <= sqrt(2); % [-1; 1] square excircle
+
+% evaluate base functions
+zernike_values = zeros(nx, ny, numel(n));
+for k = 1:numel(n) % k= 1,2,3
+    y = zernfun(n(k), m(k), r(indices), theta(indices), 'norm');
+    zernike_values(:, :, k) = reshape(y(indices), nx, ny);
+end
+
+%% low pass filtering mask
+x = 1:nx;
+y = 1:ny;
+[X, Y] = meshgrid(x, y);
+r1 = 0;  % first disk radius
+r2 = 30; % second disk radius
+mask = ones(nx, ny);
+mask((X - nx / 2).^2 + (Y - ny / 2).^2 <= r1^2) = 0;
+mask((X - nx / 2).^2 + (Y - ny / 2).^2 <= r2^2) = 0;
 
 %% video i/o
 [data_filename, data_path] = uigetfile('.raw');
@@ -91,6 +110,7 @@ video_wr_corrected.Quality = 100;
 num_batches = floor((num_images - j_win) / j_step);
 offsets = (0:num_batches) * j_step;
 
+current_optimum = initial_guess;
 for offset = offsets
     %% read image batch
     data_fd = fopen(data_fullpath, 'r');
@@ -106,6 +126,10 @@ for offset = offsets
     moment_aberrated = moment_aberrated ./ imgaussfilt(moment_aberrated, gw);
     
     %% optimize zernike correction
+    objective_fn = objective(batch, zernike_values, kernel, f1, f2, fs, mask, delta_x, delta_y, gw);
+    opt_history = runfmincon(current_optimum, objective_fn, min_constraint, max_constraint);
+    % retrieve optimization result
+    current_optimum = opt_history.x(end, :);
     
     
     %% write frames to files
