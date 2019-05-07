@@ -145,7 +145,10 @@ for offset = 0:jstep*Nx*Ny*2:(Nt-jwin)*Nx*Ny*2
         I2 = fread(fid_I,Nx*Ny*jwin,'uint16=>double','b'); % 16bit/px, 'b'= big endian ordering
         fclose(fid_I);
         I2r = reshape(I2,Nx,Ny,jwin);
-        clear I2
+        clear I2;
+        
+%%
+%       I = ReplaceDroppedFrames(I2r,threshold);%threshold = 1/5
         I2 = zeros(Nx, Ny, jwin);
         I2(1:Nx, 1:Ny, :) = I2r;% utile?
         I2_avg2D = squeeze(mean(mean(I2,1),2));
@@ -157,9 +160,11 @@ for offset = 0:jstep*Nx*Ny*2:(Nt-jwin)*Nx*Ny*2
         ToBeDeleted = ToBeDeleted>0;
         % replacement of the dropped frames by their neighbours
         I2(:,:,ToBeDeleted) = I2(:,:,circshift(ToBeDeleted,3));
-        I2_avg2D = squeeze(mean(mean(I2,1),2));
-        I2_avg3D = squeeze(mean(I2_avg2D));
+%         I2_avg2D = squeeze(mean(mean(I2,1),2));
+%         I2_avg3D = squeeze(mean(I2_avg2D));
         I = I2;% current stack of interferograms
+%%
+        
         H = bsxfun(@times,I,Ftati);%fftshift in the reciprocal plane
         FH = fft(fft(H,[],1),[],2);%reciprocal plane
         FH = bsxfun(@times,FH,Kernel);
