@@ -19,8 +19,8 @@ DataFileName = '180810_Leo_OD_60k_acq8';%astig 1 cylindrical lens
 
 Nx = 512;
 Ny = 512;
-jwin = 1024%2048; 
-jstep = 512%1024;
+jwin = 512%2048; 
+jstep = 256%1024;
 
 PathName_I = ['../RetinalInterferograms/' DataFileName '.raw'];
 path = [DataFileName '_jwin=' num2str(jwin) '_jstep=' num2str(jstep)];
@@ -36,9 +36,9 @@ pasx = 28e-6;
 pasy = 28e-6;
 lambda = 785e-9;
 
-% z = 0.18;  %for 180810_Leo_OD_60k_acq11,8,10
+z = 0.18;  %for 180810_Leo_OD_60k_acq11,8,10
 % z = 0.45;  %for 180912_Leo_OS_60k_acq6.raw
-z = 0.13;  %for 180731_Leo_OD_60k_acq5
+% z = 0.13;  %for 180731_Leo_OD_60k_acq5
 % z = 0.19;  %for 180731_Leo_OD_60k_acq8 (use 0.13 + )
 
 % x and y shifts to apply to center the hologram

@@ -5,6 +5,10 @@ close all;
 
 %% application constants
 
+% use gpu for image processing
+% may run out of gpu memory for big j_win values
+enable_hardware_acceleration = true;
+
 % input images size (512x512 pix)
 nx = 512;
 ny = 512;
@@ -14,15 +18,15 @@ pix_per_image = nx * ny;
 % interferogram images are processed in batches
 % each batch produces a single momentum image
 j_win = 512; % number of images in each batch
-j_step = 512; % index offset between two image batches
+j_step = 256; % index offset between two image batches
 
 fs = 60; % input video sampling frequency
 f1 = 3;
 f2 = 30;
 
 % shifts to put center of the image at coord (0, 0)
-delta_x = 0;
-delta_y = 0;
+delta_x = 100;
+delta_y = -100;
 
 % width of gaussian filter for the hologram flat field correction
 gw = 35;
@@ -30,8 +34,8 @@ gw = 35;
 x_step = 28e-6;
 y_step = 28e-6;
 
-lambda = 789e-9; % laser wavelength
-z = 0.13; % reconstruction distance
+lambda = 785e-9; % laser wavelength
+z = 0.18; % reconstruction distance
 
 % wave propagation kernel
 u_step = 1 / (nx * x_step);
@@ -39,7 +43,7 @@ v_step = 1 / (ny * y_step);
 u = ((1:nx) - 1 - round(nx / 2)) * u_step;
 v = ((1:nx) - 1 - round(ny / 2)) * v_step;
 [U, V] = meshgrid(u, v);
-kernel = exp(2 * 1i * pi * z / lambda * sqrt(1 - lambda^2 * U.^2 - lambda^2 * V.^2));
+kernel = exp(2 * 1i * pi * z / lambda * sqrt(1 - lambda^2 * (U).^2 - lambda^2 * (V).^2));
 
 %% optimization parameters
 % zernike base parameters
@@ -80,8 +84,8 @@ y = 1:ny;
 r1 = 0;  % first disk radius
 r2 = 30; % second disk radius
 mask = ones(nx, ny);
-mask((X - nx / 2).^2 + (Y - ny / 2).^2 <= r1^2) = 0;
-mask((X - nx / 2).^2 + (Y - ny / 2).^2 <= r2^2) = 0;
+mask(((X - nx / 2).^2 + (Y - ny / 2).^2) <= r1^2) = 0;
+mask(((X - nx / 2).^2 + (Y - ny / 2).^2) >= r2^2) = 0;
 
 %% video i/o
 [data_filename, data_path] = uigetfile('.raw');
@@ -106,9 +110,13 @@ video_wr_phase_corrector.Quality = 100;
 video_wr_corrected.FrameRate = 25;
 video_wr_corrected.Quality = 100;
 
+open(video_wr_aberrated);
+open(video_wr_phase_corrector);
+open(video_wr_corrected);
+    
 %% main loop
 num_batches = floor((num_images - j_win) / j_step);
-offsets = (0:num_batches) * j_step;
+offsets = (0:num_batches) * j_step * pix_per_image * 2;
 
 current_optimum = initial_guess;
 for offset = offsets
@@ -126,24 +134,23 @@ for offset = offsets
     moment_aberrated = moment_aberrated ./ imgaussfilt(moment_aberrated, gw);
     
     %% optimize zernike correction
-    objective_fn = objective(batch, zernike_values, kernel, f1, f2, fs, mask, delta_x, delta_y, gw);
+    objective_fn = objective(batch, zernike_values, kernel, f1, f2, fs, mask, delta_x, delta_y, gw, enable_hardware_acceleration);
     opt_history = runfmincon(current_optimum, objective_fn, min_constraint, max_constraint);
     % retrieve optimization result
     current_optimum = opt_history.x(end, :);
-    
+    phase_correction = compute_phase_correction(current_optimum, zernike_values);
+    moment_corrected = compute_moment(batch, kernel, f1, f2, fs, delta_x, delta_y, phase_correction);
+    moment_corrected = moment_corrected ./ imgaussfilt(moment_corrected, gw);
     
     %% write frames to files
-    open(video_wr_aberrated);
-    open(video_wr_phase_corrector);
-    open(video_wr_corrected);
-    
     writeVideo(video_wr_aberrated, mat2gray(moment_aberrated));
-    
-    close(video_wr_aberrated);
-    close(video_wr_phase_corrector);
-    close(video_wr_corrected);
-    
+    writeVideo(video_wr_phase_corrector, mat2gray(phase_correction));
+    writeVideo(video_wr_corrected, mat2gray(moment_corrected));
 end
+
+close(video_wr_aberrated);
+close(video_wr_phase_corrector);
+close(video_wr_corrected);
 
 
 

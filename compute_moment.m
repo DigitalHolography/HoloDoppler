@@ -1,4 +1,4 @@
-function [moment] = compute_moment(batch, kernel, f1, f2, fs, delta_x, delta_y)
+function [moment] = compute_moment(batch, kernel, f1, f2, fs, delta_x, delta_y, phase_correction)
 % Compute the moment of a batch of interferograms
 %
 % batch: the input interferograms batch
@@ -11,12 +11,29 @@ function [moment] = compute_moment(batch, kernel, f1, f2, fs, delta_x, delta_y)
 %
 % delta_x, delta_y: coordinates shifts to put the center of
 % the interferograms at position (0, 0)
+%
+% phase_correction: optional parameter
 
-% TODO: add Ftati ?
+%% shift with F_tati
+nx = size(batch, 1);
+ny = size(batch, 2);
+F_tati = zeros(nx, ny);
+for k = 1:nx
+    for l = 1:ny
+        F_tati(k, l) = exp(1i * pi * (k + l));
+    end
+end
+
+batch = batch .* F_tati;
 
 %% complex valued hologram
 FH = fft2(batch);
 FH = FH .* kernel;
+
+if exist('phase_correction', 'var')
+    FH = FH .* exp(-1i * phase_correction);
+end
+
 H = ifft2(FH);
 
 %% squared magnitude of hologram
