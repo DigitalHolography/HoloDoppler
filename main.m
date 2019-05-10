@@ -8,6 +8,7 @@ close all;
 % use gpu for image processing
 % may run out of gpu memory for big j_win values
 enable_hardware_acceleration = true;
+enable_hardware_acceleration = enable_hardware_acceleration && parallel.gpu.GPUDevice.isAvailable;
 
 % input images size (512x512 pix)
 nx = 512;
@@ -129,9 +130,7 @@ for offset = offsets
     batch = replace_dropped_frames(batch, 0.2);
 
     %% construct aberrated hologram
-    moment_aberrated = compute_moment(batch, kernel, f1, f2, fs, delta_x, delta_y);
-    % apply flat field correction
-    moment_aberrated = moment_aberrated ./ imgaussfilt(moment_aberrated, gw);
+    moment_aberrated = compute_moment(batch, kernel, f1, f2, fs, delta_x, delta_y, gw);
     
     %% optimize zernike correction
     objective_fn = objective(batch, zernike_values, kernel, f1, f2, fs, mask, delta_x, delta_y, gw, enable_hardware_acceleration);
@@ -139,8 +138,7 @@ for offset = offsets
     % retrieve optimization result
     current_optimum = opt_history.x(end, :);
     phase_correction = compute_phase_correction(current_optimum, zernike_values);
-    moment_corrected = compute_moment(batch, kernel, f1, f2, fs, delta_x, delta_y, phase_correction);
-    moment_corrected = moment_corrected ./ imgaussfilt(moment_corrected, gw);
+    moment_corrected = compute_moment(batch, kernel, f1, f2, fs, delta_x, delta_y, gw, phase_correction);
     
     %% write frames to files
     writeVideo(video_wr_aberrated, mat2gray(moment_aberrated));

@@ -1,4 +1,4 @@
-function [moment] = compute_moment(batch, kernel, f1, f2, fs, delta_x, delta_y, phase_correction)
+function [moment] = compute_moment(batch, kernel, f1, f2, fs, delta_x, delta_y, gaussian_width, phase_correction)
 % Compute the moment of a batch of interferograms
 %
 % batch: the input interferograms batch
@@ -48,4 +48,6 @@ j_win = size(batch, 3);
 n1 = round(f1 * j_win / fs);
 n2 = round(f2 * j_win / fs);
 moment = squeeze(sum(abs(SH(:, :, n1:n2)), 3));
+% apply flat field correction
+moment = moment ./ imgaussfilt(moment, gaussian_width);
 end
