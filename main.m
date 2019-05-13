@@ -124,7 +124,7 @@ for offset = offsets
     %% read image batch
     data_fd = fopen(data_fullpath, 'r');
     fseek(data_fd, offset, 'bof');
-    batch = fread(data_fd, pix_per_image * j_win, 'uint16=>double', 'b'); % big endian
+    batch = fread(data_fd, pix_per_image * j_win, 'uint16=>single', 'b'); % big endian
     fclose(data_fd);
     batch = reshape(batch, nx, ny, j_win);
     batch = replace_dropped_frames(batch, 0.2);
