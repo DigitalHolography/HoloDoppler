@@ -10,6 +10,9 @@ close all;
 enable_hardware_acceleration = true;
 enable_hardware_acceleration = enable_hardware_acceleration && parallel.gpu.GPUDevice.isAvailable;
 
+% use 64 bits floats instead of 32 bits
+use_double_precision = false;
+
 % input images size (512x512 pix)
 nx = 512;
 ny = 512;
@@ -18,8 +21,8 @@ pix_per_image = nx * ny;
 % image batches constants
 % interferogram images are processed in batches
 % each batch produces a single momentum image
-j_win = 512; % number of images in each batch
-j_step = 256; % index offset between two image batches
+j_win = 1024; % number of images in each batch
+j_step = 512; % index offset between two image batches
 
 fs = 60; % input video sampling frequency
 f1 = 3;
@@ -44,7 +47,11 @@ v_step = 1 / (ny * y_step);
 u = ((1:nx) - 1 - round(nx / 2)) * u_step;
 v = ((1:nx) - 1 - round(ny / 2)) * v_step;
 [U, V] = meshgrid(u, v);
+
 kernel = exp(2 * 1i * pi * z / lambda * sqrt(1 - lambda^2 * (U).^2 - lambda^2 * (V).^2));
+if ~use_doble_precision
+    kernel = single(kernel);
+end
 
 %% optimization parameters
 % zernike base parameters
@@ -60,6 +67,9 @@ m = [-2 2 0];
 min_constraint = [-30 -30 -1];
 max_constraint = [30 30 1];
 
+% min_constraint = [-50 -50 -1];
+% max_constraint = [50 50 1];
+
 % initial coefficients guess
 initial_guess = [0 0 0]; % no correction initially
 
@@ -70,12 +80,18 @@ y = linspace(-1, 1, ny);
 [X, Y] = meshgrid(x, y);
 [theta, r] = cart2pol(X, Y);
 indices = r <= sqrt(2); % [-1; 1] square excircle
+y = zernfun(n, m, r(indices), theta(indices), 'norm');
 
 % evaluate base functions
 zernike_values = zeros(nx, ny, numel(n));
+if ~use_double_precision
+    zernike_values = single(zernike_values);
+end
+
 for k = 1:numel(n) % k= 1,2,3
-    y = zernfun(n(k), m(k), r(indices), theta(indices), 'norm');
-    zernike_values(:, :, k) = reshape(y(indices), nx, ny);
+    tmp = zeros(nx, ny);
+    tmp(indices) = y(:, k);
+    zernike_values(:, :, k) = tmp;
 end
 
 %% low pass filtering mask
@@ -85,6 +101,9 @@ y = 1:ny;
 r1 = 0;  % first disk radius
 r2 = 30; % second disk radius
 mask = ones(nx, ny);
+if ~use_double_precision
+    mask = single(mask);
+end
 mask(((X - nx / 2).^2 + (Y - ny / 2).^2) <= r1^2) = 0;
 mask(((X - nx / 2).^2 + (Y - ny / 2).^2) >= r2^2) = 0;
 

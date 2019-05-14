@@ -19,8 +19,8 @@ DataFileName = '180810_Leo_OD_60k_acq8';%astig 1 cylindrical lens
 
 Nx = 512;
 Ny = 512;
-jwin = 512%2048; 
-jstep = 256%1024;
+jwin = 1024%2048; 
+jstep = 512%1024;
 
 PathName_I = ['../RetinalInterferograms/' DataFileName '.raw'];
 path = [DataFileName '_jwin=' num2str(jwin) '_jstep=' num2str(jstep)];
@@ -83,7 +83,7 @@ x = linspace(-1,1,Nx);
 y = linspace(-1,1,Ny);
 [X,Y] = meshgrid(x,y);
 [theta,r] = cart2pol(X,Y);
-idx = r<=sqrt(2);%1 disque inscrit dans carre %sqrt(2) carre inscrit dans disque;
+idx = r<= sqrt(2); %1;% disque inscrit dans carre %sqrt(2) carre inscrit dans disque;
 zern = zeros(Nx,Ny,numel(n)); 
 y = zernfun(n,m,r(idx),theta(idx),'norm'); % zernike polynomials used for correction
 
@@ -140,6 +140,7 @@ i = 1;
 % prioroptimum = zeros(1,numel(n));
 prioroptimum = init_guess;
 for offset = 0:jstep*Nx*Ny*2:(Nt-jwin)*Nx*Ny*2  
+        tic;
         fid_I = fopen(PathName_I, 'r');
         fseek(fid_I,offset,'bof'); % 16bit/px
         I2 = fread(fid_I,Nx*Ny*jwin,'uint16=>double','b'); % 16bit/px, 'b'= big endian ordering
@@ -210,6 +211,7 @@ for offset = 0:jstep*Nx*Ny*2:(Nt-jwin)*Nx*Ny*2
 %         frame = getframe(h);
 %         writeVideo(v,frame);
 %         close;
+        toc
         i = i+1;
         save(strcat(path,'/ResultOfOptimization.mat'), 'AllOptimizationResults');
         figure(1)

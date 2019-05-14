@@ -4,13 +4,13 @@ function [objective_fn] = objective(batch, zernike_eval, kernel, f1, f2, fs, mas
     FH = FH .* kernel;
     
     % move data to gpu if available
-    if parallel.gpu.GPUDevice.isAvailable && use_gpu
+    if use_gpu
         FH = gpuArray(FH);
         mask = gpuArray(mask);
         zernike_eval = gpuArray(zernike_eval);
     end
     
-    function [J] = objective_impl(FH, coefs, zernike_eval, f1, f2, fs, mask, delta_x, delta_y, gaussian_width, use_gpu)
+    function [J] = objective_impl(FH, coefs, zernike_eval, f1, f2, fs, mask, delta_x, delta_y, gaussian_width)
         j_win = size(FH, 3);
         phase_correction = compute_phase_correction(coefs, zernike_eval);
         
@@ -36,5 +36,5 @@ function [objective_fn] = objective(batch, zernike_eval, kernel, f1, f2, fs, mas
         
         J = gather(entropy(moment(50:450, 50:450)) / norm(stdfilt(moment(50:450, 50:450)).^2));
     end
-    objective_fn = @(coefs)objective_impl(FH, coefs, zernike_eval, f1, f2, fs, mask, delta_x, delta_y, gaussian_width, use_gpu);
+    objective_fn = @(coefs)objective_impl(FH, coefs, zernike_eval, f1, f2, fs, mask, delta_x, delta_y, gaussian_width);
 end
