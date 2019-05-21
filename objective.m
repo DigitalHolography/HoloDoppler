@@ -10,6 +10,7 @@ function [objective_fn] = objective(batch, zernike_eval, kernel, f1, f2, fs, mas
         zernike_eval = gpuArray(zernike_eval);
     end
     
+    % appeler cost function
     function [J] = objective_impl(FH, coefs, zernike_eval, f1, f2, fs, mask, delta_x, delta_y, gaussian_width)
         j_win = size(FH, 3);
         phase_correction = compute_phase_correction(coefs, zernike_eval);
@@ -34,7 +35,11 @@ function [objective_fn] = objective(batch, zernike_eval, kernel, f1, f2, fs, mas
         moment = moment ./ imgaussfilt(moment, gaussian_width);
         moment = mat2gray(abs(ifft2(fft2(moment) .* fftshift(mask))));
         
-        J = gather(entropy(moment(50:450, 50:450)) / norm(stdfilt(moment(50:450, 50:450)).^2));
+%         J = gather(sum(sum(moment.^0.75)));
+        J = gather(entropy(moment) / norm(stdfilt(moment).^2));
+%         J = gather(norm(stdfilt(moment(50:450, 50:450)).^2));
+%         J = -norm(imgradient(gather(moment(50:450, 50:450))));
+%         J = gather(entropy(moment));
     end
     objective_fn = @(coefs)objective_impl(FH, coefs, zernike_eval, f1, f2, fs, mask, delta_x, delta_y, gaussian_width);
 end

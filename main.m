@@ -21,8 +21,8 @@ pix_per_image = nx * ny;
 % image batches constants
 % interferogram images are processed in batches
 % each batch produces a single momentum image
-j_win = 1024; % number of images in each batch
-j_step = 512; % index offset between two image batches
+j_win = 512; % number of images in each batch
+j_step = 256; % index offset between two image batches
 
 fs = 60; % input video sampling frequency
 f1 = 3;
@@ -34,6 +34,10 @@ delta_y = -100;
 
 % width of gaussian filter for the hologram flat field correction
 gw = 35;
+
+% spatial filter mask radius range
+% mask_radius_range = [10 20 30 35 40 45 50 55];
+mask_radius_range = [40 50 60 65 70 75];
 
 x_step = 28e-6;
 y_step = 28e-6;
@@ -49,7 +53,7 @@ v = ((1:nx) - 1 - round(ny / 2)) * v_step;
 [U, V] = meshgrid(u, v);
 
 kernel = exp(2 * 1i * pi * z / lambda * sqrt(1 - lambda^2 * (U).^2 - lambda^2 * (V).^2));
-if ~use_doble_precision
+if ~use_double_precision
     kernel = single(kernel);
 end
 
@@ -64,8 +68,9 @@ n = [2 2 2];
 m = [-2 2 0];
 
 % constraints over the base elements coefficients for optimization
-min_constraint = [-30 -30 -1];
-max_constraint = [30 30 1];
+min_constraint = [-30 -30 -30];
+max_constraint = [30 30 30];
+constraint = [min_constraint; max_constraint];
 
 % min_constraint = [-50 -50 -1];
 % max_constraint = [50 50 1];
@@ -95,17 +100,9 @@ for k = 1:numel(n) % k= 1,2,3
 end
 
 %% low pass filtering mask
-x = 1:nx;
-y = 1:ny;
-[X, Y] = meshgrid(x, y);
-r1 = 0;  % first disk radius
-r2 = 30; % second disk radius
-mask = ones(nx, ny);
-if ~use_double_precision
-    mask = single(mask);
-end
-mask(((X - nx / 2).^2 + (Y - ny / 2).^2) <= r1^2) = 0;
-mask(((X - nx / 2).^2 + (Y - ny / 2).^2) >= r2^2) = 0;
+r1 = 0;
+r2 = 30;
+mask = construct_mask(r1, r2, nx, ny);
 
 %% video i/o
 [data_filename, data_path] = uigetfile('.raw');
@@ -151,11 +148,53 @@ for offset = offsets
     %% construct aberrated hologram
     moment_aberrated = compute_moment(batch, kernel, f1, f2, fs, delta_x, delta_y, gw);
     
-    %% optimize zernike correction
-    objective_fn = objective(batch, zernike_values, kernel, f1, f2, fs, mask, delta_x, delta_y, gw, enable_hardware_acceleration);
-    opt_history = runfmincon(current_optimum, objective_fn, min_constraint, max_constraint);
-    % retrieve optimization result
-    current_optimum = opt_history.x(end, :);
+    current_constraint = constraint;
+    
+%     for r = mask_radius_range
+%         mask = construct_mask(0, r, nx, ny);
+%         objective_fn = objective(batch, zernike_values, kernel, f1, f2, fs, mask, delta_x, delta_y, gw, enable_hardware_acceleration);
+%         opt_history = runfmincon(current_optimum, objective_fn, current_constraint(1,:), current_constraint(2,:));
+%         current_optimum = opt_history.x(end, :);
+%         
+%         axis tight;
+%         subplot(2, 2, 1);
+%         plot_objective(objective_fn, 1, current_optimum(2), current_optimum(3), current_constraint(1, 1), current_constraint(2, 1), 20);
+%         subplot(2, 2, 2);
+%         plot_objective(objective_fn, 2, current_optimum(1), current_optimum(3), current_constraint(1, 2), current_constraint(2, 2), 20);
+%         subplot(2, 2, 3);
+%         plot_objective(objective_fn, 3, current_optimum(1), current_optimum(2), current_constraint(1, 3), current_constraint(2, 3), 20);
+%     
+%         frame = getframe(gcf);
+%         [imind,cm] = rgb2ind(frame,256);
+%         imwrite(imind, cm, 'objfun.gif', 'gif', 'WriteMode', 'append');
+%     end
+    
+    for r = mask_radius_range
+        r
+        mask = construct_mask(0, r, nx, ny);
+        objective_fn = objective(batch, zernike_values, kernel, f1, f2, fs, mask, delta_x, delta_y, gw, enable_hardware_acceleration);
+        current_optimum = runfmincon(current_optimum, objective_fn, current_constraint(1,:), current_constraint(2,:));
+%         current_optimum = opt_history.x(end, :)
+        
+        % plot objective_fn
+%         subplot(2, 2, 1);
+%         plot_objective(objective_fn, 1, current_optimum(2), current_optimum(3), current_constraint(1, 1), current_constraint(2, 1), 20);
+%         subplot(2, 2, 2);
+%         plot_objective(objective_fn, 2, current_optimum(1), current_optimum(3), current_constraint(1, 2), current_constraint(2, 2), 20);
+%         subplot(2, 2, 3);
+%         plot_objective(objective_fn, 3, current_optimum(1), current_optimum(2), current_constraint(1, 3), current_constraint(2, 3), 20);
+        
+        % change constraint
+        retract = 0.40; % 30%
+        current_constraint = stretch_constraint(current_constraint, current_optimum, retract)
+     end
+    
+    
+%     %% optimize zernike correction
+%     objective_fn = objective(batch, zernike_values, kernel, f1, f2, fs, mask, delta_x, delta_y, gw, enable_hardware_acceleration);
+%     opt_history = runfmincon(current_optimum, objective_fn, min_constraint, max_constraint);
+%     % retrieve optimization result
+%     current_optimum = opt_history.x(end, :);
     phase_correction = compute_phase_correction(current_optimum, zernike_values);
     moment_corrected = compute_moment(batch, kernel, f1, f2, fs, delta_x, delta_y, gw, phase_correction);
     
