@@ -21,8 +21,8 @@ pix_per_image = nx * ny;
 % image batches constants
 % interferogram images are processed in batches
 % each batch produces a single momentum image
-j_win = 512; % number of images in each batch
-j_step = 256; % index offset between two image batches
+j_win = 1024; % number of images in each batch
+j_step = 512; % index offset between two image batches
 
 fs = 60; % input video sampling frequency
 f1 = 3;
@@ -37,7 +37,7 @@ gw = 35;
 
 % spatial filter mask radius range
 % mask_radius_range = [10 20 30 35 40 45 50 55];
-mask_radius_range = [40 50 60 65 70 75];
+mask_radius_range = round(logspace(log10(40),log10(nx/2),10));
 
 x_step = 28e-6;
 y_step = 28e-6;
@@ -66,6 +66,9 @@ end
 % (n, m) = (2, 0): defocus
 n = [2 2 2];
 m = [-2 2 0];
+
+% n=[2 2 2 3 3 3 3];
+% m=[-2 0 2 -3 -1 1 3];
 
 % constraints over the base elements coefficients for optimization
 min_constraint = [-30 -30 -30];
@@ -177,12 +180,12 @@ for offset = offsets
 %         current_optimum = opt_history.x(end, :)
         
         % plot objective_fn
-%         subplot(2, 2, 1);
-%         plot_objective(objective_fn, 1, current_optimum(2), current_optimum(3), current_constraint(1, 1), current_constraint(2, 1), 20);
-%         subplot(2, 2, 2);
-%         plot_objective(objective_fn, 2, current_optimum(1), current_optimum(3), current_constraint(1, 2), current_constraint(2, 2), 20);
-%         subplot(2, 2, 3);
-%         plot_objective(objective_fn, 3, current_optimum(1), current_optimum(2), current_constraint(1, 3), current_constraint(2, 3), 20);
+        subplot(2, 2, 1);
+        plot_objective(objective_fn, 1, current_optimum(2), current_optimum(3), current_constraint(1, 1), current_constraint(2, 1), 20);
+        subplot(2, 2, 2);
+        plot_objective(objective_fn, 2, current_optimum(1), current_optimum(3), current_constraint(1, 2), current_constraint(2, 2), 20);
+        subplot(2, 2, 3);
+        plot_objective(objective_fn, 3, current_optimum(1), current_optimum(2), current_constraint(1, 3), current_constraint(2, 3), 20);
         
         % change constraint
         retract = 0.40; % 30%
