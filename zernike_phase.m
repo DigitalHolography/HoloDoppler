@@ -12,12 +12,12 @@ y = linspace(-1,1,Ny);
 [theta,r] = cart2pol(X,Y);
 % idx = r<=sqrt(2);
 % TODO prendre sqrt(2) au lieu de 1
-idx = r<=1;
+idx = r<=sqrt(2);
 % Calcul de la phase aberree
 phi = 0;
 zern = zeros(Nx,Ny,numel(A));
 
-zz = zernfun2(1:size(A),r(idx),theta(idx),'norm');
+zz = zernfun2(3:(size(A)+3),r(idx),theta(idx),'norm');
 
 for k = 1:numel(A)
     tmp = zeros(Nx, Ny);

@@ -11,7 +11,7 @@ config;
 
 %% Construct InterferogramStream object
 fullpath = fullfile(data_path, data_filename);
-acquisition = DopplerAcquisition(Nx, Ny, fs, z, delta_x, delta_y, x_step, y_step);
+acquisition = DopplerAcquisition(Nx, Ny, fs, z, lambda, delta_x, delta_y, x_step, y_step);
 interferogram_stream = InterferogramStream(fullpath, endianness,acquisition, ...
                                            j_win, j_step);
              
@@ -74,25 +74,38 @@ for batch_idx = 1:num_batches
     switch method
         case 1
             % Shack Hartmann
-            [M_aso, found] = shack_hartmann.fetch_M_aso_from_cache('M_aso');
-            if ~found
-                M_aso = shack_hartmann.construct_M_aso(acquisition, gaussian_width, enable_hardware_acceleration);            
-            end
+            % construct calibration matrix
+            M_aso = shack_hartmann.construct_M_aso(acquisition, kernel, gaussian_width, enable_hardware_acceleration);            
+            
             % rename shift_array
             shifts = shack_hartmann.compute_images_shifts(FH, false, acquisition, f1, f2, gaussian_width, enable_hardware_acceleration);
-            shifts = reshape(shifts, size(shifts,1)*size(shifts,2), 1);
 
             Y = cat(1, real(shifts), imag(shifts));
             M_aso_concat = cat(1,real(M_aso),imag(M_aso));
-            X = pinv(M_aso_concat) * Y;
+            X = M_aso_concat \ Y;
+            
+            [phase, zernikes] = zernike_phase(X, Nx, Ny);
+            figure(1)
+            imagesc(phase);
+            colorbar
+            
+            % plot shifts in 2D
+            plot_shifts(shifts, n_pup, Nx, Ny);
+
         case 2
             % Entropy optimization
             X = entropy_opt.optimize(FH, f1, f2, acquisition, gaussian_width, 0.4, enable_hardware_acceleration);
     end
     
     %% apply correction
-    phase_correction = compute_phase_correction(X, zernike_eval);
+    phase_correction = compute_phase_correction(X, zernikes);
     hologram_corrected = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, enable_hardware_acceleration, phase_correction);
+    
+    figure(2)
+    imshow(mat2gray(hologram_corrected));
+    figure(3)
+    imshow(mat2gray(hologram_aberrated));
+    
     
     %% write video files
     writeVideo(video_wr_aberrated, mat2gray(hologram_aberrated));
