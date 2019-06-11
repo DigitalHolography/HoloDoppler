@@ -5,7 +5,8 @@ ac = acquisition;
 for pp = 1:obj.n_mode
     % construct unit zernikes
     A = zeros(obj.n_mode, 1);
-    A(pp) = 10;
+    A(pp) = 5; % passer en parametre
+
     [phi,~] = zernike_phase(A, ac.Nx, ac.Ny);
     transmittance = exp(1i*phi);
     shifts = obj.compute_images_shifts(transmittance, true, acquisition, 3, 30, gaussian_width, use_gpu);

@@ -19,7 +19,6 @@ ac = acquisition;
 
 % move data to gpu if available
 if use_gpu
-    FH = gpuArray(FH);
     if exist('phase_correction', 'var')
         phase_correction = gpuArray(phase_correction);
     end
@@ -34,7 +33,6 @@ clear FH;
 
 %% squared magnitude of hologram
 SH = fft(H, [], 3);
-clear H;
 SH = abs(SH).^2;
 
 %% shifts related to acquisition wrong positioning

@@ -1,4 +1,11 @@
 function [shifts] = compute_images_shifts(obj, FH, calibration, acquisition, f1, f2, gaussian_width, use_gpu)
+%  FH
+% calibration: flag to compute shifts from a 2d array, e.g. FH(x,y) = exp(1i*phi(x,y))
+% acquisition
+% f1, f2
+% gaussian_width
+% use_gpu
+
 % performs shack-hartman simulation
 ac = acquisition;
 
@@ -21,10 +28,11 @@ for pup_x = 1:obj.n_pup
             % instead of runing the simulation
             
             % propagate wave
-            FH_chunk = abs(fftshift(fft2(FH_chunk))).^2;
-            moment_chunks((pup_x-1)*floor(ac.Nx/obj.n_pup) + 1:pup_x*floor(ac.Nx/obj.n_pup), (pup_y-1)*floor(ac.Ny/obj.n_pup) + 1:pup_y*floor(ac.Ny/obj.n_pup)) = FH_chunk;
+            H_chunk = abs(fftshift(fft2(FH_chunk))).^2;
+            moment_chunks((pup_x-1)*floor(ac.Nx/obj.n_pup) + 1:pup_x*floor(ac.Nx/obj.n_pup), (pup_y-1)*floor(ac.Ny/obj.n_pup) + 1:pup_y*floor(ac.Ny/obj.n_pup)) = H_chunk;
         else
-            moment_chunk = reconstruct_hologram(FH_chunk, f1, f2, acquisition, gaussian_width, use_gpu);
+%             FH_chunk = fftshift(fft2(FH_chunk));
+            moment_chunk = reconstruct_hologram_no_shifts(FH_chunk, f1, f2, acquisition, gaussian_width, use_gpu);
             moment_chunks((pup_x-1)*floor(ac.Nx/obj.n_pup) + 1:pup_x*floor(ac.Nx/obj.n_pup), (pup_y-1)*floor(ac.Ny/obj.n_pup) + 1:pup_y*floor(ac.Ny/obj.n_pup)) = moment_chunk;
         end
     end

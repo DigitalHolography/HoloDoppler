@@ -1,4 +1,4 @@
-function plot_shifts(shifts, n_pup, Nx, Ny)
+function plot_shifts(shifts, n_pup, Nx, Ny, filename)
 x = zeros(n_pup^2,1);
 y = zeros(n_pup^2,1);
 x_cdg = zeros(n_pup^2,1);
@@ -19,4 +19,8 @@ plot(x,y,'r*')
 hold on
 plot(x_cdg, y_cdg, 'b+')
 hold off
+axis tight
+axis equal
+axis off
+print(filename,'-depsc');
 end

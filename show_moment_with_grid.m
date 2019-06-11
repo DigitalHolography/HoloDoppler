@@ -1,4 +1,4 @@
-function show_moment_with_grid(img, Nx, Ny, n_pup)
+function show_moment_with_grid(img, Nx, Ny, n_pup, filename)
 val = max(max(img));
 for i = 1:floor(Nx/n_pup):Nx
     img(i,:) = val;
@@ -8,4 +8,5 @@ for j = 1:floor(Ny/n_pup):Ny
 end
 
 imshow(mat2gray(img));
+imwrite(mat2gray(img), filename);
 end

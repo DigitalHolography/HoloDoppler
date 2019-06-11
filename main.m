@@ -64,25 +64,33 @@ for batch_idx = 1:num_batches
     frame_batch = interferogram_stream.read_batch(batch_idx);
     
     %% interferograms pre-treatment
-    FH = fftshift(fft2(frame_batch));
+    FH = fftshift(fft2(frame_batch)); % reciprocal space of the 2 first dimensions of FH
     FH = FH .* kernel;
+    if enable_hardware_acceleration
+        FH = gpuArray(FH);
+    end
     
     %% compute aberrated hologram
     hologram_aberrated = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, enable_hardware_acceleration);
+    
+    % add 8 defocus
+%     [p, ze] = zernike_phase([0; 0; 0], Nx, Ny);
+%     FH = FH .* exp(1i.*compute_phase_correction([0; 0; 0],ze)); 
+    % TODO fonction pour plot des images avec plusieurs aberrations
+    % differentes
     
     %% perform aberration compensation with selected method
     switch method
         case 1
             % Shack Hartmann
             % construct calibration matrix
-            M_aso = shack_hartmann.construct_M_aso(acquisition, kernel, gaussian_width, enable_hardware_acceleration);            
+            M_aso = shack_hartmann.construct_M_aso(acquisition, gaussian_width, enable_hardware_acceleration);            
             
             % rename shift_array
             shifts = shack_hartmann.compute_images_shifts(FH, false, acquisition, f1, f2, gaussian_width, enable_hardware_acceleration);
-
             Y = cat(1, real(shifts), imag(shifts));
             M_aso_concat = cat(1,real(M_aso),imag(M_aso));
-            X = M_aso_concat \ Y;
+            X = - M_aso_concat \ Y;
             
             [phase, zernikes] = zernike_phase(X, Nx, Ny);
             figure(1)
@@ -98,6 +106,7 @@ for batch_idx = 1:num_batches
     end
     
     %% apply correction
+    zernikes = evaluate_zernikes(n, m, Nx, Ny);
     phase_correction = compute_phase_correction(X, zernikes);
     hologram_corrected = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, enable_hardware_acceleration, phase_correction);
     

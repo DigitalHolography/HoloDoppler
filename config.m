@@ -36,7 +36,7 @@ interp_factor = 4;
 
 %% Entropy optimization parameters
 gaussian_width = 35;
-mask_radiuses = [30 40 50 60 65];
+mask_radiuses = [30 50 65];
 
 f1 = 3;
 f2 = 30;
