@@ -7,8 +7,10 @@ for r = obj.mask_radiuses
     objective_fn = @(coefs)objective2(FH, coefs, zernike_eval, f1, f2, mask, acquisition, gaussian_width, use_gpu);
     
     algo_options = optimoptions(@patternsearch, 'Display', 'iter');
-    algo_options.MeshTolerance = 5e-1;
+    algo_options.MeshTolerance = 1e-2;
     algo_options.Cache = 'on';
+%     algo_options.PlotFcn('psplotmeshsize');
+%     algo_options.PollMethod = 'GPSPositiveBasisNp1';
     [current_optimum, ~] = patternsearch(objective_fn, obj.initial_guess, [], [], [], [], current_constraint(1,:), current_constraint(2,:), algo_options); 
 
 %     algo_options = optimoptions('surrogateopt', 'Display', 'iter', 'MaxFunctionEvaluations', 20);
