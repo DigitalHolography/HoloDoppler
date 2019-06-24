@@ -1,7 +1,7 @@
 function kernel = propagation_kernel(Nx, Ny, z, lambda, x_step, y_step, use_double_precision)
 % Wave propagation kernel
-u_step = 1 / (Nx * x_step);
-v_step = 1 / (Ny * y_step);
+u_step = 1.0 / (Nx * x_step);
+v_step = 1.0 / (Ny * y_step);
 u = ((1:Nx) - 1 - round(Nx / 2)) * u_step;
 v = ((1:Nx) - 1 - round(Ny / 2)) * v_step;
 [U, V] = meshgrid(u, v);

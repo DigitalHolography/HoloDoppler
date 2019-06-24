@@ -8,10 +8,18 @@ config;
 
 % get interferogram filename
 if cine_file
-    [data_filename, data_path] = uigetfile('.cine');
+    [data_filenames, data_path] = uigetfile('.cine','MultiSelect','on');
 else
-    [data_filename, data_path] = uigetfile('.raw');
+    [data_filenames, data_path] = uigetfile('.raw','MultiSelect','on');
 end
+
+if ~iscell(data_filenames)
+    data_filenames = mat2cell(data_filenames, 1);
+end
+
+for data_filename_cell = data_filenames
+    
+data_filename = cell2mat(data_filename_cell);
 
 %% Construct InterferogramStream object
 fullpath = fullfile(data_path, data_filename);
@@ -54,24 +62,28 @@ num_images = data_file_info.bytes / (2*Nx*Ny);
 
 % setup output directory
 [~, name] = fileparts(data_filename);
-output_dir = sprintf('%s_jwin=%d_jstep=%d', name, j_win, j_step);
-mkdir(output_dir);
+% output_dir = sprintf('%s_jwin=%d_jstep=%d', name, j_win, j_step);
+% mkdir(output_dir);
+output_dir = data_path;
 
 % setup video writers
+if method ~= 3
+    video_wr_phase_corrector = VideoWriter(fullfile(output_dir, 'phase_corrector.avi'));
+    video_wr_corrected = VideoWriter(fullfile(output_dir, 'corrected.avi'));
+    video_wr_phase_corrector.FrameRate = 25;
+    video_wr_phase_corrector.Quality = 100;
+    video_wr_corrected.FrameRate = 25;
+    video_wr_corrected.Quality = 100;
+    open(video_wr_phase_corrector);
+    open(video_wr_corrected);
+end
+
 video_wr_aberrated = VideoWriter(fullfile(output_dir, 'aberrated.avi'));
-video_wr_phase_corrector = VideoWriter(fullfile(output_dir, 'phase_corrector.avi'));
-video_wr_corrected = VideoWriter(fullfile(output_dir, 'corrected.avi'));
 
 video_wr_aberrated.FrameRate = 25;
 video_wr_aberrated.Quality = 100;
-video_wr_phase_corrector.FrameRate = 25;
-video_wr_phase_corrector.Quality = 100;
-video_wr_corrected.FrameRate = 25;
-video_wr_corrected.Quality = 100;
 
 open(video_wr_aberrated);
-open(video_wr_phase_corrector);
-open(video_wr_corrected);
 
 %% Main loop
 if cine_file
@@ -175,11 +187,16 @@ for batch_idx = 1:num_batches-1
     
     %% write video files
     writeVideo(video_wr_aberrated, mat2gray(hologram_aberrated));
-%     writeVideo(video_wr_phase_corrector, mat2gray(phase_correction));
-%     writeVideo(video_wr_corrected, mat2gray(hologram_corrected));
+    if method ~= 3
+        writeVideo(video_wr_phase_corrector, mat2gray(phase_correction));
+        writeVideo(video_wr_corrected, mat2gray(hologram_corrected));
+    end
 end
 
 close(video_wr_aberrated);
-close(video_wr_phase_corrector);
-close(video_wr_corrected);
+if method ~= 3
+    close(video_wr_phase_corrector);
+    close(video_wr_corrected);
+end
+end
 
