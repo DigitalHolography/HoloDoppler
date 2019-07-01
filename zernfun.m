@@ -1,4 +1,4 @@
-function z = zernfun(n,m,r,theta,nflag)
+    function z = zernfun(n,m,r,theta,nflag)
 %ZERNFUN Zernike functions of order N and frequency M on the unit circle.
 %   Z = ZERNFUN(N,M,R,THETA) returns the Zernike functions of order N
 %   and angular frequency M, evaluated at positions (R,THETA) on the

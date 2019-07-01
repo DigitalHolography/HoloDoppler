@@ -1,4 +1,4 @@
-function registered = register_video(frames)
+function [registered, shifts] = register_video(frames)
 % registers a video
 % frames: a video 4D-array width x height x 1 x num_frames
 
@@ -22,12 +22,15 @@ ref_img = frames(:,:,:,ref);
 disp('picking frame:');
 disp(ref);
 
+shifts = zeros(2, num_frames);
+
 %% apply registration
 parfor i = 1:num_frames
     disp(i);
     if i ~= ref
         reg = registerImages(frames(:,:,:,i), ref_img);
         frames(:,:,:,i) = reg.RegisteredImage;
+        shifts(:,i) = [reg.Transformation.T(3,2); reg.Transformation.T(3,1)];
     end
 end
 
