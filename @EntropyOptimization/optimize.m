@@ -6,7 +6,8 @@ for r = obj.mask_radiuses
     mask = construct_mask(0, r, acquisition.Nx, acquisition.Ny);
     objective_fn = @(coefs)objective2(FH, coefs, zernike_eval, f1, f2, mask, acquisition, gaussian_width, use_gpu);
     
-    algo_options = optimoptions(@patternsearch, 'Display', 'iter');
+%     algo_options = optimoptions(@patternsearch, 'Display', 'iter');
+    algo_options = optimoptions(@patternsearch);
     algo_options.MeshTolerance = 1e-2;
     algo_options.Cache = 'on';
 %     algo_options.PlotFcn('psplotmeshsize');

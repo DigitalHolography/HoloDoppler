@@ -25,5 +25,6 @@ classdef EntropyOptimization
         end
         
         opt = optimize(obj, FH, f1, f2, acquisition, gaussian_width, retract, use_gpu)
+        opt = optimize_1d(obj, FH, f1, f2, acquisition, gaussian_width, use_gpu)
     end
 end
