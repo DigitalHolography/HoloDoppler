@@ -20,7 +20,7 @@ crop = false; % rename crop_to_512_px
 j_win = 256; % number of images in each batch
 j_step = 8192; % index offset between two image batches
 % fs = 60; % input video sampling frequency
-fs = 60;
+fs = 65;
 
 % image encoding
 endianness = 'b'; % big endian

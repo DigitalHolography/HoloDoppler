@@ -44,8 +44,12 @@ SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
 n1 = round(f1 * j_win / ac.fs);
 n2 = round(f2 * j_win / ac.fs);
 moment = squeeze(sum(abs(SH(:, :, n1:n2)), 3));
+ms = sum(sum(moment,1),2);
+
 clear SH;
 % apply flat field correction
 moment = moment ./ imgaussfilt(moment, gaussian_width);
+ms2 = sum(sum(moment,1),2);
+moment = (ms / ms2) * moment;
 hologram = gather(moment);
 end
