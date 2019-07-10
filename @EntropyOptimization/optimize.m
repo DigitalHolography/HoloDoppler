@@ -11,11 +11,7 @@ for r = obj.mask_radiuses
     algo_options.MeshTolerance = 1e-2;
     algo_options.Cache = 'on';
 %     algo_options.PlotFcn('psplotmeshsize');
-%     algo_options.PollMethod = 'GPSPositiveBasisNp1';
     [current_optimum, ~] = patternsearch(objective_fn, obj.initial_guess, [], [], [], [], current_constraint(1,:), current_constraint(2,:), algo_options); 
-
-%     algo_options = optimoptions('surrogateopt', 'Display', 'iter', 'MaxFunctionEvaluations', 20);
-%     [current_optimum, ~] = surrogateopt(objective_fn, current_constraint(1,:), current_constraint(2,:), algo_options);
     current_constraint = stretch_constraint(current_constraint, current_optimum, retract);
 end
 

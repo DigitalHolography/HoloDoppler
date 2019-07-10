@@ -55,5 +55,20 @@ classdef InterferogramStream
             batch = reshape(batch, ac.Nx, ac.Ny, obj.j_win);
             batch = replace_dropped_frames(batch, 0.2);
         end
+        
+        function batch = read_frame_batch(obj, batch_size, frame_offset)
+            ac = obj.acquisition;
+            
+            fd = fopen(obj.path, 'r');
+            frame_bytes_size = ac.Nx * ac.Ny * 2;
+            bytes_offset = frame_offset * frame_bytes_size;
+            
+            fseek(fd, bytes_offset, 'bof');
+            batch = fread(fd, ac.Nx * ac.Ny * batch_size, 'uint16=>single', obj.endianness);
+            fclose(fd);
+            
+            batch = reshape(batch, ac.Nx, ac.Ny, batch_size);
+            batch = replace_dropped_frames(batch, 0.2);
+        end
     end
 end

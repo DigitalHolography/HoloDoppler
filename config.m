@@ -1,6 +1,6 @@
 %% Meta parameters
 method = 3;
-cine_file = true; % use .cine file instead of .raw
+cine_file = false; % use .cine file instead of .raw
 
 % use gpu for image processing
 % may run out of gpu memory for big j_win values
