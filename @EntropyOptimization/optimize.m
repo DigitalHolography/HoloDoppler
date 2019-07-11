@@ -8,7 +8,8 @@ for r = obj.mask_radiuses
     
 %     algo_options = optimoptions(@patternsearch, 'Display', 'iter');
     algo_options = optimoptions(@patternsearch);
-    algo_options.MeshTolerance = 1e-2;
+%     algo_options.MeshTolerance = 1e-2;
+    algo_options.MeshTolerance = 1e-1;
     algo_options.Cache = 'on';
 %     algo_options.PlotFcn('psplotmeshsize');
     [current_optimum, ~] = patternsearch(objective_fn, obj.initial_guess, [], [], [], [], current_constraint(1,:), current_constraint(2,:), algo_options); 
