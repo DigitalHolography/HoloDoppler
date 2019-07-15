@@ -24,6 +24,7 @@ properties (Access = public)
     optimization_plan
     additional_zernike_ranks
     registration_f1
+    registration_f2
     first_name
     last_name
     year_of_birth
@@ -33,7 +34,7 @@ properties (Access = public)
 end
 methods (Access = public)
     function obj = GuiCache()
-        % nothing
+        % do nothing
     end
 end
 end
