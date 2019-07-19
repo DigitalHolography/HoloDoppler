@@ -29,6 +29,7 @@ parfor i = 1:num_frames
     disp(i);
     if i ~= ref
         reg = registerImages(frames(:,:,:,i), ref_img);
+%         reg = register_images_multimodal(frames(:,:,:,i), ref_img);
         frames(:,:,:,i) = reg.RegisteredImage;
         shifts(:,i) = [reg.Transformation.T(3,2); reg.Transformation.T(3,1)];
     end

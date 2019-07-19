@@ -75,6 +75,29 @@ methods
               % discard the rest of the struct, we don't need it
              }, 'Repeat', 1);
          obj.frame_rate = setup_mmap.Data.frame_rate_16;
+         
+         %% jump to RealBPP field
+         % WBGAIN => 2 floats = 8 bytes
+         % RECT => 4 int32 = 16 bytes
+         % OLDMAXFILENAME = 65
+         % MAXLENDESCRIPTION_OLD = 121
+         % fields to skip from begining of struct:
+         %  uint16 x 7
+         %  uint8  x 5
+         %  char   x 121
+         %  uint16 x 4
+         %  int16  x 1
+         %  uint8  x 1
+         %  char   x 88
+         %  uint16 x 1
+         %  int16  x 1
+         %  uint8  x 2
+         %  int16  x 8
+         %  float  x 8
+         %  char   x 48
+         %  char   x 88
+         %  int32  x 1
+         %  
     end
     
     function frame_batch = read_frame_batch(obj, batch_size, frame_offset)
