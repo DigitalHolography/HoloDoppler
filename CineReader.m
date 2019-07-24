@@ -13,6 +13,7 @@ properties
     bytes_per_frame
     horizontal_pix_per_meter
     vertical_pix_per_meter
+    is_packed
 end
 methods
     function obj = CineReader(filename)
@@ -62,6 +63,18 @@ methods
          obj.frame_width = bitmap_mmap.Data.bi_width;
          obj.frame_height = bitmap_mmap.Data.bi_height;
          
+         if bitmap_mmap.Data.bi_compression == 256
+             % packed binary format
+             obj.is_packed = true;
+             
+             % setup PhantomSDK lib for later use
+             addpath(genpath('PhantomSDK'));
+             LoadPhantomLibraries();
+             RegisterPhantom(true);
+         else
+             obj.is_packed = false;
+         end
+         
          %% read image ptr
          fd = fopen(filename, 'r');
          fseek(fd, header_mmap.Data.off_image_offsets, 'bof');
@@ -75,48 +88,36 @@ methods
               % discard the rest of the struct, we don't need it
              }, 'Repeat', 1);
          obj.frame_rate = setup_mmap.Data.frame_rate_16;
-         
-         %% jump to RealBPP field
-         % WBGAIN => 2 floats = 8 bytes
-         % RECT => 4 int32 = 16 bytes
-         % OLDMAXFILENAME = 65
-         % MAXLENDESCRIPTION_OLD = 121
-         % fields to skip from begining of struct:
-         %  uint16 x 7
-         %  uint8  x 5
-         %  char   x 121
-         %  uint16 x 4
-         %  int16  x 1
-         %  uint8  x 1
-         %  char   x 88
-         %  uint16 x 1
-         %  int16  x 1
-         %  uint8  x 2
-         %  int16  x 8
-         %  float  x 8
-         %  char   x 48
-         %  char   x 88
-         %  int32  x 1
-         %  
     end
     
     function frame_batch = read_frame_batch(obj, batch_size, frame_offset)
-         fd = fopen(obj.filename, 'r');
-         % skip additional 17 bytes to skip useless struct before pix array
-         
-         % method 1
-         frame_batch = zeros(obj.frame_width, obj.frame_height, batch_size);
-         for i = 1:batch_size
-             fseek(fd, obj.image_offsets(frame_offset + i), 'bof');
-             % read annotation size
-             annotation_size = fread(fd, 1, 'uint32', 'l');
-         
-             fseek(fd, obj.image_offsets(frame_offset + i) + annotation_size, 'bof');
-             frame_batch(:,:,i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint16=>single', 'l'), obj.frame_width, obj.frame_height);
+         if obj.is_packed
+             % use PhantomSDK to handle bits unpacking
+             frame_batch = zeros(obj.frame_width, obj.frame_height, batch_size);
+             
+             % get numbering offset
+             first_img_num = obj.first_image_no;
+             for i = 1:batch_size
+                 % transpose read image
+                 frame_batch(:,:,i) = ReadCineFileImage(obj.filename, frame_offset + i + first_img_num, false)';
+             end
+         else
+             fd = fopen(obj.filename, 'r');
+             % skip additional 17 bytes to skip useless struct before pix array
+
+             frame_batch = zeros(obj.frame_width, obj.frame_height, batch_size);
+             for i = 1:batch_size
+                 fseek(fd, obj.image_offsets(frame_offset + i), 'bof');
+                 % read annotation size
+                 annotation_size = fread(fd, 1, 'uint32', 'l');
+
+                 fseek(fd, obj.image_offsets(frame_offset + i) + annotation_size, 'bof');
+                 frame_batch(:,:,i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint16=>single', 'l'), obj.frame_width, obj.frame_height);
+             end
+
+             frame_batch = CineReader.replace_dropped_frames(frame_batch, 0.2);
+             fclose(fd);
          end
-         
-         frame_batch = CineReader.replace_dropped_frames(frame_batch, 0.2);
-         fclose(fd);
     end
     
     function fs = sampling_frequency(obj)
