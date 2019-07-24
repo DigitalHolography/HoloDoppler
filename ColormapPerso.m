@@ -23,7 +23,6 @@ end
 wave = [c1(1:end-1,:);c2(1:end-1,:);c3(1:end-1,:);c4];
 waveq = interp1(1:length(wave), wave, 1:Ncouleur);
 
-figure('visible','off');
 imagesc(Image, [lowhigh(1) lowhigh(2)])
 
 colormap(waveq)
