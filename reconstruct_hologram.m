@@ -1,4 +1,4 @@
-function [hologram0, hologram1, composite_1, composite_2, composite_3] = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, phase_correction)
+function [hologram0, hologram1, hologram2, composite_1, composite_2, composite_3] = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, phase_correction)
 % Compute the moment of a batch of interferograms
 %
 % batch: the input interferograms batch
@@ -55,15 +55,6 @@ ms2 = sum(sum(moment,1),2);
 moment = (ms / ms2) * moment;
 hologram0 = gather(moment);
 
-% hologram1
-f_range = (n1:n2) .* (ac.fs / j_win);
-f_range_sym = (-n2:-n1) .* (ac.fs / j_win);
-SH(:,:,n1:n2) = SH(:,:,n1:n2) .* reshape(f_range, 1, 1, numel(f_range));
-SH(:,:,n3:n4) = SH(:,:,n3:n4) .* reshape(f_range_sym, 1, 1, numel(f_range_sym));
-moment1 = gather(squeeze(sum(abs(SH(:, :, n1:n2)), 3))) + gather(squeeze(sum(abs(SH(:, :, n3:n4)), 3)));
-moment1 = moment1 ./ imgaussfilt(moment1, gaussian_width);
-hologram1 = moment1;
-
 % composite
 nrange_1 = n1:n2;
 red_1 = nrange_1(1:floor(numel(nrange_1)/4));
@@ -79,5 +70,22 @@ composite_3 = squeeze(sum(abs(SH(:, :, blue_1)), 3)) + squeeze(sum(abs(SH(:, :, 
 composite_1 = composite_1 ./ imgaussfilt(composite_1, gaussian_width);
 composite_2 = composite_2 ./ imgaussfilt(composite_2, gaussian_width);
 composite_3 = composite_3 ./ imgaussfilt(composite_3, gaussian_width);
+
+% hologram1
+f_range = (n1:n2) .* (ac.fs / j_win);
+f_range_sym = (-n2:-n1) .* (ac.fs / j_win);
+SH(:,:,n1:n2) = SH(:,:,n1:n2) .* reshape(f_range, 1, 1, numel(f_range));
+SH(:,:,n3:n4) = SH(:,:,n3:n4) .* reshape(f_range_sym, 1, 1, numel(f_range_sym));
+moment1 = gather(squeeze(sum(abs(SH(:, :, n1:n2)), 3))) + gather(squeeze(sum(abs(SH(:, :, n3:n4)), 3)));
+moment1 = moment1 ./ imgaussfilt(moment1, gaussian_width);
+hologram1 = moment1;
+
+% hologram2
+% scale SH again
+SH(:,:,n1:n2) = SH(:,:,n1:n2) .* reshape(f_range, 1, 1, numel(f_range));
+SH(:,:,n3:n4) = SH(:,:,n3:n4) .* reshape(f_range_sym, 1, 1, numel(f_range_sym));
+moment2 = gather(squeeze(sum(abs(SH(:, :, n1:n2)), 3))) + gather(squeeze(sum(abs(SH(:, :, n3:n4)), 3)));
+moment2 = moment2 ./ imgaussfilt(moment2, gaussian_width);
+hologram2 = moment2;
 end
 

@@ -99,7 +99,7 @@ methods
              first_img_num = obj.first_image_no;
              for i = 1:batch_size
                  % transpose read image
-                 frame_batch(:,:,i) = ReadCineFileImage(obj.filename, frame_offset + i + first_img_num, false)';
+                 frame_batch(:,:,i) = ReadCineFileImage(obj.filename, int32(frame_offset) + int32(i) + int32(first_img_num), false)';
              end
          else
              fd = fopen(obj.filename, 'r');
