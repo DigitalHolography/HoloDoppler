@@ -66,11 +66,7 @@ methods
          if bitmap_mmap.Data.bi_compression == 256
              % packed binary format
              obj.is_packed = true;
-             
-             % setup PhantomSDK lib for later use
-             addpath(genpath('PhantomSDK'));
-             LoadPhantomLibraries();
-             RegisterPhantom(true);
+             error('packed cine file not yet supported');
          else
              obj.is_packed = false;
          end
@@ -92,15 +88,8 @@ methods
     
     function frame_batch = read_frame_batch(obj, batch_size, frame_offset)
          if obj.is_packed
-             % use PhantomSDK to handle bits unpacking
-             frame_batch = zeros(obj.frame_width, obj.frame_height, batch_size);
-             
-             % get numbering offset
-             first_img_num = obj.first_image_no;
-             for i = 1:batch_size
-                 % transpose read image
-                 frame_batch(:,:,i) = ReadCineFileImage(obj.filename, int32(frame_offset) + int32(i) + int32(first_img_num), false)';
-             end
+             % unreachable for now
+             error('packed cine file not yet supported');
          else
              fd = fopen(obj.filename, 'r');
              % skip additional 17 bytes to skip useless struct before pix array
