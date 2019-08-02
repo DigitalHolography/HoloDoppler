@@ -14,6 +14,7 @@ properties
     horizontal_pix_per_meter
     vertical_pix_per_meter
     is_packed
+    real_bpp
 end
 methods
     function obj = CineReader(filename)
@@ -66,7 +67,6 @@ methods
          if bitmap_mmap.Data.bi_compression == 256
              % packed binary format
              obj.is_packed = true;
-             error('packed cine file not yet supported');
          else
              obj.is_packed = false;
          end
@@ -84,12 +84,51 @@ methods
               % discard the rest of the struct, we don't need it
              }, 'Repeat', 1);
          obj.frame_rate = setup_mmap.Data.frame_rate_16;
+         
+         %% skip a bunch of fields to access the number of bits per pixel
+         % bytes to skip from the begining of the Setup struct:
+         % (MAXLENDESCRIPTION_OLD = 121)
+         % (OLDMAXFILENAME = 65)
+         % uint16 x 19
+         % int16 x 11
+         % uint8 x 11
+         % char x (121 + 8 * 11 + 8*6 + 8*11 + 4*65 = 605)
+         % float x 8
+         % double x 2
+         % uint32 x 16
+         % int32 x 10
+         % bool32 x 3
+         % RECT(size=4x32bits) x 1
+         % WBGAIN(size=64bits) x 5
+         % total bytes to skip = 896
+         fd = fopen(filename, 'r');
+         fseek(fd, header_mmap.Data.off_setup + 896, 'bof');
+         obj.real_bpp = fread(fd, 1, 'uint32=>uint32');
+         fclose(fd);
     end
     
     function frame_batch = read_frame_batch(obj, batch_size, frame_offset)
-         if obj.is_packed
-             % unreachable for now
-             error('packed cine file not yet supported');
+         if obj.is_packed             
+             % assume it is 12 bits packed for now
+             fd = fopen(obj.filename, 'r');
+             frame_batch = zeros(obj.frame_width, obj.frame_height, batch_size);
+             for i = 1:batch_size
+                 fseek(fd, obj.image_offsets(frame_offset + i), 'bof');
+                 % read annotation size
+                 annotation_size = fread(fd, 1, 'uint32', 'l');
+
+                 fseek(fd, obj.image_offsets(frame_offset + i) + annotation_size, 'bof');
+                 
+                 % packed frame contains Nx*Ny u12 or Nx*Ny*5/4 bytes
+                 packed_frame_size = ceil(obj.frame_width * obj.frame_height / 4) * 5; 
+                 packed_frame = fread(fd, packed_frame_size, 'uint8=>uint8', 'l');
+                 unpacked_frame = single(zeros(obj.frame_width*obj.frame_height,1));
+                 unpack_u10_to_f32_le(packed_frame, unpacked_frame);
+                 frame_batch(:,:,i) = reshape(unpacked_frame, obj.frame_width, obj.frame_height);
+             end
+
+             frame_batch = CineReader.replace_dropped_frames(frame_batch, 0.2);
+             fclose(fd);
          else
              fd = fopen(obj.filename, 'r');
              % skip additional 17 bytes to skip useless struct before pix array

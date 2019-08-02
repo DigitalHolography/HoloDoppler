@@ -1,4 +1,4 @@
-function [hologram0, hologram1, hologram2, composite_1, composite_2, composite_3] = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, phase_correction)
+function [hologram0, sqrt_hologram0, hologram1, hologram2, composite_1, composite_2, composite_3] = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, phase_correction)
 % Compute the moment of a batch of interferograms
 %
 % batch: the input interferograms batch
@@ -48,12 +48,15 @@ n3 = size(SH, 3) - n2 + 2;
 n4 = size(SH, 3) - n1 + 2;
 moment = squeeze(sum(abs(SH(:, :, n1:n2)), 3)) + squeeze(sum(abs(SH(:, :, n3:n4)), 3));
 ms = sum(sum(moment,1),2);
+sqrt_moment = sqrt(moment);
 
 % apply flat field correction
 moment = moment ./ imgaussfilt(moment, gaussian_width);
+sqrt_moment = sqrt_moment ./ imgaussfilt(sqrt_moment, gaussian_width);
 ms2 = sum(sum(moment,1),2);
 moment = (ms / ms2) * moment;
 hologram0 = gather(moment);
+sqrt_hologram0 = gather(sqrt_moment);
 
 % composite
 nrange_1 = n1:n2;
@@ -77,7 +80,10 @@ f_range_sym = (-n2:-n1) .* (ac.fs / j_win);
 SH(:,:,n1:n2) = SH(:,:,n1:n2) .* reshape(f_range, 1, 1, numel(f_range));
 SH(:,:,n3:n4) = SH(:,:,n3:n4) .* reshape(f_range_sym, 1, 1, numel(f_range_sym));
 moment1 = gather(squeeze(sum(abs(SH(:, :, n1:n2)), 3))) + gather(squeeze(sum(abs(SH(:, :, n3:n4)), 3)));
+ms = sum(sum(moment,1),2);
 moment1 = moment1 ./ imgaussfilt(moment1, gaussian_width);
+ms2 = sum(sum(moment,1),2);
+moment1 = (ms/ms2) * moment1;
 hologram1 = moment1;
 
 % hologram2
@@ -85,6 +91,7 @@ hologram1 = moment1;
 SH(:,:,n1:n2) = SH(:,:,n1:n2) .* reshape(f_range, 1, 1, numel(f_range));
 SH(:,:,n3:n4) = SH(:,:,n3:n4) .* reshape(f_range_sym, 1, 1, numel(f_range_sym));
 moment2 = gather(squeeze(sum(abs(SH(:, :, n1:n2)), 3))) + gather(squeeze(sum(abs(SH(:, :, n3:n4)), 3)));
+moment2 = sqrt(moment2);
 moment2 = moment2 ./ imgaussfilt(moment2, gaussian_width);
 hologram2 = moment2;
 end
