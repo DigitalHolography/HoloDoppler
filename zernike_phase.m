@@ -17,7 +17,7 @@ idx = r<=sqrt(2);
 phi = 0;
 zern = zeros(Nx,Ny,numel(A));
 
-zz = zernfun2(3:(size(A)+3),r(idx),theta(idx),'norm');
+zz = zernfun2(A,r(idx),theta(idx),'norm');
 
 for k = 1:numel(A)
     tmp = zeros(Nx, Ny);

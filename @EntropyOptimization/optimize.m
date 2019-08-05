@@ -1,5 +1,5 @@
 function opt = optimize(obj, FH, f1, f2, acquisition, gaussian_width, retract, use_gpu)
-zernike_eval = evaluate_zernikes(obj.n, obj.m, acquisition.Nx, acquisition.Ny);
+[~, zernike_eval] = zernike_phase(obj.p, acquisition.Nx, acquisition.Ny);
 current_optimum = obj.initial_guess;
 current_constraint = [obj.min_constraint; obj.max_constraint];
 for r = obj.mask_radiuses
