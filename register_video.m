@@ -19,17 +19,20 @@ num_frames = size(frames, 4);
 ref = 1;
 % ref = pick_ref_img(frames, 6);
 ref_img = frames(:,:,:,ref);
-disp('picking frame:');
-disp(ref);
 
 shifts = zeros(2, num_frames);
 
+% useless progress bar for michael
+D = parallel.pool.DataQueue;
+h = waitbar(0, 'Video registration in progress...');
+afterEach(D, @update_registration_waitbar);
+N = double(num_frames);
+
 %% apply registration
 parfor i = 1:num_frames
-    disp(i);
+    send(D, i);
     if i ~= ref
         reg = registerImages(frames(:,:,:,i), ref_img);
-%         reg = register_images_multimodal(frames(:,:,:,i), ref_img);
         frames(:,:,:,i) = reg.RegisteredImage;
         shifts(:,i) = [reg.Transformation.T(3,2); reg.Transformation.T(3,1)];
     end
@@ -40,4 +43,9 @@ for i = 1:num_frames
 end
 
 registered = frames;
+
+function update_registration_waitbar(sig)
+    waitbar(sig / N, h);
+end
+close(h);
 end
