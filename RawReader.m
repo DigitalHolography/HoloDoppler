@@ -3,7 +3,7 @@
 % .raw video file
 %
 % Provides methods to fetch batches of images from the video file
-classdef InterferogramStream
+classdef RawReader
     properties
         acquisition % @DopplerAcquisition
         j_win       % number of frames in each batch
@@ -15,7 +15,7 @@ classdef InterferogramStream
     end
     methods
         % constructor
-        function obj = InterferogramStream(path, endianness, acquisition, ...
+        function obj = RawReader(path, endianness, acquisition, ...
                                            j_win, j_step)
             %% set parameters
             obj.acquisition = acquisition;
@@ -69,6 +69,14 @@ classdef InterferogramStream
             
             batch = reshape(batch, ac.Nx, ac.Ny, batch_size);
             batch = replace_dropped_frames(batch, 0.2);
+        end
+        
+        function width = get_frame_width(obj)
+            width = obj.acquisition.Nx;
+        end
+
+        function height = get_frame_height(obj)
+            height = obj.acquisition.Ny;
         end
     end
 end
