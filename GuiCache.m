@@ -31,6 +31,7 @@ properties (Access = public)
     notes
     DX
     DY
+    horizontal_axis_flip
 end
 methods (Access = public)
     function obj = GuiCache()
