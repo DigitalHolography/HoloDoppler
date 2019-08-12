@@ -30,6 +30,11 @@ properties (Access = public)
     DY
     horizontal_axis_flip
     vertical_axis_flip
+    mask_num_iter
+    low_order_zernikes_tol
+    high_order_zernikes_tol
+    low_order_max_constraint
+    high_order_max_constraint
 end
 methods (Access = public)
     function obj = GuiCache()

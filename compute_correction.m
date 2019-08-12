@@ -1,4 +1,4 @@
-function correction = compute_correction(istream, cache, gw, complex_mask, progress_bar, use_gpu, use_multithread, p, registration_shifts, varargin)
+function correction = compute_correction(istream, cache, gw, complex_mask, progress_bar, use_gpu, use_multithread, p, mesh_tol, mask_num_iter, max_constraint, registration_shifts, varargin)
 % Compute an optimal aberration correction given zernike
 % indices.
 %
@@ -76,7 +76,7 @@ parfor (batch_idx = 1:num_batches-1, parfor_arg)
 
     FH = register_FH(FH, local_shifts, j_win, batch_size_factor);
 
-    if nin == 12
+    if nin == 15
         % if this parameter exist, then so does 'previous_p'
         previous_p = varargin{1};
         previous_coefs = varargin{2};
@@ -93,15 +93,15 @@ parfor (batch_idx = 1:num_batches-1, parfor_arg)
 
     % FH is now registered and pre-processed, we now proceed to aberation
     % computation
-    min_constraint = -10 * ones(1, numel(p));
-    max_constraint = 10 * ones(1, numel(p));
+    minc = -max_constraint * ones(1, numel(p));
+    maxc = max_constraint * ones(1, numel(p));
     initial_guess = zeros(1, numel(p));
-    optimizer = EntropyOptimization(f1, f2, p, min_constraint, max_constraint, initial_guess, gw);
+    optimizer = EntropyOptimization(f1, f2, p, minc, maxc, initial_guess);
 
     if use_gpu
         FH = gpuArray(FH);
     end
-    coefs = optimizer.optimize(FH, f1, f2, acquisition, gw, 1, use_gpu);
+    coefs = optimizer.optimize(FH, f1, f2, acquisition, gw, mesh_tol, mask_num_iter, 1, use_gpu);
 
     phase_coefs(:, batch_idx) = coefs;
 
