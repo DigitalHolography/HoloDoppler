@@ -1,4 +1,7 @@
-function correction = compute_correction(istream, cache, gw, complex_mask, progress_bar, use_gpu, use_multithread, p, mesh_tol, mask_num_iter, max_constraint, registration_shifts, varargin)
+function correction = compute_correction(istream, cache, gw, complex_mask,...
+                                         progress_bar, use_gpu, use_multithread,...
+                                         p, mesh_tol, mask_num_iter, max_constraint,...
+                                         registration_shifts, varargin)
 % Compute an optimal aberration correction given zernike
 % indices.
 %
@@ -12,7 +15,6 @@ function correction = compute_correction(istream, cache, gw, complex_mask, progr
 % progress_bar: gui progress bar to display computation progress
 % use_gpu: uses GPU for hologram reconstructions
 % use_multithread: enables parfor loops
-% /!\ PLEASE DONT SET use_gpu AND use_multithread TO true AT THE SAME TIME
 % p: 1D array containing the indices of the zernikes to use for
 %                   the optimization (1D indices from 0 onwards)
 %
@@ -24,6 +26,12 @@ function correction = compute_correction(istream, cache, gw, complex_mask, progr
 %          previous correction
 %    coefs: a 1D array containing coefs of the matching
 %          zernikes for previous correction
+
+% Prevent using the GPU in a parfor loop
+% (that would be a terrible idea)
+if use_multithread && use_gpu
+    use_multithread = false;
+end
 
 nin = nargin; % local alias because nargin can't be used in parfor loops
 
@@ -76,7 +84,7 @@ parfor (batch_idx = 1:num_batches-1, parfor_arg)
 
     FH = register_FH(FH, local_shifts, j_win, batch_size_factor);
 
-    if nin == 15
+    if nin == 15 % change this value if function arguments are added or removed
         % if this parameter exist, then so does 'previous_p'
         previous_p = varargin{1};
         previous_coefs = varargin{2};

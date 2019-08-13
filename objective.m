@@ -6,6 +6,6 @@ function J = objective(FH, coefs, zernike_eval, f1, f2, mask, acquisition, gauss
     moment = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, phase_correction);
     moment = mat2gray(abs(ifft2(fft2(moment) .* fftshift(mask))));
 
-    J = gather(entropy(moment));
-%     J = gather(entropy(moment) ./ norm(stdfilt(moment).^2));
+%     J = gather(entropy(moment));
+    J = gather(entropy(moment) ./ norm(stdfilt(moment).^2));
 end
