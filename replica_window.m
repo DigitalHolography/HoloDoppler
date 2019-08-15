@@ -1,4 +1,7 @@
 function w = replica_window(Nx, Ny, x0, y0)
+% /!\
+% This is used in the 'remove_replica.m' file which currently does not work
+%
 % x0: number of pixels to skip horizontally on each side of the window
 % y0: number of pixels to skip horizontally on each side of the window
 

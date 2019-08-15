@@ -1,18 +1,24 @@
 function [hologram0, sqrt_hologram0, hologram1, hologram2, composite_1, composite_2, composite_3] = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, phase_correction)
 % Compute the moment of a batch of interferograms
 %
-% batch: the input interferograms batch
-%
+% INPUT ARGUMENT
+% FH: the preprocessed input interferograms batch
 % kernel: wave propagation kernel
-% 
-% f_lower, f_upper: frequency integration bounds
+% f1, f2: frequency integration bounds
+% acquisition: a DopplerAcquisition struct containing informations
+%              about the experimental setup
+% gaussian_width: size of the gaussian filter
+% use_gpu: use gpu or not for the reconstruction
+% phase_correction: optional parameter, a phase correction to apply before
+%                   reconstructing the hologram
 %
-% fs: batch sampling frequency
-%
-% delta_x, delta_y: coordinates shifts to put the center of
-% the interferograms at position (0, 0)
-%
-% phase_correction: optional parameter
+% OUTPUT ARGUMENTS
+% hologram0: M0
+% sqrt_hologram0: sqrt(M0)
+% hologram1: M1
+% hologram2: M2
+% composite_(1|2|3): reduced frequency bands of M0 to create a composite
+%                    RGB image in post processing
 
 j_win = size(FH, 3);
 ac = acquisition;
@@ -42,8 +48,11 @@ SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
 %% moment
 
 % hologram0
+
+% integration interval
 n1 = round(f1 * j_win / ac.fs) + 1;
 n2 = round(f2 * j_win / ac.fs);
+% symetric integration interval
 n3 = size(SH, 3) - n2 + 2;
 n4 = size(SH, 3) - n1 + 2;
 moment = squeeze(sum(abs(SH(:, :, n1:n2)), 3)) + squeeze(sum(abs(SH(:, :, n3:n4)), 3));

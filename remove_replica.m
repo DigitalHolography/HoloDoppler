@@ -1,4 +1,6 @@
 function frame_batch = remove_replica(frame_batch)
+% THIS CURRENTLY DOES NOT WORK AND IS NOT USED
+
 Nx = size(frame_batch, 1);
 Ny = size(frame_batch, 2);
 
