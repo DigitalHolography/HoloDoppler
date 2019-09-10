@@ -69,52 +69,112 @@ else
     parfor_arg = Inf;
 end
 
-parfor (batch_idx = 1:num_batches-1, parfor_arg)
-    % load interferogram batch
-    FH = istream.read_frame_batch(aberration_j_win, batch_idx * aberration_j_step);
+initial_guess = zeros(1, numel(p));
+if parfor_arg == Inf
+    %% PARALLEL LOOP
+    parfor batch_idx = 1:num_batches-1
+        % load interferogram batch
+        FH = istream.read_frame_batch(aberration_j_win, batch_idx * aberration_j_step);
 
-    % load registration_shifts
-    local_shifts = registration_shifts(:, batch_size_factor*(batch_idx-1) + 1:batch_size_factor*batch_idx);
+        % load registration_shifts
+        local_shifts = registration_shifts(:, batch_size_factor*(batch_idx-1) + 1:batch_size_factor*batch_idx);
 
-    % compute FH
-    FH = fftshift(fft2(FH)) .* FH;
-    if ~isempty(complex_mask)
-        FH = FH .* complex_mask;
-    end
-
-    FH = register_FH(FH, local_shifts, j_win, batch_size_factor);
-
-    if nin == 15 % change this value if function arguments are added or removed
-        % if this parameter exist, then so does 'previous_p'
-        previous_p = varargin{1};
-        previous_coefs = varargin{2};
-
-        [~, previous_zernikes] = zernike_phase(previous_p, Nx, Ny);
-        previous_phase = 0;
-        for i = 1:numel(previous_p)
-            previous_phase = previous_phase + previous_coefs(i) * previous_zernikes(:,:,i);
+        % compute FH
+        FH = fftshift(fft2(FH)) .* FH;
+        if ~isempty(complex_mask)
+            FH = FH .* complex_mask;
         end
 
-        % apply pervious correction
-        FH = FH .* exp(-1i * previous_phase);
+        FH = register_FH(FH, local_shifts, j_win, batch_size_factor);
+
+        if nin == 15 % change this value if function arguments are added or removed
+            % if this parameter exist, then so does 'previous_p'
+            previous_p = varargin{1};
+            previous_coefs = varargin{2};
+
+            [~, previous_zernikes] = zernike_phase(previous_p, Nx, Ny);
+            previous_phase = 0;
+            for i = 1:numel(previous_p)
+                previous_phase = previous_phase + previous_coefs(i) * previous_zernikes(:,:,i);
+            end
+
+            % apply pervious correction
+            FH = FH .* exp(-1i * previous_phase);
+        end
+
+        % FH is now registered and pre-processed, we now proceed to aberation
+        % computation
+        minc = -max_constraint * ones(1, numel(p));
+        maxc = max_constraint * ones(1, numel(p));
+        optimizer = EntropyOptimization(f1, f2, p, minc, maxc, initial_guess);
+
+        if use_gpu
+            FH = gpuArray(FH);
+        end
+        coefs = optimizer.optimize(FH, f1, f2, acquisition, gw, mesh_tol, mask_num_iter, 1, use_gpu);
+        phase_coefs(:, batch_idx) = coefs;
+
+        % increment progress bar
+        send(progress_bar, 0);
     end
+else
+    %% SEQUENTIAL LOOP
+    %  This code is a duplicate from the loop above except it is sequencial.
+    %  We can't just use a conditional parfor here because matlab wouldn't
+    %  allow us to update the initial guess in the sequencial case.
+    %  Please don't modify both loops if a modification is done. Otherwise
+    %  the code could become a mess quickly
+    for batch_idx = 1:num_batches-1
+        % load interferogram batch
+        FH = istream.read_frame_batch(aberration_j_win, batch_idx * aberration_j_step);
 
-    % FH is now registered and pre-processed, we now proceed to aberation
-    % computation
-    minc = -max_constraint * ones(1, numel(p));
-    maxc = max_constraint * ones(1, numel(p));
-    initial_guess = zeros(1, numel(p));
-    optimizer = EntropyOptimization(f1, f2, p, minc, maxc, initial_guess);
+        % load registration_shifts
+        local_shifts = registration_shifts(:, batch_size_factor*(batch_idx-1) + 1:batch_size_factor*batch_idx);
 
-    if use_gpu
-        FH = gpuArray(FH);
+        % compute FH
+        FH = fftshift(fft2(FH)) .* FH;
+        if ~isempty(complex_mask)
+            FH = FH .* complex_mask;
+        end
+
+        FH = register_FH(FH, local_shifts, j_win, batch_size_factor);
+
+        if nin == 15 % change this value if function arguments are added or removed
+            % if this parameter exist, then so does 'previous_p'
+            previous_p = varargin{1};
+            previous_coefs = varargin{2};
+
+            [~, previous_zernikes] = zernike_phase(previous_p, Nx, Ny);
+            previous_phase = 0;
+            for i = 1:numel(previous_p)
+                previous_phase = previous_phase + previous_coefs(i) * previous_zernikes(:,:,i);
+            end
+
+            % apply pervious correction
+            FH = FH .* exp(-1i * previous_phase);
+        end
+
+        % FH is now registered and pre-processed, we now proceed to aberation
+        % computation
+        minc = -max_constraint * ones(1, numel(p));
+        maxc = max_constraint * ones(1, numel(p));
+        disp(initial_guess);
+        optimizer = EntropyOptimization(f1, f2, p, minc, maxc, initial_guess);
+
+        if use_gpu
+            FH = gpuArray(FH);
+        end
+        coefs = optimizer.optimize(FH, f1, f2, acquisition, gw, mesh_tol, mask_num_iter, 1, use_gpu);
+
+        % THIS LINE IS WHAT CHANGES FROM THE PARALLEL LOOP
+        % update initial guess for next iteration
+        initial_guess = coefs;        
+
+        phase_coefs(:, batch_idx) = coefs;
+
+        % increment progress bar
+        send(progress_bar, 0);
     end
-    coefs = optimizer.optimize(FH, f1, f2, acquisition, gw, mesh_tol, mask_num_iter, 1, use_gpu);
-
-    phase_coefs(:, batch_idx) = coefs;
-
-    % increment progress bar
-    send(progress_bar, 0);
 end
 
 correction = phase_coefs;
