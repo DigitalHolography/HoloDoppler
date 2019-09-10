@@ -158,7 +158,6 @@ else
         % computation
         minc = -max_constraint * ones(1, numel(p));
         maxc = max_constraint * ones(1, numel(p));
-        disp(initial_guess);
         optimizer = EntropyOptimization(f1, f2, p, minc, maxc, initial_guess);
 
         if use_gpu
