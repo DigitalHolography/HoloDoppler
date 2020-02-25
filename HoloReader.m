@@ -5,7 +5,8 @@ properties
     num_frames
     frame_width
     frame_height
-    file_size
+    data_size
+    bit_depth
     endianness
     footer % matlab JSON object
 end
@@ -17,6 +18,7 @@ methods
         header_mmap = memmapfile(filename, 'Format',...
             {'uint8', 4, 'magic_number';...
              'uint16', 1, 'version';...
+             'uint16', 1, 'bit_depth';...
              'uint32', 1, 'width';...
              'uint32', 1, 'height';...
              'uint32', 1, 'num_frames';...
@@ -25,27 +27,28 @@ methods
              % padding - skip
             }, 'Repeat', 1);
         
-        if header_mmap.Data.magic_number ~= unicode2native('Holo')
-            % handle bad file
+        if ~isequal(header_mmap.Data.magic_number', unicode2native('HOLO'))
+            error('Bad holo file.');
         end
         
         obj.version = header_mmap.Data.version;
         obj.num_frames = header_mmap.Data.num_frames;
         obj.frame_width = header_mmap.Data.width;
         obj.frame_height = header_mmap.Data.height;
-        obj.file_size = header_mmap.Data.total_size;
+        obj.data_size = header_mmap.Data.total_size;
+        obj.bit_depth = header_mmap.Data.bit_depth;
         obj.endianness = header_mmap.Data.endianness;
     
         %% parse footer
-        bit_depth = 16; % TODO => check bit_depth value
-        footer_skip = 64 + obj.frame_width * obj.frame_height * obj.num_frames * bit_depth;
-        footer_size = obj.file_size - footer_skip;
+        footer_skip = 64 + uint64(obj.frame_width * obj.frame_height) * uint64(obj.num_frames) * uint64(obj.bit_depth/8);
+        s=dir(filename);
+        footer_size = s.bytes - footer_skip;
         
         % open file and seek footer
         fd = fopen(filename, 'r');
         fseek(fd, footer_skip, 'bof');
         footer_unparsed = fread(fd, footer_size, '*char');
-        footer_parsed = jsondecode(footer_unparsed);
+        footer_parsed = jsondecode(convertCharsToStrings(footer_unparsed));
         obj.footer = footer_parsed;
         fclose(fd);
     end
@@ -53,11 +56,17 @@ methods
     function frame_batch = read_frame_batch(obj, batch_size, frame_offset)
         fd = fopen(obj.filename, 'r');
         
-        bit_depth = 16; % TODO: check this
-        frame_size = obj.frame_width * obj.frame_height * bit_depth;
+        frame_size = obj.frame_width * obj.frame_height * uint32(obj.bit_depth/8);
                 
         fseek(fd, 64 + frame_offset * frame_size, 'bof');
-        frame_batch = reshape(fread(fd, obj.frame_width * obj.frame_height * batch_size, 'uint16=>single', 'l'), obj.frame_width, obj.frame_height);
+        
+        if obj.endianness == 0
+            endian= 'l';
+        else
+            endian= 'b';
+        end
+        
+        frame_batch = reshape(fread(fd, obj.frame_width * obj.frame_height * batch_size, 'uint16=>single', endian), obj.frame_width, obj.frame_height, batch_size);
         frame_batch = HoloReader.replace_dropped_frames(frame_batch, 0.2);
 
         fclose(fd);
