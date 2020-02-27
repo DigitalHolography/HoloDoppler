@@ -44,7 +44,7 @@ parfor (batch_idx = 1:num_batches-1, parfor_flag)
         FH = compute_FH_from_frame_batch(frame_batch, kernel);
     end
     
-    FH = reconstruct_hologram(FH, f1, f2, acquisition, gw, false);
+    FH = reconstruct_hologram(FH, f1, f2, acquisition, gw, false, true);
 
     holograms(:,:,:,batch_idx) = mat2gray(FH);
     send(progress_bar, 0); % increment progress bar

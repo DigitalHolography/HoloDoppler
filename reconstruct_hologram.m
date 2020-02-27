@@ -1,4 +1,4 @@
-function [hologram0, sqrt_hologram0, hologram1, hologram2, composite_1, composite_2, composite_3] = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, phase_correction)
+function [hologram0, sqrt_hologram0, hologram1, hologram2, composite_1, composite_2, composite_3] = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, svd, phase_correction)
 % Compute the moment of a batch of interferograms
 %
 % INPUT ARGUMENT
@@ -9,6 +9,7 @@ function [hologram0, sqrt_hologram0, hologram1, hologram2, composite_1, composit
 %              about the experimental setup
 % gaussian_width: size of the gaussian filter
 % use_gpu: use gpu or not for the reconstruction
+% svd: add SVD filtering to hologram reconstruction
 % phase_correction: optional parameter, a phase correction to apply before
 %                   reconstructing the hologram
 %
@@ -36,6 +37,11 @@ end
 
 H = ifft2(FH);
 clear FH;
+
+%% SVD filtering
+if svd
+    H = svd_filter(H, f1, ac.fs);
+end
 
 %% squared magnitude of hologram
 SH = fft(H, [], 3);
