@@ -1,4 +1,4 @@
-function [M] = mat_mask(M_init,rem_subAp) %[M] = mat_mask(M,n_diag_corner) %[M_masked] = mat_mask(M_init)
+function [M] = mat_mask(M_init,rem_subAp)
 % mat_mask(M_init,rem_subAp) puts 0 value to all 4 corners of a vectorized matrix.
 % input:    M_init, matrix or vector to mask. size(M_init) =
 % (n_SubAp,n_mode) or (n_SubAp,1)    
