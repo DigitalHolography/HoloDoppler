@@ -30,11 +30,18 @@ properties (Access = public)
     DY
     horizontal_axis_flip
     vertical_axis_flip
+    
+    % iterative optimization parameters
     mask_num_iter
     low_order_zernikes_tol
     high_order_zernikes_tol
     low_order_max_constraint
     high_order_max_constraint
+    
+    % shack-hartmann parameters
+    zernike_ranks
+    num_subapertures
+    subaperture_margin
 end
 methods (Access = public)
     function obj = GuiCache()

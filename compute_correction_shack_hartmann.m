@@ -1,10 +1,10 @@
 function correction = compute_correction_shack_hartmann(istream, cache, kernel, gw, complex_mask,...
                                          progress_bar, use_gpu, use_multithread,...
                                          p, registration_shifts, num_subapertures,...
-                                         num_modes, calibration_factor, subaperture_margin,...
+                                         calibration_factor, subaperture_margin,...
                                          corrmap_margin, excluded_subapertures,...
                                          power_filter_corrector, sigma_filter_corrector,...
-                                         max_shack_hartmann_iter, varargin)
+                                         varargin)
 % Compute an optimal aberration correction given zernike
 % indices.
 %
@@ -92,7 +92,7 @@ if parfor_arg == Inf
 
         FH = register_FH(FH, local_shifts, j_win, batch_size_factor);
 
-        if nin == 21 % change this value if function arguments are added or removed
+        if nin == 20 % change this value if function arguments are added or removed
             % if this parameter exist, then so does 'previous_p'
             previous_p = varargin{1};
             previous_coefs = varargin{2};
@@ -109,10 +109,7 @@ if parfor_arg == Inf
 
         % FH is now registered and pre-processed, we now proceed to aberation
         % computation
-        
-        % TODO: replace num_modes by p
-        modes = [3 4 5];
-        shack_hartmann = ShackHartmann(num_subapertures, modes, calibration_factor, subaperture_margin, corrmap_margin, power_filter_corrector, sigma_filter_corrector);
+        shack_hartmann = ShackHartmann(num_subapertures, p, calibration_factor, subaperture_margin, corrmap_margin, power_filter_corrector, sigma_filter_corrector);
         [M_aso, stiched_moments_M_aso] = shack_hartmann.construct_M_aso(f1, f2, gw, acquisition);
         
         if use_gpu
@@ -161,7 +158,7 @@ else
 
         FH = register_FH(FH, local_shifts, j_win, batch_size_factor);
 
-        if nin == 21 % change this value if function arguments are added or removed
+        if nin == 20 % change this value if function arguments are added or removed
             % if this parameter exist, then so does 'previous_p'
             previous_p = varargin{1};
             previous_coefs = varargin{2};
@@ -178,10 +175,7 @@ else
 
         % FH is now registered and pre-processed, we now proceed to aberation
         % computation
-        
-        % TODO: replace num_modes by p
-        modes = [3 4 5];
-        shack_hartmann = ShackHartmann(num_subapertures, modes, calibration_factor, subaperture_margin, corrmap_margin, power_filter_corrector, sigma_filter_corrector);
+        shack_hartmann = ShackHartmann(num_subapertures, p, calibration_factor, subaperture_margin, corrmap_margin, power_filter_corrector, sigma_filter_corrector);
         [M_aso, stiched_moments_M_aso] = shack_hartmann.construct_M_aso(f1, f2, gw, acquisition);
         
         if use_gpu
@@ -199,7 +193,7 @@ else
         M_aso_concat = cat(1,real(M_aso),imag(M_aso));
         
         % solve linear system
-        coefs = M_aso_concat \ Y;   
+        coefs = M_aso_concat \ Y;
         
         coefs = coefs * calibration_factor;
         
