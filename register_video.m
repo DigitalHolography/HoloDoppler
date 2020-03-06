@@ -1,4 +1,4 @@
-function [registered, shifts] = register_video(frames)
+function [registered, shifts] = register_video(frames, ref_idx)
 % registers a video
 % frames: a video 4D-array width x height x 1 x num_frames
 
@@ -16,7 +16,7 @@ function [registered, shifts] = register_video(frames)
 % end
 num_frames = size(frames, 4);
 
-ref = 1;
+ref = ref_idx;
 % ref = pick_ref_img(frames, 6);
 ref_img = frames(:,:,:,ref);
 

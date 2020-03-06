@@ -1,4 +1,4 @@
-function reg = compute_temporal_registration(istream, cache, batch_size, batch_stride, gw, kernel, complex_mask, progress_bar, use_multithread)
+function reg = compute_temporal_registration(istream, cache, batch_size, batch_stride, ref_idx, gw, kernel, complex_mask, progress_bar, use_multithread)
 % Compute pixel shifts for phase registration.
 % returns a 2 x num_frames shift matrix
 % [dx1 ... dxn]
@@ -51,5 +51,5 @@ parfor (batch_idx = 1:num_batches-1, parfor_flag)
 end
 
 % compute registrations
-[~, reg] = register_video(holograms); 
+[~, reg] = register_video(holograms, ref_idx); 
 end

@@ -21,8 +21,6 @@ properties (Access = public)
     aberration_compensation
     batch_size_factor_flag
     batch_size_factor
-    optimization_plan
-    additional_zernike_ranks
     notes
     DX
     DY
@@ -30,6 +28,7 @@ properties (Access = public)
     vertical_axis_flip
     
     % iterative optimization parameters
+    optimization_zernike_ranks
     mask_num_iter
     low_order_zernikes_tol
     high_order_zernikes_tol
@@ -37,7 +36,7 @@ properties (Access = public)
     high_order_max_constraint
     
     % shack-hartmann parameters
-    zernike_ranks
+    shack_hartmann_zernike_ranks
     num_subapertures
     subaperture_margin
 end

@@ -78,13 +78,14 @@ methods
          fclose(fd);
          
          %% jump to camera setup structure to read frame rate
-         % TODO: read FrameRate instead of FrameRate16
+         % Skip additional 768 bytes to access FrameRate in the struct,
+         % instead of FrameRate16
          setup_mmap = memmapfile(filename,...
-             'Offset', header_mmap.Data.off_setup, 'Format',...
-             {'uint16', 1, 'frame_rate_16';...
+             'Offset', header_mmap.Data.off_setup + 768, 'Format',...
+             {'uint32', 1, 'frame_rate';...
               % discard the rest of the struct, we don't need it
              }, 'Repeat', 1);
-         obj.frame_rate = setup_mmap.Data.frame_rate_16;
+         obj.frame_rate = setup_mmap.Data.frame_rate;
          
          %% skip a bunch of fields to access the number of bits per pixel
          % bytes to skip from the begining of the Setup struct:
