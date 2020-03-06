@@ -18,8 +18,8 @@ function reg = compute_temporal_registration(istream, cache, batch_size, batch_s
 Nx = istream.get_frame_width();
 Ny = istream.get_frame_height();
 acquisition = DopplerAcquisition(Nx,Ny,cache.Fs/1000,cache.z,cache.wavelength,cache.DX,cache.DY,cache.pix_width,cache.pix_height);
-f1 = cache.registration_f1;
-f2 = cache.registration_f2;
+f1 = cache.f1;
+f2 = cache.f2;
 
 % reset progress bar
 send(progress_bar, -1);

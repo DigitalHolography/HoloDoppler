@@ -23,8 +23,6 @@ properties (Access = public)
     batch_size_factor
     optimization_plan
     additional_zernike_ranks
-    registration_f1
-    registration_f2
     notes
     DX
     DY

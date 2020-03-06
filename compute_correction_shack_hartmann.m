@@ -47,8 +47,8 @@ Nx = istream.get_frame_width();
 Ny = istream.get_frame_height();
 j_win = cache.batch_size;
 j_step = cache.batch_stride;
-f1 = cache.registration_f1;
-f2 = cache.registration_f2;
+f1 = cache.f1;
+f2 = cache.f2;
 acquisition = DopplerAcquisition(Nx,Ny,cache.Fs/1000,cache.z,cache.wavelength,cache.DX,cache.DY,cache.pix_width,cache.pix_height);
 
 % modify j_win and j_step if a batch_size_factor is provieded
