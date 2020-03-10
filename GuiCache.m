@@ -26,8 +26,16 @@ properties (Access = public)
     DY
     horizontal_axis_flip
     vertical_axis_flip
+    position_in_file
+    
+    % color image parameters
+    color_f1
+    color_f2
+    color_f3
+    low_frequency
     
     % iterative optimization parameters
+    iterative_aberration_compensation
     optimization_zernike_ranks
     mask_num_iter
     low_order_zernikes_tol
@@ -36,6 +44,7 @@ properties (Access = public)
     high_order_max_constraint
     
     % shack-hartmann parameters
+    shack_hartmann_aberration_compensation
     shack_hartmann_zernike_ranks
     num_subapertures
     subaperture_margin

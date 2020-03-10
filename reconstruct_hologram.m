@@ -1,4 +1,5 @@
-function [hologram0, sqrt_hologram0, hologram1, hologram2, freq_low, freq_high] = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, svd, phase_correction)
+function [hologram0, sqrt_hologram0, hologram1, hologram2, freq_low, freq_high] = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, svd, phase_correction,...
+                                                                                                       color_f1, color_f2, color_f3)
 % Compute the moment of a batch of interferograms
 %
 % INPUT ARGUMENT
@@ -31,7 +32,7 @@ if use_gpu
     end
 end
 
-if exist('phase_correction', 'var')
+if exist('phase_correction', 'var') && ~isempty(phase_correction)
     FH = FH .* exp(-1i * phase_correction);
 end
 
@@ -74,18 +75,23 @@ hologram0 = gather(moment);
 sqrt_hologram0 = gather(sqrt_moment);
 
 % low and high frequency bands
-freq_1 = 1;
-freq_2 = 6;
-freq_3 = ac.fs/2;
-low_n1 = round(freq_1 * j_win / ac.fs) + 1;
-low_n2 = round(freq_2 * j_win / ac.fs);
-high_n1 = low_n2 + 1;
-high_n2 = round(freq_3 * j_win / ac.fs);
+if exist('color_f3', 'var')
+    freq_1 = color_f1;
+    freq_2 = color_f2;
+    freq_3 = color_f3;
+    low_n1 = round(freq_1 * j_win / ac.fs) + 1;
+    low_n2 = round(freq_2 * j_win / ac.fs);
+    high_n1 = low_n2 + 1;
+    high_n2 = round(freq_3 * j_win / ac.fs);
 
-freq_low = squeeze(sum(abs(SH(:, :, low_n1:low_n2)), 3));
-freq_high = squeeze(sum(abs(SH(:, :, high_n1:high_n2)), 3));
-freq_low = freq_low ./ imgaussfilt(freq_low, gaussian_width);
-freq_high = freq_high./ imgaussfilt(freq_high, gaussian_width);
+    freq_low = squeeze(sum(abs(SH(:, :, low_n1:low_n2)), 3));
+    freq_high = squeeze(sum(abs(SH(:, :, high_n1:high_n2)), 3));
+    freq_low = freq_low ./ imgaussfilt(freq_low, gaussian_width);
+    freq_high = freq_high./ imgaussfilt(freq_high, gaussian_width);
+else
+    freq_low = [];
+    freq_high = [];
+end
 
 % hologram1
 f_range = (n1:n2) .* (ac.fs / j_win);
