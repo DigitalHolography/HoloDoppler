@@ -19,8 +19,6 @@ properties (Access = public)
     parallelism
     registration_via_phase
     aberration_compensation
-    batch_size_factor_flag
-    batch_size_factor
     notes
     DX
     DY
@@ -38,10 +36,8 @@ properties (Access = public)
     iterative_aberration_compensation
     optimization_zernike_ranks
     mask_num_iter
-    low_order_zernikes_tol
-    high_order_zernikes_tol
-    low_order_max_constraint
-    high_order_max_constraint
+    zernikes_tol
+    max_constraint
     
     % shack-hartmann parameters
     shack_hartmann_aberration_compensation
