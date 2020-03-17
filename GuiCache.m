@@ -22,8 +22,6 @@ properties (Access = public)
     notes
     DX
     DY
-    horizontal_axis_flip
-    vertical_axis_flip
     position_in_file
     
     % color image parameters
