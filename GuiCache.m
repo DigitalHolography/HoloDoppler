@@ -23,6 +23,7 @@ properties (Access = public)
     DX
     DY
     position_in_file
+    save_additional_videos
     
     % color image parameters
     color_f1
