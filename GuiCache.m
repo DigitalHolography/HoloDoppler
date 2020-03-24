@@ -24,6 +24,7 @@ properties (Access = public)
     DY
     position_in_file
     save_additional_videos
+    rephasing
     
     % color image parameters
     color_f1

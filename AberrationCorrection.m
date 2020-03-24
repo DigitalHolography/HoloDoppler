@@ -28,8 +28,34 @@ methods
        % nothing 
     end
     
-    function phase = compute_total_phase(obj, current_batch_idx, shack_zernikes, iterative_zernikes)
+    function [rephasing_zernikes, shack_zernikes, iterative_opt_zernikes] = generate_zernikes(obj, Nx, Ny)
+       if ~isempty(obj.rephasing_zernike_indices)
+          [~, rephasing_zernikes] = zernike_phase(obj.rephasing_zernike_indices, Nx, Ny);
+       else
+           rephasing_zernikes = [];
+       end
+       
+       if ~isempty(obj.shack_hartmann_zernike_indices)
+          [~, shack_zernikes] = zernike_phase(obj.shack_hartmann_zernike_indices, Nx, Ny); 
+       else
+           shack_zernikes = [];
+       end
+       
+       if ~isempty(obj.iterative_opt_zernike_indices)
+          [~, iterative_opt_zernikes] = zernike_phase(obj.iterative_opt_zernike_indices, Nx, Ny);
+       else
+           iterative_opt_zernikes = [];
+       end
+    end
+    
+    function phase = compute_total_phase(obj, current_batch_idx, rephasing_zernikes, shack_zernikes, iterative_zernikes)
         phase = 0;
+        
+        if ~isempty(obj.rephasing_zernike_indices)
+            for i = 1:numel(obj.rephasing_zernike_indices)
+               phase = phase + obj.rephasing_zernike_coefs(i,current_batch_idx) * rephasing_zernikes(:,:,i); 
+            end
+        end
         
         if ~isempty(obj.shack_hartmann_zernike_indices)
             for i = 1:numel(obj.shack_hartmann_zernike_indices)
@@ -43,6 +69,9 @@ methods
             end
         end    
     end
+    
+%     function interpolate_to_other_num_batches(obj, new_num_batches)
+%     end
    % nothing else for now but it might be a good idea
    % to add here methods to compute the phase
    % corrections or other useful stuff
