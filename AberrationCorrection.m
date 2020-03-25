@@ -30,7 +30,8 @@ methods
     
     function [rephasing_zernikes, shack_zernikes, iterative_opt_zernikes] = generate_zernikes(obj, Nx, Ny)
        if ~isempty(obj.rephasing_zernike_indices)
-          [~, rephasing_zernikes] = zernike_phase(obj.rephasing_zernike_indices, Nx, Ny);
+%           [~, rephasing_zernikes] = zernike_phase([2 1], Nx, Ny);
+          rephasing_zernikes = evaluate_zernikes([1 1], [1 -1], Nx, Ny);
        else
            rephasing_zernikes = [];
        end

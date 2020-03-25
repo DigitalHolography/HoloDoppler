@@ -187,57 +187,57 @@ methods
        obj.rephasing_data = rephasing_data; 
     end
     
-    function FH = read_FH(obj, batch_size, frame_offset, kernel)
-       % read a frame batch and compute FH, then applies a phase computed
-       % from rephasing data
-       
-       frame_batch = obj.read_frame_batch(batch_size, frame_offset);
-       FH = fftshift(fft2(frame_batch)) .* kernel;
-       
-       if ~isempty(obj.rephasing_data)
-           % interpolate rephasing coefs to current batch
-           rephasing_num_batches = obj.rephasing_data.get_Nt();
-                                    
-%            current_num_batches = floor((obj.num_frames - batch_size) / batch_stride);
-           
-           % select indices of batches in rephasing data that corresponds
-           % to current frame batch
-           
-           % global idx of first/last frames of current batch
-           first_frame_idx = frame_offset+1;
-           last_frame_idx = frame_offset + batch_size;
-           
-           indices1 = find(obj.rephasing_data.frame_ranges >= first_frame_idx);
-           indices2 = find(obj.rephasing_data.frame_ranges <= last_frame_idx);
-                      
-           [~,J1] = ind2sub(2, indices1);
-           [~,J2] = ind2sub(2, indices2);
-           J = intersect(J1,J2);
-           jstart = min(J);
-           jstop = max(J);
-           
-           [rephasing_zernikes, shack_zernikes, iterative_opt_zernikes] = ...
-                       obj.rephasing_data.aberration_correction.generate_zernikes(obj.frame_width, obj.frame_height);
-                   
-           for j = jstart:jstop
-              % load phase
-              phase = obj.rephasing_data.aberration_correction.compute_total_phase(j,rephasing_zernikes,shack_zernikes,iterative_opt_zernikes);
-              correction = exp(-1i * phase);
-              
-              % compute last frame to apply phase
-              if j ~= size(obj.rephasing_data.frame_ranges,2)
-                last_frame_to_apply_phase_idx = min(obj.rephasing_data.frame_ranges(1,j+1)-1, last_frame_idx);
-              else
-                last_frame_to_apply_phase_idx = min(obj.rephasing_data.frame_ranges(2,j), last_frame_idx);
-              end
-              
-              % apply correction to FH frames
-              for idx = 1:last_frame_to_apply_phase_idx - first_frame_idx + 1
-                 FH(:,:,idx) = FH(:,:,idx) .* correction;
-              end
-           end
-       end
-    end
+%     function FH = read_FH(obj, batch_size, frame_offset, kernel)
+%        % read a frame batch and compute FH, then applies a phase computed
+%        % from rephasing data
+%        
+%        frame_batch = obj.read_frame_batch(batch_size, frame_offset);
+%        FH = fftshift(fft2(frame_batch)) .* kernel;
+%        
+%        if ~isempty(obj.rephasing_data)
+%            % interpolate rephasing coefs to current batch
+%            rephasing_num_batches = obj.rephasing_data.get_Nt();
+%                                     
+% %            current_num_batches = floor((obj.num_frames - batch_size) / batch_stride);
+%            
+%            % select indices of batches in rephasing data that corresponds
+%            % to current frame batch
+%            
+%            % global idx of first/last frames of current batch
+%            first_frame_idx = frame_offset+1;
+%            last_frame_idx = frame_offset + batch_size;
+%            
+%            indices1 = find(obj.rephasing_data.frame_ranges >= first_frame_idx);
+%            indices2 = find(obj.rephasing_data.frame_ranges <= last_frame_idx);
+%                       
+%            [~,J1] = ind2sub(2, indices1);
+%            [~,J2] = ind2sub(2, indices2);
+%            J = intersect(J1,J2);
+%            jstart = min(J);
+%            jstop = max(J);
+%            
+%            [rephasing_zernikes, shack_zernikes, iterative_opt_zernikes] = ...
+%                        obj.rephasing_data.aberration_correction.generate_zernikes(obj.frame_width, obj.frame_height);
+%                    
+%            for j = jstart:jstop
+%               % load phase
+%               phase = obj.rephasing_data.aberration_correction.compute_total_phase(j,rephasing_zernikes,shack_zernikes,iterative_opt_zernikes);
+%               correction = exp(-1i * phase);
+%               
+%               % compute last frame to apply phase
+%               if j ~= size(obj.rephasing_data.frame_ranges,2)
+%                 last_frame_to_apply_phase_idx = min(obj.rephasing_data.frame_ranges(1,j+1)-1, last_frame_idx);
+%               else
+%                 last_frame_to_apply_phase_idx = min(obj.rephasing_data.frame_ranges(2,j), last_frame_idx);
+%               end
+%               
+%               % apply correction to FH frames
+%               for idx = 1:last_frame_to_apply_phase_idx - first_frame_idx + 1
+%                  FH(:,:,idx) = FH(:,:,idx) .* correction;
+%               end
+%            end
+%        end
+%     end
 end
 methods(Static)
     function batch = replace_dropped_frames(batch, threshold)
