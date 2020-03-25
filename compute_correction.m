@@ -1,4 +1,4 @@
-function correction = compute_correction(istream, cache, gw, complex_mask,...
+function correction = compute_correction(istream, cache, kernel, rephasing_data, gw, complex_mask,...
                                          progress_bar, use_gpu, use_multithread,...
                                          p, mesh_tol, mask_num_iter, max_constraint,...
                                          registration_shifts, varargin)
@@ -7,6 +7,8 @@ function correction = compute_correction(istream, cache, gw, complex_mask,...
 %
 % istream: either a valid CineReader or a RawReader
 % cache: gui parameters
+% kernel: reconstruction kernel
+% rephasing_data: rephasing to apply before processing
 % gw: size of gaussian filter
 % batch_size: number of frames in a batch
 % batch_stride: number of frames to skip between each batches
@@ -68,14 +70,16 @@ if parfor_arg == Inf
         local_shifts = registration_shifts(:, batch_idx);
 
         % compute FH
-        FH = fftshift(fft2(FH)) .* FH;
+        FH = fftshift(fft2(FH)) .* kernel;
+        FH = rephase_FH(FH, rephasing_data, j_win, batch_idx * j_step);
+        
         if ~isempty(complex_mask)
             FH = FH .* complex_mask;
         end
 
         FH = register_FH(FH, local_shifts, j_win, 1);
 
-        if nin == 15 % change this value if function arguments are added or removed
+        if nin == 17 % change this value if function arguments are added or removed
             % if this parameter exist, then so does 'previous_p'
             previous_p = varargin{1};
             previous_coefs = varargin{2};
@@ -121,14 +125,15 @@ else
         local_shifts = registration_shifts(:, batch_idx);
 
         % compute FH
-        FH = fftshift(fft2(FH)) .* FH;
+        FH = fftshift(fft2(FH)) .* kernel;
+        FH = rephase_FH(FH, rephasing_data, j_win, batch_idx * j_step);
         if ~isempty(complex_mask)
             FH = FH .* complex_mask;
         end
 
         FH = register_FH(FH, local_shifts, j_win, 1);
 
-        if nin == 15 % change this value if function arguments are added or removed
+        if nin == 17 % change this value if function arguments are added or removed
             % if this parameter exist, then so does 'previous_p'
             previous_p = varargin{1};
             previous_coefs = varargin{2};
