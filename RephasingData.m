@@ -13,7 +13,7 @@ methods
     function obj = RephasingData(batch_size, batch_stride, aberration_correction)
        obj.batch_size = batch_size;
        obj.batch_stride = batch_stride;
-       obj. aberration_correction = aberration_correction;
+       obj.aberration_correction = aberration_correction;
     end
     
     function Nt = get_Nt(obj)

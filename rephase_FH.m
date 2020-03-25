@@ -1,6 +1,10 @@
 function FH = rephase_FH(FH, rephasing_data, batch_size, frame_offset)
 % Applies a phase to FH computed from rephasing data
 
+if isempty(rephasing_data)
+    return
+end
+
 % select indices of batches in rephasing data that corresponds
 % to current frame batch
 
