@@ -57,11 +57,11 @@ SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
 % hologram0
 
 % integration interval
-n1 = round(f1 * j_win / ac.fs) + 1;
-n2 = round(f2 * j_win / ac.fs);
+n1 = ceil(f1 * j_win / ac.fs);
+n2 = ceil(f2 * j_win / ac.fs);
 % symetric integration interval
-n3 = size(SH, 3) - n2 + 2;
-n4 = size(SH, 3) - n1 + 2;
+n3 = size(SH, 3) - n2 + 1;
+n4 = size(SH, 3) - n1 + 1;
 moment = squeeze(sum(abs(SH(:, :, n1:n2)), 3)) + squeeze(sum(abs(SH(:, :, n3:n4)), 3));
 ms = sum(sum(moment,1),2);
 sqrt_moment = sqrt(moment);
