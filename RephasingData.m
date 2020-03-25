@@ -28,7 +28,7 @@ methods
         obj.frame_ranges = zeros(2, Nt);
         
         for i = 1:Nt
-           obj.frame_ranges(1,i) = i * obj.batch_stride + 1;
+           obj.frame_ranges(1,i) = (i - 1) * obj.batch_stride + 1;
            obj.frame_ranges(2,i) = obj.frame_ranges(1,i) + obj.batch_size;
         end
     end

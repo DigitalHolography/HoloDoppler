@@ -65,7 +65,7 @@ end
 
 parfor (batch_idx = 1:num_batches-1, parfor_arg)
     % load interferogram batch
-    FH = istream.read_frame_batch(j_win, batch_idx * j_step);
+    FH = istream.read_frame_batch(j_win, (batch_idx - 1)* j_step);
 
     % load registration_shifts
     local_shifts = registration_shifts(:, batch_idx);

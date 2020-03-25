@@ -34,7 +34,7 @@ end
 % construct holograms
 holograms = zeros(Nx,Ny,1,num_batches);
 parfor (batch_idx = 1:num_batches-1, parfor_flag)
-    frame_batch = istream.read_frame_batch(batch_size, batch_idx * batch_stride);
+    frame_batch = istream.read_frame_batch(batch_size, (batch_idx - 1)* batch_stride);
     
     % TODO make complex mask an optional variable
     % instead of checking if it is empty or not
