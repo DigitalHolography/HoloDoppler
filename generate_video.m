@@ -28,7 +28,7 @@ if ~isempty(contrast_enhancement_tol)
 end
 
 %% fix intensity flashes
-video = video - mean(video, 'all');
+video = video - mean(mean(video, 2), 1);
 
 %% flip video
 video = flip(video);
