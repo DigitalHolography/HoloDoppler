@@ -72,7 +72,7 @@ classdef RawReader
                 width_range = 1:obj.true_frame_width;
              end
             
-            batch = zeros(ac.Nx, ac.Ny, obj.j_win);
+            batch = zeros(ac.Nx, ac.Ny, obj.j_win, 'single');
             fd = fopen(obj.path, 'r');
             fseek(fd, obj.offsets(k), 'bof');
             data = fread(fd, obj.true_frame_width * obj.true_frame_height * obj.j_win, 'uint16=>single', obj.endianness); % big endian
@@ -95,7 +95,7 @@ classdef RawReader
                 width_range = 1:obj.true_frame_width;
             end
              
-            batch = zeros(ac.Nx, ac.Ny, batch_size);
+            batch = zeros(ac.Nx, ac.Ny, batch_size, 'single');
             
             fd = fopen(obj.path, 'r');
             frame_bytes_size = obj.true_frame_width * obj.true_frame_height * 2;

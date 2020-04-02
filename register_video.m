@@ -20,7 +20,7 @@ ref = ref_idx;
 % ref = pick_ref_img(frames, 6);
 ref_img = frames(:,:,:,ref);
 
-shifts = zeros(2, num_frames);
+shifts = zeros(2, num_frames, 'single');
 
 % useless progress bar for michael
 D = parallel.pool.DataQueue;

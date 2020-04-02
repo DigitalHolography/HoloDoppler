@@ -9,10 +9,10 @@ middle = [1 1 1];
 topmiddle = [1 0 0];
 top = [0.5 0 0];
 
-c1 = zeros(Ncouleur/4,3);
-c2 = zeros(Ncouleur/4,3);
-c3 = zeros(Ncouleur/4,3);
-c4 = zeros(Ncouleur/4,3);
+c1 = zeros(Ncouleur/4,3,'single');
+c2 = zeros(Ncouleur/4,3,'single');
+c3 = zeros(Ncouleur/4,3,'single');
+c4 = zeros(Ncouleur/4,3,'single');
 for i = 1:3
     c1(:,i) = linspace(bottom(i), botmiddle(i), Ncouleur/4);
     c2(:,i) = linspace(botmiddle(i), middle(i), Ncouleur/4);

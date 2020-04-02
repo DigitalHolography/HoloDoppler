@@ -7,5 +7,6 @@ Nt = size(video, 4);
 dynamic_vector = sort(video(:));
 tol_vector = floor([tol_pdi(1)*Nx*Ny*Nt+1, tol_pdi(2)*Nx*Ny*Nt]);
 
-video = mat2gray(video, [dynamic_vector(tol_vector(1)), dynamic_vector(tol_vector(2))]);
+video = mat2gray(video, double([dynamic_vector(tol_vector(1)), dynamic_vector(tol_vector(2))]));
+% video = mat2gray(video);
 end

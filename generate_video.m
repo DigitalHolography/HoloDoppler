@@ -45,14 +45,18 @@ video = mat2gray(video);
 output_filename = sprintf('%s_%s.%s', output_dirname, name, 'avi');
 w = VideoWriter(sprintf('%s\\avi\\%s', output_path, output_filename));
 open(w);
-writeVideo(w, video);
+for i = 1:size(video,4)
+ writeVideo(w, video(:,:,:,i));   
+end
 close(w)
 
 %% save to mp4 format
 output_filename = sprintf('%s_%s.%s', output_dirname, name, 'mp4');
 w = VideoWriter(sprintf('%s\\mp4\\%s', output_path, output_filename), 'MPEG-4');
 open(w);
-writeVideo(w, video);
+for i = 1:size(video,4)
+ writeVideo(w, video(:,:,:,i));   
+end
 close(w)
 
 %% save to raw format

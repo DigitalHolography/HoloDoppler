@@ -51,7 +51,7 @@ acquisition = DopplerAcquisition(Nx,Ny,cache.Fs/1000,cache.z,cache.wavelength,ca
 % reset progress bar
 num_batches = floor((istream.num_frames - j_win) / j_step);
 
-phase_coefs = zeros(numel(p), num_batches);
+phase_coefs = zeros(numel(p), num_batches, 'single');
 
 if use_gpu || ~use_multithread
     parfor_arg = 0;
@@ -59,7 +59,7 @@ else
     parfor_arg = Inf;
 end
 
-initial_guess = zeros(1, numel(p));
+initial_guess = zeros(1, numel(p), 'single');
 if parfor_arg == Inf
     %% PARALLEL LOOP
     parfor batch_idx = 1:num_batches-1

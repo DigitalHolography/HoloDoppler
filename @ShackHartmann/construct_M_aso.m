@@ -1,8 +1,8 @@
 function [M_aso,StitchedMomentsInMaso] = construct_M_aso(obj, f1, f2, gw, acquisition)
 ac = acquisition;
 
-M_aso = zeros(obj.n_SubAp^2, numel(obj.modes));
-StitchedMomentsInMaso = zeros(ac.Nx,ac.Ny, numel(obj.modes)); %Stitched PowerDoppler moments in each subaperture
+M_aso = zeros(obj.n_SubAp^2, numel(obj.modes),'single');
+StitchedMomentsInMaso = zeros(ac.Nx,ac.Ny, numel(obj.modes),'single'); %Stitched PowerDoppler moments in each subaperture
 
 for p = 1:numel(obj.modes)
     [~,phi] = zernike_phase(obj.modes(p), ac.Nx, ac.Ny);

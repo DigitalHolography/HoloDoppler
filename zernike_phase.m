@@ -14,12 +14,12 @@ y = linspace(-1,1,Ny);
 idx = r<=1;
 % Calcul de la phase aberree
 phi = 0;
-zern = zeros(Nx,Ny,numel(A));
+zern = zeros(Nx,Ny,numel(A),'single');
 
 zz = zernfun2(A,r(idx),theta(idx));%,'norm');
 
 for k = 1:numel(A)
-    tmp = zeros(Nx, Ny);
+    tmp = zeros(Nx, Ny, 'single');
     tmp(idx) = zz(:, k);
     zern(:, :, k) = tmp;
     phi = phi+A(k).*squeeze(zern(:,:,k));

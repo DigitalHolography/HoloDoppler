@@ -134,7 +134,7 @@ methods
          if obj.is_packed             
              % assume it is 12 bits packed for now
              fd = fopen(obj.filename, 'r');
-             frame_batch = zeros(final_frame_size, final_frame_size, batch_size);
+             frame_batch = zeros(final_frame_size, final_frame_size, batch_size, 'single');
              for i = 1:batch_size
                  fseek(fd, obj.image_offsets(frame_offset + i), 'bof');
                  % read annotation size
@@ -145,7 +145,7 @@ methods
                  % packed frame contains Nx*Ny u12 or Nx*Ny*5/4 bytes
                  packed_frame_size = ceil(obj.true_frame_width * obj.true_frame_height / 4) * 5; 
                  packed_frame = fread(fd, packed_frame_size, 'uint8=>uint8', 'l');
-                 unpacked_frame = single(zeros(obj.true_frame_width*obj.true_frame_height,1));
+                 unpacked_frame = zeros(obj.true_frame_width*obj.true_frame_height,1,'single');
                  unpack_u10_to_f32_le(packed_frame, unpacked_frame);
                  frame_batch(width_range,height_range,i) = reshape(unpacked_frame, obj.frame_width, obj.frame_height);
              end
@@ -156,7 +156,7 @@ methods
              fd = fopen(obj.filename, 'r');
              % skip additional 17 bytes to skip useless struct before pix array
 
-             frame_batch = zeros(final_frame_size, final_frame_size, batch_size);
+             frame_batch = zeros(final_frame_size, final_frame_size, batch_size, 'single');
              for i = 1:batch_size
                  fseek(fd, obj.image_offsets(frame_offset + i), 'bof');
                  % read annotation size
