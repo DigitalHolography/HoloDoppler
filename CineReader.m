@@ -15,6 +15,10 @@ properties
     vertical_pix_per_meter
     is_packed
     real_bpp
+    
+    true_frame_width
+    true_frame_height
+    rephasing_data % AberrationCorrection from previous acquisition
 end
 methods
     function obj = CineReader(filename)
@@ -78,12 +82,14 @@ methods
          fclose(fd);
          
          %% jump to camera setup structure to read frame rate
+         % Skip additional 768 bytes to access FrameRate in the struct,
+         % instead of FrameRate16
          setup_mmap = memmapfile(filename,...
-             'Offset', header_mmap.Data.off_setup, 'Format',...
-             {'uint16', 1, 'frame_rate_16';...
+             'Offset', header_mmap.Data.off_setup + 768, 'Format',...
+             {'uint32', 1, 'frame_rate';...
               % discard the rest of the struct, we don't need it
              }, 'Repeat', 1);
-         obj.frame_rate = setup_mmap.Data.frame_rate_16;
+         obj.frame_rate = setup_mmap.Data.frame_rate;
          
          %% skip a bunch of fields to access the number of bits per pixel
          % bytes to skip from the begining of the Setup struct:
@@ -105,13 +111,30 @@ methods
          fseek(fd, header_mmap.Data.off_setup + 896, 'bof');
          obj.real_bpp = fread(fd, 1, 'uint32=>uint32');
          fclose(fd);
+         
+         final_frame_size = max(obj.frame_width, obj.frame_height);
+         obj.true_frame_width = obj.frame_width;
+         obj.true_frame_height = obj.frame_height;
+         obj.frame_width = final_frame_size;
+         obj.frame_height = final_frame_size;
     end
     
     function frame_batch = read_frame_batch(obj, batch_size, frame_offset)
+         final_frame_size = max(obj.true_frame_width, obj.true_frame_height);
+         if obj.true_frame_width <= obj.true_frame_height
+            width_skip = floor(0.5*(final_frame_size - obj.true_frame_width));
+            width_range = 1+width_skip:width_skip+obj.true_frame_width;
+            height_range = 1:obj.true_frame_height;
+         else
+            height_skip = floor(0.5*(final_frame_size - obj.true_frame_height));
+            height_range = 1+height_skip:height_skip+obj.true_frame_height;
+            width_range = 1:obj.true_frame_width;
+         end
+         
          if obj.is_packed             
              % assume it is 12 bits packed for now
              fd = fopen(obj.filename, 'r');
-             frame_batch = zeros(obj.frame_width, obj.frame_height, batch_size);
+             frame_batch = zeros(final_frame_size, final_frame_size, batch_size, 'single');
              for i = 1:batch_size
                  fseek(fd, obj.image_offsets(frame_offset + i), 'bof');
                  % read annotation size
@@ -120,11 +143,11 @@ methods
                  fseek(fd, obj.image_offsets(frame_offset + i) + annotation_size, 'bof');
                  
                  % packed frame contains Nx*Ny u12 or Nx*Ny*5/4 bytes
-                 packed_frame_size = ceil(obj.frame_width * obj.frame_height / 4) * 5; 
+                 packed_frame_size = ceil(obj.true_frame_width * obj.true_frame_height / 4) * 5; 
                  packed_frame = fread(fd, packed_frame_size, 'uint8=>uint8', 'l');
-                 unpacked_frame = single(zeros(obj.frame_width*obj.frame_height,1));
+                 unpacked_frame = zeros(obj.true_frame_width*obj.true_frame_height,1,'single');
                  unpack_u10_to_f32_le(packed_frame, unpacked_frame);
-                 frame_batch(:,:,i) = reshape(unpacked_frame, obj.frame_width, obj.frame_height);
+                 frame_batch(width_range,height_range,i) = reshape(unpacked_frame, obj.frame_width, obj.frame_height);
              end
 
              frame_batch = CineReader.replace_dropped_frames(frame_batch, 0.2);
@@ -133,14 +156,14 @@ methods
              fd = fopen(obj.filename, 'r');
              % skip additional 17 bytes to skip useless struct before pix array
 
-             frame_batch = zeros(obj.frame_width, obj.frame_height, batch_size);
+             frame_batch = zeros(final_frame_size, final_frame_size, batch_size, 'single');
              for i = 1:batch_size
                  fseek(fd, obj.image_offsets(frame_offset + i), 'bof');
                  % read annotation size
                  annotation_size = fread(fd, 1, 'uint32', 'l');
 
                  fseek(fd, obj.image_offsets(frame_offset + i) + annotation_size, 'bof');
-                 frame_batch(:,:,i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint16=>single', 'l'), obj.frame_width, obj.frame_height);
+                 frame_batch(width_range,height_range,i) = reshape(fread(fd, obj.true_frame_width * obj.true_frame_height, 'uint16=>single', 'l'), obj.true_frame_width, obj.true_frame_height);
              end
 
              frame_batch = CineReader.replace_dropped_frames(frame_batch, 0.2);
@@ -160,6 +183,61 @@ methods
         height = obj.frame_height;
     end
     
+    function obj = bind_rephasing_data(obj, rephasing_data)
+       obj.rephasing_data = rephasing_data; 
+    end
+    
+%     function FH = read_FH(obj, batch_size, frame_offset, kernel)
+%        % read a frame batch and compute FH, then applies a phase computed
+%        % from rephasing data
+%        
+%        frame_batch = obj.read_frame_batch(batch_size, frame_offset);
+%        FH = fftshift(fft2(frame_batch)) .* kernel;
+%        
+%        if ~isempty(obj.rephasing_data)
+%            % interpolate rephasing coefs to current batch
+%            rephasing_num_batches = obj.rephasing_data.get_Nt();
+%                                     
+% %            current_num_batches = floor((obj.num_frames - batch_size) / batch_stride);
+%            
+%            % select indices of batches in rephasing data that corresponds
+%            % to current frame batch
+%            
+%            % global idx of first/last frames of current batch
+%            first_frame_idx = frame_offset+1;
+%            last_frame_idx = frame_offset + batch_size;
+%            
+%            indices1 = find(obj.rephasing_data.frame_ranges >= first_frame_idx);
+%            indices2 = find(obj.rephasing_data.frame_ranges <= last_frame_idx);
+%                       
+%            [~,J1] = ind2sub(2, indices1);
+%            [~,J2] = ind2sub(2, indices2);
+%            J = intersect(J1,J2);
+%            jstart = min(J);
+%            jstop = max(J);
+%            
+%            [rephasing_zernikes, shack_zernikes, iterative_opt_zernikes] = ...
+%                        obj.rephasing_data.aberration_correction.generate_zernikes(obj.frame_width, obj.frame_height);
+%                    
+%            for j = jstart:jstop
+%               % load phase
+%               phase = obj.rephasing_data.aberration_correction.compute_total_phase(j,rephasing_zernikes,shack_zernikes,iterative_opt_zernikes);
+%               correction = exp(-1i * phase);
+%               
+%               % compute last frame to apply phase
+%               if j ~= size(obj.rephasing_data.frame_ranges,2)
+%                 last_frame_to_apply_phase_idx = min(obj.rephasing_data.frame_ranges(1,j+1)-1, last_frame_idx);
+%               else
+%                 last_frame_to_apply_phase_idx = min(obj.rephasing_data.frame_ranges(2,j), last_frame_idx);
+%               end
+%               
+%               % apply correction to FH frames
+%               for idx = 1:last_frame_to_apply_phase_idx - first_frame_idx + 1
+%                  FH(:,:,idx) = FH(:,:,idx) .* correction;
+%               end
+%            end
+%        end
+%     end
 end
 methods(Static)
     function batch = replace_dropped_frames(batch, threshold)

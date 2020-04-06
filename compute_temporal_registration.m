@@ -1,4 +1,4 @@
-function reg = compute_temporal_registration(istream, cache, batch_size, batch_stride, gw, kernel, complex_mask, progress_bar, use_multithread)
+function reg = compute_temporal_registration(istream, cache, batch_size, batch_stride, ref_idx, gw, kernel, complex_mask, progress_bar, use_multithread)
 % Compute pixel shifts for phase registration.
 % returns a 2 x num_frames shift matrix
 % [dx1 ... dxn]
@@ -18,8 +18,8 @@ function reg = compute_temporal_registration(istream, cache, batch_size, batch_s
 Nx = istream.get_frame_width();
 Ny = istream.get_frame_height();
 acquisition = DopplerAcquisition(Nx,Ny,cache.Fs/1000,cache.z,cache.wavelength,cache.DX,cache.DY,cache.pix_width,cache.pix_height);
-f1 = cache.registration_f1;
-f2 = cache.registration_f2;
+f1 = cache.f1;
+f2 = cache.f2;
 
 % reset progress bar
 send(progress_bar, -1);
@@ -32,9 +32,9 @@ else
 end
 
 % construct holograms
-holograms = zeros(Nx,Ny,1,num_batches);
+holograms = zeros(Nx,Ny,1,num_batches,'single');
 parfor (batch_idx = 1:num_batches-1, parfor_flag)
-    frame_batch = istream.read_frame_batch(batch_size, batch_idx * batch_stride);
+    frame_batch = istream.read_frame_batch(batch_size, (batch_idx - 1)* batch_stride);
     
     % TODO make complex mask an optional variable
     % instead of checking if it is empty or not
@@ -44,12 +44,12 @@ parfor (batch_idx = 1:num_batches-1, parfor_flag)
         FH = compute_FH_from_frame_batch(frame_batch, kernel);
     end
     
-    FH = reconstruct_hologram(FH, f1, f2, acquisition, gw, false);
+    FH = reconstruct_hologram(FH, f1, f2, acquisition, gw, false, true);
 
     holograms(:,:,:,batch_idx) = mat2gray(FH);
     send(progress_bar, 0); % increment progress bar
 end
 
 % compute registrations
-[~, reg] = register_video(holograms); 
+[~, reg] = register_video(holograms, ref_idx); 
 end

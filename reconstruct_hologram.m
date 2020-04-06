@@ -1,4 +1,5 @@
-function [hologram0, sqrt_hologram0, hologram1, hologram2, composite_1, composite_2, composite_3] = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, phase_correction)
+function [hologram0, sqrt_hologram0, hologram1, hologram2, freq_low, freq_high] = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, svd, phase_correction,...
+                                                                                                       color_f1, color_f2, color_f3)
 % Compute the moment of a batch of interferograms
 %
 % INPUT ARGUMENT
@@ -9,6 +10,7 @@ function [hologram0, sqrt_hologram0, hologram1, hologram2, composite_1, composit
 %              about the experimental setup
 % gaussian_width: size of the gaussian filter
 % use_gpu: use gpu or not for the reconstruction
+% svd: add SVD filtering to hologram reconstruction
 % phase_correction: optional parameter, a phase correction to apply before
 %                   reconstructing the hologram
 %
@@ -30,12 +32,17 @@ if use_gpu
     end
 end
 
-if exist('phase_correction', 'var')
+if exist('phase_correction', 'var') && ~isempty(phase_correction)
     FH = FH .* exp(-1i * phase_correction);
 end
 
 H = ifft2(FH);
 clear FH;
+
+%% SVD filtering
+if svd
+    H = svd_filter(H, f1, ac.fs);
+end
 
 %% squared magnitude of hologram
 SH = fft(H, [], 3);
@@ -50,11 +57,11 @@ SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
 % hologram0
 
 % integration interval
-n1 = round(f1 * j_win / ac.fs) + 1;
-n2 = round(f2 * j_win / ac.fs);
+n1 = ceil(f1 * j_win / ac.fs);
+n2 = ceil(f2 * j_win / ac.fs);
 % symetric integration interval
-n3 = size(SH, 3) - n2 + 2;
-n4 = size(SH, 3) - n1 + 2;
+n3 = size(SH, 3) - n2 + 1;
+n4 = size(SH, 3) - n1 + 1;
 moment = squeeze(sum(abs(SH(:, :, n1:n2)), 3)) + squeeze(sum(abs(SH(:, :, n3:n4)), 3));
 ms = sum(sum(moment,1),2);
 sqrt_moment = sqrt(moment);
@@ -67,21 +74,24 @@ moment = (ms / ms2) * moment;
 hologram0 = gather(moment);
 sqrt_hologram0 = gather(sqrt_moment);
 
-% composite
-nrange_1 = n1:n2;
-red_1 = nrange_1(1:floor(numel(nrange_1)/4));
-green_1 = nrange_1(floor(numel(nrange_1)/4):floor(numel(nrange_1)/2));
-blue_1 =  nrange_1(floor(numel(nrange_1)/2):end);
-nrange_2 = n3:n4;
-red_2 = nrange_2(1:floor(numel(nrange_2)/4));
-green_2 = nrange_2(floor(numel(nrange_2)/4):floor(numel(nrange_2)/2));
-blue_2 =  nrange_2(floor(numel(nrange_2)/2):end);
-composite_1 = squeeze(sum(abs(SH(:, :, red_1)), 3)) + squeeze(sum(abs(SH(:, :, red_2)), 3));
-composite_2 = squeeze(sum(abs(SH(:, :, green_1)), 3)) + squeeze(sum(abs(SH(:, :, green_2)), 3));
-composite_3 = squeeze(sum(abs(SH(:, :, blue_1)), 3)) + squeeze(sum(abs(SH(:, :, blue_2)), 3));
-composite_1 = composite_1 ./ imgaussfilt(composite_1, gaussian_width);
-composite_2 = composite_2 ./ imgaussfilt(composite_2, gaussian_width);
-composite_3 = composite_3 ./ imgaussfilt(composite_3, gaussian_width);
+% low and high frequency bands
+if exist('color_f3', 'var')
+    freq_1 = color_f1;
+    freq_2 = color_f2;
+    freq_3 = color_f3;
+    low_n1 = round(freq_1 * j_win / ac.fs) + 1;
+    low_n2 = round(freq_2 * j_win / ac.fs);
+    high_n1 = low_n2 + 1;
+    high_n2 = round(freq_3 * j_win / ac.fs);
+
+    freq_low = squeeze(sum(abs(SH(:, :, low_n1:low_n2)), 3));
+    freq_high = squeeze(sum(abs(SH(:, :, high_n1:high_n2)), 3));
+    freq_low = freq_low ./ imgaussfilt(freq_low, gaussian_width);
+    freq_high = freq_high./ imgaussfilt(freq_high, gaussian_width);
+else
+    freq_low = [];
+    freq_high = [];
+end
 
 % hologram1
 f_range = (n1:n2) .* (ac.fs / j_win);

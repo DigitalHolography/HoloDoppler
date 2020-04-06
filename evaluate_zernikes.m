@@ -7,10 +7,10 @@ indices = r <= sqrt(2); % [-1; 1] square excircle
 y = zernfun(n, m, r(indices), theta(indices), 'norm');
 
 % evaluate base functions
-zernike_values = zeros(Nx, Ny, numel(n));
+zernike_values = zeros(Nx, Ny, numel(n), 'single');
 
 for k = 1:numel(n) % k= 1,2,3
-    tmp = zeros(Nx, Ny);
+    tmp = zeros(Nx, Ny, 'single');
     tmp(indices) = y(:, k);
     zernike_values(:, :, k) = tmp;
 end

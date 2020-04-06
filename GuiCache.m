@@ -19,22 +19,31 @@ properties (Access = public)
     parallelism
     registration_via_phase
     aberration_compensation
-    batch_size_factor_flag
-    batch_size_factor
-    optimization_plan
-    additional_zernike_ranks
-    registration_f1
-    registration_f2
     notes
     DX
     DY
-    horizontal_axis_flip
-    vertical_axis_flip
+    position_in_file
+    save_additional_videos
+    rephasing
+    
+    % color image parameters
+    color_f1
+    color_f2
+    color_f3
+    low_frequency
+    
+    % iterative optimization parameters
+    iterative_aberration_compensation
+    optimization_zernike_ranks
     mask_num_iter
-    low_order_zernikes_tol
-    high_order_zernikes_tol
-    low_order_max_constraint
-    high_order_max_constraint
+    zernikes_tol
+    max_constraint
+    
+    % shack-hartmann parameters
+    shack_hartmann_aberration_compensation
+    shack_hartmann_zernike_ranks
+    num_subapertures
+    subaperture_margin
 end
 methods (Access = public)
     function obj = GuiCache()
