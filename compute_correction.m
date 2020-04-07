@@ -62,7 +62,7 @@ end
 initial_guess = zeros(1, numel(p), 'single');
 if parfor_arg == Inf
     %% PARALLEL LOOP
-    parfor batch_idx = 1:num_batches-1
+    parfor batch_idx = 1:num_batches
         % load interferogram batch
         FH = istream.read_frame_batch(j_win, (batch_idx - 1)* j_step);
 
@@ -71,7 +71,7 @@ if parfor_arg == Inf
 
         % compute FH
         FH = fftshift(fft2(FH)) .* kernel;
-        FH = rephase_FH(FH, rephasing_data, j_win, batch_idx * j_step);
+        FH = rephase_FH(FH, rephasing_data, j_win, (batch_idx - 1)* j_step);
         
         if ~isempty(complex_mask)
             FH = FH .* complex_mask;
@@ -117,7 +117,7 @@ else
     %  allow us to update the initial guess in the sequencial case.
     %  Please don't modify both loops if a modification is done. Otherwise
     %  the code could become a mess quickly
-    for batch_idx = 1:num_batches-1
+    for batch_idx = 1:num_batches
         % load interferogram batch
         FH = istream.read_frame_batch(j_win, (batch_idx - 1)* j_step);
 
@@ -126,7 +126,7 @@ else
 
         % compute FH
         FH = fftshift(fft2(FH)) .* kernel;
-        FH = rephase_FH(FH, rephasing_data, j_win, batch_idx * j_step);
+        FH = rephase_FH(FH, rephasing_data, j_win, (batch_idx - 1)* j_step);
         if ~isempty(complex_mask)
             FH = FH .* complex_mask;
         end

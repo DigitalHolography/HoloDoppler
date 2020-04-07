@@ -63,7 +63,7 @@ else
     parfor_arg = Inf;
 end
 
-parfor (batch_idx = 1:num_batches-1, parfor_arg)
+parfor (batch_idx = 1:num_batches, parfor_arg)
     % load interferogram batch
     FH = istream.read_frame_batch(j_win, (batch_idx - 1)* j_step);
 
@@ -72,7 +72,7 @@ parfor (batch_idx = 1:num_batches-1, parfor_arg)
 
     % compute FH
     FH = fftshift(fft2(FH)) .* kernel;
-    FH = rephase_FH(FH, rephasing_data, j_win, batch_idx * j_step);
+    FH = rephase_FH(FH, rephasing_data, j_win, (batch_idx - 1)* j_step);
     if ~isempty(complex_mask)
         FH = FH .* complex_mask;
     end

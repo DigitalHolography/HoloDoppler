@@ -18,6 +18,9 @@ indices2 = find(rephasing_data.frame_ranges <= last_frame_idx);
 [~,J1] = ind2sub(2, indices1);
 [~,J2] = ind2sub(2, indices2);
 J = intersect(J1,J2);
+if isempty(J)
+    J = J2(end);
+end
 jstart = min(J);
 jstop = max(J);
 
