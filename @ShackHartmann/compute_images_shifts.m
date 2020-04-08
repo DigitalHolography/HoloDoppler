@@ -40,7 +40,7 @@ j_win = size(FH, 3);
 % 9  10 11 12
 % 13 14 15 16
 %
-shifts = zeros(obj.n_SubAp^2, 1, 'single');
+shifts = zeros(obj.n_SubAp^2, 1);
 
 % reference SubApil
 % we take one of the four in the center as a reference
@@ -61,10 +61,10 @@ else
     SubAp_init = round(obj.SubAp_margin*floor(ac.Nx/obj.n_SubAp)); % First pixel of a subaperture with margin
     SubAp_end = round((1-obj.SubAp_margin)*floor(ac.Nx/obj.n_SubAp)); % Last pixel of a subaperture with margin
 end
-moment_chunks_array = zeros(ac.Nx,ac.Ny,'single'); %Stitched PowerDoppler moments in each subaperture
-moment_chunks_crop_array = zeros(ac.Nx,ac.Ny,'single');%Stitched cropped PowerDoppler moments in each subaperture
+moment_chunks_array = zeros(ac.Nx,ac.Ny); %Stitched PowerDoppler moments in each subaperture
+moment_chunks_crop_array = zeros(ac.Nx,ac.Ny);%Stitched cropped PowerDoppler moments in each subaperture
 SubAp_id_range = [SubAp_idref:obj.n_SubAp 1:SubAp_idref-1];
-correlation_chunks_array = zeros((SubAp_end-SubAp_init+floor(ac.Nx/obj.n_SubAp))*obj.n_SubAp,'single'); %Stitched cropped correlations in each subaperture
+correlation_chunks_array = zeros((SubAp_end-SubAp_init+floor(ac.Nx/obj.n_SubAp))*obj.n_SubAp); %Stitched cropped correlations in each subaperture
 
 for SubAp_idx = SubAp_id_range
     for SubAp_idy = SubAp_id_range
@@ -144,7 +144,7 @@ for SubAp_idx = SubAp_id_range
             inf_margin_corr = floor(obj.CorrMap_margin*size(c_aux,1));%floor((size(c_aux,1)+2*(SubAp_end-SubAp_init+1))/4);
             sup_margin_corr = size(c_aux,1)-inf_margin_corr;%floor((3*size(c_aux,1)-2*(SubAp_end-SubAp_init+1))/4);
             % correlation map, with zeros in margins
-            c = zeros(size(c_aux),'single');
+            c = zeros(size(c_aux));
             c(inf_margin_corr:sup_margin_corr,inf_margin_corr:sup_margin_corr)=c_aux(inf_margin_corr:sup_margin_corr,inf_margin_corr:sup_margin_corr);
             correlation_chunks_array((SubAp_idx-1)*size(correlation_chunks_array,1)/obj.n_SubAp+1:SubAp_idx*size(correlation_chunks_array,1)/obj.n_SubAp,(SubAp_idy-1)*size(correlation_chunks_array,2)/obj.n_SubAp+1:SubAp_idy*size(correlation_chunks_array,2)/obj.n_SubAp)=c;
             % find correlation peak
