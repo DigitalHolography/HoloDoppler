@@ -38,6 +38,30 @@ else
     padr = [];
 end
 
+%% First pass - process blocks and contruct normalization parameters
+num_blocks = floor(num_frames/block_size)+1;
+global_dynamic_vector_low = [];
+global_dynamic_vector_high = [];
+tol_pdi_low = contrast_enhancement_tol;  % default 0.0005
+tol_pdi = [tol_pdi_low 1-tol_pdi_low];
+for batch_idx = 1:block_size:num_frames
+    actual_block_size = min(batch_idx - 1 + block_size, num_frames) - batch_idx + 1;
+    
+    fseek(fd,frame_size * 4 * (batch_idx - 1),'bof');
+    block = fread(fd, frame_size*actual_block_size,'single');
+    dynamic_vector = sort(block(:));
+
+    tol_vector = floor([tol_pdi(1)*numel(dynamic_vector)+1, tol_pdi(2)*numel(dynamic_vector)]);
+    global_dynamic_vector_low = [global_dynamic_vector_low; dynamic_vector(1:tol_vector(1))];
+    global_dynamic_vector_high = [global_dynamic_vector_high; dynamic_vector(tol_vector(2):end)];
+end
+global_dynamic_vector_low = sort(global_dynamic_vector_low);
+global_dynamic_vector_high = sort(global_dynamic_vector_high);
+tol_pdi = [1/double(num_blocks), 1-1/double(num_blocks)];
+tol_vector = floor([tol_pdi(1)*numel(global_dynamic_vector_low), tol_pdi(2)*numel(global_dynamic_vector_high)+1]);
+normalization_bounds = [global_dynamic_vector_low(tol_vector(1)), global_dynamic_vector_high(tol_vector(2))];
+
+%% Second pass - process blocks and generate final videos
 for batch_idx = 1:block_size:num_frames
    actual_block_size = min(batch_idx - 1 + block_size, num_frames) - batch_idx + 1;
    
@@ -66,12 +90,13 @@ for batch_idx = 1:block_size:num_frames
        block(:,:,:,:) = pad_block(:,:,:,pad_size+1:end-pad_size);
     end
     
-    %% contrast enhancement
-    if ~isempty(contrast_enhancement_tol)
-        tol_pdi_low = contrast_enhancement_tol;  % default 0.0005
-        tol_pdi = [tol_pdi_low 1-tol_pdi_low];
-        block = enhance_video_constrast(block, tol_pdi);
-    end
+%     %% contrast enhancement
+%     if ~isempty(contrast_enhancement_tol)
+%         tol_pdi_low = contrast_enhancement_tol;  % default 0.0005
+%         tol_pdi = [tol_pdi_low 1-tol_pdi_low];
+%         block = enhance_video_constrast(block, tol_pdi);
+%     end
+    block = mat2gray(block, double(normalization_bounds));
     
     %% fix intensity flashes
     block = block - mean(mean(block, 2), 1);
