@@ -59,7 +59,7 @@ else
     parfor_arg = Inf;
 end
 
-initial_guess = zeros(1, numel(p), 'single');
+initial_guess = zeros(1, numel(p));
 if parfor_arg == Inf
     %% PARALLEL LOOP
     parfor batch_idx = 1:num_batches
