@@ -20,15 +20,15 @@ if ~isempty(temporal_filter_sigma)
    end
 end
 
+%% fix intensity flashes
+video = video - mean(mean(video, 2), 1);
+
 %% contrast enhancement
 if ~isempty(contrast_enhancement_tol)
     tol_pdi_low = contrast_enhancement_tol;  % default 0.0005
     tol_pdi = [tol_pdi_low 1-tol_pdi_low];
     video = enhance_video_constrast(video, tol_pdi);
 end
-
-%% fix intensity flashes
-video = video - mean(mean(video, 2), 1);
 
 %% flip video
 video = flip(video);

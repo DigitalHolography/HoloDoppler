@@ -17,7 +17,7 @@ for rephasing_data = rephasing_data
     % global idx of first/last frames of current batch
     first_frame_idx = frame_offset+1;
     last_frame_idx = frame_offset + batch_size;
-
+    
     indices1 = find(rephasing_data.frame_ranges >= first_frame_idx);
     indices2 = find(rephasing_data.frame_ranges <= last_frame_idx);
 
@@ -38,7 +38,7 @@ for rephasing_data = rephasing_data
       % load phase
       phase = rephasing_data.aberration_correction.compute_total_phase(j,rephasing_zernikes,shack_zernikes,iterative_opt_zernikes);
       correction = exp(-1i * phase);
-
+      
       % compute last frame to apply phase
       if jstop ~= size(rephasing_data.frame_ranges,2)
         last_frame_to_apply_phase_idx = min(rephasing_data.frame_ranges(1,jstop+1)-1, last_frame_idx);
@@ -51,7 +51,7 @@ for rephasing_data = rephasing_data
       Nj = jstop - jstart + 1;
       cur_j = j - jstart + 1;
       % apply correction to FH frames  
-      idx_range = frame_range((cur_j-1)*floor(range_size/Nj)+1:floor(cur_j*range_size/Nj));
+      idx_range = frame_range(ceil((cur_j-1)*range_size/Nj)+1:ceil(cur_j*range_size/Nj));
       FH(:,:,idx_range) = FH(:,:,idx_range) .* correction;
     end 
 end

@@ -24,9 +24,9 @@ open(w_avi);
 open(w_mp4);
 
 num_frames = uint64(num_frames);
-block_size = 1024;
+block_size = 512;
 frame_size = Nx*Ny*Nc;
-fd = fopen(filename);
+fd = fopen(filename,'r+');
 
 if ~isempty(temporal_filter_sigma)
     pad_size = floor(temporal_filter_sigma);
@@ -38,7 +38,42 @@ else
     padr = [];
 end
 
-%% First pass - process blocks and contruct normalization parameters
+%% First pass - temporal filter
+for batch_idx = 1:block_size:num_frames
+   actual_block_size = min(batch_idx - 1 + block_size, num_frames) - batch_idx + 1;
+   
+   %% load data block from file
+   if batch_idx - pad_size > 0
+       fseek(fd,frame_size * 4 * (batch_idx - 1 - pad_size),'bof');
+       padl(:) = fread(fd, frame_size*pad_size,'single');
+   end
+   fseek(fd,frame_size * 4 * (batch_idx - 1),'bof');
+   block = fread(fd, frame_size*actual_block_size,'single');
+   block = reshape(block, Nx, Ny, Nc, actual_block_size);
+   if num_frames >= batch_idx - 1 + block_size + pad_size
+      padr(:) =  fread(fd, frame_size*pad_size,'single');
+   end
+   
+    %% temporal filter
+    if ~isempty(temporal_filter_sigma)
+       sigma = [0.0001 0.0001 temporal_filter_sigma];
+       pad_block = cat(4, padl, block, padr);
+       
+       for c = 1:size(block, 3)
+          pad_block(:,:,c,:) = imgaussfilt3(squeeze(pad_block(:,:,c,:)), sigma); 
+       end
+       
+       block(:,:,:,:) = pad_block(:,:,:,pad_size+1:end-pad_size);
+    end
+    
+    % fix intensity flashes
+    block = block - mean(mean(block, 2), 1);
+    
+    fseek(fd,frame_size * 4 * (batch_idx - 1),'bof');
+    fwrite(fd, block(1:frame_size*actual_block_size),'single');
+end
+
+%% Second pass - process blocks and contruct normalization parameters
 num_blocks = floor(num_frames/block_size)+1;
 global_dynamic_vector_low = [];
 global_dynamic_vector_high = [];
@@ -61,7 +96,7 @@ tol_pdi = [1/double(num_blocks), 1-1/double(num_blocks)];
 tol_vector = floor([tol_pdi(1)*numel(global_dynamic_vector_low), tol_pdi(2)*numel(global_dynamic_vector_high)+1]);
 normalization_bounds = [global_dynamic_vector_low(tol_vector(1)), global_dynamic_vector_high(tol_vector(2))];
 
-%% Second pass - process blocks and generate final videos
+%% Third - process blocks and generate final videos
 for batch_idx = 1:block_size:num_frames
    actual_block_size = min(batch_idx - 1 + block_size, num_frames) - batch_idx + 1;
    
@@ -76,42 +111,16 @@ for batch_idx = 1:block_size:num_frames
    if num_frames >= batch_idx - 1 + block_size + pad_size
       padr(:) =  fread(fd, frame_size*pad_size,'single');
    end
-   
-   
-   %% temporal filter
-    if ~isempty(temporal_filter_sigma)
-       sigma = [0.0001 0.0001 temporal_filter_sigma];
-       pad_block = cat(4, padl, block, padr);
-       
-       for c = 1:size(block, 3)
-          pad_block(:,:,c,:) = imgaussfilt3(squeeze(pad_block(:,:,c,:)), sigma); 
-       end
-       
-       block(:,:,:,:) = pad_block(:,:,:,pad_size+1:end-pad_size);
-    end
-    
-%     %% contrast enhancement
-%     if ~isempty(contrast_enhancement_tol)
-%         tol_pdi_low = contrast_enhancement_tol;  % default 0.0005
-%         tol_pdi = [tol_pdi_low 1-tol_pdi_low];
-%         block = enhance_video_constrast(block, tol_pdi);
-%     end
-    block = mat2gray(block, double(normalization_bounds));
-    
-    %% fix intensity flashes
-    block = block - mean(mean(block, 2), 1);
-    
-    %% flip video
-    block = flip(block);
     
     %% contrast inversion
     if contrast_inversion
        block = -1.0 * block; 
     end
     
-    %% prepare for writing
-    block = mat2gray(block);
+    block = mat2gray(block, double(normalization_bounds));
     
+    %% flip video
+    block = flip(block);
     
     writeVideo(w_avi, block);
     writeVideo(w_mp4, block);
