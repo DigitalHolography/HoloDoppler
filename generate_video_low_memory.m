@@ -129,16 +129,5 @@ end
 close(w_avi);
 close(w_mp4);
 fclose(fd);
-% %% save to raw format
-% if export_raw
-%     output_filename = sprintf('%s_%s.%s', output_dirname, name, 'raw');
-%     export_raw_video(sprintf('%s\\raw\\%s', output_path, output_filename), block);
-% end
-% 
-% %% save temporal average to png
-% if export_avg_img
-%     output_filename = sprintf('%s_%s.%s', output_dirname, name, 'png');
-%     video_avg = mat2gray(mean(block, 4));
-%     imwrite(video_avg,sprintf('%s\\png\\%s', output_path, output_filename));
-% end
+
 end
