@@ -50,17 +50,12 @@ shifts = zeros(obj.n_SubAp^2, 1);
 % 5  6  7  8
 % 9  10 11 12
 % 13 14 15 16
+ac.Nx = double(ac.Nx);
 SubAp_idref = ceil(obj.n_SubAp/2); % Index of reference subaperture for correlations
-if obj.SubAp_margin>0.5 % To avoid error
-    SubAp_init = round((1-obj.SubAp_margin)*floor(ac.Nx/obj.n_SubAp)); % Last pixel of a subaperture with margin
-    SubAp_end = round(obj.SubAp_margin*floor(ac.Nx/obj.n_SubAp)); % First pixel of a subaperture with margin
-elseif obj.SubAp_margin == 0 
-    SubAp_init=1;
-    SubAp_end = round((1-obj.SubAp_margin)*floor(ac.Nx/obj.n_SubAp)); % Last pixel of a subaperture with margin
-else
-    SubAp_init = round(obj.SubAp_margin*floor(ac.Nx/obj.n_SubAp)); % First pixel of a subaperture with margin
-    SubAp_end = round((1-obj.SubAp_margin)*floor(ac.Nx/obj.n_SubAp)); % Last pixel of a subaperture with margin
-end
+
+SubAp_init = max(1,floor(obj.SubAp_margin*floor(double(ac.Nx)/obj.n_SubAp)));
+SubAp_end = ceil(ac.Nx/obj.n_SubAp - SubAp_init);
+
 moment_chunks_array = zeros(ac.Nx,ac.Ny); %Stitched PowerDoppler moments in each subaperture
 moment_chunks_crop_array = zeros(ac.Nx,ac.Ny);%Stitched cropped PowerDoppler moments in each subaperture
 SubAp_id_range = [SubAp_idref:obj.n_SubAp 1:SubAp_idref-1];
@@ -151,8 +146,8 @@ for SubAp_idx = SubAp_id_range
             [xpeak_aux, ypeak_aux] = find(c==max(c(:)));
             xpeak = xpeak_aux+0.5*(c(xpeak_aux-1,ypeak_aux)-c(xpeak_aux+1,ypeak_aux))/(c(xpeak_aux-1,ypeak_aux)+c(xpeak_aux+1,ypeak_aux)-2.*c(xpeak_aux,ypeak_aux));
             ypeak = ypeak_aux+0.5*(c(xpeak_aux,ypeak_aux-1)-c(xpeak_aux,ypeak_aux+1))/(c(xpeak_aux,ypeak_aux-1)+c(xpeak_aux,ypeak_aux+1)-2.*c(xpeak_aux,ypeak_aux));
-            xoffSet = floor(size(c, 1)/2) - xpeak;
-            yoffSet = floor(size(c, 2)/2) - ypeak;
+            xoffSet = ceil(size(c, 1)/2) - xpeak;
+            yoffSet = ceil(size(c, 2)/2) - ypeak;
             % compute shift between images
             shift_curr = xoffSet + 1i * yoffSet;
             shifts(1 + (SubAp_idx - 1) + obj.n_SubAp * (SubAp_idy - 1)) = shift_curr(1); %To be sure no double correlation maximum
@@ -160,10 +155,9 @@ for SubAp_idx = SubAp_id_range
             shifts(1 + (SubAp_idx - 1) + obj.n_SubAp * (SubAp_idy - 1)) = 0+1i*0;
         end
 
-        
-        % to show sub-apertures used in correlation
-        idx_range_out = (SubAp_idx-1)*floor(ac.Nx/obj.n_SubAp)+SubAp_init:SubAp_idx*floor(ac.Nx/obj.n_SubAp)-SubAp_init;
-        idy_range_out = (SubAp_idy-1)*floor(ac.Ny/obj.n_SubAp)+SubAp_init:SubAp_idy*floor(ac.Ny/obj.n_SubAp)-SubAp_init;
+        % to show sub-apertures used in correlation        
+        idx_range_out = (SubAp_idx-1)*floor(ac.Nx/obj.n_SubAp)+SubAp_init:(SubAp_idx-1)*floor(ac.Nx/obj.n_SubAp)+SubAp_init+numel(SubAp_init:SubAp_end)-1;
+        idy_range_out = (SubAp_idy-1)*floor(ac.Ny/obj.n_SubAp)+SubAp_init:(SubAp_idy-1)*floor(ac.Ny/obj.n_SubAp)+SubAp_init+numel(SubAp_init:SubAp_end)-1;
         moment_chunks_crop_array(idx_range_out,idy_range_out)=moment_chunk(SubAp_init:SubAp_end,SubAp_init:SubAp_end);
 
     end %SubAp_idy
