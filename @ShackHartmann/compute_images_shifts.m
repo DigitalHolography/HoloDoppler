@@ -118,7 +118,6 @@ for SubAp_idx = SubAp_id_range
             if (obj.SigmaFilterPreCorr ~= 0)
                 moment_chunk = imgaussfilt(moment_chunk,obj.SigmaFilterPreCorr); % filtering to ease correlation
             end
-            
         end % calibration
         
         if sum(moment_chunk(:))~=0
@@ -158,7 +157,7 @@ for SubAp_idx = SubAp_id_range
         % to show sub-apertures used in correlation        
         idx_range_out = (SubAp_idx-1)*floor(ac.Nx/obj.n_SubAp)+SubAp_init:(SubAp_idx-1)*floor(ac.Nx/obj.n_SubAp)+SubAp_init+numel(SubAp_init:SubAp_end)-1;
         idy_range_out = (SubAp_idy-1)*floor(ac.Ny/obj.n_SubAp)+SubAp_init:(SubAp_idy-1)*floor(ac.Ny/obj.n_SubAp)+SubAp_init+numel(SubAp_init:SubAp_end)-1;
-        moment_chunks_crop_array(idx_range_out,idy_range_out)=moment_chunk(SubAp_init:SubAp_end,SubAp_init:SubAp_end);
+        moment_chunks_crop_array(idx_range_out,idy_range_out) = flip(moment_chunk(SubAp_init:SubAp_end,SubAp_init:SubAp_end)');
 
     end %SubAp_idy
 end %SubAp_idx
