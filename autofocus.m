@@ -16,5 +16,5 @@ algo_options.Cache = 'on';
 obj_fn = @(z)autofocus_objective_fn(z,frame_batch, f1, f2, acquisition, gaussian_width, mask, use_gpu);
 
 % we constrain z between 0.10 and 0.40. usually it will be around 0.22
-[z_opt, ~] = patternsearch(obj_fn, z0, [], [], [], [], 0.10, 0.40, [], algo_options); 
+[z_opt, ~] = patternsearch(obj_fn, z0, [], [], [], [], 0.10, 0.40, [], algo_options);
 end
