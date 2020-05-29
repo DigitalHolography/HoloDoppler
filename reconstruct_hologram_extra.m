@@ -1,7 +1,8 @@
-function [hologram0, sqrt_hologram0] = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, svd, phase_correction)
+function [hologram0, sqrt_hologram0, hologram1, hologram2, freq_low, freq_high, M0_pos, M0_neg, M1sM0r] = reconstruct_hologram_extra(FH, f1, f2, acquisition, gaussian_width, use_gpu, svd, phase_correction,...
+                                                                  color_f1, color_f2, color_f3)
 % Compute the moment of a batch of interferograms.
-% For more moment outputs, use reconstruct_hologram_extra, this function
-% only computes one output for speed
+% This function computes a lot of different outputs, for speed use
+% tue 'reconstruct_hologram' function instead.
 %
 % INPUT ARGUMENT
 % FH: the preprocessed input interferograms batch
@@ -53,8 +54,11 @@ SH = abs(SH).^2;
 SH = permute(SH, [2 1 3]);
 SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
 
-%% moment
+%% Compute moments
 [hologram0, sqrt_hologram0] = moment0(SH, f1, f2, ac.fs, j_win, gaussian_width);
-% hologram0
+hologram1 = moment1(SH, f1, f2, ac.fs, j_win, gaussian_width);
+hologram2 = moment2(SH, f1, f2, ac.fs, j_win, gaussian_width);
+[freq_low, freq_high] = composite(SH, color_f1, color_f2, color_f3, ac.fs, j_win, gaussian_width);
+[M0_pos, M0_neg] = directional(SH, f1, f2, ac.fs, j_win, gaussian_width);
+M1sM0r = fmean(SH, f1, f2, ac.fs, j_win, gaussian_width);
 end
-
