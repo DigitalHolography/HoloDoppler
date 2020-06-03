@@ -1,4 +1,4 @@
-function correction = compute_correction_shack_hartmann(istream, cache, kernel, rephasing_data, gw, complex_mask,...
+function [correction, stiched_moments_video] = compute_correction_shack_hartmann(istream, cache, kernel, rephasing_data, gw, complex_mask,...
                                          progress_bar, use_gpu, use_multithread,...
                                          p, registration_shifts, num_subapertures,...
                                          calibration_factor, subaperture_margin,...
@@ -56,6 +56,7 @@ acquisition = DopplerAcquisition(Nx,Ny,cache.Fs/1000,cache.z,cache.wavelength,ca
 num_batches = floor((istream.num_frames - j_win) / j_step);
 
 phase_coefs = zeros(numel(p), num_batches, 'single');
+stiched_moments_video = zeros(Nx, Ny, 1, num_batches, 'single');
 
 if use_gpu || ~use_multithread
     parfor_arg = 0;
@@ -119,6 +120,7 @@ parfor (batch_idx = 1:num_batches, parfor_arg)
     coefs = coefs * calibration_factor;
 
     phase_coefs(:, batch_idx) = coefs;
+    stiched_moments_video(:,:,:,batch_idx) = stiched_moments_subap;
 
     % increment progress bar
     send(progress_bar, 0);
