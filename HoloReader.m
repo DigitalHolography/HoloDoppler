@@ -58,7 +58,7 @@ methods
         
         frame_size = obj.frame_width * obj.frame_height * uint32(obj.bit_depth/8);
                 
-        fseek(fd, 64 + frame_offset * frame_size, 'bof');
+        fseek(fd, 64 + uint64(frame_offset) * uint64(frame_size), 'bof');
         
         if obj.endianness == 0
             endian= 'l';
