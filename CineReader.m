@@ -131,7 +131,7 @@ methods
             width_range = 1:obj.true_frame_width;
          end
          
-         if obj.is_packed             
+         if obj.is_packed              
              % assume it is 12 bits packed for now
              fd = fopen(obj.filename, 'r');
              frame_batch = zeros(final_frame_size, final_frame_size, batch_size, 'single');
@@ -152,20 +152,23 @@ methods
 
              frame_batch = CineReader.replace_dropped_frames(frame_batch, 0.2);
              fclose(fd);
-         else
+         else %not 12bit packed
              fd = fopen(obj.filename, 'r');
              % skip additional 17 bytes to skip useless struct before pix array
-
              frame_batch = zeros(final_frame_size, final_frame_size, batch_size, 'single');
              for i = 1:batch_size
                  fseek(fd, obj.image_offsets(frame_offset + i), 'bof');
                  % read annotation size
                  annotation_size = fread(fd, 1, 'uint32', 'l');
-
                  fseek(fd, obj.image_offsets(frame_offset + i) + annotation_size, 'bof');
-                 frame_batch(width_range,height_range,i) = reshape(fread(fd, obj.true_frame_width * obj.true_frame_height, 'uint16=>single', 'l'), obj.true_frame_width, obj.true_frame_height);
-             end
-
+                 % 
+                 if obj.bits_per_pix == 8 % read 8-bit interferograms
+                    frame_batch(width_range,height_range,i) = reshape(fread(fd, obj.true_frame_width * obj.true_frame_height, 'uint8=>single', 'l'), obj.true_frame_width, obj.true_frame_height);
+                 else % read 16-bit interferograms
+                    frame_batch(width_range,height_range,i) = reshape(fread(fd, obj.true_frame_width * obj.true_frame_height, 'uint16=>single', 'l'), obj.true_frame_width, obj.true_frame_height);
+                 end
+             end       
+             
              frame_batch = CineReader.replace_dropped_frames(frame_batch, 0.2);
              fclose(fd);
          end
