@@ -15,6 +15,7 @@ properties
     vertical_pix_per_meter
     is_packed
     real_bpp
+    bi_compression % New
     
     true_frame_width
     true_frame_height
@@ -62,13 +63,14 @@ methods
              }, 'Repeat', 1);
          
          obj.bits_per_pix = bitmap_mmap.Data.bi_bit_count;
+         obj.bi_compression = bitmap_mmap.Data.bi_compression; % New 
          obj.bytes_per_frame = bitmap_mmap.Data.bi_size_image;
          obj.horizontal_pix_per_meter = bitmap_mmap.Data.bi_x_pels_per_meter;
          obj.vertical_pix_per_meter = bitmap_mmap.Data.bi_y_pels_per_meter;
          obj.frame_width = bitmap_mmap.Data.bi_width;
          obj.frame_height = bitmap_mmap.Data.bi_height;
          
-         if bitmap_mmap.Data.bi_compression == 256
+         if bitmap_mmap.Data.bi_compression == 256 || bitmap_mmap.Data.bi_compression == 1024 % u10 || u12 
              % packed binary format
              obj.is_packed = true;
          else
@@ -134,22 +136,24 @@ methods
          if obj.is_packed              
              % assume it is 12 bits packed for now
              fd = fopen(obj.filename, 'r');
-             frame_batch = zeros(final_frame_size, final_frame_size, batch_size, 'single');
+             frame_batch = zeros(final_frame_size, final_frame_size, batch_size, 'double');
              for i = 1:batch_size
                  fseek(fd, obj.image_offsets(frame_offset + i), 'bof');
                  % read annotation size
-                 annotation_size = fread(fd, 1, 'uint32', 'l');
-
-                 fseek(fd, obj.image_offsets(frame_offset + i) + annotation_size, 'bof');
+                 annotation_size = fread(fd, 1, 'uint32', 'l');                 
+                 fseek(fd, obj.image_offsets(frame_offset + i) + annotation_size, 'bof');     
                  
-                 % packed frame contains Nx*Ny u12 or Nx*Ny*5/4 bytes
-                 packed_frame_size = ceil(obj.true_frame_width * obj.true_frame_height / 4) * 5; 
-                 packed_frame = fread(fd, packed_frame_size, 'uint8=>uint8', 'l');
-                 unpacked_frame = zeros(obj.true_frame_width*obj.true_frame_height,1,'single');
-                 unpack_u10_to_f32_le(packed_frame, unpacked_frame);
-                 frame_batch(width_range,height_range,i) = reshape(unpacked_frame, obj.frame_width, obj.frame_height);
+                 if obj.bi_compression == 256 % packed frame contains Nx*Ny u10 or Nx*Ny*5/4 Bytes
+                    packed_frame_size = ceil(obj.true_frame_width * obj.true_frame_height / 4) * 5;                  
+                 elseif obj.bi_compression == 1024 % packed frame contains Nx*Ny u12 or Nx*Ny*3/2 Bytes
+                    packed_frame_size = ceil(obj.true_frame_width * obj.true_frame_height / 2) * 3; 
+                 end
+                 
+                 packed_frame = fread(fd, packed_frame_size, 'uint8', 'l');
+                 unpacked_frame_zeros = zeros(obj.true_frame_width*obj.true_frame_height, 1, 'double');
+                 unpacked_frame = unpack_u12_u10(obj.bi_compression, packed_frame, unpacked_frame_zeros);
+                 frame_batch(width_range,height_range,i) = rot90(flipud(reshape(unpacked_frame, obj.frame_width, obj.frame_height)), 2);
              end
-
              frame_batch = CineReader.replace_dropped_frames(frame_batch, 0.2);
              fclose(fd);
          else %not 12bit packed
@@ -168,7 +172,6 @@ methods
                     frame_batch(width_range,height_range,i) = reshape(fread(fd, obj.true_frame_width * obj.true_frame_height, 'uint16=>single', 'l'), obj.true_frame_width, obj.true_frame_height);
                  end
              end       
-             
              frame_batch = CineReader.replace_dropped_frames(frame_batch, 0.2);
              fclose(fd);
          end
