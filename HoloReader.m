@@ -57,18 +57,36 @@ methods
         fd = fopen(obj.filename, 'r');
         
         frame_size = obj.frame_width * obj.frame_height * uint32(obj.bit_depth/8);
+        frame_batch = zeros(obj.frame_width, obj.frame_height, batch_size, 'single');
+        
+        width_range = 1:obj.frame_width;
+        height_range = 1:obj.frame_height;
                 
-        fseek(fd, 64 + uint64(frame_offset) * uint64(frame_size), 'bof');
+        %fseek(fd, 64 + uint64(frame_offset) * uint64(frame_size), 'bof');
         
         if obj.endianness == 0
             endian= 'l';
-        else
+        elseif obj.endianness == 1
             endian= 'b';
         end
         
-        frame_batch = reshape(fread(fd, obj.frame_width * obj.frame_height * batch_size, 'uint16=>single', endian), obj.frame_width, obj.frame_height, batch_size);
+        for i = 1:batch_size 
+            fseek(fd, 64 + uint64(frame_size) * (uint64(frame_offset) + (i-1)), 'bof'); 
+            if obj.bit_depth == 8
+                frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint8=>single', endian), obj.frame_width, obj.frame_height);  
+            elseif obj.bit_depth == 16
+                frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint16=>single', endian), obj.frame_width, obj.frame_height);
+            end
+        end 
         frame_batch = HoloReader.replace_dropped_frames(frame_batch, 0.2);
-
+%         if not(obj.frame_width == obj.frame_height) 
+%             frame_batch = HoloReader.replace_dropped_frames((imresize(frame_batch, [obj.frame_width, obj.frame_width])), 0.2);
+%         else
+%             frame_batch = HoloReader.replace_dropped_frames(flipud(rot90(frame_batch)), 0.2);
+%         end        
+%         imagesc(flipud(rot90(frame_batch(:,:,1))));
+%         peaksnr = psnr(frame_batch(:,:,1), frame_batch(:,:,batch_size));
+%         peaksnr
         fclose(fd);
     end
     
