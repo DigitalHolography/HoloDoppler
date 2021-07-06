@@ -10,9 +10,9 @@ function RI = construct_resistivity_index(M0)
     std_M0 = mat2gray(std_M0);
     
     max_uint16 = 65535; 
-    v_diast = avg_M0 - std_M0; 
-    v_syst = avg_M0 + std_M0; 
+    v_diast = avg_M0 - (std_M0 / 2); 
+    v_syst = avg_M0 + (std_M0 / 2); 
     RI = uint16(max_uint16 * (1 - ((v_syst - v_diast) ./ v_syst)));
     
-    RI = ind2rgb(RI, redblue(65536)); 
+    RI = ind2rgb(RI, colormap_redblue(65536)); 
 end
