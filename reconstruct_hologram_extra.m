@@ -1,4 +1,4 @@
-function [hologram0, sqrt_hologram0, hologram1, hologram2, freq_low, freq_high, M0_pos, M0_neg, M1sM0r] = reconstruct_hologram_extra(FH, f1, f2, acquisition, gaussian_width, use_gpu, svd, phase_correction,...
+function [hologram0, sqrt_hologram0, hologram1, hologram2, freq_low, freq_high, M0_pos, M0_neg, M1sM0r, velocity] = reconstruct_hologram_extra(FH, wavelength, f1, f2, acquisition, gaussian_width, use_gpu, svd, phase_correction,...
                                                                   color_f1, color_f2, color_f3)
 % Compute the moment of a batch of interferograms.
 % This function computes a lot of different outputs, for speed use
@@ -23,6 +23,7 @@ function [hologram0, sqrt_hologram0, hologram1, hologram2, freq_low, freq_high, 
 % hologram2: M2
 % composite_(1|2|3): reduced frequency bands of M0 to create a composite
 %                    RGB image in post processing
+% blood velocity: velocity
 
 j_win = size(FH, 3);
 ac = acquisition;
@@ -48,17 +49,18 @@ end
 
 %% squared magnitude of hologram
 SH = fft(H, [], 3);
-SH = abs(SH).^2;
+SH2 = abs(SH).^2; 
 
 %% shifts related to acquisition wrong positioning
-SH = permute(SH, [2 1 3]);
-SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
+SH2 = permute(SH2, [2 1 3]);
+SH2 = circshift(SH2, [-ac.delta_y, ac.delta_x, 0]);
 
 %% Compute moments
-[hologram0, sqrt_hologram0] = moment0(SH, f1, f2, ac.fs, j_win, gaussian_width);
-hologram1 = moment1(SH, f1, f2, ac.fs, j_win, gaussian_width);
-hologram2 = moment2(SH, f1, f2, ac.fs, j_win, gaussian_width);
-[freq_low, freq_high] = composite(SH, color_f1, color_f2, color_f3, ac.fs, j_win, gaussian_width);
-[M0_pos, M0_neg] = directional(SH, f1, f2, ac.fs, j_win, gaussian_width);
-M1sM0r = fmean(SH, f1, f2, ac.fs, j_win, gaussian_width);
+velocity = construct_velocity_video(SH2, f1, f2, ac.fs, j_win, gaussian_width, wavelength);
+[hologram0, sqrt_hologram0] = moment0(SH2, f1, f2, ac.fs, j_win, gaussian_width);
+hologram1 = moment1(SH2, f1, f2, ac.fs, j_win, gaussian_width);
+hologram2 = moment2(SH2, f1, f2, ac.fs, j_win, gaussian_width);
+[freq_low, freq_high] = composite(SH2, color_f1, color_f2, color_f3, ac.fs, j_win, gaussian_width);
+[M0_pos, M0_neg] = directional(SH2, f1, f2, ac.fs, j_win, gaussian_width);
+M1sM0r = fmean(SH2, f1, f2, ac.fs, j_win, gaussian_width);
 end
