@@ -9,16 +9,10 @@ n3 = size(SH, 3) - n2 + 1;
 n4 = size(SH, 3) - n1 + 1;
 
 moment = squeeze(sum(abs(SH(:, :, n1:n2)), 3)) + squeeze(sum(abs(SH(:, :, n3:n4)), 3));
-ms = sum(sum(moment,1),2);
 sqrt_moment = sqrt(moment);
-
-% apply flat field correction
-moment = moment ./ imgaussfilt(moment, gw);
 sqrt_moment = sqrt_moment ./ imgaussfilt(sqrt_moment, gw);
-ms2 = sum(sum(moment,1),2);
-moment = (ms / ms2) * moment;
 
+moment =  flat_field_correction(moment, gw);
 M0 = gather(moment);
-sqrt_M0 = gather(sqrt_moment);
+sqrt_M0 = gather(sqrt_moment); 
 end
-
