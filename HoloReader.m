@@ -43,16 +43,47 @@ methods
         footer_skip = 64 + uint64(obj.frame_width * obj.frame_height) * uint64(obj.num_frames) * uint64(obj.bit_depth/8);
         s=dir(filename);
         footer_size = s.bytes - footer_skip;
-        
-        % open file and seek footer
-        fd = fopen(filename, 'r');
-        fseek(fd, footer_skip, 'bof');
-        footer_unparsed = fread(fd, footer_size, '*char');
-        footer_parsed = jsondecode(convertCharsToStrings(footer_unparsed));
-        obj.footer = footer_parsed;
-        fclose(fd);
+
+        if footer_skip >= s.bytes
+            obj.footer.lambda = 8.5200e-07';
+            obj.footer.pixel_size = 12;
+            obj.footer.z = 0.4000;
+            %                                    x_img: 64
+            %                    algorithm: 1
+            %                 contrast_max: 70.7946
+            %                 contrast_min: 18.1970
+            %            fft_shift_enabled: 1
+            %     img_acc_slice_xy_enabled: 1
+            %       img_acc_slice_xy_level: 4
+            %     img_acc_slice_xz_enabled: 0
+            %       img_acc_slice_xz_level: 1
+            %     img_acc_slice_yz_enabled: 0
+            %       img_acc_slice_yz_level: 1
+            %                       lambda: 8.5200e-07
+            %                    log_scale: 0
+            %                         mode: 2
+            %                            p: 0
+            %                p_acc_enabled: 1
+            %                  p_acc_level: 32
+            %                   pixel_size: 12
+            %               renorm_enabled: 1
+            %                  time_filter: 1
+            %                x_acc_enabled: 0
+            %                  x_acc_level: 1
+            %                y_acc_enabled: 0
+            %                  y_acc_level: 1
+            %                            z: 0.4000
+        else
+            % open file and seek footer
+            fd = fopen(filename, 'r');
+            fseek(fd, footer_skip, 'bof');
+            footer_unparsed = fread(fd, footer_size, '*char');
+            footer_parsed = jsondecode(convertCharsToStrings(footer_unparsed));
+            obj.footer = footer_parsed;
+            fclose(fd);
+        end
     end
-    
+
     function frame_batch = read_frame_batch(obj, batch_size, frame_offset)
         fd = fopen(obj.filename, 'r');
         
