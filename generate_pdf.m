@@ -43,14 +43,16 @@ pmax = size(img_dir_content,1)-2;
 
 figure(111)
 for pp = 1:pmax
-imagefilefeatures = img_dir_content(pp+2);
-[filepath,name,ext] = fileparts(fullfile(imagefilefeatures.folder,imagefilefeatures.name));
-subplot(3,5,pp);
-if ext == '.png'
-    imshow(fullfile(imagefilefeatures.folder,imagefilefeatures.name));
-end%if
-axis image;
-title(num2str(pp));
+    imagefilefeatures = img_dir_content(pp+2);
+    [filepath,name,ext] = fileparts(fullfile(imagefilefeatures.folder,imagefilefeatures.name));
+    subplot(3,5,pp);
+    if ext == '.png'
+        imshow(fullfile(imagefilefeatures.folder,imagefilefeatures.name));
+    end%if
+    axis image;
+    title(name);
+    ax = gca;
+    ax.TitleFontSizeMultiplier = 0.5;
 end%pp
 
 f = figure(111);
@@ -58,25 +60,17 @@ f.Units = 'inches';
 f.Position = [1 1 11 8];
 
 figure(111)
-% title(img_dirname);
-% title('211006_BRZ0182_OS1OS2_1_small_7');
 
 chosen_figure=111;
-set(chosen_figure,'PaperUnits','inches');
-set(chosen_figure,'PaperPositionMode','auto');
-set(chosen_figure,'PaperSize',[str2num(figure_property.Width) str2num(figure_property.Height)]); % Canvas Size
-set(chosen_figure,'Units','inches');
-% hgexport(gcf,'filename.pdf',figure_property); %Set desired file name
-print(chosen_figure,'filename','-dpdf','-fillpage');
-
-a=1;
-
+set(chosen_figure, 'PaperUnits', 'inches');
+set(chosen_figure, 'PaperPositionMode', 'auto');
+set(chosen_figure,'PaperSize', [str2num(figure_property.Width) str2num(figure_property.Height)]); % Canvas Size
+set(chosen_figure, 'Units', 'inches');
+% hgexport(fullfile(img_dirpath),fullfile(img_dirname, '.pdf'),figure_property); %Set desired file name
+print(chosen_figure, img_dirname, '-dpdf', '-fillpage');
+movefile(strcat(img_dirname, '.pdf'), img_dirpath);
 
 
-
-
-% 
-% 
 % template_filename = fullfile('resources', 'template.pptx');
 % PH = fullfile('resources', 'placeholder.png');
 % 
