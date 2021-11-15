@@ -7,7 +7,7 @@ function [phase] = compute_phase_correction(coefs, zernike_values)
 % zernike_values: zernike base evaluated on a grid
 %
 % phase: phase correction evaluated on a grid
-phase=0;
+phase = 0;
 for k = 1:numel(coefs)
     phase = phase + coefs(k) * zernike_values(:, :, k);
 end
