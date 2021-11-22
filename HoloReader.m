@@ -44,6 +44,10 @@ methods
         s=dir(filename);
         footer_size = s.bytes - footer_skip;
 
+        % read JSON footer
+        % value = jsondecode(txt)
+
+        % read old footer
         if footer_skip >= s.bytes
             obj.footer.lambda = 8.5200e-07';
             obj.footer.pixel_size = 12;
