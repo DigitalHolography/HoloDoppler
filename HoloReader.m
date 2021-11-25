@@ -44,7 +44,7 @@ methods
         s=dir(filename);
         footer_size = s.bytes - footer_skip;
 
-        if footer_skip >= s.bytes
+        if footer_skip >= s.bytes % what to do in case there is no footer found
             obj.footer.lambda = 8.5200e-07';
             obj.footer.pixel_size = 12;
             obj.footer.z = 0.4000;
