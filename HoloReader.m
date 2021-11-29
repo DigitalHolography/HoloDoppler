@@ -8,7 +8,7 @@ properties
     data_size
     bit_depth
     endianness
-    footer % matlab JSON object
+    footer 
 end
 methods
     function obj = HoloReader(filename)
@@ -44,7 +44,8 @@ methods
         s=dir(filename);
         footer_size = s.bytes - footer_skip;
 
-        if footer_skip >= s.bytes % what to do in case there is no footer found
+        % read old footer
+        if footer_skip >= s.bytes
             obj.footer.lambda = 8.5200e-07';
             obj.footer.pixel_size = 12;
             obj.footer.z = 0.4000;
