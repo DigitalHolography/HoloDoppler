@@ -8,7 +8,7 @@ properties
     data_size
     bit_depth
     endianness
-    footer % matlab JSON object
+    footer 
 end
 methods
     function obj = HoloReader(filename)
@@ -43,9 +43,6 @@ methods
         footer_skip = 64 + uint64(obj.frame_width * obj.frame_height) * uint64(obj.num_frames) * uint64(obj.bit_depth/8);
         s=dir(filename);
         footer_size = s.bytes - footer_skip;
-
-        % read JSON footer
-        % value = jsondecode(txt)
 
         % read old footer
         if footer_skip >= s.bytes
