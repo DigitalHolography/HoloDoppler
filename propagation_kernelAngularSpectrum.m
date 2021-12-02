@@ -1,4 +1,4 @@
-function kernel = propagation_kernel(Nx, Ny, z, lambda, x_step, y_step, use_double_precision)
+function kernel = propagation_kernelAngularSpectrum(Nx, Ny, z, lambda, x_step, y_step, use_double_precision)
 % Wave propagation kernel 2FFT
 u_step = 1.0 / (Nx * x_step);
 v_step = 1.0 / (Ny * y_step);
