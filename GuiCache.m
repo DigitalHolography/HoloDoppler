@@ -6,6 +6,7 @@ classdef GuiCache
 properties (Access = public)
     batch_size
     batch_stride
+    spatialTransformation
     z
     f1
     f2
