@@ -1,8 +1,8 @@
 function generate_pdf(img_dirname, img_dirpath, fS, f1, f2)
 
-img_dirname 
+% img_dirname 
 % 211006_BRZ0182_OS1OS2_1_small_7
-img_dirpath
+% img_dirpath
 % C:\Users\Interns\Documents\MATLAB\data\211006_BRZ0182_OS1OS2_1_small_7
 
 clear figure_property;
@@ -64,13 +64,13 @@ end
 
 video_dir_path = 'C:\Users\Interns\Documents\MATLAB\data\200110_GOM0180_OS_ONH1_0_M0.mp4';
 
-v = VideoReader(video_dir_path);
-
-while hasFrame(v)
-    frame = readFrame(v);
-end
-
-subplot(3, 5, pp + 1);
+% v = VideoReader(video_dir_path);
+% 
+% while hasFrame(v)
+%     frame = readFrame(v);
+% end
+% 
+% subplot(3, 5, pp + 1);
 
 
 f = figure(111);

@@ -49,9 +49,10 @@ methods
 
         % read old footer
         if footer_skip >= s.bytes
-            obj.footer.lambda = 8.5200e-07';
-            obj.footer.pixel_size = 12;
-            obj.footer.z = 0.4000;
+                obj.footer.computeSettings.imageRendering.lambda = 8.5200e-07';
+                obj.footer.info.pixelSize.x = 12;
+                obj.footer.info.pixelSize.y = 12;
+                obj.footer.computeSettings.imageRendering.zDistance = 0.4000;
             %                                    x_img: 64
             %                    algorithm: 1
             %                 contrast_max: 70.7946
