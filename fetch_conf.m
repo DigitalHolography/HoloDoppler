@@ -1,11 +1,10 @@
 function [conf, found] = fetch_conf(filepath, filename)
-    [~, filename, ~] = fileparts(filename);
-    try
-        conf = load(sprintf("%s%s.mat", filepath, filename));
+    conf = [];
+    found = false;
+    [file_name, suffix] = get_last_config_file_name(filepath, filename);
+    if (suffix > -1)
+        conf = load(sprintf("%s%s_%d.mat", filepath, file_name, suffix));
         conf = conf.conf;
         found = true;
-    catch
-        conf = [];
-        found = false;
     end
 end
