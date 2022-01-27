@@ -1,9 +1,12 @@
-function [conf, found] = fetch_conf(filename)
-    conf = [];
-    found = false;
-    fd = fopen(filename, 'r');
-    if (fd ~= -1)
-        conf = jsondecode(fscanf(fd, "%s"));
+function [conf, found] = fetch_conf(filepath, filename)
+    %conf = [];
+    %found = false;
+    try
+        conf = load(fullfile(filepath, filename));
+        conf = conf.conf;
         found = true;
+    catch
+        conf = [];
+        found = false;
     end
 end
