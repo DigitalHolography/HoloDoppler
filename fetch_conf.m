@@ -1,8 +1,7 @@
 function [conf, found] = fetch_conf(filepath, filename)
-    %conf = [];
-    %found = false;
+    [~, filename, ~] = fileparts(filename);
     try
-        conf = load(fullfile(filepath, filename));
+        conf = load(sprintf("%s%s.mat", filepath, filename));
         conf = conf.conf;
         found = true;
     catch
