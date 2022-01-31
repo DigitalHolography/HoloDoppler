@@ -1,4 +1,4 @@
-function [config, found] = fetch_conf(filepath, filename)
+function [config, found] = fetch_config(filepath, filename)
     config = [];
     found = false;
     [file_name, suffix] = get_last_config_file_name(filepath, filename);

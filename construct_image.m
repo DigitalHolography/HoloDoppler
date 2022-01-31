@@ -35,7 +35,7 @@ end
 
 %% squared magnitude of hologram
 SH = fft(H, [], 3);
-SH2 = abs(SH).^2; 
+SH2 = abs(SH).^2;
 
 %% shifts related to acquisition wrong positioning
 SH2 = permute(SH2, [2 1 3]);
