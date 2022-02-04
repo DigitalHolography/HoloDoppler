@@ -1,4 +1,4 @@
-function [hologram0, sqrt_hologram0] = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, svd, phase_correction)
+function [hologram0, sqrt_hologram0] = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, svd, phase_correction, pca)
 % Compute the moment of a batch of interferograms.
 % For more moment outputs, use reconstruct_hologram_extra, this function
 % only computes one output for speed
@@ -46,7 +46,7 @@ clear FH;
 % end
 
 %% squared magnitude of hologram
-if (f1 == 0)
+if (pca)
     SH2 = short_time_PCA(H, f1, ac.fs);
     SH = abs(SH2).^2;
     SH = permute(SH, [2 1 3 4]);

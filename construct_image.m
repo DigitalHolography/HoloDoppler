@@ -1,6 +1,6 @@
 function img_type_list = construct_image(FH, wavelength, f1, f2, acquisition, gaussian_width, use_gpu, svd, phase_correction,...
                                                                   color_f1, color_f2, color_f3, img_type_list, is_low_frequency , ...
-                                                                  spatial_transformation)
+                                                                  spatial_transformation, pca)
 
 % FIXME : replace ifs by short name functions
 
@@ -29,13 +29,13 @@ end
 clear FH;
 
 %% SVD filtering
-% if svd
-%     H = svd_filter(H, f1, ac.fs);
-% end
+if svd
+    H = svd_filter(H, f1, ac.fs);
+end
 
 %% squared magnitude of hologram
 % SH = fft(H, [], 3);
-if (f1 == 0)
+if (pca == 1)
     SH = short_time_PCA(H, f1, ac.fs);
     SH2 = abs(SH(:,:,:,1)).^2;
 else 
