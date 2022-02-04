@@ -35,17 +35,19 @@ end
 
 %% squared magnitude of hologram
 % SH = fft(H, [], 3);
-if (pca == 1)
-    SH = short_time_PCA(H, f1, ac.fs);
-    SH2 = abs(SH(:,:,:,1)).^2;
-else 
-    SH = fft(H, [], 3);
-    SH2 = abs(SH).^2;
+%% squared magnitude of hologram : SH
+if (pca)
+    SH = short_time_PCA(H);
+else
+    %% squared magnitude of hologram
+    SH = fft(H, [], 3);    
 end
-
+clear("H");
+SH = abs(SH).^2;
 %% shifts related to acquisition wrong positioning
-SH2 = permute(SH2, [2 1 3]);
-SH2 = circshift(SH2, [-ac.delta_y, ac.delta_x, 0]);
+SH = permute(SH, [2 1 3]);
+SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
+
 
 %% Compute moments based on dropdown value
 if is_low_frequency
@@ -57,11 +59,7 @@ end
 % possibly you don't need to distinguish between grayscale images and RGB
 
 if img_type_list.power_Doppler.select % Power Doppler has been chosen
-    if (f1 == 0)
-        [img, sqrt_img] = (moment0_PCA(SH2, gaussian_width));
-    else
-        [img, sqrt_img] = (moment0(SH2, f1, f2, ac.fs, j_win, gaussian_width));
-    end
+    [img, sqrt_img] = moment0(SH, f1, f2, ac.fs, j_win, gaussian_width);
     img_type_list.power_Doppler.M0_sqrt = sqrt_img;
     img_type_list.power_Doppler.image = img;
 end
