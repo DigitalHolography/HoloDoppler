@@ -46,16 +46,28 @@ clear FH;
 % end
 
 %% squared magnitude of hologram
-SH2 = short_time_PCA(H, f1, ac.fs);
-SH = abs(SH2).^2;
+if (f1 == 0)
+    SH2 = short_time_PCA(H, f1, ac.fs);
+    SH = abs(SH2).^2;
+    SH = permute(SH, [2 1 3 4]);
+    SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
+    [hologram0, sqrt_hologram0] = moment0_PCA(SH, gaussian_width);
+else
+    SH2 = fft(H, [], 3);
+    SH = abs(SH2).^2;
+    SH = permute(SH, [2 1 3]);
+    SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
+    [hologram0, sqrt_hologram0] = moment0(SH, f1, f2, ac.fs, j_win, gaussian_width);
+end
+
 
 %% shifts related to acquisition wrong positioning
-SH = permute(SH, [2 1 3 4]);
-SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
+
+
 
 %% moment
 % [hologram0, sqrt_hologram0] = moment0(SH, f1, f2, ac.fs, j_win, gaussian_width);
-[hologram0, sqrt_hologram0] = moment0_PCA(SH, gaussian_width);
+
 % hologram0
 end
 

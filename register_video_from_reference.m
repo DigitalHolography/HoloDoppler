@@ -26,6 +26,7 @@ N = double(num_frames);
 
 frames = mat2gray(frames);
 
+
 %% apply registration
 parfor i = 1:num_frames
     send(D, i);
