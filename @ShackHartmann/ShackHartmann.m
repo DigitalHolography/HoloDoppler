@@ -12,7 +12,8 @@ classdef ShackHartmann
         % methods declaration
         [M_aso,StitchedMomentsInMaso] = construct_M_aso(obj, f1, f2, gw, acquisition)
         [shifts,StitchedMomentsInSubApertures,StitchedCorrInSubApertures] = compute_images_shifts(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
-               
+        [shifts,StitchedMomentsInSubApertures,StitchedCorrInSubApertures] = spatial_signal_analysis_PCA(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
+
         function obj = ShackHartmann(n_SubAp, p, calibration_factor,SubAp_margin,CorrMap_margin,PowFilterPreCorr,SigmaFilterPreCorr)
             obj.n_SubAp = n_SubAp;
             obj.modes = p;
