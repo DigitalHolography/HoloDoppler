@@ -1,4 +1,4 @@
-function [FH] = subaperture_PCA (obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
+function [FH] = subaperture_PCA (FH, acquisition)
 
 ac = acquisition;
 batch_size = size(FH,3);
@@ -10,13 +10,13 @@ batch_size = size(FH,3);
 % 9  10 11 12
 % 13 14 15 16
 %
-shifts = zeros(obj.n_SubAp^2, 1);
+
 ac.Nx = double(ac.Nx);
-n_subAp_x = obj.n_SubAp;
-n_subAp_y = obj.n_SubAp;
+n_subAp_x = 16;
+n_subAp_y = 16;
 subAp_Nx = floor(ac.Nx/n_subAp_x); % assume : image is square
 subAp_Ny = floor(ac.Nx/n_subAp_x); % assume : image is square
-sub_images = zeros(subAp_Nx, subAp_Nx, obj.n_SubAp^2);
+
 
 FH_4D = ones(subAp_Nx, subAp_Ny, batch_size, n_subAp_x * n_subAp_y)+1i*ones(subAp_Nx, subAp_Ny, batch_size, n_subAp_x * n_subAp_y);
 
@@ -32,7 +32,7 @@ cov = FH_2D' * FH_2D;
 
 [V,S] = eig(cov);
 [~, sort_idx] = sort(diag(S), 'descend');
-V = V(:,sort_idx)
+V = V(:,sort_idx);
 
 %singular value selection
 % %FIXME ATTN 2f1
@@ -41,7 +41,7 @@ V = V(:,sort_idx)
 %PCA (reciprocal space)
 % FH_2D = FH_2D * V(:,3:end);
 %SVD (+ return to direct space)
-FH_2D = FH_2D * V(:,3:end) * V(:,3:end)';
+FH_2D = FH_2D * V(:,1:1) * V(:,1:1)';
 
 FH_4D = reshape(FH_2D,subAp_Nx, subAp_Ny, batch_size, n_subAp_x * n_subAp_y);
 
