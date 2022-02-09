@@ -1,6 +1,6 @@
 function img_type_list = construct_image(FH, wavelength, f1, f2, acquisition, gaussian_width, use_gpu, svd, phase_correction,...
                                                                   color_f1, color_f2, color_f3, img_type_list, is_low_frequency , ...
-                                                                  spatial_transformation, pca)
+                                                                  spatial_transformation, pca, SubAp_PCA)
 
 % FIXME : replace ifs by short name functions
 
@@ -13,6 +13,10 @@ if use_gpu
     if exist('phase_correction', 'var')
         phase_correction = gpuArray(phase_correction);
     end
+end
+
+if (SubAp_PCA.Value)
+    FH = subaperture_PCA(FH, SubAp_PCA, acquisition);
 end
 
 if exist('phase_correction', 'var') && ~isempty(phase_correction)

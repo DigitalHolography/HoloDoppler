@@ -1,4 +1,4 @@
-function [FH] = subaperture_PCA (FH, acquisition)
+function [FH] = subaperture_PCA (FH, SubAp_PCA, acquisition)
 
 ac = acquisition;
 batch_size = size(FH,3);
@@ -41,7 +41,7 @@ V = V(:,sort_idx);
 %PCA (reciprocal space)
 % FH_2D = FH_2D * V(:,3:end);
 %SVD (+ return to direct space)
-FH_2D = FH_2D * V(:,1:1) * V(:,1:1)';
+FH_2D = FH_2D * V(:,SubAp_PCA.min:SubAp_PCA.max) * V(:,SubAp_PCA.min:SubAp_PCA.max)';
 
 FH_4D = reshape(FH_2D,subAp_Nx, subAp_Ny, batch_size, n_subAp_x * n_subAp_y);
 
