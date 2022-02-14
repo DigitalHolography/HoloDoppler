@@ -161,5 +161,4 @@ for SubAp_idx = SubAp_id_range
 
     end %SubAp_idy
 end %SubAp_idx
-1;
 end

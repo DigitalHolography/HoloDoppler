@@ -36,6 +36,8 @@ if svd
     H = svd_filter(H, f1, ac.fs);
 end
 
+%% 
+
 %% squared magnitude of hologram
 % SH = fft(H, [], 3);
 %% squared magnitude of hologram : SH
@@ -49,7 +51,7 @@ else
     n1 = [ceil(f1 * j_win / ac.fs), size(SH, 3) - ceil(f2 * j_win / ac.fs) + 1];
     n2 = [ceil(f2 * j_win / ac.fs), size(SH, 3) - ceil(f1 * j_win / ac.fs) + 1];
 end
-clear("H");
+% clear("H");
 SH = abs(SH).^2;
 %% shifts related to acquisition wrong positioning
 SH = permute(SH, [2 1 3]);
@@ -64,20 +66,26 @@ else
 end
 
 % possibly you don't need to distinguish between grayscale images and RGB
+if img_type_list.phase_variation.select
+    %FIXME : ecraser H
+    C = angle(phase_fluctuation(H));
+    C = permute(H, [2 1 3]);
+    img_type_list.phase_variation.image = moment0(C, floor(j_win/2), j_win, gaussian_width);
+end
 
 if img_type_list.power_Doppler.select % Power Doppler has been chosen
-    [img, sqrt_img] = moment0(SH, n1, n2, ac.fs, j_win, gaussian_width);
+    [img, sqrt_img] = moment0(SH, n1, n2, gaussian_width);
     img_type_list.power_Doppler.M0_sqrt = sqrt_img;
     img_type_list.power_Doppler.image = img;
 end
 
 if img_type_list.power_1_Doppler.select % Power 1 Doppler has been chosen
-    img = moment1(SH, n1, n2, ac.fs, j_win, gaussian_width);
+    img = moment1(SH, n1, n2, gaussian_width);
     img_type_list.power_1_Doppler.image = img;
 end
 
 if img_type_list.power_2_Doppler.select % Power 2 Doppler has been chosen
-    img = moment2(SH, n1, n2, ac.fs, j_win, gaussian_width);
+    img = moment2(SH, n1, n2, gaussian_width);
     img_type_list.power_2_Doppler.image = img;
 end
 

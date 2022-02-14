@@ -27,23 +27,25 @@ skip = skip .* hann(n_subAp_y + 2)';
 skip = skip(2:end-1,2:end-1);
 
 
-gauss = ones(subAp_Nx, subAp_Ny);
+% gauss = ones(subAp_Nx, subAp_Ny);
+gauss = gauss2D(subAp_Nx, 0.5); % parameter alpha = 3 
 gauss1 = ones(subAp_Nx, subAp_Ny);
-gauss = gauss .* hann(subAp_Nx);
-gauss = gauss .* hann(subAp_Ny)';
-
-% gauss1(1:10, :) = 0;
-% gauss1(:, 1:10) = 0;
-% gauss1(118:128, :) = 0;
-% gauss1(:, 118:128) = 0;
+% gauss = gauss .* hann(subAp_Nx);
+% gauss = gauss .* hann(subAp_Ny)';
 % 
-% gauss = conv2(gauss, gauss1, "same");
-
+gauss1(1:10, :) = 0;
+gauss1(:, 1:10) = 0;
+gauss1(118:128, :) = 0;
+gauss1(:, 118:128) = 0;
+% % 
+gauss = conv2(gauss, gauss1, "same");
+% 
+% imagesc(gauss);
 gauss = fft2(gauss);
 
 % t = linspace(-64*pi,64*pi,subAp_Nx);
-% gauss1 = gauss .*(sinc(t));
-% gauss1 = gauss .*(sinc(t))';
+% gauss = gauss .*(sinc(t));
+% gauss = gauss .*(sinc(t))';
 % 
 % gauss2 = ones(subAp_Nx, subAp_Ny);
 % gauss3 = ones(subAp_Nx, subAp_Ny);
@@ -52,7 +54,7 @@ gauss = fft2(gauss);
 % gauss2 = gauss2 .* x;
 % gauss3 = gauss3.* y';
 % 
-% gauss1 = gauss1 .* exp(1i * gauss2 * 202) .* exp(1i * gauss3 * 202);
+% gauss = gauss .* exp(1i * gauss2 * 202) .* exp(1i * gauss3 * 202);
     
 
 % imagesc(abs(gauss));
@@ -60,11 +62,17 @@ gauss = fft2(gauss);
 for id_y = 1 : n_subAp_y
     for id_x = 1 : n_subAp_x
         if (skip(id_x, id_y) >= 0.10)
-            for i = 1 : batch_size
-                FH_4D(:,:,i,id_x+(id_y-1)*n_subAp_x) = conv2(FH((id_y-1)*subAp_Nx+1 : id_y*subAp_Nx, (id_x-1)*subAp_Nx+1 : id_x*subAp_Nx, i), gauss, 'same');
-            end
+            FH_4D(:,:,:,id_x+(id_y-1)*n_subAp_x) = FH((id_y-1)*subAp_Nx+1 : id_y*subAp_Nx, (id_x-1)*subAp_Nx+1 : id_x*subAp_Nx, :);
         
-            H_chunk = ifft2(FH_4D(:,:,:,id_x+(id_y-1)*n_subAp_x));
+            H_chunk = fft2(FH_4D(:,:,:,id_x+(id_y-1)*n_subAp_x));
+
+            for i = 1:size(H_chunk,4)
+                chunk_for_pca(:,:,:,i) = H_chunk(:,:,:,i) .* gauss2D(subAp_Nx, 100);
+            end
+            
+%             chunk_for_pca = H_chunk;
+            chunk_for_pca = ifft2(chunk_for_pca);
+            FH_4D(:,:,:,id_x+(id_y-1)*n_subAp_x) = chunk_for_pca;
             % Statistical filtering
             if enable_svd
                 sz1 = size(H_chunk,1);
@@ -147,14 +155,24 @@ V = V(:,sort_idx);
 %PCA (reciprocal space)
 % FH_2D = FH_2D * V(:,3:end);
 %SVD (+ return to direct space)
+for id_y = 1 : n_subAp_y
+    for id_x = 1 : n_subAp_x
+        FH_4D(:,:,:,id_x+(id_y-1)*n_subAp_x) = FH((id_y-1)*subAp_Nx+1 : id_y*subAp_Nx, (id_x-1)*subAp_Nx+1 : id_x*subAp_Nx, :);
+    end
+end
+FH_2D = reshape(FH_4D, subAp_Nx * subAp_Ny * batch_size, n_subAp_x * n_subAp_y);
 FH_2D = FH_2D * V(:,SubAp_PCA.min:SubAp_PCA.max) * V(:,SubAp_PCA.min:SubAp_PCA.max)';
 
 FH_4D = reshape(FH_2D,subAp_Nx, subAp_Ny, batch_size, n_subAp_x * n_subAp_y);
 
 for id_y = 1 : n_subAp_y
-    for id_x = 1 : n_subAp_x  
+    for id_x = 1 : n_subAp_x
          FH((id_y-1)*subAp_Nx+1 : id_y*subAp_Nx, (id_x-1)*subAp_Nx+1 : id_x*subAp_Nx, :) = FH_4D(:,:,:,id_x+(id_y-1)*n_subAp_x);
     end
-end 
+end
+
+% the gauss filtering is applied not only for eigen decomposition but only
+% for final rendering of the image, is that correct?
+
 
 end
