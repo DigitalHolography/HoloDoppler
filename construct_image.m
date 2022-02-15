@@ -57,7 +57,6 @@ SH = abs(SH).^2;
 SH = permute(SH, [2 1 3]);
 SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
 
-
 %% Compute moments based on dropdown value
 if is_low_frequency
     sign = -1;
@@ -69,8 +68,8 @@ end
 if img_type_list.phase_variation.select
     %FIXME : ecraser H
     C = angle(phase_fluctuation(H));
-    C = permute(H, [2 1 3]);
-    img_type_list.phase_variation.image = moment0(C, floor(j_win/2), j_win, gaussian_width);
+    C = permute(C, [2 1 3]);
+    img_type_list.phase_variation.image = moment0(C, n1, n2, gaussian_width);
 end
 
 if img_type_list.power_Doppler.select % Power Doppler has been chosen
