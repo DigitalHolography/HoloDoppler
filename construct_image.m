@@ -22,12 +22,20 @@ if exist('phase_correction', 'var') && ~isempty(phase_correction)
     FH = FH .* exp(-1i * phase_correction);
 end
 
-switch spatial_transformation
-    case 'angular spectrum'
-        H = ifft2(FH);
-    case 'Fresnel'
-        H = fftshift(ifft2(FH));
+
+% if we want dark field preview H is calculated by dark field function
+if img_type_list.dark_field_image.select
+    H = dark_field(FH, z1, spatial_transform1, z2, spatial_transform2);
+else
+    switch spatial_transformation
+        case 'angular spectrum'
+            H = ifft2(FH);
+        case 'Fresnel'
+            H = fftshift(ifft2(FH));
+    end
 end
+
+
 
 clear FH;
 
@@ -35,8 +43,6 @@ clear FH;
 if svd
     H = svd_filter(H, f1, ac.fs);
 end
-
-%% 
 
 %% squared magnitude of hologram
 % SH = fft(H, [], 3);
@@ -65,6 +71,10 @@ else
 end
 
 % possibly you don't need to distinguish between grayscale images and RGB
+if img_type_list.dark_field_image.select
+    img_type_list.dark_field_image.image = moment0(H, n1, n2, gaussian_width);
+end
+
 if img_type_list.phase_variation.select
     %FIXME : ecraser H
     C = angle(phase_fluctuation(H));
