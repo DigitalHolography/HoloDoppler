@@ -6,4 +6,5 @@ function [C] = cumulant(A, n1, n2)
 
 moment = squeeze(sum(A(:, :, n1:n2), 3));
 C = gather(moment);
+
 end

@@ -1,5 +1,8 @@
-function dark_field_H = dark_field(FH, z1, spatial_transform1, z2, spatial_transform2)
+function dark_field_H = dark_field(FH, z1, spatial_transform1, z2, spatial_transform2, lambda)
     
+    x_step = 1;
+    y_step = 1;
+
     % ensure that FH is in GPU
     FH = gpuArray(single(FH));
     H_retina = fft2(FH);
@@ -28,6 +31,9 @@ function dark_field_H = dark_field(FH, z1, spatial_transform1, z2, spatial_trans
     r1_FH = 8;
     r2_FH = 2;
     angular_mask = ~make_ring_mask(Nx, Ny, floor(Nx/2), floor(Ny/2), r1_FH, r2_FH);
+
+    kernel1 = propagation_kernelAngularSpectrum(Nx, Ny, -z1, lambda, x_step, y_step, false);
+    kernel2 = propagation_kernelAngularSpectrum(Nx, Ny, z2 , lambda, x_step, y_step, false);
     
     for id_y = 1:y_stride:Ny
         for id_x = 1:x_stride:Nx
@@ -38,9 +44,9 @@ function dark_field_H = dark_field(FH, z1, spatial_transform1, z2, spatial_trans
     
             switch spatial_transform1
                 case 'angular spectrum'
-                    frame_batch = gpuArray(fftshift(fft2(FH_retina)) .* app.kernelAngularSpectrum(-z1));
+                    frame_batch = gpuArray(fftshift(fft2(FH_retina)) .* kernel1);
                 case 'Fresnel'
-                    frame_batch = gpuArray((FH_retina) .* app.kernelFresnel(-z1));
+                    frame_batch = gpuArray((FH_retina) .* kernel1);
             end
     
             % transforms from "compute_FH_from_frame_batch.m"
@@ -54,9 +60,9 @@ function dark_field_H = dark_field(FH, z1, spatial_transform1, z2, spatial_trans
             %% filtering in H2 (iris) plane
             switch spatial_transform2
                 case 'angular spectrum'
-                    FH_iris = gpuArray(fftshift(fft2(frame_batch)) .* app.kernelAngularSpectrum(z2));
+                    FH_iris = gpuArray(fftshift(fft2(frame_batch)) .* kernel2);
                 case 'Fresnel'
-                    FH_iris = gpuArray((frame_batch) .* app.kernelFresnel(z2));
+                    FH_iris = gpuArray((frame_batch) .* kernel2);
             end
             H_iris = fft2(FH_iris);
             iris_mask = make_ring_mask(Nx, Ny, id_x, id_y, r1_iris, r2_iris);

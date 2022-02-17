@@ -25,7 +25,8 @@ end
 
 % if we want dark field preview H is calculated by dark field function
 if img_type_list.dark_field_image.select
-    H = dark_field(FH, z1, spatial_transform1, z2, spatial_transform2);
+    H = dark_field(FH, z1, spatial_transform1, z2, spatial_transform2, ac.lambda);
+    
 else
     switch spatial_transformation
         case 'angular spectrum'
@@ -74,6 +75,7 @@ SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
 
 if img_type_list.pure_PCA.select
     img_type_list.pure_PCA.image = cumulant(SH, n1, n2);
+    img_type_list.pure_PCA.image = flat_field_correction(img_type_list.pure_PCA.image, gaussian_width);
 end
 
 if img_type_list.dark_field_image.select
@@ -123,7 +125,7 @@ if img_type_list.M0sM1r.select % M1sM0r has been chosen
 end
 
 if img_type_list.velocity_estimate.select % Velocity Estimate has been chosen
-   img_type_list.velocity_estimate.image = construct_velocity_video(SH, n1, n2, ac.fs, j_win, gaussian_width, wavelength);
+   img_type_list.velocity_estimate.image = construct_velocity_video(SH, f1, f2, ac.fs, j_win, gaussian_width, wavelength);
 end
 
 end

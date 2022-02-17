@@ -1,4 +1,4 @@
-function [hologram0, sqrt_hologram0] = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, svd, phase_correction, PCA)
+function [hologram0, sqrt_hologram0] = reconstruct_hologram(FH, acquisition, gaussian_width, use_gpu, svd, phase_correction, time_transform)
 % Compute the moment of a batch of interferograms.
 % For more moment outputs, use reconstruct_hologram_extra, this function
 % only computes one output for speed
@@ -42,19 +42,20 @@ clear FH;
 
 %% SVD filtering
 if (svd)
-    H = svd_filter(H, f1, ac.fs);
+    H = svd_filter(H, time_transform.f1, ac.fs);
 end
 
 %% squared magnitude of hologram : SH
-if (PCA.Value)
-    SH = short_time_PCA(H);
-    n1 = PCA.min;
-    n2 = PCA.max;
-else
-    %% squared magnitude of hologram
-    SH = fft(H, [], 3);
-    n1 = [ceil(f1 * j_win / ac.fs), size(SH, 3) - ceil(f2 * j_win / ac.fs) + 1];
-    n2 = [ceil(f2 * j_win / ac.fs), size(SH, 3) - ceil(f1 * j_win / ac.fs) + 1];
+switch time_transform.type
+    case 'PCA' % if the time transform is PCA
+        SH = short_time_PCA(H);
+        n1 = time_transform.f1;
+        n2 = time_transform.f2;
+    
+    case 'FFT' % if the time transform is FFT
+        SH = fft(H, [], 3);
+        f1 = time_transform.f1;
+        f2 = time_transform.f2;
 end
 clear("H");
 SH = abs(SH).^2;
@@ -62,6 +63,13 @@ SH = abs(SH).^2;
 SH = permute(SH, [2 1 3]);
 SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
 %% moment
-[hologram0, sqrt_hologram0] = moment0(SH, n1, n2, ac.fs, j_win, gaussian_width);
+
+switch time_transform.type
+    case 'PCA' % if the time transform is PCA
+        [hologram0] = cumulant(SH, n1, n2);
+    case 'FFT' % if the time transform is FFT
+        [hologram0, sqrt_hologram0] = moment0(SH, f1, f2, ac.fs, j_win, gaussian_width);
+end
+
 end
 
