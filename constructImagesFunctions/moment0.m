@@ -1,14 +1,17 @@
-function [M0, sqrt_M0] = moment0(A, idxspan1, idxspan2,  gw)
+function [M0, sqrt_M0] = moment0(A, f1, f2, fs, batch_size, gw)
 %% integration interval
-% A : 3D array x,y,omega
-% idxspan1 = index vector (positive freqs)
-% idxspan2 = index vector (negative freqs)
+% convert frequencies to indices
+n1 = ceil(f1 * batch_size / fs);
+n2 = ceil(f2 * batch_size / fs);
+
+% symetric integration interval
+n3 = size(A, 3) - n2 + 1;
+n4 = size(A, 3) - n1 + 1;
 
 A = abs(A);
-moment = squeeze(sum(A(:, :, idxspan1(1):idxspan2(1)), 3));
-for i = 2 : length(idxspan1)
-    moment = moment + squeeze(sum(A(:, :, idxspan1(i):idxspan2(i)), 3));
-end
+
+moment = squeeze(sum(A(:, :, n1:n2), 3)) + squeeze(sum(A(:, :, n3:n4), 3));
+
 moment =  flat_field_correction(moment, gw);
 
 sqrt_moment = sqrt(moment);
