@@ -25,7 +25,8 @@ end
 
 % if we want dark field preview H is calculated by dark field function
 if img_type_list.dark_field_image.select
-    H = dark_field(FH, z1, spatial_transform1, z2, spatial_transform2, ac.lambda);
+    %for now we assume that both spatial transforms are the same
+    H = dark_field(FH, ac.z_retina, spatial_transformation, ac.z_iris, spatial_transformation, ac.lambda, ac.x_step, ac.y_step);
     
 else
     switch spatial_transformation
@@ -79,7 +80,7 @@ if img_type_list.pure_PCA.select
 end
 
 if img_type_list.dark_field_image.select
-    img_type_list.dark_field_image.image = moment0(SH, f1, f2, ac.fs, j_win, gaussian_width);
+    img_type_list.dark_field_image.image = cumulant(SH, f1, f2);
 end
 
 if img_type_list.phase_variation.select

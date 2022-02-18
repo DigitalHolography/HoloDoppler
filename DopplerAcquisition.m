@@ -4,6 +4,8 @@ classdef DopplerAcquisition
         Ny      % number of pix vertically
         fs      % sampling frequency
         z       % reconstruction distance
+        z_retina % reconstruction distance for retina
+        z_iris  %reconstruction distance for iris
         lambda  % laser wavelength
         delta_x % required x circshift
         delta_y % required y circshift
@@ -12,12 +14,14 @@ classdef DopplerAcquisition
     end
     methods
         % constructor
-        function obj = DopplerAcquisition(Nx, Ny, fs, z, lambda, delta_x, ...
+        function obj = DopplerAcquisition(Nx, Ny, fs, z, z_retina, z_iris, lambda, delta_x, ...
                                           delta_y, x_step, y_step)
             obj.Nx = Nx;
             obj.Ny = Ny;
             obj.fs = fs;
             obj.z = z;
+            obj.z_retina = z_retina;
+            obj.z_iris = z_iris;
             obj.lambda = lambda;
             obj.delta_x = delta_x;
             obj.delta_y = delta_y;

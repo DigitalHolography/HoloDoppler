@@ -8,8 +8,9 @@ properties (Access = public)
     batch_stride
     spatialTransformation
     z
-    f1
-    f2
+    z_retina
+    z_iris
+    time_transform  % object with : type of transformation, f1, f2
     wavelength
     Fs
     pix_width
