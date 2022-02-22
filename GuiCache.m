@@ -10,6 +10,7 @@ properties (Access = public)
     z
     z_retina
     z_iris
+    z_switch
     time_transform  % object with : type of transformation, f1, f2
     wavelength
     Fs
@@ -47,6 +48,13 @@ properties (Access = public)
     shack_hartmann_zernike_ranks
     num_subapertures
     subaperture_margin
+    SubAp_PCA;
+    minSubAp_PCA;
+    maxSubAp_PCA;
+
+    timetransform;
+    min_PCA
+    max_PCA
 end
 methods (Access = public)
     function obj = GuiCache()
