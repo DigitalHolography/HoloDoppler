@@ -3,8 +3,8 @@ function dark_field_H = dark_field(FH, z_retina, spatial_transform1, z_iris, spa
 % ensure that FH is in GPU
 FH = gpuArray(single(FH));
 H_retina = ifft2(FH);
-FH_iris = gpuArray((zeros(size(FH)))+1i*(zeros(size(FH))));
-H_iris = gpuArray((zeros(size(FH)))+1i*(zeros(size(FH))));
+FH_iris = gpuArray(single(zeros(size(FH)))+1i*single(zeros(size(FH))));
+H_iris = gpuArray(single(zeros(size(FH)))+1i*single(zeros(size(FH))));
 % H_retina_sourcepoint = gpuArray((zeros(size(FH)))+1i*(zeros(size(FH))));
 %     dark_field_H = gpuArray((zeros(size(FH)))+1i*(zeros(size(FH))));
 %     sidelobes_H = gpuArray((zeros(size(FH)))+1i*(zeros(size(FH))));
@@ -14,13 +14,14 @@ Ny = size(FH,2);
 Nt = size(FH,3);
 
 % spatial subsampling
-x_stride = 16;
-y_stride = 16;
+x_stride = 4;
+y_stride = 4;
 
 % filter features in retina plane
 r1_retina = 50;
 r2_retina = 20;
 mask_blur_retina = 10;
+retina_mask_centered = make_ring_mask(Nx, Ny, r1_retina, r2_retina);
 
 % r1_retina_sourcepoint = 5;
 % r2_retina_sourcepoint = 0;
@@ -30,13 +31,14 @@ r1_iris = 4;
 r2_iris = 0;
 mask_blur_iris = 10;
 mask_blur_iris_sourcepoint = 30;
-x_neighborhood = 4;
-y_neighborhood = 4;
+x_neighborhood = 1;
+y_neighborhood = 1;
+iris_mask_centered = make_ring_mask(Nx, Ny, r1_iris, r2_iris);
 
 % filter features in reciprocal plane
 r1_FH = 4;
 r2_FH = 2;
-angular_mask = ~make_ring_mask(Nx, Ny, floor(Nx/2), floor(Ny/2), r1_FH, r2_FH);
+% angular_mask = ~make_ring_mask(Nx, Ny, r1_FH, r2_FH);
 
 % evaluation of iris plane size
 Nx2 = ceil(Nx/x_stride)*(2*x_neighborhood+1);
@@ -47,6 +49,9 @@ dark_field_H = gpuArray((zeros(Nx2,Ny2,Nt))+1i*(zeros(Nx2,Ny2,Nt)));
 kernel1 = propagation_kernelAngularSpectrum(Nx, Ny, -z_retina, lambda, x_step, y_step, false);
 kernel2 = propagation_kernelAngularSpectrum(Nx, Ny, z_iris , lambda, x_step, y_step, false);
 tic
+
+center_x = floor(Nx/2);
+center_y = floor(Ny/2);
 
 % indexes used for dark_field_H in iris plane
 ii_x = 0;
@@ -61,15 +66,17 @@ for id_y =  1:y_stride:Ny %
         row = id_x + floor(x_stride/2);
         col = id_y + floor(y_stride/2); 
         %% filering in retina plane with ring
-        retina_mask = make_ring_mask(Nx, Ny, id_x + floor(x_stride/2), id_y + floor(y_stride/2), r1_retina, r2_retina);
+        
+        retina_mask = circshift(retina_mask_centered, row - center_x, 1);
+        retina_mask = circshift(retina_mask, col - center_y, 2);
         retina_mask = imgaussfilt(retina_mask, mask_blur_retina);
         H_retina_filtered = H_retina .* retina_mask;
 
         %
-        figure(1)
-        imagesc((squeeze(sum(abs(H_retina_filtered),3))));
-        axis image;
-        title('retina')
+%         figure(1)
+%         imagesc((squeeze(sum(abs(H_retina_filtered),3))));
+%         axis image;
+%         title('retina')
         %
         %% calculate optical field distribution in reciprocal space (complex-valued synthetic frame batch)
         FH_retina = fft2(H_retina_filtered);
@@ -125,23 +132,24 @@ for id_y =  1:y_stride:Ny %
         end
         H_iris = flip(flip(ifft2(fftshift(FH_iris)),1),2);
         %% filtering in iris plane with pinhole
-        iris_mask = make_ring_mask(Nx, Ny, row, col, r1_iris, r2_iris);
+        iris_mask = circshift(iris_mask_centered, row - center_x, 1);
+        iris_mask = circshift(iris_mask, col - center_y, 2);
         %
-        figure(2)
-        Q = squeeze(sum(abs(H_iris),3));
-        imagesc(Q);
-        axis image;
-        title('iris before pinhole mask')
+%         figure(2)
+%         Q = squeeze(sum(abs(H_iris),3));
+%         imagesc(Q);
+%         axis image;
+%         title('iris before pinhole mask')
         %
 
         iris_mask = imgaussfilt(iris_mask, mask_blur_iris);
         H_iris = H_iris .* iris_mask;
         %
-        figure(3)
-        R = squeeze(sum(abs(H_iris),3));
-        imagesc(R);
-        axis image;
-        title('iris after pinhole mask')
+%         figure(3)
+%         R = squeeze(sum(abs(H_iris),3));
+%         imagesc(R);
+%         axis image;
+%         title('iris after pinhole mask')
 
         %% stop here for now
 
@@ -176,4 +184,5 @@ for id_y =  1:y_stride:Ny %
     end% id_x
 end% id_y
 toc
+save('C:\Users\Interns\Documents\MATLAB\data\dark_field.mat', 'dark_field_H', '-mat');
 end
