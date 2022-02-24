@@ -57,14 +57,14 @@ end
 switch time_transform.type
     case 'PCA' % if the time transform is PCA
         SH = short_time_PCA(H);
-        n1 = time_transform.f1;
-        n2 = time_transform.f2;
-    
     case 'FFT' % if the time transform is FFT
         SH = fft(H, [], 3);
-        f1 = time_transform.f1;
-        f2 = time_transform.f2;
 end
+
+f1 = time_transform.f1;
+f2 = time_transform.f2;
+n1 = time_transform.min_PCA;
+n2 = time_transform.max_PCA;
 
 % clear("H");
 SH = abs(SH).^2;
@@ -80,7 +80,7 @@ if img_type_list.pure_PCA.select
 end
 
 if img_type_list.dark_field_image.select
-    img_type_list.dark_field_image.image = flat_field_correction(cumulant(SH, f1, f2),gaussian_width);
+    img_type_list.dark_field_image.image = (flat_field_correction(moment0(SH, f1, f2, ac.fs, j_win, gaussian_width),gaussian_width));
 end
 
 if img_type_list.phase_variation.select
