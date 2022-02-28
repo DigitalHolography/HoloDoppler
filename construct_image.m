@@ -129,4 +129,15 @@ if img_type_list.velocity_estimate.select % Velocity Estimate has been chosen
    img_type_list.velocity_estimate.image = construct_velocity_video(SH, f1, f2, ac.fs, j_win, gaussian_width, wavelength);
 end
 
+if img_type_list.spectrogram.select
+    img_type_list.spectrogram.image = moment0(SH, f1, f2, ac.fs, j_win, gaussian_width);
+    total_energy_sent = sum(SH, "all");
+    y = squeeze(sum(SH, [1 2]))./ total_energy_sent;
+    img_type_list.spectrogram.vector = y;
+%     x = linspace(-33.5, 33.5, j_win);
+%     plot(x, y);
+%     axis square
+%     Frame = getframe(gcf)
+%     FrameData = Frame.cdata; %// This is a matrix that you can plot/show with imshow.
+end
 end
