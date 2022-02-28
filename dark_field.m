@@ -20,8 +20,8 @@ Nt = size(FH,3);
 % axis image;
 
 % spatial subsampling
-x_stride = 1;
-y_stride = 1;
+x_stride = 16;
+y_stride = 16;
 
 % filter features in retina plane
 r1_retina = 20;
@@ -38,8 +38,8 @@ r1_iris = 4;
 r2_iris = 0;
 mask_blur_iris = 10;
 mask_blur_iris_sourcepoint = 30;
-x_neighborhood = 0;
-y_neighborhood = 0;
+x_neighborhood = 3;
+y_neighborhood = 3;
 iris_mask_centered = make_ring_mask(Nx, Ny, r1_iris, r2_iris);
 iris_mask_centered = gpuArray(single(imgaussfilt(iris_mask_centered, mask_blur_iris)));
 
@@ -50,7 +50,6 @@ mask_blur_angular = 10;
 angular_mask_centered = single(~make_ring_mask(Nx, Ny, r1_FH, r2_FH));
 angular_mask_centered = gpuArray(single(imgaussfilt(angular_mask_centered, mask_blur_angular)));
 
-
 % evaluation of iris plane size
 Nx2 = ceil(Nx/x_stride)*(2*x_neighborhood+1);
 Ny2 = ceil(Ny/y_stride)*(2*y_neighborhood+1);
@@ -59,6 +58,9 @@ dark_field_H = gpuArray(single(zeros(Nx2,Ny2,Nt))+1i*(zeros(Nx2,Ny2,Nt)));
 
 kernel1 = propagation_kernelAngularSpectrum(Nx, Ny, -z_retina, lambda, x_step, y_step, false);
 kernel2 = propagation_kernelAngularSpectrum(Nx, Ny, z_iris , lambda, x_step, y_step, false);
+
+frame_batch = gpuArray(single(zeros(size(FH)))+1i*single(zeros(size(FH))));
+
 tic
 
 center_x = floor(Nx/2);
@@ -223,9 +225,12 @@ for id_y =  1:y_stride:Ny %
         x_range = (ii_x - 1) * (2 * x_neighborhood +1) + 1 : ii_x * (2 * x_neighborhood +1);
         y_range = (ii_y - 1) * (2 * y_neighborhood +1) + 1 : ii_y * (2 * y_neighborhood +1);
         
+
+        H_iris = circshift(H_iris, center_x - row, 1);
+        H_iris = circshift(H_iris, center_y - col, 2);
         
         dark_field_H(x_range, y_range, :) = ... 
-        H_iris(row-x_neighborhood:row+x_neighborhood,col-y_neighborhood:col+y_neighborhood, :) ./ energy;
+        H_iris(center_x-x_neighborhood:center_x+x_neighborhood,center_y-y_neighborhood:center_y+y_neighborhood, :) ./ energy;
     end% id_x
 end% id_y
 
@@ -240,5 +245,7 @@ end% id_y
 % imagesc(squeeze(abs(sum(SH_test,3))));
 
 toc
-save('C:\Users\Interns\Documents\MATLAB\data\dark_field.mat', 'dark_field_H', '-mat');
+% output_dirname = create_output_directory_name(app.filepath, app.filename);
+%             output_dirpath = fullfile(app.filepath, output_dirname);
+% save('C:\Users\Interns\Documents\MATLAB\data\dark_field.mat', 'dark_field_H', '-mat');
 end

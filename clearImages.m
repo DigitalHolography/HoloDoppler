@@ -10,7 +10,7 @@ images.directional_Doppler.select = 0; images.directional_Doppler.image = []; im
 images.M0sM1r.select = 0; images.M0sM1r.image = [];
 images.velocity_estimate.select = 0; images.velocity_estimate.image = [];
 images.phase_variation.select = 0; images.phase_variation.image = [];
-images.dark_field_image.select = 0; images.dark_field_image.image = [];
+images.dark_field_image.select = 0; images.dark_field_image.image = []; images.dark_field_image.H = [];
 images.pure_PCA.select = 0; images.pure_PCA.image = [];
 
 end

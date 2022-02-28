@@ -15,7 +15,7 @@ field_5 = 'directional_Doppler'; values_5 = struct('short_name','directional', '
 field_6 = 'M0sM1r'; values_6 = struct('short_name','ratio', 'select', 0 ,'image', [] );
 field_7 = 'velocity_estimate'; values_7 = struct('short_name','velocity', 'select', 0 ,'image', []);
 field_8 = 'phase_variation'; values_8 = struct('short_name','phase_variation', 'select', 0 ,'image', []);
-field_9 = 'dark_field_image'; values_9 = struct('short_name','dark_field', 'select', 0 ,'image', []);
+field_9 = 'dark_field_image'; values_9 = struct('short_name','dark_field', 'select', 0 ,'image', [], 'H', []);
 field_10 = 'pure_PCA'; values_10 = struct('short_name','PCA', 'select', 0 ,'image', []);
 
 %it takes a lot of time, would it be possible to unify the structure : have
