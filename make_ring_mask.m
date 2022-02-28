@@ -6,7 +6,7 @@ function mask = make_ring_mask(Nx, Ny, radius1, radius2)
     for y = center_y - radius1:center_y + radius1
         for x = center_x - radius1:center_x + radius1
             vec_norm = norm([x - center_x, y - center_y]);
-            if (x > 0 && y > 0 && x <= Nx && y <= Ny && vec_norm < radius1 && vec_norm >= radius2)
+            if (x > 0 && y > 0 && x <= Nx && y <= Ny && vec_norm <= radius1 && vec_norm >= radius2)
                 mask(x, y) = 1;
             end
         end

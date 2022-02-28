@@ -80,7 +80,7 @@ if img_type_list.pure_PCA.select
 end
 
 if img_type_list.dark_field_image.select
-    img_type_list.dark_field_image.image = (flat_field_correction(moment0(SH, f1, f2, ac.fs, j_win, gaussian_width),gaussian_width));
+    img_type_list.dark_field_image.image = log(flat_field_correction(moment0(SH, f1, f2, ac.fs, j_win, gaussian_width),gaussian_width));
 end
 
 if img_type_list.phase_variation.select

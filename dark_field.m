@@ -20,14 +20,15 @@ Nt = size(FH,3);
 % axis image;
 
 % spatial subsampling
-x_stride = 16;
-y_stride = 16;
+x_stride = 1;
+y_stride = 1;
 
 % filter features in retina plane
-r1_retina = 50;
-r2_retina = 20;
+r1_retina = 20;
+r2_retina = 5;
 mask_blur_retina = 1;
 retina_mask_centered = make_ring_mask(Nx, Ny, r1_retina, r2_retina);
+retina_mask_centered = gpuArray(single(imgaussfilt(retina_mask_centered, mask_blur_retina)));
 
 % r1_retina_sourcepoint = 5;
 % r2_retina_sourcepoint = 0;
@@ -37,20 +38,24 @@ r1_iris = 4;
 r2_iris = 0;
 mask_blur_iris = 10;
 mask_blur_iris_sourcepoint = 30;
-x_neighborhood = 4;
-y_neighborhood = 4;
+x_neighborhood = 0;
+y_neighborhood = 0;
 iris_mask_centered = make_ring_mask(Nx, Ny, r1_iris, r2_iris);
+iris_mask_centered = gpuArray(single(imgaussfilt(iris_mask_centered, mask_blur_iris)));
 
-% filter features in reciprocal plane
-r1_FH = 10;
+% filter features in reciprocal plane (of iris)
+r1_FH = 50;
 r2_FH = 0;
-angular_mask_centered = ~make_ring_mask(Nx, Ny, r1_FH, r2_FH);
+mask_blur_angular = 10;
+angular_mask_centered = single(~make_ring_mask(Nx, Ny, r1_FH, r2_FH));
+angular_mask_centered = gpuArray(single(imgaussfilt(angular_mask_centered, mask_blur_angular)));
+
 
 % evaluation of iris plane size
 Nx2 = ceil(Nx/x_stride)*(2*x_neighborhood+1);
 Ny2 = ceil(Ny/y_stride)*(2*y_neighborhood+1);
 % mem allocation of iris plane matrix
-dark_field_H = gpuArray((zeros(Nx2,Ny2,Nt))+1i*(zeros(Nx2,Ny2,Nt)));
+dark_field_H = gpuArray(single(zeros(Nx2,Ny2,Nt))+1i*(zeros(Nx2,Ny2,Nt)));
 
 kernel1 = propagation_kernelAngularSpectrum(Nx, Ny, -z_retina, lambda, x_step, y_step, false);
 kernel2 = propagation_kernelAngularSpectrum(Nx, Ny, z_iris , lambda, x_step, y_step, false);
@@ -58,6 +63,10 @@ tic
 
 center_x = floor(Nx/2);
 center_y = floor(Ny/2);
+
+% SH_retina_for_filt = squeeze(abs(sum(fft(H_retina, [], 3),3)));
+% SH_retina_filtered_im = imgaussfilt(SH_retina_for_filt, 10);
+% imagesc(SH_retina_for_filt./SH_retina_filtered_im);
 
 % indexes used for dark_field_H in iris plane
 ii_x = 0;
@@ -72,25 +81,30 @@ for id_y =  1:y_stride:Ny %
         row = id_x + floor(x_stride/2);
         col = id_y + floor(y_stride/2); 
         %% filering in retina plane with ring
-      
         retina_mask = circshift(retina_mask_centered, row - center_x, 1);
         retina_mask = circshift(retina_mask, col - center_y, 2);
-        retina_mask = imgaussfilt(retina_mask, mask_blur_retina);
         H_retina_filtered = H_retina .* retina_mask;
+
+
+        SH_retina_filtered = abs(fft(H_retina_filtered, [], 3));
+        energy = mean(mean(squeeze(sum(SH_retina_filtered(:,:, 4:28),3)),1),2);
+
+   
+%         H_retina_filtered = H_retina_filtered ./ SH_retina_filtered_im;
 
         
 
-        %
+%         %
 %         figure(1)
 %         imagesc((squeeze(sum(abs(H_retina_filtered),3))));
 %         axis image;
 %         title('retina')
-        %
+%         %
         %% calculate optical field distribution in reciprocal space (complex-valued synthetic frame batch)
         FH_retina = fft2(H_retina_filtered);
         switch spatial_transform1
             case 'angular spectrum'
-                frame_batch = gpuArray(fft2(fftshift(FH_retina .* kernel1)));
+                frame_batch = gpuArray(single(fft2(fftshift(FH_retina .* kernel1))));
                 %                     frame_batch = gpuArray((fft2(FH_retina)) .* kernel1);
             case 'Fresnel'
                 frame_batch = gpuArray((FH_retina) .* kernel1);
@@ -134,7 +148,7 @@ for id_y =  1:y_stride:Ny %
         switch spatial_transform2
             case 'angular spectrum'
                 %                     FH_iris = gpuArray(fftshift(fft2(frame_batch)) .* kernel2);
-                FH_iris = gpuArray(fftshift(fft2(frame_batch)) .* (kernel2));
+                FH_iris = gpuArray(single(fftshift(fft2(frame_batch)) .* (kernel2)));
             case 'Fresnel'
                 FH_iris = gpuArray((frame_batch) .* kernel2);
         end
@@ -148,13 +162,18 @@ for id_y =  1:y_stride:Ny %
 %         imagesc(Q);
 %         axis image;
 %         title('iris before pinhole mask')
-%         %
+% %         %
 
-        iris_mask = imgaussfilt(iris_mask, mask_blur_iris);
         H_iris = H_iris .* iris_mask;
 
-        SH_iris_filtered = fft(H_iris, [], 3);
-        energy = abs(mean(mean(sum(SH_iris_filtered,3),2),1))/10000;
+%         SH_iris_filtered = abs(fft(H_iris(row-r1_iris:row+r1_iris,col-r1_iris:col+r1_iris,:), [], 3));
+%         SH_iris_filtered = imresize(SH_iris_filtered, (2*x_neighborhood+1)/(2*r1_iris + 1));
+        % flat field correction analog
+%         SH_iris_filtered = abs(fft(H_iris, [], 3));
+%         H_iris = H_iris ./ imgaussfilt(SH_iris_filtered, 1);
+
+%         energy = squeeze(sum(abs(fft(H_iris, [], 3)),3));
+
 
         %
 %         figure(3)
@@ -162,29 +181,29 @@ for id_y =  1:y_stride:Ny %
 %         imagesc(R);
 %         axis image;
 %         title('iris after pinhole mask')
-        %
+%         %
 
         %% stop here for now
 
         %% filering in reciprocal plane of iris with anti-ring
         FH_iris = fftshift(fft2(H_iris));
-        %
+%         %
 %         figure(4)
 %         imagesc((squeeze(sum(abs(FH_iris),3))));
 %         axis image;
 %         title('angular distribution before filtering')
-        %
+%         %
 
 
         [M,ii] = max((squeeze(sum(abs(FH_iris),3))),[],'all');
         [row_max,col_max] = ind2sub(size((squeeze(sum(abs(FH_iris),3)))),ii);
-        angular_mask = circshift(angular_mask_centered, row_max - center_x, 1);
-        angular_mask = circshift(angular_mask, col_max - center_y, 2);
 
         %
 %         angular_mask = fftshift(angular_mask);
+        angular_mask = circshift(angular_mask_centered, row_max - center_x, 1);
+        angular_mask = circshift(angular_mask, col_max - center_y, 2);
         FH_iris = FH_iris .* angular_mask;
-%         
+% %         
 %         figure(5)
 %         imagesc((squeeze(sum(abs(FH_iris),3))));
 %         axis image;
@@ -206,7 +225,7 @@ for id_y =  1:y_stride:Ny %
         
         
         dark_field_H(x_range, y_range, :) = ... 
-        H_iris( row-x_neighborhood:row+x_neighborhood,col-y_neighborhood:col+y_neighborhood, :) ;
+        H_iris(row-x_neighborhood:row+x_neighborhood,col-y_neighborhood:col+y_neighborhood, :) ./ energy;
     end% id_x
 end% id_y
 
