@@ -10,14 +10,15 @@ function images = imageStructure()
 field_1 = 'power_Doppler'; values_1 = struct('short_name','power', 'select', 0 ,'image', [] , 'M0_sqrt', []);
 field_2 = 'power_1_Doppler'; values_2 = struct('short_name','power1', 'select', 0 ,'image', []);
 field_3 = 'power_2_Doppler'; values_3 = struct('short_name','power2', 'select', 0 ,'image', []);
-field_4 = 'color_Doppler'; values_4 = struct('short_name','color', 'select', 0 ,'image', [] , 'M0_pos', [], 'M0_neg', []);
-field_5 = 'directional_Doppler'; values_5 = struct('short_name','directional', 'select', 0 ,'image', [] , 'freq_low', [], 'freq_high', []);
+field_4 = 'color_Doppler'; values_4 = struct('short_name','color', 'select', 0 ,'image', [] , 'freq_low', [], 'freq_high', []);
+field_5 = 'directional_Doppler'; values_5 = struct('short_name','directional', 'select', 0 ,'image', [] , 'M0_pos', [], 'M0_neg', []);
 field_6 = 'M0sM1r'; values_6 = struct('short_name','ratio', 'select', 0 ,'image', [] );
 field_7 = 'velocity_estimate'; values_7 = struct('short_name','velocity', 'select', 0 ,'image', []);
 field_8 = 'phase_variation'; values_8 = struct('short_name','phase_variation', 'select', 0 ,'image', []);
 field_9 = 'dark_field_image'; values_9 = struct('short_name','dark_field', 'select', 0 ,'image', [], 'H', []);
 field_10 = 'pure_PCA'; values_10 = struct('short_name','PCA', 'select', 0 ,'image', []);
-field_11 = 'spectrogram'; values_11 = struct('short_name', 'spectrogram', 'select', 0, 'image', [], 'vector', []);
+field_11 = 'spectrogram'; values_11 = struct('short_name', 'spectrogram', 'select', 0, 'image', [], 'vector', [], 'H', []);
+
 
 %it takes a lot of time, would it be possible to unify the structure : have
 %only the image field or only the additional images?
