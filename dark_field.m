@@ -20,8 +20,8 @@ Nt = size(FH,3);
 % axis image;
 
 % spatial subsampling
-x_stride = 16;
-y_stride = 16;
+x_stride = 32;
+y_stride = 32;
 
 % filter features in retina plane
 r1_retina = 20;
@@ -38,8 +38,8 @@ r1_iris = 4;
 r2_iris = 0;
 mask_blur_iris = 10;
 mask_blur_iris_sourcepoint = 30;
-x_neighborhood = 3;
-y_neighborhood = 3;
+x_neighborhood = 0;
+y_neighborhood = 0;
 iris_mask_centered = make_ring_mask(Nx, Ny, r1_iris, r2_iris);
 iris_mask_centered = gpuArray(single(imgaussfilt(iris_mask_centered, mask_blur_iris)));
 

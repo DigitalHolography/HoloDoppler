@@ -27,6 +27,7 @@ properties (Access = public)
     DY
     position_in_file
     save_additional_videos
+    save_dark_field
     low_memory
     rephasing
     
