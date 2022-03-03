@@ -26,8 +26,7 @@ properties (Access = public)
     DX
     DY
     position_in_file
-    save_additional_videos
-    save_dark_field
+    output_videos
     low_memory
     rephasing
     

@@ -1,6 +1,6 @@
 function img_type_list = construct_image(FH, wavelength, acquisition, gaussian_width, use_gpu, svd, phase_correction,...
                                                                   color_f1, color_f2, color_f3, img_type_list, is_low_frequency , ...
-                                                                  spatial_transformation, time_transform, SubAp_PCA)
+                                                                  spatial_transformation, time_transform, SubAp_PCA, xy_stride)
 
 % FIXME : replace ifs by short name functions
 
@@ -26,7 +26,7 @@ end
 % if we want dark field preview H is calculated by dark field function
 if img_type_list.dark_field_image.select
     %for now we assume that both spatial transforms are the same
-    H = dark_field(FH, ac.z_retina, spatial_transformation, ac.z_iris, spatial_transformation, ac.lambda, ac.x_step, ac.y_step); 
+    H = dark_field(FH, ac.z_retina, spatial_transformation, ac.z_iris, spatial_transformation, ac.lambda, ac.x_step, ac.y_step, xy_stride); 
     img_type_list.dark_field_image.H = H;
 else
     switch spatial_transformation
