@@ -26,8 +26,8 @@ x_stride = xy_stride;
 y_stride = xy_stride;
 
 % filter features in retina plane
-r1_retina = 60;
-r2_retina = 40;
+r1_retina = 50;
+r2_retina = 15;
 mask_blur_retina = 1;
 retina_mask_centered = make_ring_mask(Nx, Ny, r1_retina, r2_retina);
 retina_mask_centered = gpuArray(single(imgaussfilt(retina_mask_centered, mask_blur_retina)));
@@ -36,9 +36,9 @@ retina_mask_centered = gpuArray(single(imgaussfilt(retina_mask_centered, mask_bl
 % r2_retina_sourcepoint = 0;
 
 % filter features in iris plane
-r1_iris = 2;
+r1_iris = 20;
 r2_iris = 0;
-mask_blur_iris = 10;
+mask_blur_iris = 5;
 mask_blur_iris_sourcepoint = 30;
 x_neighborhood = 0;
 y_neighborhood = 0;
@@ -46,7 +46,7 @@ iris_mask_centered = make_ring_mask(Nx, Ny, r1_iris, r2_iris);
 iris_mask_centered = gpuArray(single(imgaussfilt(iris_mask_centered, mask_blur_iris)));
 
 % filter features in reciprocal plane (of iris)
-r1_FH = 20;
+r1_FH = 50;
 r2_FH = 0;
 mask_blur_angular = 10;
 angular_mask_centered = single(make_ring_mask(Nx, Ny, r1_FH, r2_FH));
@@ -193,46 +193,48 @@ for id_y =  1:y_stride:Ny %
         %
 
         %% stop here for now
-
-        %% filering in reciprocal plane of iris with anti-ring
-        FH_iris = fftshift(fft2(H_iris));
-        %
-        if figflag
-            figure(4)
-            imagesc((squeeze(sum(abs(FH_iris),3))));
-            axis image;
-            title('angular distribution before filtering')
-        end
-        %
-
-
-        [M,ii] = max((squeeze(sum(abs(FH_iris),3))),[],'all');
-        [row_max,col_max] = ind2sub(size((squeeze(sum(abs(FH_iris),3)))),ii);
-
-        %
-        %         angular_mask = fftshift(angular_mask);
-        angular_mask = circshift(angular_mask_centered, row_max - center_x, 1);
-        angular_mask = circshift(angular_mask, col_max - center_y, 2);
-        FH_iris = FH_iris .* angular_mask;
-        %
-
-        if figflag
-            figure(5)
-            imagesc((squeeze(sum(abs(FH_iris),3))));
-            axis image;
-            title('angular distribution after filtering')
-        end
-        %
-
-        %% repropagate to iris plane
-        H_iris = ifft2(FH_iris);
-
-        if figflag
-            figure(6)
-            imagesc((squeeze(sum(abs(H_iris),3))));
-            axis image;
-            title('final spot in the iris plane')
-        end
+% 
+%         %% filering in reciprocal plane of iris with anti-ring
+%         FH_iris = fftshift(fft2(H_iris));
+%         %
+%         if figflag
+%             figure(4)
+%             imagesc((squeeze(sum(abs(FH_iris),3))));
+%             axis image;
+%             title('angular distribution before filtering')
+%         end
+%         %
+% 
+% 
+% %         [M,ii] = max((squeeze(sum(abs(FH_iris),3))),[],'all');
+% %         [row_max,col_max] = ind2sub(size((squeeze(sum(abs(FH_iris),3)))),ii);
+% 
+%         %
+%         %         angular_mask = fftshift(angular_mask);
+% %         angular_mask = circshift(angular_mask_centered, row_max - center_x, 1);
+% %         angular_mask = circshift(angular_mask, col_max - center_y, 2);
+%         angular_mask = circshift(angular_mask_centered, 0, 1);
+%         angular_mask = circshift(angular_mask, 0, 2);
+%         FH_iris = FH_iris .* angular_mask;
+%         %
+% 
+%         if figflag
+%             figure(5)
+%             imagesc((squeeze(sum(abs(FH_iris),3))));
+%             axis image;
+%             title('angular distribution after filtering')
+%         end
+%         %
+% 
+%         %% repropagate to iris plane
+%         H_iris = ifft2(FH_iris);
+% 
+%         if figflag
+%             figure(6)
+%             imagesc((squeeze(sum(abs(H_iris),3))));
+%             axis image;
+%             title('final spot in the iris plane')
+%         end
 
         %% select neighborhood of the image point in the iris plane
 
@@ -244,7 +246,7 @@ for id_y =  1:y_stride:Ny %
         H_iris = circshift(H_iris, center_y - col, 2);
 
         dark_field_H(x_range, y_range, :) = ...
-            H_iris(center_x-x_neighborhood:center_x+x_neighborhood,center_y-y_neighborhood:center_y+y_neighborhood, :) ./ energy;
+        H_iris(center_x-x_neighborhood:center_x+x_neighborhood,center_y-y_neighborhood:center_y+y_neighborhood, :) ./ energy;
     end% id_x
 end% id_y
 

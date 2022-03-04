@@ -57,7 +57,9 @@ SubAp_init = max(1,floor(obj.SubAp_margin*floor(double(ac.Nx)/obj.n_SubAp)));
 % SubAp_init = max(1,floor(double(ac.Nx)/obj.n_SubAp));
 SubAp_end = ceil(ac.Nx/obj.n_SubAp - SubAp_init);
 
-moment_chunk_mask = apodize_image(SubAp_end - SubAp_init + 1, SubAp_end - SubAp_init + 1, 4);
+%FIXME : make a flat mask at the center, with minimal apodization : DANGER xcorr
+%moment_chunk_mask = apodize_image(SubAp_end - SubAp_init + 1, SubAp_end - SubAp_init + 1, 5);
+moment_chunk_mask  = ones(SubAp_end - SubAp_init + 1, SubAp_end - SubAp_init + 1);
 
 moment_chunks_array = zeros(ac.Nx,ac.Ny); %Stitched PowerDoppler moments in each subaperture
 moment_chunks_crop_array = zeros(ac.Nx,ac.Ny);%Stitched cropped PowerDoppler moments in each subaperture
