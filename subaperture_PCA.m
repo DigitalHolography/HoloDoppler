@@ -26,7 +26,7 @@ skip = skip .* hann(n_subAp_x + 2);
 skip = skip .* hann(n_subAp_y + 2)';
 skip = skip(2:end-1,2:end-1);
 
-
+%FIXME gauss2D > apodization2D
 % gauss = ones(subAp_Nx, subAp_Ny);
 gauss = gauss2D(subAp_Nx, 0.5); % parameter alpha = 3 
 gauss1 = ones(subAp_Nx, subAp_Ny);
@@ -67,6 +67,8 @@ for id_y = 1 : n_subAp_y
             H_chunk = fft2(FH_4D(:,:,:,id_x+(id_y-1)*n_subAp_x));
 
             for i = 1:size(H_chunk,4)
+
+%FIXME gauss2D > apodization2D
                 chunk_for_pca(:,:,:,i) = H_chunk(:,:,:,i) .* gauss2D(subAp_Nx, 100);
             end
             

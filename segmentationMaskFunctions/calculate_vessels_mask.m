@@ -1,4 +1,4 @@
-function [maskA,maskA_NotBinary] = calculation_maskA_auto(S)
+function [maskA,maskA_NotBinary] = calculate_vessels_mask(S, par)
 % calculation_maskA_auto calculates a binary and a not binary masks.
 % USAGE: [maskA,maskA_NotBinary] = calculation_maskA_auto(S,m,n,name)
 %
@@ -13,6 +13,9 @@ function [maskA,maskA_NotBinary] = calculation_maskA_auto(S)
 % Authors: 05/2021 Salim BENNANI & Malek AZAIZ
 
 
+%FIXME
+par = 12;
+
 m = size(S,1);
 n = size(S,2);
 
@@ -25,11 +28,11 @@ moy = mean(S,"all");
 
 
 %FIXME
-if moy > 12
+if moy > par
     threshold=2*moy-2*std(reshape(S,1,[]));
     %reshape(S,1,[]) === S(:)
 else
-    threshold=3*moy;
+    threshold=2*moy;
 end
     
 

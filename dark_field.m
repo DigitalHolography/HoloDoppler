@@ -26,8 +26,8 @@ x_stride = xy_stride;
 y_stride = xy_stride;
 
 % filter features in retina plane
-r1_retina = 20;
-r2_retina = 5;
+r1_retina = 60;
+r2_retina = 40;
 mask_blur_retina = 1;
 retina_mask_centered = make_ring_mask(Nx, Ny, r1_retina, r2_retina);
 retina_mask_centered = gpuArray(single(imgaussfilt(retina_mask_centered, mask_blur_retina)));
@@ -36,7 +36,7 @@ retina_mask_centered = gpuArray(single(imgaussfilt(retina_mask_centered, mask_bl
 % r2_retina_sourcepoint = 0;
 
 % filter features in iris plane
-r1_iris = 4;
+r1_iris = 2;
 r2_iris = 0;
 mask_blur_iris = 10;
 mask_blur_iris_sourcepoint = 30;
@@ -46,10 +46,10 @@ iris_mask_centered = make_ring_mask(Nx, Ny, r1_iris, r2_iris);
 iris_mask_centered = gpuArray(single(imgaussfilt(iris_mask_centered, mask_blur_iris)));
 
 % filter features in reciprocal plane (of iris)
-r1_FH = 50;
+r1_FH = 20;
 r2_FH = 0;
 mask_blur_angular = 10;
-angular_mask_centered = single(~make_ring_mask(Nx, Ny, r1_FH, r2_FH));
+angular_mask_centered = single(make_ring_mask(Nx, Ny, r1_FH, r2_FH));
 angular_mask_centered = gpuArray(single(imgaussfilt(angular_mask_centered, mask_blur_angular)));
 
 % evaluation of iris plane size

@@ -54,7 +54,10 @@ ac.Nx = double(ac.Nx);
 SubAp_idref = ceil(obj.n_SubAp/2); % Index of reference subaperture for correlations
 
 SubAp_init = max(1,floor(obj.SubAp_margin*floor(double(ac.Nx)/obj.n_SubAp)));
+% SubAp_init = max(1,floor(double(ac.Nx)/obj.n_SubAp));
 SubAp_end = ceil(ac.Nx/obj.n_SubAp - SubAp_init);
+
+moment_chunk_mask = apodize_image(SubAp_end - SubAp_init + 1, SubAp_end - SubAp_init + 1, 4);
 
 moment_chunks_array = zeros(ac.Nx,ac.Ny); %Stitched PowerDoppler moments in each subaperture
 moment_chunks_crop_array = zeros(ac.Nx,ac.Ny);%Stitched cropped PowerDoppler moments in each subaperture
@@ -124,6 +127,10 @@ for SubAp_idx = SubAp_id_range
             moment_chunk = moment_chunk-mean(moment_chunk(:)); %centering
             moment_chunk = moment_chunk/max(moment_chunk(:)); %normalisation
         end
+
+        %
+       
+
         moment_chunks_array(idx_range,idy_range) = moment_chunk;
         
         %% Computation of the correlations between subapertures
@@ -133,7 +140,8 @@ for SubAp_idx = SubAp_id_range
             % get the reference image chunk
             moment_chunk_ref = moment_chunks_array(idx_range_ref,idy_range_ref);
             % compute auxilliary correlation between current and reference image chunk
-            c_aux = normxcorr2(moment_chunk(SubAp_init:SubAp_end,SubAp_init:SubAp_end),moment_chunk_ref);
+            moment_chunk_cropped = moment_chunk(SubAp_init:SubAp_end,SubAp_init:SubAp_end) .* moment_chunk_mask;
+            c_aux = normxcorr2(moment_chunk_cropped,moment_chunk_ref);
             % margins (tails) to suppress in final correlation map
             inf_margin_corr = floor(obj.CorrMap_margin*size(c_aux,1));%floor((size(c_aux,1)+2*(SubAp_end-SubAp_init+1))/4);
             sup_margin_corr = size(c_aux,1)-inf_margin_corr;%floor((3*size(c_aux,1)-2*(SubAp_end-SubAp_init+1))/4);
@@ -157,7 +165,7 @@ for SubAp_idx = SubAp_id_range
         % to show sub-apertures used in correlation        
         idx_range_out = (SubAp_idx-1)*floor(ac.Nx/obj.n_SubAp)+SubAp_init:(SubAp_idx-1)*floor(ac.Nx/obj.n_SubAp)+SubAp_init+numel(SubAp_init:SubAp_end)-1;
         idy_range_out = (SubAp_idy-1)*floor(ac.Ny/obj.n_SubAp)+SubAp_init:(SubAp_idy-1)*floor(ac.Ny/obj.n_SubAp)+SubAp_init+numel(SubAp_init:SubAp_end)-1;
-        moment_chunks_crop_array(idx_range_out,idy_range_out) = flip(moment_chunk(SubAp_init:SubAp_end,SubAp_init:SubAp_end)');
+        moment_chunks_crop_array(idx_range_out,idy_range_out) = flip(moment_chunk_cropped');
 
     end %SubAp_idy
 end %SubAp_idx
