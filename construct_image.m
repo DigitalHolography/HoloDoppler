@@ -26,7 +26,7 @@ end
 % if we want dark field preview H is calculated by dark field function
 if img_type_list.dark_field_image.select
     %for now we assume that both spatial transforms are the same
-    H = dark_field(FH, ac.z_retina, spatial_transformation, ac.z_iris, spatial_transformation, ac.lambda, ac.x_step, ac.y_step, xy_stride); 
+    H = dark_field(FH, ac.z_retina, spatial_transformation, ac.z_iris, spatial_transformation, ac.lambda, ac.x_step, ac.y_step, xy_stride, time_transform.f1, time_transform.f2, ac.fs); 
     img_type_list.dark_field_image.H = H;
 else
     switch spatial_transformation

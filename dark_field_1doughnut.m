@@ -1,4 +1,4 @@
-function dark_field_H = dark_field(FH, z_retina, spatial_transform1, z_iris, spatial_transform2, lambda, x_step, y_step, xy_stride, f1, f2, fs)
+function dark_field_H = dark_field(FH, z_retina, spatial_transform1, z_iris, spatial_transform2, lambda, x_step, y_step,xy_stride)
 
 % ensure that FH is in GPU
 FH = gpuArray(single(FH));
@@ -24,27 +24,13 @@ Nt = size(FH,3);
 % spatial subsampling
 x_stride = xy_stride;
 y_stride = xy_stride;
-% num_donut = 1...8
-num_pattern_x = 8;
-num_pattern_y = 8;
 
 % filter features in retina plane
-r1_retina = 32;
+r1_retina = 50;
 r2_retina = 15;
 mask_blur_retina = 1;
-Nx_pattern = floor(Nx/num_pattern_x);
-Ny_pattern = floor(Ny/num_pattern_y);
-retina_mask_centered_pattern = make_ring_mask(Nx_pattern, Ny_pattern, r1_retina, r2_retina);
-retina_mask_centered_pattern = gpuArray(single(imgaussfilt(retina_mask_centered_pattern, mask_blur_retina)));
-retina_mask_centered = repmat(retina_mask_centered_pattern, num_pattern_x);
-energy = zeros(num_pattern_x, num_pattern_y);
-% frequency intervals for integrals 
-n1 = ceil(f1 * Nt / fs);
-n2 = ceil(f2 * Nt / fs);
-
-% symetric integration interval
-n3 = Nt - n2 + 1;
-n4 = Nt - n1 + 1;
+retina_mask_centered = make_ring_mask(Nx, Ny, r1_retina, r2_retina);
+retina_mask_centered = gpuArray(single(imgaussfilt(retina_mask_centered, mask_blur_retina)));
 
 % r1_retina_sourcepoint = 5;
 % r2_retina_sourcepoint = 0;
@@ -56,9 +42,8 @@ mask_blur_iris = 5;
 mask_blur_iris_sourcepoint = 30;
 x_neighborhood = 0;
 y_neighborhood = 0;
-iris_mask_centered_pattern = make_ring_mask(Nx_pattern, Ny_pattern, r1_iris, r2_iris);
-iris_mask_centered_pattern = gpuArray(single(imgaussfilt(iris_mask_centered_pattern, mask_blur_iris)));
-iris_mask_centered = repmat(iris_mask_centered_pattern, num_pattern_x);
+iris_mask_centered = make_ring_mask(Nx, Ny, r1_iris, r2_iris);
+iris_mask_centered = gpuArray(single(imgaussfilt(iris_mask_centered, mask_blur_iris)));
 
 % filter features in reciprocal plane (of iris)
 r1_FH = 50;
@@ -82,25 +67,25 @@ frame_batch = gpuArray(single(zeros(size(FH))) + 1i*single(zeros(size(FH))));
 tic
 
 % center of the calculation grid - image frame
-center_x = floor(Nx_pattern/2);
-center_y = floor(Ny_pattern/2);
+center_x = floor(Nx/2);
+center_y = floor(Ny/2);
 
 % SH_retina_for_filt = squeeze(abs(sum(fft(H_retina, [], 3),3)));
 % SH_retina_filtered_im = imgaussfilt(SH_retina_for_filt, 10);
 % imagesc(SH_retina_for_filt./SH_retina_filtered_im);
 
 % waitbar with cancel button
-f = waitbar(0,'compute image 0 percent');
+wwww = waitbar(0,'compute image 0 percent');
 % indexes used for dark_field_H in iris plane
 ii_x = 0;
 ii_y = 0;
 % sequential computation of image pixels (id_x, id_y)
-for id_y =  1:y_stride:Ny_pattern %
+for id_y =  1:y_stride:Ny %
     ii_y = ii_y + 1;
     ii_x = 0;    
 % Update waitbar and message
-waitbar(id_y/Ny_pattern,f,['compute image ', num2str(round(id_y/Ny_pattern*100),2), ' percent']);
-    for id_x =  1:x_stride:Nx_pattern%
+waitbar(id_y/Ny,['compute image ', num2str(id_y/Ny*100), ' percent']);
+    for id_x =  1:x_stride:Nx %
         ii_x = ii_x + 1;
         % indexes of center of illumination filtering patterns
         row = id_x + floor(x_stride/2);
@@ -110,20 +95,7 @@ waitbar(id_y/Ny_pattern,f,['compute image ', num2str(round(id_y/Ny_pattern*100),
         retina_mask = circshift(retina_mask, col - center_y, 2);
         H_retina_filtered = H_retina .* retina_mask;
         SH_retina_filtered = abs(fft(H_retina_filtered, [], 3));
-
-        SH_retina_filtered_for_energy = circshift(SH_retina_filtered, -(row - center_x), 1);
-        SH_retina_filtered_for_energy = circshift(SH_retina_filtered_for_energy, -(col - center_y), 2);
-
-        for pp_y = 1 : num_pattern_y
-            for pp_x = 1 : num_pattern_x
-                jx_range = (pp_x - 1)*Nx_pattern + 1 : (pp_x)*Nx_pattern;
-                jy_range = (pp_y - 1)*Ny_pattern + 1 : (pp_y)*Ny_pattern;
-                tmp = squeeze(sum(SH_retina_filtered_for_energy(jx_range, jy_range, n1:n2), 3)) + squeeze(sum(SH_retina_filtered_for_energy(jx_range, jy_range, n3:n4), 3));
-                energy(pp_x, pp_y) = mean(mean(tmp,1),2);
-            end
-        end
-
-
+        energy = mean(mean(squeeze(sum(SH_retina_filtered(:,:, 4:28),3)),1),2);
         %         H_retina_filtered = H_retina_filtered ./ SH_retina_filtered_im;
         %
         if figflag
@@ -186,20 +158,20 @@ waitbar(id_y/Ny_pattern,f,['compute image ', num2str(round(id_y/Ny_pattern*100),
                 FH_iris = gpuArray((frame_batch) .* kernel2);
         end
         H_iris = flip(flip(ifft2(fftshift(FH_iris)),1),2);
-%         %% filtering in iris plane with pinhole
-%         iris_mask = circshift(iris_mask_centered, row - center_x, 1);
-%         iris_mask = circshift(iris_mask, col - center_y, 2);
-%         %
-%         if figflag
-%             figure(2)
-%             Q = squeeze(sum(abs(H_iris),3));
-%             imagesc(Q);
-%             axis image;
-%             title('iris before pinhole mask')
-%         end
+        %% filtering in iris plane with pinhole
+        iris_mask = circshift(iris_mask_centered, row - center_x, 1);
+        iris_mask = circshift(iris_mask, col - center_y, 2);
+        %
+        if figflag
+            figure(2)
+            Q = squeeze(sum(abs(H_iris),3));
+            imagesc(Q);
+            axis image;
+            title('iris before pinhole mask')
+        end
         %         %
 
-%         H_iris = H_iris .* iris_mask;
+        H_iris = H_iris .* iris_mask;
 
         %         SH_iris_filtered = abs(fft(H_iris(row-r1_iris:row+r1_iris,col-r1_iris:col+r1_iris,:), [], 3));
         %         SH_iris_filtered = imresize(SH_iris_filtered, (2*x_neighborhood+1)/(2*r1_iris + 1));
@@ -262,33 +234,21 @@ waitbar(id_y/Ny_pattern,f,['compute image ', num2str(round(id_y/Ny_pattern*100),
 %             axis image;
 %             title('final spot in the iris plane')
 %         end
+
+        %% select neighborhood of the image point in the iris plane
+
+        x_range = (ii_x - 1) * (2 * x_neighborhood +1) + 1 : ii_x * (2 * x_neighborhood +1);
+        y_range = (ii_y - 1) * (2 * y_neighborhood +1) + 1 : ii_y * (2 * y_neighborhood +1);
+        x2_range = center_x-x_neighborhood:center_x+x_neighborhood;
+        y2_range = center_y-y_neighborhood:center_y+y_neighborhood;
         H_iris = circshift(H_iris, center_x - row, 1);
         H_iris = circshift(H_iris, center_y - col, 2);
-
-        Mx_pattern = Nx2/num_pattern_x;
-        My_pattern = Ny2/num_pattern_y;
-        %% select neighborhood of the image point in the iris plane
-        for pp_y = 1 : num_pattern_y
-            for pp_x = 1 : num_pattern_x
-                x_range = (ii_x - 1) * (2 * x_neighborhood +1) + (pp_x - 1)*Mx_pattern + 1 : ii_x * (2 * x_neighborhood +1) + (pp_x - 1)*Mx_pattern;
-                y_range = (ii_y - 1) * (2 * y_neighborhood +1) + (pp_y - 1)*My_pattern + 1 : ii_y * (2 * y_neighborhood +1) + (pp_y - 1)*My_pattern;
-                x2_range = center_x + (pp_x - 1)*Nx_pattern - x_neighborhood:center_x + (pp_x - 1)*Nx_pattern  + x_neighborhood;
-                y2_range = center_y + (pp_y - 1)*Ny_pattern - y_neighborhood:center_y + (pp_y - 1)*Ny_pattern  + y_neighborhood;
-
-%                 x_range = (ii_x - 1) * (2 * x_neighborhood +1) + 1 : ii_x * (2 * x_neighborhood +1);
-%                 y_range = (ii_y - 1) * (2 * y_neighborhood +1) + 1 : ii_y * (2 * y_neighborhood +1);
-%                 x2_range = center_x-x_neighborhood:center_x+x_neighborhood;
-%                 y2_range = center_y-y_neighborhood:center_y+y_neighborhood;
-                % ponit normalization by energy of the pattern 
-                dark_field_H(x_range, y_range, :) = H_iris(x2_range, y2_range, :) ./ energy(pp_x, pp_y);
-            end
-        end
-            
+        dark_field_H(x_range, y_range, :) = H_iris(x2_range, y2_range, :) ./ energy;
     end% id_x
     % delete waitbar
-    
+    delete(wwww);
 end% id_y
-close(f);
+
 % kernel1 = propagation_kernelAngularSpectrum(Nx2,Ny2, z_retina, lambda, x_step, y_step, false);
 % kernel2 = propagation_kernelAngularSpectrum(Nx2,Ny2, -z_iris , lambda, x_step, y_step, false);
 % FH_test = fft2(dark_field_H);

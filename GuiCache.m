@@ -35,6 +35,9 @@ properties (Access = public)
     color_f2
     color_f3
     low_frequency
+
+    % dark field parameters
+    xystride
     
     % iterative optimization parameters
     iterative_aberration_compensation
