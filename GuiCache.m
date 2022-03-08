@@ -38,6 +38,8 @@ properties (Access = public)
 
     % dark field parameters
     xystride
+    num_unit_cells_x
+    r1
     
     % iterative optimization parameters
     iterative_aberration_compensation

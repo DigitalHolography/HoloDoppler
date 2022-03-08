@@ -1,4 +1,4 @@
-function dark_field_H = dark_field(FH, z_retina, spatial_transform1, z_iris, spatial_transform2, lambda, x_step, y_step, xy_stride, f1, f2, fs)
+function dark_field_H = dark_field(FH, z_retina, spatial_transform1, z_iris, spatial_transform2, lambda, x_step, y_step, xy_stride, f1, f2, fs, num_unit_cells_x, r2_retina)
 
 % ensure that FH is in GPU
 FH = gpuArray(single(FH));
@@ -25,19 +25,21 @@ Nt = size(FH,3);
 x_stride = xy_stride;
 y_stride = xy_stride;
 % num_donut = 1...8
-num_pattern_x = 8;
-num_pattern_y = 8;
+% num_pattern_x = ;
+
+% number of unit cells in lattice of structured illumination
+num_unit_cells_y = num_unit_cells_x;
 
 % filter features in retina plane
 r1_retina = 32;
-r2_retina = 15;
+% r2_retina = 15;
 mask_blur_retina = 1;
-Nx_pattern = floor(Nx/num_pattern_x);
-Ny_pattern = floor(Ny/num_pattern_y);
+Nx_pattern = floor(Nx/num_unit_cells_x);
+Ny_pattern = floor(Ny/num_unit_cells_y);
 retina_mask_centered_pattern = make_ring_mask(Nx_pattern, Ny_pattern, r1_retina, r2_retina);
 retina_mask_centered_pattern = gpuArray(single(imgaussfilt(retina_mask_centered_pattern, mask_blur_retina)));
-retina_mask_centered = repmat(retina_mask_centered_pattern, num_pattern_x);
-energy = zeros(num_pattern_x, num_pattern_y);
+retina_mask_centered = repmat(retina_mask_centered_pattern, num_unit_cells_x);
+energy = zeros(num_unit_cells_x, num_unit_cells_y);
 % frequency intervals for integrals 
 n1 = ceil(f1 * Nt / fs);
 n2 = ceil(f2 * Nt / fs);
@@ -58,7 +60,7 @@ x_neighborhood = 0;
 y_neighborhood = 0;
 iris_mask_centered_pattern = make_ring_mask(Nx_pattern, Ny_pattern, r1_iris, r2_iris);
 iris_mask_centered_pattern = gpuArray(single(imgaussfilt(iris_mask_centered_pattern, mask_blur_iris)));
-iris_mask_centered = repmat(iris_mask_centered_pattern, num_pattern_x);
+iris_mask_centered = repmat(iris_mask_centered_pattern, num_unit_cells_x);
 
 % filter features in reciprocal plane (of iris)
 r1_FH = 50;
@@ -114,8 +116,8 @@ waitbar(id_y/Ny_pattern,f,['compute image ', num2str(round(id_y/Ny_pattern*100),
         SH_retina_filtered_for_energy = circshift(SH_retina_filtered, -(row - center_x), 1);
         SH_retina_filtered_for_energy = circshift(SH_retina_filtered_for_energy, -(col - center_y), 2);
 
-        for pp_y = 1 : num_pattern_y
-            for pp_x = 1 : num_pattern_x
+        for pp_y = 1 : num_unit_cells_y
+            for pp_x = 1 : num_unit_cells_x
                 jx_range = (pp_x - 1)*Nx_pattern + 1 : (pp_x)*Nx_pattern;
                 jy_range = (pp_y - 1)*Ny_pattern + 1 : (pp_y)*Ny_pattern;
                 tmp = squeeze(sum(SH_retina_filtered_for_energy(jx_range, jy_range, n1:n2), 3)) + squeeze(sum(SH_retina_filtered_for_energy(jx_range, jy_range, n3:n4), 3));
@@ -265,11 +267,11 @@ waitbar(id_y/Ny_pattern,f,['compute image ', num2str(round(id_y/Ny_pattern*100),
         H_iris = circshift(H_iris, center_x - row, 1);
         H_iris = circshift(H_iris, center_y - col, 2);
 
-        Mx_pattern = Nx2/num_pattern_x;
-        My_pattern = Ny2/num_pattern_y;
+        Mx_pattern = Nx2/num_unit_cells_x;
+        My_pattern = Ny2/num_unit_cells_y;
         %% select neighborhood of the image point in the iris plane
-        for pp_y = 1 : num_pattern_y
-            for pp_x = 1 : num_pattern_x
+        for pp_y = 1 : num_unit_cells_y
+            for pp_x = 1 : num_unit_cells_x
                 x_range = (ii_x - 1) * (2 * x_neighborhood +1) + (pp_x - 1)*Mx_pattern + 1 : ii_x * (2 * x_neighborhood +1) + (pp_x - 1)*Mx_pattern;
                 y_range = (ii_y - 1) * (2 * y_neighborhood +1) + (pp_y - 1)*My_pattern + 1 : ii_y * (2 * y_neighborhood +1) + (pp_y - 1)*My_pattern;
                 x2_range = center_x + (pp_x - 1)*Nx_pattern - x_neighborhood:center_x + (pp_x - 1)*Nx_pattern  + x_neighborhood;
