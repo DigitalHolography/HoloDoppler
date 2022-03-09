@@ -14,6 +14,10 @@ function [frames, shifts] = register_video_from_reference(frames, ref_img)
 % for i = 1:num_frames
 %     frames(:,:,:,i) = rgb2gray(readFrame(r));
 % end
+
+
+
+
 num_frames = size(frames, 4);
 
 shifts = zeros(2, num_frames, 'single');
@@ -26,7 +30,6 @@ N = double(num_frames);
 
 frames = mat2gray(frames);
 
-
 %% apply registration
 parfor i = 1:num_frames
     send(D, i);
@@ -35,6 +38,10 @@ parfor i = 1:num_frames
     frames(:,:,:,i) = reg.RegisteredImage;
     shifts(:,i) = [reg.Transformation.T(3,2); reg.Transformation.T(3,1)];
 end
+
+figure(10)
+imagesc(ref_img)
+shifts
 
 % for i = 1:num_frames
 %     frames(:,:,:,i) = mat2gray(frames(:,:,:,i));

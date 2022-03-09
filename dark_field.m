@@ -31,19 +31,20 @@ y_stride = xy_stride;
 num_unit_cells_y = num_unit_cells_x;
 
 % filter features in retina plane
-r1_retina = 32;
-% r2_retina = 15;
-mask_blur_retina = 1;
+% unit cell size (x,y)
 Nx_pattern = floor(Nx/num_unit_cells_x);
 Ny_pattern = floor(Ny/num_unit_cells_y);
+r1_retina = ceil(sqrt(2)*max(Nx_pattern,Ny_pattern));
+% r2_retina = 15;
+% mask_blur_retina = 1;
 retina_mask_centered_pattern = make_ring_mask(Nx_pattern, Ny_pattern, r1_retina, r2_retina);
-retina_mask_centered_pattern = gpuArray(single(imgaussfilt(retina_mask_centered_pattern, mask_blur_retina)));
+% retina_mask_centered_pattern = gpuArray(single(imgaussfilt(retina_mask_centered_pattern, mask_blur_retina)));
+retina_mask_centered_pattern = gpuArray(single(retina_mask_centered_pattern));
 retina_mask_centered = repmat(retina_mask_centered_pattern, num_unit_cells_x);
 energy = zeros(num_unit_cells_x, num_unit_cells_y);
 % frequency intervals for integrals 
 n1 = ceil(f1 * Nt / fs);
 n2 = ceil(f2 * Nt / fs);
-
 % symetric integration interval
 n3 = Nt - n2 + 1;
 n4 = Nt - n1 + 1;
