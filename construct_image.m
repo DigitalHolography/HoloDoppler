@@ -1,6 +1,7 @@
 function img_type_list = construct_image(FH, wavelength, acquisition, gaussian_width, use_gpu, svd, phase_correction,...
                                                                   color_f1, color_f2, color_f3, img_type_list, is_low_frequency , ...
-                                                                  spatial_transformation, time_transform, SubAp_PCA, xy_stride, num_unit_cells_x, r1)
+                                                                  spatial_transformation, time_transform, SubAp_PCA, xy_stride, num_unit_cells_x, r1, ...
+                                                                  local_temporal, phi1, phi2, local_spatial, nu1, nu2)
 
 % FIXME : replace ifs by short name functions
 
@@ -22,6 +23,13 @@ if exist('phase_correction', 'var') && ~isempty(phase_correction)
     FH = FH .* exp(-1i * phase_correction);
 end
 
+if local_spatial
+    FH = local_spatial_PCA(FH, nu1, nu2);
+end
+
+if local_temporal
+    FH = local_temporal_PCA(FH, phi1, phi2);
+end
 
 % if we want dark field preview H is calculated by dark field function
 if img_type_list.dark_field_image.select
