@@ -23,13 +23,7 @@ if exist('phase_correction', 'var') && ~isempty(phase_correction)
     FH = FH .* exp(-1i * phase_correction);
 end
 
-if local_spatial
-    FH = local_spatial_PCA(FH, nu1, nu2);
-end
 
-if local_temporal
-    FH = local_temporal_PCA(FH, phi1, phi2);
-end
 
 % if we want dark field preview H is calculated by dark field function
 if img_type_list.dark_field_image.select
@@ -45,15 +39,28 @@ else
     end
     
 end
-
-
-
-clear FH;
-
 %% SVD filtering
+
+
 if svd
     H = svd_filter(H, time_transform.f1, ac.fs);
 end
+
+
+if local_spatial
+    H = local_spatial_PCA(H, nu1, nu2);
+end
+
+if local_temporal
+    H = local_temporal_PCA(H, phi1, phi2);
+end
+
+clear FH;
+
+
+
+
+
 
 
 img_type_list.spectrogram.H = H;
@@ -107,6 +114,10 @@ if img_type_list.power_Doppler.select % Power Doppler has been chosen
     [img, sqrt_img] = moment0(SH, f1, f2, ac.fs, j_win, gaussian_width);
     img_type_list.power_Doppler.M0_sqrt = sqrt_img;
     img_type_list.power_Doppler.image = img;
+
+    %save image for study
+    img = mat2gray(img);
+    imwrite(img, 'C:\Users\Bronxville\Pictures\local_spatial_220314\power.png');
 end
 
 if img_type_list.power_1_Doppler.select % Power 1 Doppler has been chosen

@@ -1,7 +1,7 @@
-function FH = local_temporal_PCA(FH, phi1, phi2)
+function H = local_temporal_PCA(H, phi1, phi2)
 % spatial filtering in sub-cube of FH to reveal smaller structures
 
-H = ifft2(FH);
+% H = ifft2(FH);
 
 num_cube_x = 8;
 num_cube_y = 8;
@@ -9,7 +9,7 @@ Nx_cube = floor(size(H, 1)/num_cube_x);
 Ny_cube = floor(size(H, 2)/num_cube_y);
 H_filtered = 1i*zeros(size(H), 'double');
 
-cube = 1i*zeros(Nx_cube, Ny_cube, size(FH, 3), num_cube_x, num_cube_y);
+cube = 1i*zeros(Nx_cube, Ny_cube, size(H, 3), num_cube_x, num_cube_y);
 
 for id_y = 1 : num_cube_y
     for id_x = 1 : num_cube_x
@@ -42,5 +42,7 @@ for id_y = 1 : num_cube_y
     end
 end
 
-FH = fft2(H_filtered);
+% FH = fft2(H_filtered);
+H = H_filtered;
+
 end
