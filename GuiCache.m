@@ -12,6 +12,7 @@ properties (Access = public)
     z_iris
     z_switch
     time_transform  % object with : type of transformation, f1, f2
+    imageChoice
     wavelength
     Fs
     pix_width
