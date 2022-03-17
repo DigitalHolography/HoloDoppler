@@ -39,9 +39,9 @@ parfor i = 1:num_frames
     shifts(:,i) = [reg.Transformation.T(3,2); reg.Transformation.T(3,1)];
 end
 
-figure(10)
-imagesc(ref_img)
-shifts
+% figure(10)
+% imagesc(ref_img)
+% shifts
 
 % for i = 1:num_frames
 %     frames(:,:,:,i) = mat2gray(frames(:,:,:,i));
