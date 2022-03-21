@@ -116,9 +116,9 @@ if img_type_list.power_Doppler.select % Power Doppler has been chosen
     img_type_list.power_Doppler.image = img;
 
     %save image for study
-    img = mat2gray(img);
-    [file_name, suffix] = get_last_file_name('C:\Users\Philadelphia\Pictures\local_spatial_220314', 'power', 'png');
-    imwrite(img, fullfile('C:\Users\Philadelphia\Pictures\local_spatial_220314', sprintf("%s_%d.png", file_name, suffix + 1)));
+%     img = mat2gray(img);
+%     [file_name, suffix] = get_last_file_name('C:\Users\Philadelphia\Pictures\local_spatial_220314', 'power', 'png');
+%     imwrite(img, fullfile('C:\Users\Philadelphia\Pictures\local_spatial_220314', sprintf("%s_%d.png", file_name, suffix + 1)));
 end
 
 if img_type_list.power_1_Doppler.select % Power 1 Doppler has been chosen
