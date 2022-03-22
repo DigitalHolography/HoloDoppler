@@ -82,7 +82,7 @@ kernel2 = propagation_kernelAngularSpectrum(Nx, Ny, z_iris , lambda, x_step, y_s
 frame_batch = gpuArray(single(zeros(size(FH))) + 1i*single(zeros(size(FH))));
 
 %start recording compute time
-tic
+% tic
 
 % center of the calculation grid - image frame
 center_x = floor(Nx_pattern/2);
@@ -302,8 +302,9 @@ close(f);
 % figure(7)
 % imagesc(squeeze(abs(sum(SH_test,3))));
 
-toc
+% toc
 % output_dirname = create_output_directory_name(app.filepath, app.filename);
 %             output_dirpath = fullfile(app.filepath, output_dirname);
 % save('C:\Users\Interns\Documents\MATLAB\data\dark_field.mat', 'dark_field_H', '-mat');
+dark_field_H = imresize(dark_field_H, [Nx, Ny], 'nearest');
 end
