@@ -1,4 +1,4 @@
-function img = construct_colored_image(M_freq_low, M_freq_high, is_low_frequency)
+function tmp = construct_colored_image(M_freq_low, M_freq_high, is_low_frequency)
 % Constructs a colored image from hologram stacks made with different
 % frequency bands
 %
@@ -9,6 +9,7 @@ function img = construct_colored_image(M_freq_low, M_freq_high, is_low_frequency
 
 M_freq_low = squeeze(M_freq_low);
 M_freq_high = squeeze(M_freq_high);
+
 avg_M0_low = mean(M_freq_low, 3);
 avg_M0_high = mean(M_freq_high, 3);
 
@@ -39,4 +40,8 @@ low_high = stretchlim(img, [0, 1]);
 gamma_composite = 0.8;
 img = imadjust(img, low_high, low_high, gamma_composite);
 img = imsharpen(img, 'Radius', 10, 'Amount', 0.6);
+tmp = zeros(2 * size(img, 1) -1, 2 * size(img, 2) - 1, size(img, 3));
+for mm = 1:size(img, 3)
+    tmp(:,:,mm) = interp2(single(img(:,:,mm)), 1);
+end
 end
