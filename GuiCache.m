@@ -5,6 +5,7 @@ classdef GuiCache
 % everything up
 properties (Access = public)
     batch_size
+    ref_batch_size
     batch_stride
     spatialTransformation
     z
@@ -12,6 +13,7 @@ properties (Access = public)
     z_iris
     z_switch
     time_transform  % object with : type of transformation, f1, f2
+    blur
     imageChoice
     wavelength
     Fs
