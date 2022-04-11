@@ -37,7 +37,14 @@ if exist('phase_correction', 'var') && ~isempty(phase_correction)
     FH = FH .* exp(-1i * phase_correction);
 end
 
-H = ifft2(FH);
+switch spatial_transformation
+    case 'angular spectrum'
+        H = ifft2(FH);
+    case 'Fresnel'
+        H = fftshift(ifft2(FH));
+end
+
+% H = ifft2(FH);
 clear FH;
 
 %% SVD filtering
