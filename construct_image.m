@@ -4,7 +4,6 @@ function img_type_list = construct_image(FH, wavelength, acquisition, gaussian_w
                                                                   local_temporal, phi1, phi2, local_spatial, nu1, nu2)
 
 % FIXME : replace ifs by short name functions
-
 j_win = size(FH, 3);
 ac = acquisition;
 
