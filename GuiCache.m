@@ -32,6 +32,7 @@ properties (Access = public)
     output_videos
     low_memory
     rephasing
+    OCTdata
     
     % color image parameters
     color_f1
