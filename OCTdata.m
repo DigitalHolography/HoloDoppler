@@ -1,10 +1,10 @@
 classdef OCTdata
     properties (Access = public)
         stack
-        range_y
-        range_z
         projection_xz
         projection_xy
+        range_y
+        range_z
     end
 
     methods
