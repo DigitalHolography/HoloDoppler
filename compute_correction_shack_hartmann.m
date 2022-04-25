@@ -48,9 +48,10 @@ Nx = istream.get_frame_width();
 Ny = istream.get_frame_height();
 j_win = cache.batch_size;
 j_step = cache.batch_stride;
-f1 = cache.f1;
-f2 = cache.f2;
-acquisition = DopplerAcquisition(Nx,Ny,cache.Fs/1000,cache.z,cache.wavelength,cache.DX,cache.DY,cache.pix_width,cache.pix_height);
+f1 = cache.time_transform.f1;
+f2 = cache.time_transform.f2;
+acquisition = DopplerAcquisition(Nx,Ny,cache.Fs/1000, cache.z, cache.z_retina, cache.z_iris,cache.wavelength,cache.DX,cache.DY,cache.pix_width,cache.pix_height);
+% acquisition = DopplerAcquisition(, app.cache.z, app.cache.z_retina, app.cache.z_iris,app.cache.wavelength,app.cache.DX,app.cache.DY,app.cache.pix_width,app.cache.pix_height);
 
 % reset progress bar
 num_batches = floor((istream.num_frames - j_win) / j_step);

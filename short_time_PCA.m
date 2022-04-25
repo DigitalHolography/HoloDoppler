@@ -1,4 +1,4 @@
-function H_PCA = short_time_PCA(H)
+function H_PCA = short_time_PCA(H, x)
     % PCA
     %
     % H: frame batch already propagated to the distance of reconstruction
@@ -13,7 +13,9 @@ function H_PCA = short_time_PCA(H)
     V = V(:,sort_idx);
 %     threshold = round(f1 * batch_size / fs)*2 + 1;
     % selection of eigenvalues
-%     V(:,1:threshold) = 0;
+    X = ones(size(V));
+    X(:, x) = 2;
+    V = V.*X;
     %projection of H
     H_PCA = H * V;
     H_PCA = reshape(H_PCA,width,height,batch_size);

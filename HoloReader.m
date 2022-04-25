@@ -48,8 +48,7 @@ methods
         % value = jsondecode(txt)
 
         % read old footer
-%         if  footer_skip >= s.bytes
-        if 1
+         if  footer_skip >= s.bytes
                 obj.footer.computeSettings.imageRendering.lambda = 8.5200e-07';
                 obj.footer.info.pixelSize.x = 12;
                 obj.footer.info.pixelSize.y = 12;
