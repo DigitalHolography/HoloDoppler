@@ -39,6 +39,13 @@ function hologram_stack = reconstruct_hologram_stack(FH, time_transform, acquisi
     %     FH = FH .* exp(-1i * phase_correction);
     % end
     
+    %% spatial filter
+    mask = construct_mask(50, max(size(FH,1),size(FH,2)), size(FH, 1), size(FH, 2));
+    figure(11)
+    imagesc(log(abs(FH(:,:, 3))));
+    FH = FH .* mask;
+     
+
     H = ifft2(FH);
     clear FH;
     
@@ -47,10 +54,12 @@ function hologram_stack = reconstruct_hologram_stack(FH, time_transform, acquisi
         H = svd_filter(H, f1, ac.fs);
     end
     
+  
+
     %% squared magnitude of hologram
     SH = fft(H, [], 3);
     SH = abs(SH).^2;
-    
+
     %% shifts related to acquisition wrong positioning
     SH = permute(SH, [2 1 3]);
     SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);

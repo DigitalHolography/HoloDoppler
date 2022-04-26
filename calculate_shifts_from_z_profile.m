@@ -6,13 +6,18 @@ shifts = zeros(1,size(z_profile_video,2));
 % [min_profile, ~] = min(z_profile_video, [],  2);
 % z_profile_video = z_profile_video - min_profile;
 % z_profile_video = (z_profile_video > 1);
+%% normalize through changing laser intensity
+% we assume it is stable during one frame aquisition
+for frame = 1 : size(z_profile_video, 2) 
+z_profile_video(:, frame) = z_profile_video(:, frame)/ sum(z_profile_video(:, frame), "all");
+end
 
 A = std(z_profile_video, 1, 2);
-mask = (A > 0.01);
+mask = (A > median(A,"all"));
 z_profile_video = (z_profile_video .* mask);
 figure (1)
 imagesc(z_profile_video);
-z_profile_video = z_profile_video > (1.1 * sum(z_profile_video, "all")/nnz(z_profile_video));
+z_profile_video = z_profile_video > sum(z_profile_video, "all")/nnz(z_profile_video);
 Z = zeros(size(z_profile_video, 1));
 R = repmat(z_profile_video(:, 1), 1, size(z_profile_video, 1));
 
