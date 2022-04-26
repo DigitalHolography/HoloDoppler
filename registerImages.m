@@ -49,6 +49,10 @@ initTform.T(3,1:2) = [translationX, translationY];
 fixedInit = imgaussfilt(FIXED,1.909722);
 movingInit = imgaussfilt(MOVING,1.909722);
 
+% Binarize images
+fixedInit = imbinarize(mat2gray(fixedInit), 'adaptive', 'ForegroundPolarity', 'bright', 'Sensitivity', 0.5);
+movingInit = imbinarize(mat2gray(movingInit), 'adaptive', 'ForegroundPolarity', 'bright', 'Sensitivity', 0.5);
+
 % Normalize images
 movingInit = mat2gray(movingInit);
 fixedInit = mat2gray(fixedInit);
