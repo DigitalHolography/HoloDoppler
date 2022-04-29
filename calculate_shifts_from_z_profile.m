@@ -12,27 +12,24 @@ for frame = 1 : size(z_profile_video, 2)
 z_profile_video(:, frame) = z_profile_video(:, frame)/ sum(z_profile_video(:, frame), "all");
 end
 
-A = std(z_profile_video, 1, 2);
-mask = (A > median(A,"all"));
-z_profile_video = (z_profile_video .* mask);
+% A = std(z_profile_video, 1, 2);
+% mask = (A > median(A,"all"));
+% z_profile_video = (z_profile_video .* mask);
 figure (1)
 imagesc(z_profile_video);
-z_profile_video = z_profile_video > sum(z_profile_video, "all")/nnz(z_profile_video);
-Z = zeros(size(z_profile_video, 1));
-R = repmat(z_profile_video(:, 1), 1, size(z_profile_video, 1));
+% z_profile_video = z_profile_video > sum(z_profile_video, "all")/nnz(z_profile_video);
+% z_profile_video = imbinarize(mat2gray(z_profile_video),0.7);
 
+toc
 
+tic
 for frame = 1 : size(z_profile_video, 2) 
-%     [c, lags] = xcorr(ref_z_profile, z_profile_video(:, frame));
-%     [~, idx] = max(c);
-    for csh = 1 : size(z_profile_video, 1)
-        Z(:, csh) = circshift(z_profile_video(:, frame), csh);
-    end
-    C = R.* Z;
-    IDX = sum(C, 1);
-    [~, idx] = max(IDX);
-    shifts(frame) = idx;
+    [c, lags] = xcorr(ref_z_profile, z_profile_video(:, frame));
+    [~, idx] = max(c);
+    shifts(frame) = lags(idx);
 end
+
+toc 
 
 for frame = 1 : size(z_profile_video, 2) 
 z_profile_video(:, frame) = circshift(z_profile_video(:, frame), shifts(frame), 1);

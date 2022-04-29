@@ -14,7 +14,7 @@ function H_PCA = short_time_PCA(H, x)
 %     threshold = round(f1 * batch_size / fs)*2 + 1;
     % selection of eigenvalues
     X = ones(size(V));
-    X(:, x) = 2;
+    X(:, x) = 0;
     V = V.*X;
     %projection of H
     H_PCA = H * V;
