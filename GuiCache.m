@@ -33,6 +33,7 @@ properties (Access = public)
     low_memory
     rephasing
     OCTdata
+    SVD
     
     % color image parameters
     color_f1
