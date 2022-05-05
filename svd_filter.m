@@ -16,6 +16,6 @@ cov = H'*H;
 [~, sort_idx] = sort(diag(S), 'descend');
 V = V(:,sort_idx);
 H_tissue = H * V(:,1:threshold) * V(:,1:threshold)';
-% H = reshape(H - H_tissue, width, height, batch_size);
-H = reshape(H_tissue, width, height, batch_size);
+H = reshape(H - H_tissue, width, height, batch_size);
+H = reshape(H, width, height, batch_size);
 end
