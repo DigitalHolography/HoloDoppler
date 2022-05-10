@@ -37,6 +37,7 @@ for rephasing_data = rephasing_data
     for j = jstart:jstop
       % load phase
       phase = rephasing_data.aberration_correction.compute_total_phase(j,rephasing_zernikes,shack_zernikes,iterative_opt_zernikes);
+
       correction = exp(-1i * phase);
       
       % compute last frame to apply phase
@@ -50,10 +51,16 @@ for rephasing_data = rephasing_data
       range_size = numel(frame_range);
       Nj = jstop - jstart + 1;
       cur_j = j - jstart + 1;
-      % apply correction to FH frames  
+      % apply correction to FH frames
       idx_range = frame_range(ceil((cur_j-1)*range_size/Nj)+1:ceil(cur_j*range_size/Nj));
       FH(:,:,idx_range) = FH(:,:,idx_range) .* correction;
-    end 
+
+      if ~isempty(rephasing_data.image_registration(3))
+          FH = register_in_z_via_phase(FH, rephasing_data.image_registration(3, j));
+      end
+    end
+
+    
 end
 
 end

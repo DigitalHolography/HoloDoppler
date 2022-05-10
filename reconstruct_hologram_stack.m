@@ -41,7 +41,6 @@ function hologram_stack = reconstruct_hologram_stack(FH, time_transform, acquisi
     
     %% spatial filter
     mask = construct_mask(50, max(size(FH,1),size(FH,2)), size(FH, 1), size(FH, 2));
-
     FH = FH .* mask;
      
 

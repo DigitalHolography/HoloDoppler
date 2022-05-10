@@ -3,6 +3,8 @@ properties
    batch_size
    batch_stride
    aberration_correction
+
+   image_registration
    
    % An array of size 2 x Nt
    % 1st row at pos i: idx of the first frame of the batch used to compute the coefs stored at pos i

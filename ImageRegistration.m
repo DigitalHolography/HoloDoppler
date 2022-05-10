@@ -4,6 +4,7 @@ classdef ImageRegistration
 properties
     translation_x
     translation_y
+    translation_z
     rotation
     scaling
 end
