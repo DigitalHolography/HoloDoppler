@@ -6,15 +6,18 @@ classdef ShackHartmann
         SubAp_margin
         CorrMap_margin 
         PowFilterPreCorr
-        SigmaFilterPreCorr  
+        SigmaFilterPreCorr
+        subimage_size
+        subimage_stride
     end
     methods
         % methods declaration
         [M_aso,StitchedMomentsInMaso] = construct_M_aso(obj, f1, f2, gw, acquisition)
         [shifts,StitchedMomentsInSubApertures,StitchedCorrInSubApertures] = compute_images_shifts(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
         [shifts,StitchedMomentsInSubApertures,StitchedCorrInSubApertures] = spatial_signal_analysis_PCA(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
+        SubFH = SubField(obj, FH);
 
-        function obj = ShackHartmann(n_SubAp, p, calibration_factor,SubAp_margin,CorrMap_margin,PowFilterPreCorr,SigmaFilterPreCorr)
+        function obj = ShackHartmann(n_SubAp, p, calibration_factor,SubAp_margin,CorrMap_margin,PowFilterPreCorr,SigmaFilterPreCorr, subimage_size, subimage_stride)
             obj.n_SubAp = n_SubAp;
             obj.modes = p;
             obj.calibration_factor = calibration_factor;
@@ -22,6 +25,8 @@ classdef ShackHartmann
             obj.CorrMap_margin = CorrMap_margin;
             obj.PowFilterPreCorr = PowFilterPreCorr;
             obj.SigmaFilterPreCorr = SigmaFilterPreCorr;
+            obj.subimage_size = subimage_size;
+            obj.subimage_stride = subimage_stride;
         end
         
         % reload M_aso that was previously constructed

@@ -1,4 +1,6 @@
 function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_images_shifts(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
+
+gw = 15;
 % SubAp_margin
 % SubAp_idx < SubAp_idx
 % SubAp_idy < SubAp_idy
@@ -66,17 +68,17 @@ moment_chunks_crop_array = zeros(ac.Nx,ac.Ny);%Stitched cropped PowerDoppler mom
 SubAp_id_range = [SubAp_idref:obj.n_SubAp 1:SubAp_idref-1];
 correlation_chunks_array = zeros((SubAp_end-SubAp_init+floor(ac.Nx/obj.n_SubAp))*obj.n_SubAp); %Stitched cropped correlations in each subaperture
 
-for SubAp_idx = SubAp_id_range
-    for SubAp_idy = SubAp_id_range
+for SubAp_idy = SubAp_id_range
+    for SubAp_idx = SubAp_id_range
         %% Construction of subapertures
         
         % get the current index range and reference index ranges
         idx_range = (SubAp_idx-1)*floor(ac.Nx/obj.n_SubAp)+1:SubAp_idx*floor(ac.Nx/obj.n_SubAp);
-        idy_range = (SubAp_idy-1)*floor(ac.Nx/obj.n_SubAp)+1:SubAp_idy*floor(ac.Nx/obj.n_SubAp);
+        idy_range = (SubAp_idy-1)*floor(ac.Ny/obj.n_SubAp)+1:SubAp_idy*floor(ac.Ny/obj.n_SubAp);
         idx_range_ref = (SubAp_idref-1)*floor(ac.Nx/obj.n_SubAp)+1:SubAp_idref*floor(ac.Nx/obj.n_SubAp);
-        idy_range_ref = (SubAp_idref-1)*floor(ac.Nx/obj.n_SubAp)+1:SubAp_idref*floor(ac.Nx/obj.n_SubAp);
+        idy_range_ref = (SubAp_idref-1)*floor(ac.Ny/obj.n_SubAp)+1:SubAp_idref*floor(ac.Ny/obj.n_SubAp);
         % get the current image chunk
-        FH_chunk = FH(idx_range,idy_range,:);
+        FH_chunk = FH(idy_range,idx_range,:);
         % propagate wave
         if calibration
             moment_chunk = abs(fftshift(fftshift(ifft2(FH_chunk),1),2)).^2;
@@ -109,12 +111,12 @@ for SubAp_idx = SubAp_id_range
             n4 = size(hologram_chunk, 3) - n1 + 2;
             
             moment = squeeze(sum(hologram_chunk(:, :, n1:n2), 3)) + squeeze(sum(hologram_chunk(:, :, n3:n4), 3));
-            ms = sum(sum(moment,1),2);
+            ms = sum(moment, [1, 2]);
             
             % apply flat field correction
             if ms~=0
                 moment = moment ./ imgaussfilt(moment, gw/(obj.n_SubAp));
-                ms2 = sum(sum(moment,1),2);
+                ms2 = sum(moment, [1, 2]);
                 moment = (ms / ms2) * moment;
             end
             moment_chunk = gather(moment); % PowerDoppler moments
@@ -133,7 +135,7 @@ for SubAp_idx = SubAp_id_range
         %
        
 
-        moment_chunks_array(idx_range,idy_range) = moment_chunk;
+        moment_chunks_array(idy_range,idx_range) = moment_chunk;
         
         %% Computation of the correlations between subapertures
         % get the reference image chunk
@@ -167,7 +169,7 @@ for SubAp_idx = SubAp_id_range
         % to show sub-apertures used in correlation        
         idx_range_out = (SubAp_idx-1)*floor(ac.Nx/obj.n_SubAp)+SubAp_init:(SubAp_idx-1)*floor(ac.Nx/obj.n_SubAp)+SubAp_init+numel(SubAp_init:SubAp_end)-1;
         idy_range_out = (SubAp_idy-1)*floor(ac.Ny/obj.n_SubAp)+SubAp_init:(SubAp_idy-1)*floor(ac.Ny/obj.n_SubAp)+SubAp_init+numel(SubAp_init:SubAp_end)-1;
-        moment_chunks_crop_array(idx_range_out,idy_range_out) = flip(moment_chunk_cropped');
+        moment_chunks_crop_array(idy_range_out,idx_range_out) = moment_chunk_cropped;
 
     end %SubAp_idy
 end %SubAp_idx
