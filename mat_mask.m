@@ -14,7 +14,6 @@ if rem_subAp == 0
     condition = repmat(condition.',1,Ny);
     M = M_init(condition);
     M=reshape(M,[size(M,1)/size(condition,2) size(condition,2)]);
-    
 else
     M=M_init;
     M(rem_subAp,:)=[];

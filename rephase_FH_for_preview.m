@@ -13,7 +13,7 @@ function [FH, phasePlane] = rephase_FH_for_preview(FH, coefs)
 zernike_indices = [ 3 4 5 ]; %check if this is the correct numeration
 
 
-[ ~, zern ] = zernike_phase(zernike_indices, frame_width, frame_height);
+[ ~, zern ] = zernike_phase(zernike_indices, 512, 512);
 
 % figure(1)
 % imagesc(zern(:,:,3));
@@ -26,6 +26,9 @@ end
 
 phasePlane = phase;
 correction = exp(-1i * phase);
+correction = imresize(correction, [frame_width frame_height]);
+figure;
+imagesc(angle(correction));
 FH = FH .* correction;
 
 end

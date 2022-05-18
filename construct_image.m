@@ -3,6 +3,14 @@ function img_type_list = construct_image(FH, wavelength, acquisition, gaussian_w
                                                                   spatial_transformation, time_transform, SubAp_PCA, xy_stride, num_unit_cells_x, r1, ...
                                                                   local_temporal, phi1, phi2, local_spatial, nu1, nu2)
 
+% [~, phase ] = zernike_phase([ 4 ], 512, 512);
+% phase = 30 * 0.5 * phase;
+% phase_mask =  exp(1i * phase);
+% phase_mask = imresize(phase_mask, [size(FH,1) size(FH,2)]);
+% figure;
+% imagesc(angle(phase_mask));
+% FH = FH .* phase_mask;
+
 % FIXME : replace ifs by short name functions
 j_win = size(FH, 3);
 ac = acquisition;
