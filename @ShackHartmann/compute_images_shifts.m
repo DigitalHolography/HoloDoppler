@@ -89,6 +89,8 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
     correlation_chunks_array = zeros((SubAp_end-SubAp_init+floor(ac.Nx/obj.n_SubAp))*obj.n_SubAp); %Stitched cropped correlations in each subaperture
     gw = 60 * (ac.Nx/obj.n_SubAp)/512;
 
+    correlation_coef = zeros(1,obj.n_SubAp^2);
+
     for SubAp_idy = SubAp_id_range
         for SubAp_idx = SubAp_id_range
             %% Construction of subapertures
@@ -181,6 +183,9 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
 %                 correlation_chunks_array((SubAp_idx-1)*size(correlation_chunks_array,1)/obj.n_SubAp+1:SubAp_idx*size(correlation_chunks_array,1)/obj.n_SubAp,(SubAp_idy-1)*size(correlation_chunks_array,2)/obj.n_SubAp+1:SubAp_idy*size(correlation_chunks_array,2)/obj.n_SubAp)=c;
                 % find correlation peak
                 [xpeak_aux, ypeak_aux] = find(c==max(c(:)));
+                if ~calibration
+                    correlation_coef(1 + (SubAp_idx - 1) + obj.n_SubAp * (SubAp_idy - 1)) = c(xpeak_aux, ypeak_aux);
+                end
                 xpeak = xpeak_aux+0.5*(c(xpeak_aux-1,ypeak_aux)-c(xpeak_aux+1,ypeak_aux))/(c(xpeak_aux-1,ypeak_aux)+c(xpeak_aux+1,ypeak_aux)-2.*c(xpeak_aux,ypeak_aux));
                 ypeak = ypeak_aux+0.5*(c(xpeak_aux,ypeak_aux-1)-c(xpeak_aux,ypeak_aux+1))/(c(xpeak_aux,ypeak_aux-1)+c(xpeak_aux,ypeak_aux+1)-2.*c(xpeak_aux,ypeak_aux));
                 xoffSet = ceil(size(c, 1)/2) - xpeak;
@@ -199,7 +204,22 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
     
         end %SubAp_idy
     end %SubAp_idx
-    central_shift = shifts(ceil(length(shifts)/2));
-    shifts = shifts - central_shift;
+
+    
+    if ~calibration
+%         plop = flip(plop');
+%         for SubAp_idy = 1:obj.n_SubAp
+%             for SubAp_idx = 1:obj.n_SubAp
+%                 fprintf("%f   ", plop(SubAp_idy, SubAp_idx));
+%             end
+%             fprintf("\n");    
+%         end
+        correlation_threshold = mean(correlation_coef, "all") - std(correlation_coef, 1, "all");
+       
+        central_shift = shifts(ceil(length(shifts)/2));
+        shifts = shifts - central_shift;
+        shifts(correlation_coef < correlation_threshold) = NaN ;
+    end
+
     moment_chunks_crop_array = flip(moment_chunks_crop_array');
 end

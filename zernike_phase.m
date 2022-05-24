@@ -6,6 +6,8 @@ function [ phi , zern ] = zernike_phase(A, Nx, Ny)
 % OUTPUTS : 
 %   phi - phase
 
+
+
 x = linspace(-1,1,Nx);
 y = linspace(-1,1,Ny);
 [X,Y] = meshgrid(x,y);

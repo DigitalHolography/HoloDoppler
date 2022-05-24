@@ -12,9 +12,8 @@ function [FH, phasePlane] = rephase_FH_for_preview(FH, coefs)
 [frame_width, frame_height, ~] = size(FH);
 zernike_indices = [ 3 4 5 ]; %check if this is the correct numeration
 
-
-[ ~, zern ] = zernike_phase(zernike_indices, 512, 512);
-
+[~,Zern] = zernike_phase(zernike_indices, floor(512* sqrt(2)), floor(512* sqrt(2)));
+zern = Zern(floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256, floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256, : );
 % figure(1)
 % imagesc(zern(:,:,3));
 
