@@ -1,4 +1,4 @@
-function generate_video(video, output_path, name, contrast_enhancement_tol, temporal_filter_sigma, contrast_inversion, export_raw, export_avg_img)
+function generate_video(video, range, output_path, name, contrast_enhancement_tol, temporal_filter_sigma, contrast_inversion, export_raw, export_avg_img)
 % Saves a raw pixel array to a video file, with some post processing
 % commonly done for rendering hologram videos
 %
@@ -10,7 +10,9 @@ function generate_video(video, output_path, name, contrast_enhancement_tol, temp
 % contrast_inversion: if true, contrast of the video will be inverted
 % export_raw: if true, the video is also exported as a raw file in the raw directory
 % export_avg_img: if true, save the temporal average of the video as a png
-%                 file in the 'png' directory 
+%                 file in the 'png' directory
+
+video = video(:,:,:,range);
 
 %% temporal filter
 if ~isempty(temporal_filter_sigma)

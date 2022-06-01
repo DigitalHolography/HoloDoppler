@@ -26,8 +26,6 @@ end
 phasePlane = phase;
 correction = exp(-1i * phase);
 correction = imresize(correction, [frame_width frame_height]);
-figure;
-imagesc(angle(correction));
 FH = FH .* correction;
 
 end
