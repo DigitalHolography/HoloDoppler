@@ -1,4 +1,4 @@
-function generate_video(video, range, output_path, name, contrast_enhancement_tol, temporal_filter_sigma, contrast_inversion, export_raw, export_avg_img)
+function generate_video(video, output_path, name, contrast_enhancement_tol, temporal_filter_sigma, contrast_inversion, export_raw, export_avg_img)
 % Saves a raw pixel array to a video file, with some post processing
 % commonly done for rendering hologram videos
 %
@@ -10,9 +10,27 @@ function generate_video(video, range, output_path, name, contrast_enhancement_to
 % contrast_inversion: if true, contrast of the video will be inverted
 % export_raw: if true, the video is also exported as a raw file in the raw directory
 % export_avg_img: if true, save the temporal average of the video as a png
-%                 file in the 'png' directory
+%                 file in the 'png' directory 
 
-video = video(:,:,:,range);
+[~, output_dirname] = fileparts(output_path);
+output_filename = sprintf('%s_%s.%s', output_dirname, name, 'avi');
+
+%% flip video
+video = flip(video);
+
+%% save to raw format
+if export_raw
+    output_filename = sprintf('%s_%s.%s', output_dirname, name, 'raw');
+    export_raw_video(fullfile(output_path, 'raw', output_filename), rot90(video));
+    
+    output_filename = sprintf('%s_%s.%s', output_dirname, name, 'avi');
+    w = VideoWriter(fullfile(output_path, 'raw', output_filename));
+    open(w);
+    for i = 1:size(video, 4)
+        writeVideo(w, video(:,:,:,i));
+    end
+    close(w);
+end
 
 %% temporal filter
 if ~isempty(temporal_filter_sigma)
@@ -32,8 +50,7 @@ if ~isempty(contrast_enhancement_tol)
     video = enhance_video_constrast(video, tol_pdi);
 end
 
-%% flip video
-video = flip(video);
+
 
 %% contrast inversion
 if contrast_inversion
@@ -43,8 +60,6 @@ end
 %% prepare for writing
 video = mat2gray(video);
 
-[~, output_dirname] = fileparts(output_path);
-output_filename = sprintf('%s_%s.%s', output_dirname, name, 'avi');
 w = VideoWriter(sprintf('%s\\avi\\%s', output_path, output_filename));
 open(w);
 for i = 1:size(video,4)
@@ -61,11 +76,6 @@ for i = 1:size(video,4)
 end
 close(w)
 
-%% save to raw format
-if export_raw
-    output_filename = sprintf('%s_%s.%s', output_dirname, name, 'raw');
-    export_raw_video(sprintf('%s\\raw\\%s', output_path, output_filename), video);
-end
 
 %% save temporal average to png
 if export_avg_img
