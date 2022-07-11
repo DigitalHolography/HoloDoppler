@@ -1,5 +1,4 @@
-function mask = calculate_vessels_mask(video, contrast_enhancement_tol, temporal_filter_sigma, contrast_inversion, export_raw, export_avg_img)
-
+function artery_mask = createArteryMask(video, contrast_enhancement_tol, temporal_filter_sigma, contrast_inversion, export_raw, export_avg_img)
 video = flip(video);
 %% temporal filter
 if ~isempty(temporal_filter_sigma)
@@ -51,6 +50,6 @@ video = mat2gray(video);
     C = C .* pulse_init_3d;
     C = squeeze(mean(C, 3));
 
-    mask = C > max(C(:))*0.2;
+    artery_mask = C > max(C(:))*0.2;
 
 end
