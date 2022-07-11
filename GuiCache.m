@@ -61,6 +61,9 @@ properties (Access = public)
     SubAp_PCA;
     minSubAp_PCA;
     maxSubAp_PCA;
+
+    %masks
+    artery_mask;
 end
 methods (Access = public)
     function obj = GuiCache()

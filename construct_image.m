@@ -1,7 +1,8 @@
 function img_type_list = construct_image(FH, wavelength, acquisition, gaussian_width, use_gpu, svd, phase_correction,...
                                                                   color_f1, color_f2, color_f3, img_type_list, is_low_frequency , ...
                                                                   spatial_transformation, time_transform, SubAp_PCA, xy_stride, num_unit_cells_x, r1, ...
-                                                                  local_temporal, phi1, phi2, local_spatial, nu1, nu2)
+                                                                  local_temporal, phi1, phi2, local_spatial, nu1, nu2, ...
+                                                                  artery_mask)
 
 % [~, phase ] = zernike_phase([ 4 ], 512, 512);
 % phase = 30 * 0.5 * phase;
@@ -162,10 +163,24 @@ if img_type_list.velocity_estimate.select % Velocity Estimate has been chosen
 end
 
 if img_type_list.spectrogram.select
-    img_type_list.spectrogram.image = moment0(SH, f1, f2, ac.fs, j_win, gaussian_width);
-    total_energy_sent = sum(SH, "all");
-    y = squeeze(sum(SH, [1 2])) ./ total_energy_sent;
-    img_type_list.spectrogram.vector = y;
+    %     figure(111)
+    %     imagesc(artery_mask);
+%     n1 = ceil(f1 * j_win / ac.fs);
+%     n2 = ceil(f2 * j_win / ac.fs);
+% 
+%     % symetric integration interval
+%     n3 = j_win - n2 + 1;
+%     n4 = j_win - n1 + 1;
+    if ~isempty(artery_mask)
+        SH_artery  = sum(SH .*flip(artery_mask),[1 2]) ./ nnz(artery_mask);
+        img_type_list.spectrogram.image = mat2gray(single(artery_mask));
+%         SH_artery(1:n1) = 0;
+%         SH_artery(n2:n3) = 0;
+%         SH_artery(n4:end) = 0;
+        img_type_list.spectrogram.vector = SH_artery;
+    else
+        img_type_list.spectrogram.vector = zeros(j_win);
+    end
 %     x = linspace(-33.5, 33.5, j_win);
 %     plot(x, y);
 %     axis square

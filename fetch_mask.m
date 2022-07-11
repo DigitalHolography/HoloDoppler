@@ -1,4 +1,6 @@
 function [mask, found] = fetch_mask(filepath, filename, file_ext)
+% this function is not used for now FIXME
+
 % check if there is already an output folder for the current
 % file_M0. If there is one, load GUI parameters cache from
 % exported data

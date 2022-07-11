@@ -1,6 +1,5 @@
 function mask = calculate_vessels_mask(video, contrast_enhancement_tol, temporal_filter_sigma, contrast_inversion, export_raw, export_avg_img)
 
-video = flip(video);
 %% temporal filter
 if ~isempty(temporal_filter_sigma)
     sigma = [0.0001 0.0001 temporal_filter_sigma];
@@ -52,5 +51,7 @@ video = mat2gray(video);
     C = squeeze(mean(C, 3));
 
     mask = C > max(C(:))*0.2;
+
+    mask = flip(mask);
 
 end
