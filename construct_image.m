@@ -190,7 +190,7 @@ if img_type_list.spectrogram.select
 
     if ~isempty(artery_mask)
         SH_artery  = sum(SH .*artery_mask,[1 2]) ./ nnz(artery_mask);
-        SH_artery  = squeeze(SH_artery) - SH_mean;
+        SH_artery  = squeeze(SH_artery);% - SH_mean;
         SH_artery(SH_artery < 0) = 1;
         % normalize : squeeze(mean(SH_mean(2:end, :), 1));
 %         SH_artery = SH_artery ./ SH_norm;

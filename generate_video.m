@@ -19,7 +19,7 @@ output_filename = sprintf('%s_%s.%s', output_dirname, name, 'avi');
 video = flip(video);
 
 %% save to raw format
-if export_raw
+if export_raw 
     output_filename = sprintf('%s_%s.%s', output_dirname, name, 'raw');
     export_raw_video(fullfile(output_path, 'raw', output_filename), rot90(video));
     
@@ -31,6 +31,7 @@ if export_raw
     end
     close(w);
 end
+
 
 %% temporal filter
 if ~isempty(temporal_filter_sigma)
