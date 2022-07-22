@@ -203,8 +203,8 @@ if img_type_list.spectrogram.select
         %SH_artery = SH_artery./ movmean(SH_artery, 25);
         img_type_list.spectrogram.vector = SH_artery;
     else
-        img_type_list.spectrogram.vector = zeros(j_win);
-        img_type_list.spectrogram.image = zeros(size(FH, 1), size(FH, 2));
+        img_type_list.spectrogram.vector = zeros(1,j_win);
+        img_type_list.spectrogram.image = zeros(size(SH, 1), size(SH, 2));
     end
 %     x = linspace(-33.5, 33.5, j_win);
 %     plot(x, y);
