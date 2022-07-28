@@ -136,8 +136,18 @@ if img_type_list.power_1_Doppler.select % Power 1 Doppler has been chosen
 end
 
 if img_type_list.power_2_Doppler.select % Power 2 Doppler has been chosen
-    img = moment2(SH, f1, f2, ac.fs, j_win, gaussian_width);
-    img_type_list.power_2_Doppler.image = img;
+    %% FIXME: from now one Power 2 Doppler becomes frequency RMS
+    S = SH; % not to modify SH
+    S_mean = reshape(squeeze(mean(S, [1 2])), 1, 1, j_win);
+    for i = 1 : size(S,1)
+        for j = 1 : size(S, 2)
+            S(i,j,:) = S(i,j,:) - S_mean;
+        end
+    end
+    S(S<0) = 0;
+    img2 = moment2(S, f1, f2, ac.fs, j_win, 0);
+    [~, img0] = moment0(S, f1, f2, ac.fs, j_win, 0);
+    img_type_list.power_2_Doppler.image = img2./img0;
 end
 
 if img_type_list.color_Doppler.select  % Color Doppler has been chosen
@@ -180,6 +190,7 @@ if img_type_list.spectrogram.select
 %     ms = sum(SH, [1 2]);
 %     SH = SH./ blurred_moment;
       SH_mean = squeeze(mean(SH, [1 2]));
+      ms = squeeze(sum(SH_mean, "all"));
 %       artery_neighborhood_mask = imbinarize(imgaussfilt(single(artery_mask), 100));
 %       figure;
 %       imagesc(artery_neighborhood_mask);
@@ -189,8 +200,9 @@ if img_type_list.spectrogram.select
 %     corrected_image = (ms / ms2) .* image;
 
     if ~isempty(artery_mask)
-        SH_artery  = sum(SH .*artery_mask,[1 2]) ./ nnz(artery_mask);
-        SH_artery  = squeeze(SH_artery);% - SH_mean;
+        SH_artery  = squeeze(sum(SH .*artery_mask,[1 2]) ./ nnz(artery_mask));
+        ma = squeeze(sum(SH_artery, "all"));
+        SH_artery  = (SH_artery)*(ms/ma) - SH_mean;
         SH_artery(SH_artery < 0) = 1;
         % normalize : squeeze(mean(SH_mean(2:end, :), 1));
 %         SH_artery = SH_artery ./ SH_norm;
@@ -206,10 +218,6 @@ if img_type_list.spectrogram.select
         img_type_list.spectrogram.vector = zeros(1,j_win);
         img_type_list.spectrogram.image = zeros(size(SH, 1), size(SH, 2));
     end
-%     x = linspace(-33.5, 33.5, j_win);
-%     plot(x, y);
-%     axis square
-%     Frame = getframe(gcf)
-%     FrameData = Frame.cdata; %// This is a matrix that you can plot/show with imshow.
+    img_type_list.spectrogram.H = SH;
 end
 end

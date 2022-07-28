@@ -14,7 +14,9 @@ SH(:,:,n1:n2) = SH(:,:,n1:n2) .* reshape(f_range, 1, 1, numel(f_range)).^2;
 SH(:,:,n3:n4) = SH(:,:,n3:n4) .* reshape(f_range_sym, 1, 1, numel(f_range_sym)).^2;
 moment2 = gather(squeeze(sum(abs(SH(:, :, n1:n2)), 3))) + gather(squeeze(sum(abs(SH(:, :, n3:n4)), 3)));
 moment2 = sqrt(moment2);
+if gw ~= 0
 moment2 = moment2 ./ imgaussfilt(moment2, gw);
+end
 
 M2 = moment2;
 end

@@ -12,10 +12,15 @@ A = abs(A);
 
 moment = squeeze(sum(A(:, :, n1:n2), 3)) + squeeze(sum(A(:, :, n3:n4), 3));
 
+if gw ~= 0
 moment =  flat_field_correction(moment, gw);
+end 
 
 sqrt_moment = sqrt(moment);
+
+if gw ~= 0
 sqrt_moment = flat_field_correction(sqrt_moment, gw);
+end
 
 M0 = gather(moment);
 sqrt_M0 = gather(sqrt_moment);
