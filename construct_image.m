@@ -189,35 +189,35 @@ if img_type_list.spectrogram.select
 
 %     ms = sum(SH, [1 2]);
 %     SH = SH./ blurred_moment;
-      SH_mean = squeeze(mean(SH, [1 2]));
-      ms = squeeze(sum(SH_mean, "all"));
-%       artery_neighborhood_mask = imbinarize(imgaussfilt(single(artery_mask), 100));
-%       figure;
-%       imagesc(artery_neighborhood_mask);
-
-%       SH_mean  = squeeze(sum(SH .*artery_neighborhood_mask, [1 2]) ./ nnz(artery_neighborhood_mask));
-%     ms2 = sum(SH, [1 2]);
-%     corrected_image = (ms / ms2) .* image;
-
-    if ~isempty(artery_mask)
-        SH_artery  = squeeze(sum(SH .*artery_mask,[1 2]) ./ nnz(artery_mask));
-        ma = squeeze(sum(SH_artery, "all"));
-        SH_artery  = (SH_artery)*(ms/ma) - SH_mean;
-        SH_artery(SH_artery < 0) = 1;
-        % normalize : squeeze(mean(SH_mean(2:end, :), 1));
-%         SH_artery = SH_artery ./ SH_norm;
-        SH_artery(1:1) = 0;
-%         SH_artery(n2:n3) = 0;
-        SH_artery(end-1:end) = 0;
-        SH_artery = fftshift(SH_artery);
-        img_type_list.spectrogram.image = mat2gray(single(artery_mask));
-
-        %SH_artery = SH_artery./ movmean(SH_artery, 25);
-        img_type_list.spectrogram.vector = SH_artery;
-    else
+%       SH_mean = squeeze(mean(SH, [1 2]));
+%       ms = squeeze(sum(SH_mean, "all"));
+% %       artery_neighborhood_mask = imbinarize(imgaussfilt(single(artery_mask), 100));
+% %       figure;
+% %       imagesc(artery_neighborhood_mask);
+% 
+% %       SH_mean  = squeeze(sum(SH .*artery_neighborhood_mask, [1 2]) ./ nnz(artery_neighborhood_mask));
+% %     ms2 = sum(SH, [1 2]);
+% %     corrected_image = (ms / ms2) .* image;
+% 
+%     if ~isempty(artery_mask)
+%         SH_artery  = squeeze(sum(SH .*artery_mask,[1 2]) ./ nnz(artery_mask));
+%         ma = squeeze(sum(SH_artery, "all"));
+%         SH_artery  = (SH_artery)*(ms/ma) - SH_mean;
+%         SH_artery(SH_artery < 0) = 1;
+%         % normalize : squeeze(mean(SH_mean(2:end, :), 1));
+% %         SH_artery = SH_artery ./ SH_norm;
+%         SH_artery(1:1) = 0;
+% %         SH_artery(n2:n3) = 0;
+%         SH_artery(end-1:end) = 0;
+%         SH_artery = fftshift(SH_artery);
+%         img_type_list.spectrogram.image = mat2gray(single(artery_mask));
+% 
+%         %SH_artery = SH_artery./ movmean(SH_artery, 25);
+%         img_type_list.spectrogram.vector = SH_artery;
+%     else
         img_type_list.spectrogram.vector = zeros(1,j_win);
         img_type_list.spectrogram.image = zeros(size(SH, 1), size(SH, 2));
-    end
-    img_type_list.spectrogram.H = SH;
+%     end
+%     img_type_list.spectrogram.H = SH;
 end
 end

@@ -21,7 +21,7 @@ video = flip(video);
 %% save to raw format
 if export_raw 
     output_filename = sprintf('%s_%s.%s', output_dirname, name, 'raw');
-    export_raw_video(fullfile(output_path, 'raw', output_filename), rot90(video));
+    export_raw_video(fullfile(output_path, 'raw', output_filename), (video));
     
     output_filename = sprintf('%s_%s.%s', output_dirname, name, 'avi');
     w = VideoWriter(fullfile(output_path, 'raw', output_filename));
