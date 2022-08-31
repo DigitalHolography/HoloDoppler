@@ -1,4 +1,4 @@
-function [FH, phasePlane] = rephase_FH_for_preview(FH, coefs)
+function [FH, phasePlane] = rephase_FH_for_preview(FH, coefs, zernike_indices)
 
 %translate coefs to the form of obj.shack_hart... 
 %phase = rephasing_data.aberration_correction.compute_total_phase(j,rephasing_zernikes,shack_zernikes,iterative_opt_zernikes);
@@ -10,7 +10,7 @@ function [FH, phasePlane] = rephase_FH_for_preview(FH, coefs)
 % app.PreviewLabel.Text = sprintf('astig_1 : %0.1f\ndefocus: %0.1f\nastig_2 : %0.1f', coefs(1), coefs(2), coefs(3));
 
 [frame_width, frame_height, ~] = size(FH);
-zernike_indices = [ 3 4 5 ]; %check if this is the correct numeration
+% zernike_indices = [ 3 4 5 ]; %check if this is the correct numeration
 
 [~,Zern] = zernike_phase(zernike_indices, floor(512* sqrt(2)), floor(512* sqrt(2)));
 zern = Zern(floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256, floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256, : );
