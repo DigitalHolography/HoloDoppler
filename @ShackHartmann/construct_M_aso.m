@@ -11,9 +11,10 @@ for p = 1:numel(obj.modes)
     [~,Phi] = zernike_phase(obj.modes(p), floor(512* sqrt(2)), floor(512* sqrt(2)));
     phi = Phi(floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256, floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256 );
     phi = phi*obj.calibration_factor;
-    transmittance = exp(1i*phi);
+    transmittance = (exp(1i*phi));
 %     figure;
 %     imagesc(angle(transmittance));
+    [~] = obj.compute_SVD_for_SubAp(transmittance, f1, f2, gw, true, false, ac);
     [shifts, StichedMomentsInSubapertures] = obj.compute_images_shifts(transmittance, f1, f2, gw, true, false, ac);
     
     % each mode is a col of M_aso
