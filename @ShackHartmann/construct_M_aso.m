@@ -14,7 +14,7 @@ for p = 1:numel(obj.modes)
     transmittance = (exp(1i*phi));
 %     figure;
 %     imagesc(angle(transmittance));
-    [~] = obj.compute_SVD_for_SubAp(transmittance, f1, f2, gw, true, false, ac);
+     [~] = obj.compute_SVD_for_SubAp(transmittance, f1, f2, gw, true, false, ac);
     [shifts, StichedMomentsInSubapertures] = obj.compute_images_shifts(transmittance, f1, f2, gw, true, false, ac);
     
     % each mode is a col of M_aso
