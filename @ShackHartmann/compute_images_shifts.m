@@ -227,4 +227,19 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
     end
 
     moment_chunks_crop_array = flip(moment_chunks_crop_array');
+
+%     figure(1);
+%     imagesc(moment_chunks_crop_array);
+%     axis square;
+%     axis off;
+%     colormap gray;
+%     print('-f1','-dpng', fullfile('C:\Users\Novokuznetsk\Pictures\Shack_Hart', 'moment_chunk_crop_array')) ;
+% 
+%     figure(2);
+%     imagesc(correlation_chunks_array);
+%     axis square;
+%     axis off;
+%     colormap gray;
+%     print('-f2','-dpng', fullfile('C:\Users\Novokuznetsk\Pictures\Shack_Hart', 'correlation_chunks_array')) ;
+    
 end

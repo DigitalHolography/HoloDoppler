@@ -39,9 +39,11 @@ function phase = compute_SVD_for_SubAp(obj, FH, f1, f2, gw, calibration, enable_
     %moment_chunk_mask  = ones(SubAp_end - SubAp_init + 1, SubAp_end - SubAp_init + 1);
     moment_chunk_mask = ones(floor(double(ac.Nx)/obj.n_SubAp));
 
-    FH_reduced = ones((obj.n_SubAp)^2, size(moment_chunk_mask,1) + floor(ac.Ny/obj.n_SubAp) - 1, size(moment_chunk_mask,1) + floor(ac.Ny/obj.n_SubAp) - 1);
-    FH_reduced_bis = ones((obj.n_SubAp)^2, size(moment_chunk_mask,1) + floor(ac.Ny/obj.n_SubAp) - 1, size(moment_chunk_mask,1) + floor(ac.Ny/obj.n_SubAp) - 1);
-    stitched_FH_reduced = ones((obj.n_SubAp)* (size(moment_chunk_mask,1) + floor(ac.Ny/obj.n_SubAp) - 1), (obj.n_SubAp)* (size(moment_chunk_mask,1) + floor(ac.Ny/obj.n_SubAp) - 1));
+%     FH_reduced = ones((obj.n_SubAp)^2, size(moment_chunk_mask,1) + floor(ac.Ny/obj.n_SubAp) - 1, size(moment_chunk_mask,1) + floor(ac.Ny/obj.n_SubAp) - 1);
+FH_reduced = ones((obj.n_SubAp)^2, SubAp_end - SubAp_init + 1, SubAp_end - SubAp_init + 1);
+FH_reduced_bis = zeros(size(FH_reduced));
+% FH_reduced_bis = ones((obj.n_SubAp)^2, size(moment_chunk_mask,1) + floor(ac.Ny/obj.n_SubAp) - 1, size(moment_chunk_mask,1) + floor(ac.Ny/obj.n_SubAp) - 1);
+stitched_FH_reduced = ones((obj.n_SubAp)* (size(moment_chunk_mask,1) + floor(ac.Ny/obj.n_SubAp) - 1), (obj.n_SubAp)* (size(moment_chunk_mask,1) + floor(ac.Ny/obj.n_SubAp) - 1));
     stitched_FH_reduced_bis = ones((obj.n_SubAp)* (size(moment_chunk_mask,1) + floor(ac.Ny/obj.n_SubAp) - 1), (obj.n_SubAp)* (size(moment_chunk_mask,1) + floor(ac.Ny/obj.n_SubAp) - 1));
 
     gw = 35;
@@ -71,6 +73,7 @@ function phase = compute_SVD_for_SubAp(obj, FH, f1, f2, gw, calibration, enable_
             % propagate wave
             if calibration
                 moment_chunk = abs(fftshift(fftshift(ifft2(FH_chunk),1),2)).^2;
+%                 moment_chunk = abs(fftshift(fftshift(ifft2(exp(1i .* angle(FH_chunk))),1),2)).^2;
             else
                 H_chunk = ifft2(FH_chunk);
                 % Statistical filtering
@@ -122,7 +125,7 @@ function phase = compute_SVD_for_SubAp(obj, FH, f1, f2, gw, calibration, enable_
             end
     
             %
-           
+%             moment_chunk = imbinarize(moment_chunk);
     
             moment_chunks_array(idy_range,idx_range) = moment_chunk;
 
@@ -135,10 +138,12 @@ function phase = compute_SVD_for_SubAp(obj, FH, f1, f2, gw, calibration, enable_
                     moment_chunk_ref = moment_chunks_array(idx_range_ref,idy_range_ref);
                     temp = zeros(size(moment_chunk_ref));
                     temp(SubAp_init:SubAp_end, SubAp_init:SubAp_end) = moment_chunk_ref(SubAp_init:SubAp_end, SubAp_init:SubAp_end);
-                    temp = circshift(temp, 1, 1);
-                    temp = circshift(temp, 1, 2);
+%                     temp = circshift(temp, 1, 1);
+%                     temp = circshift(temp, 1, 2);
                     moment_chunk_ref = temp;
                 else
+%                     M0 = circshift(M0, 1, 1);
+%                     M0 = circshift(M0, 1, 2);
                     moment_chunk_ref = M0;
                 end
                 % compute auxilliary correlation between current and reference image chunk
@@ -156,28 +161,51 @@ function phase = compute_SVD_for_SubAp(obj, FH, f1, f2, gw, calibration, enable_
                 aa = length((SubAp_idx-1)*size(correlation_chunks_array,1)/obj.n_SubAp+1:SubAp_idx*size(correlation_chunks_array,1)/obj.n_SubAp);
                 bb = length((SubAp_idy-1)*size(correlation_chunks_array,2)/obj.n_SubAp+1:SubAp_idy*size(correlation_chunks_array,2)/obj.n_SubAp);
                 
-                center = floor(size(c_aux,1)/2);
+                center = ceil(size(c_aux,1)/2);
 %                 c(inf_margin_corr:sup_margin_corr,inf_margin_corr:sup_margin_corr)=c_aux(inf_margin_corr:sup_margin_corr,inf_margin_corr:sup_margin_corr);
                 c(center - 5:center + 5,center - 5:center + 5)=c_aux(center - 5:center + 5,center - 5:center + 5);
                 correlation_chunks_array((SubAp_idx-1)*size(correlation_chunks_array,1)/obj.n_SubAp+1:SubAp_idx*size(correlation_chunks_array,1)/obj.n_SubAp,(SubAp_idy-1)*size(correlation_chunks_array,2)/obj.n_SubAp+1:SubAp_idy*size(correlation_chunks_array,2)/obj.n_SubAp)=c(1:aa, 1:bb);
             end% correlation
-    
+            
+            %construct shifts matrix - all circshifts possible for the
+            %central image
+
+         
+
             % to show sub-apertures used in correlation        
 %             idx_range_out = (SubAp_idx-1)*floor(ac.Nx/obj.n_SubAp)+SubAp_init:(SubAp_idx-1)*floor(ac.Nx/obj.n_SubAp)+SubAp_init+numel(SubAp_init:SubAp_end)-1;
 %             idy_range_out = (SubAp_idy-1)*floor(ac.Ny/obj.n_SubAp)+SubAp_init:(SubAp_idy-1)*floor(ac.Ny/obj.n_SubAp)+SubAp_init+numel(SubAp_init:SubAp_end)-1;
-            moment_chunks_crop_array(idy_range,idx_range) = moment_chunk_cropped;
+              moment_chunks_crop_array(idy_range,idx_range) = moment_chunk_cropped;
 %             c = imgaussfilt(c, ceil(min(size(c, 1), size(c, 2))/10));
 %             c = imbinarize(c,'adaptive', 'ForegroundPolarity', 'bright', 'Sensitivity', 0.5);
 %             FH_reduced((SubAp_idy - 1) * obj.n_SubAp + SubAp_idx, :, :) = FH(idy_range,idx_range,:);
-            FH_reduced((SubAp_idy - 1) * obj.n_SubAp + SubAp_idx, :, :) = exp(1i*angle(fft2((fftshift(c)))));
+%               temp = moment_chunk_cropped .* exp(1i*angle((fft2((moment_chunk_cropped)))));
+              temp = moment_chunk_cropped .* exp(1i* angle(fft2(moment_chunk_cropped))) ;
+              temp = exp(1i* angle(fft2(moment_chunk_cropped))) ;
+              temp = temp(SubAp_init:SubAp_end,SubAp_init:SubAp_end);
+              FH_reduced((SubAp_idy - 1) * obj.n_SubAp + SubAp_idx, :, :) = temp;
+%             FH_reduced((SubAp_idy - 1) * obj.n_SubAp + SubAp_idx, :, :) = fftshift(fft2((moment_chunk_cropped)));
 %             FH_reduced((SubAp_idy - 1) * obj.n_SubAp + SubAp_idx, :, :) = exp(1i*angle(fft2((fftshift(fftshift(moment_chunk,1),2)))));
 %             FH_reduced((SubAp_idy - 1) * obj.n_SubAp + SubAp_idx, :, :) = exp(1i*angle(fft2(c)));
-            FH_reduced_bis((SubAp_idy - 1) * obj.n_SubAp + SubAp_idx, :, :) = c;
+              FH_reduced_bis((SubAp_idy - 1) * obj.n_SubAp + SubAp_idx, :, :) = moment_chunk_cropped(SubAp_init:SubAp_end,SubAp_init:SubAp_end);
+%               FH_reduced_bis((SubAp_idy - 1) * obj.n_SubAp + SubAp_idx, :, :) = abs((ifft2(temp))).^2; % just for display
         end %SubAp_idy
     end %SubAp_idx
-    
 
+    1;
+    crop_size = length(SubAp_init:SubAp_end);
+    shift_matrix = zeros(11^2, crop_size^2);
+    for i = -5 : 5 
+        for j = -5 : 5 
+            lin_idx = ((i+6)-1)*11 + (j+6);
+            temp = moment_chunk_ref(SubAp_init:SubAp_end, SubAp_init:SubAp_end);
+            temp = circshift(temp, i, 1);
+            temp = circshift(temp, j, 2);
+            shift_matrix(lin_idx, :) = reshape(temp, 1, []);
+        end
+    end
 
+    self_cros_correlation = shift_matrix * FH_reduced_bis(ceil(obj.n_SubAp^2/2))';
 
     
     FH_ref_image = FH_reduced(ceil(size(FH_reduced,1)/2), :);
@@ -187,6 +215,11 @@ function phase = compute_SVD_for_SubAp(obj, FH, f1, f2, gw, calibration, enable_
 
     stitched_FH_reduced = stitch_SubAp(FH_reduced);
     central = stitched_FH_reduced(idy_range_ref, idx_range_ref);
+%     geo = abs(fftshift(fftshift(ifft2(stitched_FH_reduced),1),2)).^2;
+%     geo(geo < 0.5) = 0;
+%     geo = exp(1i*angle(fft2(fftshift(geo))));
+%     stitched_FH_reduced = exp(1i*(angle(stitched_FH_reduced) - angle(geo)));
+    subAp_matrix = reshape(FH_reduced, (obj.n_SubAp)^2, (SubAp_end-SubAp_init + 1)*(SubAp_end-SubAp_init + 1));
     
     stitched_FH_reduced_bis = stitch_SubAp(FH_reduced_bis);
     central_bis = stitched_FH_reduced_bis(idy_range_ref, idx_range_ref);
@@ -198,27 +231,92 @@ function phase = compute_SVD_for_SubAp(obj, FH, f1, f2, gw, calibration, enable_
     axis image
     figure(2)
     imagesc(abs(stitched_FH_reduced_bis));
-    title('Amplitude of cross-correlation of subaperture images')
+    title('Subaperture images cropped')
     colorbar
     axis image
-%     figure(3)
-%     imagesc(angle(FH));
-%     title('Zernike phase polynomial')
-%     colorbar
-%     axis image
-    
-    %% SVD on subapertures
-    FH_reduced = reshape((FH_reduced), (obj.n_SubAp)^2, []);
-    COV = FH_reduced*FH_reduced';
-    [V, S]           = eig(COV);
-    [~, sortIdx]     = sort(diag(S),'descend');
-    V                = V(:,sortIdx);
-    phase = (reshape( V(:, 1), obj.n_SubAp, obj.n_SubAp));
-
-        figure(4)
-        imagesc(angle(phase));
-        title('First eigenvector of SVD')
+    if calibration
+        figure(3)
+        imagesc(angle(FH));
+        title('Zernike phase polynomial')
         colorbar
         axis image
-    1;
+    end
+    
+    FH_reduced_bis = reshape((FH_reduced_bis), (obj.n_SubAp)^2, []);
+
+    self_cros_correlation = shift_matrix * FH_reduced_bis(ceil(obj.n_SubAp^2/2), :)';
+
+%     [~, sortIdx]     = sort(self_cros_correlation(1:61));
+%     shift_matrix(1:61, :)                = shift_matrix(sortIdx, :);
+%     [~, sortIdx]     = sort(self_cros_correlation(62:end),'descend');
+%     shift_matrix(62:end, :)                = shift_matrix(sortIdx + 61, :);
+
+    M = (shift_matrix * FH_reduced_bis');
+    % normalize in each column
+    for i = 1 : size(M, 2)
+        M(:, i) = M(:, i) ./ squeeze(mean(M(:, i), "all"));
+    end
+
+
+    %% SVD on subapertures
+%     FH_reduced = reshape((FH_reduced), (obj.n_SubAp)^2, []);
+%     COV = FH_reduced*FH_reduced';
+%     [V, S]           = eig(COV);
+%     [~, sortIdx]     = sort(diag(S),'descend');
+%     V                = V(:,sortIdx);
+%     phase = (reshape( sum(V(:, end-7:end),2), obj.n_SubAp, obj.n_SubAp));
+
+%     FH_reduced = reshape((FH_reduced), (obj.n_SubAp)^2, []);
+%     COV = FH_reduced'*FH_reduced;
+%     [V, S]           = eig(COV);
+%     [~, sortIdx]     = sort(diag(S),'descend');
+%     V                = V(:,sortIdx);
+%     phase = (reshape( sum(V(:, :),2), (SubAp_end-SubAp_init + 1), (SubAp_end-SubAp_init + 1)));
+
+          [U,S,V] = svd(M);
+
+          first_pattern = M * V;
+          figure(11)
+          imagesc(first_pattern);
+          title ('Projection of the M matrix on the V basis')
+
+%         figure(4)
+%         imagesc(abs(fftshift(fftshift(ifft2(phase),1),2)).^2);
+%         title('Angle of First eigenvector of SVD')
+%         colorbar
+%         axis image
+% 
+%         figure(5)
+%         imagesc(abs(stitched_FH_reduced));
+%         title('Absolute value in the reciprocal plane of the image')
+%         colorbar
+%         axis image
+% 
+%         figure(6)
+%         imagesc(log(abs(subAp_matrix)));
+%         title('Subaperture matrix log in reciprocal space')
+%         colorbar
+%         
+%         figure(7)
+%         imagesc(abs(phase));
+%         title('Abs of First eigenvector of SVD')
+%         colorbar
+% 
+        figure(8)
+        plot(log(diag(S)), '.');
+        pbaspect([1 1 1])
+        title('Eigenvalues distribution in Subapertures (log)')
+% 
+        figure(9)
+        imagesc(V);
+        title('eigenvectors in subapertures (V matrix)')
+        colorbar
+
+        figure(10)
+        imagesc(M);
+        title('M matrix')
+        colorbar
+
+        phase = 0;
+
 end

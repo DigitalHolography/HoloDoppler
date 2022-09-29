@@ -51,19 +51,19 @@ function map_RI = construct_resistivity_index(M0,filepath,RI_output_filename)
     cmap(:,end+1:end+n3) = [linspace(c2(1), c3(1), n3) ; linspace(c2(2), c3(2), n3) ; linspace(c2(3), c3(3),n3) ]; 
     cmap(:,end+1:end+n4) = [linspace(1, 1, n4) ; linspace(1, 1, n4) ; linspace(1, 1,n4) ];
 
-    title_map = strcat('Arterial resistivity index : ', num2str(RI)) ; 
-    disp(size(Y)) ; 
-    figure(3)
-    imagesc(RI_mat) ;
-    title(title_map,'FontSize',20) ; 
-    colormap(cmap') ; 
-    axis square
-    axis off; 
-    colorbar ; 
+%     title_map = strcat('Arterial resistivity index : ', num2str(RI)) ; 
+%     disp(size(Y)) ; 
+%     figure(3)
+%     imagesc(RI_mat) ;
+%     title(title_map,'FontSize',20) ; 
+%     colormap(cmap') ; 
+%     axis square
+%     axis off; 
+%     colorbar ; 
     
     
-    full_name = strcat(fullfile(filepath,'png',RI_output_filename),'AV') ; 
-    print('-f3','-dpng',full_name) ; 
+%     full_name = strcat(fullfile(filepath,'png',RI_output_filename),'AV') ; 
+%     print('-f3','-dpng',full_name) ; 
 
     map_RI = RI_mat ; 
     

@@ -136,18 +136,22 @@ if img_type_list.power_1_Doppler.select % Power 1 Doppler has been chosen
 end
 
 if img_type_list.power_2_Doppler.select % Power 2 Doppler has been chosen
-    %% FIXME: from now one Power 2 Doppler becomes frequency RMS
+    %% FIXME: from now on Power 2 Doppler becomes frequency RMS
     S = SH; % not to modify SH
-    S_mean = reshape(squeeze(mean(S, [1 2])), 1, 1, j_win);
-    for i = 1 : size(S,1)
-        for j = 1 : size(S, 2)
-            S(i,j,:) = S(i,j,:) - S_mean;
-        end
-    end
-    S(S<0) = 0;
-    img2 = moment2(S, f1, f2, ac.fs, j_win, 0);
-    [~, img0] = moment0(S, f1, f2, ac.fs, j_win, 0);
-    img_type_list.power_2_Doppler.image = img2./img0;
+    %     S_mean = mean(abs(S(128:384,128:384,:)), [1 2]);
+%     S_mean = mean(abs(S), [1 2]);
+    %     S = S - .8 * S_mean;
+    %     for pp = 1:size(S,3)
+    %         S(:,:,pp) = imgaussfilt(S(:,:,pp),'FilterSize',9,'Padding','replicate');
+    %     end
+%     S(S<0) = 0;
+    img2 = moment2(S, f1, f2, ac.fs, j_win, 0); %0 35
+    %moment 1
+    [img0,~] = moment0(S, f1, f2, ac.fs, j_win, 0); %0 35
+    %     img_type_list.power_2_Doppler.image = img2./img0;
+    %     img_type_list.power_2_Doppler.image = img2./mean(img0(128:384,128:384),[1 2]);
+    %     img_type_list.power_2_Doppler.image = sqrt(img2./img0);
+    img_type_list.power_2_Doppler.image = sqrt(img2./mean(img0(:)));
 end
 
 if img_type_list.color_Doppler.select  % Color Doppler has been chosen
