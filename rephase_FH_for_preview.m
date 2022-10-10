@@ -24,6 +24,12 @@ for i = 1:numel(coefs)
 end
 
 phasePlane = phase;
+
+% figure(1)
+% imagesc(phasePlane);
+% axis off;
+% axis image;
+
 correction = exp(-1i * phase);
 correction = imresize(correction, [frame_width frame_height]);
 FH = FH .* correction;

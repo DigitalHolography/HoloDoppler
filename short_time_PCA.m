@@ -11,6 +11,9 @@ function H_PCA = short_time_PCA(H, x)
     [V,S] = eig(cov);
     [~, sort_idx] = sort(diag(S), 'descend');
     V = V(:,sort_idx);
+    figure
+    plot(log(diag(S)), '.')
+    title('Eigenvalues distribution')
 %     threshold = round(f1 * batch_size / fs)*2 + 1;
     % selection of eigenvalues
     X = ones(size(V));
