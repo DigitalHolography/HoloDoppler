@@ -7,6 +7,7 @@ path = input_filepath;
 [~,filename,~] = fileparts(input_filename);
 suffix = 0;
 
+
 while exist(fullfile(path, sprintf("%s_%d", filename, suffix)), 'Dir')
     suffix = suffix + 1;
 end
