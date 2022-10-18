@@ -49,7 +49,7 @@ function hologram_stack = reconstruct_hologram_stack(FH, time_transform, acquisi
     
     %% SVD filtering
     if svd
-        H = svd_filter(H, f1, ac.fs);
+        H = svd_filter(H, ac.fs/j_win, ac.fs);
     end
     
   
@@ -57,6 +57,8 @@ function hologram_stack = reconstruct_hologram_stack(FH, time_transform, acquisi
     %% squared magnitude of hologram
     SH = fft(H, [], 3);
     SH = abs(SH).^2;
+%         SH = abs(angle(SH) - angle(circshift(SH, 1, 3)));
+
 
     %% shifts related to acquisition wrong positioning
     SH = permute(SH, [2 1 3]);

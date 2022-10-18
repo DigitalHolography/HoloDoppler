@@ -55,9 +55,9 @@ for rephasing_data = rephasing_data
       idx_range = frame_range(ceil((cur_j-1)*range_size/Nj)+1:ceil(cur_j*range_size/Nj));
       FH(:,:,idx_range) = FH(:,:,idx_range) .* correction;
 
-      if ~isempty(rephasing_data.image_registration(3))
-          FH = register_in_z_via_phase(FH, rephasing_data.image_registration(3, j));
-      end
+%       if ~isempty(rephasing_data.image_registration(3))
+%           FH = register_in_z_via_phase(FH, rephasing_data.image_registration(3, j));
+%       end
     end
 
     
