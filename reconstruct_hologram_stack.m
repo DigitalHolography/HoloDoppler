@@ -38,7 +38,10 @@ function hologram_stack = reconstruct_hologram_stack(FH, time_transform, acquisi
     % if exist('phase_correction', 'var') && ~isempty(phase_correction)
     %     FH = FH .* exp(-1i * phase_correction);
     % end
-    
+%     coefs = cell(1,1,1);
+%     coefs{1,1,1} = [0 100 0];
+%     [FH, ~] = rephase_FH_for_preview(FH, coefs, [3 4 5]);
+
     %% spatial filter
     mask = construct_mask(75, max(size(FH,1),size(FH,2)), size(FH, 1), size(FH, 2));
     FH = FH .* mask;
