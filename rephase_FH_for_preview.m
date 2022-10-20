@@ -13,8 +13,8 @@ layer_thickness = floor(size(FH, 3)/2/n_sub_z);
 [frame_width, frame_height, ~] = size(FH);
 % zernike_indices = [ 3 4 5 ]; %check if this is the correct numeration
 
-[~,Zern] = zernike_phase(zernike_indices, floor(512* sqrt(2)), floor(512* sqrt(2)));
-zern = Zern(floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256, floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256, : );
+[~,zern] = zernike_phase(zernike_indices, 512, 512);
+% zern = Zern(floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256, floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256, : );
 % figure(1)
 % imagesc(zern(:,:,3));
 
@@ -23,10 +23,10 @@ for z = 1:n_sub_z
     for i = 1:numel(coefs{1,1,1})
         phase = phase + coefs{1,1,z}(i) * zern(:,:,i);
     end
-%     disp(coefs{1,1,z}(1))
-%     disp(coefs{1,1,z}(2))
-%     disp(coefs{1,1,z}(3))
-%     disp('--------------')
+    disp(coefs{1,1,z}(1))
+    disp(coefs{1,1,z}(2))
+    disp(coefs{1,1,z}(3))
+    disp('--------------')
     phasePlane = phase;
     correction = exp(-1i * phase);
     correction = imresize(correction, [frame_width frame_height]);
