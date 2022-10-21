@@ -13,7 +13,7 @@ layer_thickness = floor(size(FH, 3)/2/n_sub_z);
 [frame_width, frame_height, ~] = size(FH);
 % zernike_indices = [ 3 4 5 ]; %check if this is the correct numeration
 
-[~,zern] = zernike_phase(zernike_indices, 512, 512);
+[~,zern] = zernike_phase(zernike_indices, size(FH,1) , size(FH,2));
 % zern = Zern(floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256, floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256, : );
 % figure(1)
 % imagesc(zern(:,:,3));
