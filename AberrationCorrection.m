@@ -6,6 +6,8 @@ classdef AberrationCorrection
 properties
     rephasing_zernike_indices
     rephasing_zernike_coefs
+
+    rephasing_in_z_coefs
     
     shack_hartmann_zernike_indices
     shack_hartmann_zernike_coefs
