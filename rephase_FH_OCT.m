@@ -1,4 +1,4 @@
-function FH = rephase_FH_OCT(FH, rephasing_data, batch_idx, num_batches)
+function FH = rephase_FH_OCT(FH, rephasing_data, batch_idx, num_batches, num_frames)
 
 
 if isempty(rephasing_data)
@@ -7,6 +7,8 @@ end
 
 for rephasing_data = rephasing_data
     shifts = rephasing_data.aberration_correction.rephasing_in_z_coefs;
+    frame_ranges = rephasing_data.frame_ranges;
+
 %     shifts = 180;
     [Nx, Ny, j_win] = size(FH);
     tilt = evaluate_zernikes(1, 1, Nx, j_win);
