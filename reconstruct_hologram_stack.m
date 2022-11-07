@@ -1,4 +1,4 @@
-function hologram_stack = reconstruct_hologram_stack(FH, time_transform, acquisition, gaussian_width, use_gpu, svd, phase_correction, stack_size)
+function [hologram_stack, complex_hologram_stack] = reconstruct_hologram_stack(FH, time_transform, acquisition, gaussian_width, use_gpu, svd, phase_correction, stack_size)
     % Compute the moment of a batch of interferograms.
     % For more moment outputs, use reconstruct_hologram_extra, this function
     % only computes one output for speed
@@ -44,21 +44,34 @@ function hologram_stack = reconstruct_hologram_stack(FH, time_transform, acquisi
 
     %% spatial filter
     mask = construct_mask(75, max(size(FH,1),size(FH,2)), size(FH, 1), size(FH, 2));
-    FH = FH .* mask;
-     
+    mask2 = construct_mask(75, max(size(FH,1),size(FH,3)), size(FH, 3), size(FH, 1));
+    mask3 = construct_mask(75, max(size(FH,2),size(FH,3)), size(FH, 2), size(FH, 3));
+    for i = 1 : size(FH, 3)
+        FH(:,:,i) = squeeze(FH(:,:,i)) .* mask;
+    end
+% 
+%     for i = 1 : size(FH, 2)
+%         FH(:,i,:) = squeeze(FH(:,i,:)) .* mask2;
+%     end
+% 
+%     for i = 1 : size(FH, 1)
+%         FH(i, :, :) = squeeze(FH(i, :, :)) .* mask3;
+%     end
 
     H = ifft2(FH);
     clear FH;
     
+    f1_for_OCT = 1*ac.fs/j_win;
     %% SVD filtering
     if svd
-        H = svd_filter(H, ac.fs/j_win, ac.fs);
+        H = svd_filter(H, f1_for_OCT, ac.fs);
     end
     
   
 
     %% squared magnitude of hologram
     SH = fft(H, [], 3);
+    complex_hologram_stack = gather(SH(:,:,1:floor(j_win/2)));
     SH = abs(SH).^2;
 %         SH = abs(angle(SH) - angle(circshift(SH, 1, 3)));
 

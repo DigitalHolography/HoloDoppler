@@ -64,6 +64,10 @@ properties (Access = public)
 
     %masks
     artery_mask;
+
+    % OCT parameters
+    OCT_range_y
+    OCT_range_z
 end
 methods (Access = public)
     function obj = GuiCache()
