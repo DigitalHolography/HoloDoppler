@@ -64,6 +64,8 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
         SH = fft(H, [], 3);
         SH = abs(SH).^2;
         %     SH = permute(SH, [2 1 3]);
+        %FIXME
+%         M0 = SH(:,:, 128);
         M0 = moment0(SH, f1, f2, ac.fs, size(FH ,3), gw);
         M0 = flat_field_correction(M0, gw);
         M0 = imresize(M0, [ac.Ny/obj.n_SubAp ac.Nx/obj.n_SubAp]);
@@ -88,7 +90,9 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
     SubAp_id_range = [SubAp_idref:obj.n_SubAp 1:SubAp_idref-1];
     correlation_chunks_array = zeros((SubAp_end-SubAp_init+floor(ac.Nx/obj.n_SubAp))*obj.n_SubAp); %Stitched cropped correlations in each subaperture
 %     gw = 60 * (ac.Nx/obj.n_SubAp)/512;
+
     gw = 20;
+
 
     correlation_coef = zeros(1,obj.n_SubAp^2);
 
