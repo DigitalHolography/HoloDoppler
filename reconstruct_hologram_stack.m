@@ -43,12 +43,29 @@ function hologram_stack = reconstruct_hologram_stack(FH, time_transform, acquisi
 %     [FH, ~] = rephase_FH_for_preview(FH, coefs, [3 4 5]);
 
     %% spatial filter
-    mask = construct_mask(75, max(size(FH,1),size(FH,2)), size(FH, 1), size(FH, 2));
+    mask = construct_mask(3, max(size(FH,1),size(FH,2)), size(FH, 1), size(FH, 2));
     FH = FH .* mask;
      
 
     H = ifft2(FH);
     clear FH;
+
+    %% spatial filter z
+    fftBuffer = fft(H);
+
+    % Store buffers
+    dcFilterBuffer = fftBuffer;
+    trendFilterBuffer = fftBuffer;
+
+    % Apply high pass filter to remove DC
+    dcFilterBuffer(1:7,:,:) = 0;
+    fringesAfterHighPassFilter = real(ifft(dcFilterBuffer));
+
+    % Apply low pass filter to remove the trend
+    trendFilterBuffer(1:509,:,:) = 0;
+
+    H = fringesAfterHighPassFilter - trendFilterBuffer;
+
     
     %% SVD filtering
     if svd
@@ -58,23 +75,30 @@ function hologram_stack = reconstruct_hologram_stack(FH, time_transform, acquisi
     if (svdx)
         H = svd_x_filter(H, time_transform.f1, ac.fs, Nb_SubAp);
     end
-  
-
-    %% squared magnitude of hologram
+    
+    %% calculate spectrogram
     SH = fft(H, [], 3);
-    SH = abs(SH).^2;
-%         SH = abs(angle(SH) - angle(circshift(SH, 1, 3)));
-
 
     %% shifts related to acquisition wrong positioning
     SH = permute(SH, [2 1 3]);
     SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
-  
-
-%     hologram_stack = zeros(size(SH,1), size(SH,2), stack_size);
-%     %% moment
     SH = (SH(:,:,1:floor(j_win/2)));
-%     SH(:,:, 16:end) = z_profile_filtering((SH(:,:, 16:end)));
+    
+    tmp = abs(SH).^2;
+    profile = squeeze(mean(tmp(200:300, 200:300, :),[1 2]));
+    filter = ones(256, 1);
+    filter(1 : 20) = 0;
+    [~, peakLoc] = max(profile.*filter);
+    enfaceLayer = SH(:, :, peakLoc);
+    disp(peakLoc);
+
+    figure;
+
+    subplot(1,2,1); imagesc(rot90(abs(enfaceLayer))); title('Amplitude', 'FontSize', 24); axis square; axis off
+    subplot(1,2,2); imagesc(rot90(angle(enfaceLayer))); title('Phase', 'FontSize', 24); axis square; axis off
+    
+    
+    SH = real(SH).^2;
     hologram_stack = gather(SH);
 
     
