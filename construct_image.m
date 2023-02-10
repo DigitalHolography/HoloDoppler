@@ -15,7 +15,7 @@ function img_type_list = construct_image(FH, wavelength, acquisition, gaussian_w
 % FIXME : replace ifs by short name functions
 j_win = size(FH, 3);
 ac = acquisition;
-artery_mask = flip(artery_mask);
+%artery_mask = flip(artery_mask);
 
 % move data to gpu if available
 if use_gpu
@@ -25,7 +25,7 @@ if use_gpu
 end
 
 if (SubAp_PCA.Value)
-    FH = subaperture_PCA(FH, SubAp_PCA, acquisition, svd, f1, f2, gaussian_width);
+    FH = subaperture_PCA(FH, SubAp_PCA, acquisition, svd, time_transform.f1, time_transform.f2, gaussian_width);
 end
 
 if exist('phase_correction', 'var') && ~isempty(phase_correction)
