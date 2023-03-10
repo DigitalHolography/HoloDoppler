@@ -186,6 +186,22 @@ if img_type_list.spectrogram.select
     n4 = j_win - n1 + 1;
     SH = abs(SH);
 
+ if img_type_list.moment0.select % Power 1 Doppler has been chosen
+    [img, sqrt_img] = moment0(SH, f1, f2, ac.fs, j_win, 0);
+    img_type_list.moment0.image = img;
+    img_type_list.moment0.sqrt_img = sqrt_img;
+ end
+
+ if img_type_list.moment1.select % Power 1 Doppler has been chosen
+    img = moment1(SH, f1, f2, ac.fs, j_win, 0);
+    img_type_list.moment1.image = img;
+ end
+
+ if img_type_list.moment2.select % Power 1 Doppler has been chosen
+    img = moment2(SH, f1, f2, ac.fs, j_win, 0);
+    img_type_list.moment2.image = img;
+ end
+
 %     moment = squeeze(sum(SH(:, :, n1:n2), 3)) + squeeze(sum(SH(:, :, n3:n4), 3));
 %     blurred_moment = imgaussfilt(moment, gaussian_width);
 

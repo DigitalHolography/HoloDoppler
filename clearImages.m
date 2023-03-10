@@ -13,5 +13,8 @@ images.phase_variation.select = 0; images.phase_variation.image = [];
 images.dark_field_image.select = 0; images.dark_field_image.image = []; images.dark_field_image.H = [];
 images.pure_PCA.select = 0; images.pure_PCA.image = [];
 images.spectrogram.select = 0; images.spectrogram.image = []; images.spectrogram.vector = []; images.spectrogram.H = [];
+images.moment0.select = 0; images.moment0.image = []; images.moment0.M0_sqrt = []; 
+images.moment1.select = 0; images.moment1.image = [];
+images.moment2.select = 0; images.moment2.image = [];
 
 end
