@@ -152,7 +152,8 @@ methods
                  packed_frame = fread(fd, packed_frame_size, 'uint8', 'l');
                  unpacked_frame_zeros = zeros(obj.true_frame_width*obj.true_frame_height, 1, 'double');
                  unpacked_frame = unpack_u12_u10(obj.bi_compression, packed_frame, unpacked_frame_zeros);
-                 frame_batch(width_range,height_range,i) = rot90(flipud(reshape(unpacked_frame, obj.frame_width, obj.frame_height)), 2);
+                 frame_batch(width_range,height_range,i) = rot90(flipud(reshape(unpacked_frame, obj.true_frame_width, obj.true_frame_height)), 2);
+                 %frame_batch(width_range,height_range,i) = rot90(flipud(reshape(unpacked_frame, obj.frame_width, obj.frame_height)), 2);
              end
              frame_batch = CineReader.replace_dropped_frames(frame_batch, 0.2);
              fclose(fd);
