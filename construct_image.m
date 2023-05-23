@@ -44,7 +44,8 @@ else
         case 'angular spectrum'
             H = ifft2(FH);
         case 'Fresnel'
-            H = fftshift(ifft2(FH));
+            H = fftshift(fft2(FH));
+%             H = fftshift(ifft2(FH));
     end
     
 end
