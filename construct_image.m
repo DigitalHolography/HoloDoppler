@@ -177,6 +177,11 @@ if img_type_list.velocity_estimate.select % Velocity Estimate has been chosen
 end
 
 if img_type_list.spectrogram.select
+    tmp = zeros(size(SH,1), size(SH,2), 1, size(SH,3),'single');
+    for ii = 1:size(SH,3)
+        tmp(:,:,1,ii)  = SH(:,:,ii);
+    img_type_list.spectrogram.SH = tmp;
+    
     %     figure(111)
     %     imagesc(artery_mask);
     n1 = ceil(f1 * j_win / ac.fs);

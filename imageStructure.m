@@ -17,7 +17,7 @@ field_7 = 'velocity_estimate'; values_7 = struct('short_name','velocity', 'selec
 field_8 = 'phase_variation'; values_8 = struct('short_name','phase_variation', 'select', 0 ,'image', []);
 field_9 = 'dark_field_image'; values_9 = struct('short_name','dark_field', 'select', 0 ,'image', [], 'H', []);
 field_10 = 'pure_PCA'; values_10 = struct('short_name','PCA', 'select', 0 ,'image', []);
-field_11 = 'spectrogram'; values_11 = struct('short_name', 'spectrogram', 'select', 0, 'image', [], 'vector', [], 'H', []);
+field_11 = 'spectrogram'; values_11 = struct('short_name', 'spectrogram', 'select', 0, 'image', [], 'vector', [], 'SH', []);
 
 field_12 = 'moment0'; values_12 = struct('short_name','M0', 'select', 0 ,'image', [] , 'M0_sqrt', []);
 field_13 = 'moment1'; values_13 = struct('short_name','M1', 'select', 0 ,'image', []);
