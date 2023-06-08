@@ -177,20 +177,25 @@ if img_type_list.velocity_estimate.select % Velocity Estimate has been chosen
 end
 
 if img_type_list.spectrogram.select
-    tmp = zeros(size(SH,1), size(SH,2), 1, size(SH,3),'single');
-    for ii = 1:size(SH,3)
-        tmp(:,:,1,ii)  = SH(:,:,ii);
-    img_type_list.spectrogram.SH = tmp;
-    
-    %     figure(111)
-    %     imagesc(artery_mask);
-    n1 = ceil(f1 * j_win / ac.fs);
-    n2 = ceil(f2 * j_win / ac.fs);
+    img_type_list.spectrogram.SH = SH;
+    img_type_list.spectrogram.vector = zeros(1,j_win);
+    img_type_list.spectrogram.image = zeros(size(SH, 1), size(SH, 2));
+    %     tmp = zeros(size(SH,1), size(SH,2), 1, size(SH,3),'single');
+    %     for ii = 1:size(SH,3)
+    %         tmp(:,:,1,ii)  = SH(:,:,ii);
+    %     img_type_list.spectrogram.SH = tmp;
+    %
+    %     %     figure(111)
+    %     %     imagesc(artery_mask);
+    %     n1 = ceil(f1 * j_win / ac.fs);
+    %     n2 = ceil(f2 * j_win / ac.fs);
+    %
+    %     % symetric integration interval
+    %     n3 = j_win - n2 + 1;
+    %     n4 = j_win - n1 + 1;
+    %     SH = abs(SH);
+end
 
-    % symetric integration interval
-    n3 = j_win - n2 + 1;
-    n4 = j_win - n1 + 1;
-    SH = abs(SH);
 
  if img_type_list.moment0.select % Power 1 Doppler has been chosen
     [img, sqrt_img] = moment0(SH, f1, f2, ac.fs, j_win, 0);
@@ -239,9 +244,8 @@ if img_type_list.spectrogram.select
 %         %SH_artery = SH_artery./ movmean(SH_artery, 25);
 %         img_type_list.spectrogram.vector = SH_artery;
 %     else
-        img_type_list.spectrogram.vector = zeros(1,j_win);
-        img_type_list.spectrogram.image = zeros(size(SH, 1), size(SH, 2));
+
 %     end
 %     img_type_list.spectrogram.H = SH;
-end
+
 end
