@@ -41,7 +41,7 @@ end
 nin = nargin; % local alias because nargin can't be used in parfor loops
 
 % proxy variables to avoid
-% broadcasting the entire gui to worker
+% broadcast0ing the entire gui to worker
 % threads during parfor loop
 Nx = istream.get_frame_width();
 Ny = istream.get_frame_height();
@@ -59,7 +59,7 @@ phase_coefs = zeros(numel(p), num_batches, 'single');
 stiched_moments_video = zeros(Nx, Ny, 1, num_batches, 'single');
 
 if use_gpu || ~use_multithread
-    parfor_arg = 0;
+    parf or_arg = 0;
 else
     parfor_arg = Inf;
 end

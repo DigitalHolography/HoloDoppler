@@ -34,6 +34,7 @@ properties (Access = public)
     rephasing
     OCTdata
     SVD
+    save_raw
     
     % color image parameters
     color_f1

@@ -1,4 +1,4 @@
-function img_type_list = construct_image(FH, wavelength, acquisition, gaussian_width, use_gpu, svd, phase_correction,...
+function img_type_list = construct_image(FH, wavelength, acquisition, gaussian_width, use_gpu, svd, svdx, Nb_SubAp, phase_correction,...
                                                                   color_f1, color_f2, color_f3, img_type_list, is_low_frequency , ...
                                                                   spatial_transformation, time_transform, SubAp_PCA, xy_stride, num_unit_cells_x, r1, ...
                                                                   local_temporal, phi1, phi2, local_spatial, nu1, nu2, ...
@@ -15,7 +15,7 @@ function img_type_list = construct_image(FH, wavelength, acquisition, gaussian_w
 % FIXME : replace ifs by short name functions
 j_win = size(FH, 3);
 ac = acquisition;
-artery_mask = flip(artery_mask);
+%artery_mask = flip(artery_mask);
 
 % move data to gpu if available
 if use_gpu
@@ -25,7 +25,7 @@ if use_gpu
 end
 
 if (SubAp_PCA.Value)
-    FH = subaperture_PCA(FH, SubAp_PCA, acquisition, svd, f1, f2, gaussian_width);
+    FH = subaperture_PCA(FH, SubAp_PCA, acquisition, svd, time_transform.f1, time_transform.f2, gaussian_width);
 end
 
 if exist('phase_correction', 'var') && ~isempty(phase_correction)
@@ -44,7 +44,8 @@ else
         case 'angular spectrum'
             H = ifft2(FH);
         case 'Fresnel'
-            H = fftshift(ifft2(FH));
+            H = fftshift(fft2(FH));
+%             H = fftshift(ifft2(FH));
     end
     
 end
@@ -53,6 +54,10 @@ end
 
 if svd
     H = svd_filter(H, time_transform.f1, ac.fs);
+end
+
+if (svdx)
+    H = svd_x_filter(H, time_transform.f1, ac.fs, Nb_SubAp);
 end
 
 
@@ -172,15 +177,41 @@ if img_type_list.velocity_estimate.select % Velocity Estimate has been chosen
 end
 
 if img_type_list.spectrogram.select
-    %     figure(111)
-    %     imagesc(artery_mask);
-    n1 = ceil(f1 * j_win / ac.fs);
-    n2 = ceil(f2 * j_win / ac.fs);
+    img_type_list.spectrogram.SH = SH;
+    img_type_list.spectrogram.vector = zeros(1,j_win);
+    img_type_list.spectrogram.image = zeros(size(SH, 1), size(SH, 2));
+    %     tmp = zeros(size(SH,1), size(SH,2), 1, size(SH,3),'single');
+    %     for ii = 1:size(SH,3)
+    %         tmp(:,:,1,ii)  = SH(:,:,ii);
+    %     img_type_list.spectrogram.SH = tmp;
+    %
+    %     %     figure(111)
+    %     %     imagesc(artery_mask);
+    %     n1 = ceil(f1 * j_win / ac.fs);
+    %     n2 = ceil(f2 * j_win / ac.fs);
+    %
+    %     % symetric integration interval
+    %     n3 = j_win - n2 + 1;
+    %     n4 = j_win - n1 + 1;
+    %     SH = abs(SH);
+end
 
-    % symetric integration interval
-    n3 = j_win - n2 + 1;
-    n4 = j_win - n1 + 1;
-    SH = abs(SH);
+
+ if img_type_list.moment0.select % Power 1 Doppler has been chosen
+    [img, sqrt_img] = moment0(SH, f1, f2, ac.fs, j_win, 0);
+    img_type_list.moment0.image = img;
+    img_type_list.moment0.sqrt_img = sqrt_img;
+ end
+
+ if img_type_list.moment1.select % Power 1 Doppler has been chosen
+    img = moment1(SH, f1, f2, ac.fs, j_win, 0);
+    img_type_list.moment1.image = img;
+ end
+
+ if img_type_list.moment2.select % Power 1 Doppler has been chosen
+    img = moment2(SH, f1, f2, ac.fs, j_win, 0);
+    img_type_list.moment2.image = img;
+ end
 
 %     moment = squeeze(sum(SH(:, :, n1:n2), 3)) + squeeze(sum(SH(:, :, n3:n4), 3));
 %     blurred_moment = imgaussfilt(moment, gaussian_width);
@@ -213,9 +244,8 @@ if img_type_list.spectrogram.select
 %         %SH_artery = SH_artery./ movmean(SH_artery, 25);
 %         img_type_list.spectrogram.vector = SH_artery;
 %     else
-        img_type_list.spectrogram.vector = zeros(1,j_win);
-        img_type_list.spectrogram.image = zeros(size(SH, 1), size(SH, 2));
+
 %     end
 %     img_type_list.spectrogram.H = SH;
-end
+
 end

@@ -1,4 +1,4 @@
-function [hologram0, sqrt_hologram0] = reconstruct_hologram(FH, acquisition, gaussian_width, use_gpu, svd, phase_correction, time_transform, spatial_transformation)
+function [hologram0, sqrt_hologram0] = reconstruct_hologram(FH, acquisition, gaussian_width, use_gpu, svd, svdx, Nb_SubAp, phase_correction, time_transform, spatial_transformation)
 % Compute the moment of a batch of interferograms.
 % For more moment outputs, use reconstruct_hologram_extra, this function
 % only computes one output for speed
@@ -50,6 +50,10 @@ clear FH;
 %% SVD filtering
 if (svd)
     H = svd_filter(H, time_transform.f1, ac.fs);
+end
+
+if (svdx)
+    H = svd_x_filter(H, time_transform.f1, ac.fs, Nb_SubAp);
 end
 
 %% squared magnitude of hologram : SH

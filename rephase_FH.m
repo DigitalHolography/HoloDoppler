@@ -15,7 +15,7 @@ for rephasing_data = rephasing_data
     end
 
     % global idx of first/last frames of current batch
-    first_frame_idx = frame_offset+1;
+    first_frame_idx = frame_offset + 1;
     last_frame_idx = frame_offset + batch_size;
     
     indices1 = find(rephasing_data.frame_ranges >= first_frame_idx);
@@ -40,6 +40,8 @@ for rephasing_data = rephasing_data
 
       correction = exp(-1i * phase);
       
+      %FIXME this doesn't need to be in the loop
+      % i do not see when this situation could arise
       % compute last frame to apply phase
       if jstop ~= size(rephasing_data.frame_ranges,2)
         last_frame_to_apply_phase_idx = min(rephasing_data.frame_ranges(1,jstop+1)-1, last_frame_idx);

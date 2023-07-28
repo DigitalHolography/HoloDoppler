@@ -23,10 +23,10 @@ for z = 1:n_sub_z
     for i = 1:numel(coefs{1,1,1})
         phase = phase + coefs{1,1,z}(i) * zern(:,:,i);
     end
-%     disp(coefs{1,1,z}(1))
-%     disp(coefs{1,1,z}(2))
-%     disp(coefs{1,1,z}(3))
-%     disp('--------------')
+    disp(coefs{1,1,z}(1))
+    disp(coefs{1,1,z}(2))
+    disp(coefs{1,1,z}(3))
+    disp('--------------')
     phasePlane = phase;
     correction = exp(-1i * phase);
     correction = imresize(correction, [frame_width frame_height]);
