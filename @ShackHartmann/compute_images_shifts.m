@@ -1,5 +1,7 @@
 function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_images_shifts(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
     
+
+%     gw = 20;
     % SubAp_margin
     % SubAp_idx < SubAp_idx
     % SubAp_idy < SubAp_idy
@@ -87,8 +89,8 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
     moment_chunks_crop_array = zeros(ac.Nx,ac.Ny);%Stitched cropped PowerDoppler moments in each subaperture
     SubAp_id_range = [SubAp_idref:obj.n_SubAp 1:SubAp_idref-1];
     correlation_chunks_array = zeros((SubAp_end-SubAp_init+floor(ac.Nx/obj.n_SubAp))*obj.n_SubAp); %Stitched cropped correlations in each subaperture
-%     gw = 60 * (ac.Nx/obj.n_SubAp)/512;
-    gw = 20;
+    gw = 200 * (ac.Nx/obj.n_SubAp)/512;
+
 
     correlation_coef = zeros(1,obj.n_SubAp^2);
 
@@ -226,8 +228,13 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
         shifts(correlation_coef < correlation_threshold) = NaN ;
     end
 
-    moment_chunks_crop_array = flip(moment_chunks_crop_array');
 
+    moment_chunks_crop_array = flip(moment_chunks_crop_array');
+    num_SubAp = obj.n_SubAp;
+    if ~calibration
+        parallaxFiltering(moment_chunks_array, num_SubAp)
+    end
+    1;
 %     figure(1);
 %     imagesc(moment_chunks_crop_array);
 %     axis square;
