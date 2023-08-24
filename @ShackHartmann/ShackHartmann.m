@@ -13,7 +13,7 @@ classdef ShackHartmann
     methods
         % methods declaration
         [M_aso,StitchedMomentsInMaso] = construct_M_aso(obj, f1, f2, gw, acquisition)
-        [shifts,StitchedMomentsInSubApertures,StitchedCorrInSubApertures] = compute_images_shifts(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
+        [shifts,StitchedMomentsInSubApertures,StitchedCorrInSubApertures, FH] = compute_images_shifts(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
         phase = compute_SVD_for_SubAp(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition);
         phase = compute_temporal_SVD_in_SubAp(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition);
         [shifts,StitchedMomentsInSubApertures,StitchedCorrInSubApertures] = spatial_signal_analysis_PCA(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)

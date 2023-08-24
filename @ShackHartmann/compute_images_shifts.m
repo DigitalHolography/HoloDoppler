@@ -1,7 +1,5 @@
 function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_images_shifts(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
     
-
-%     gw = 20;
     % SubAp_margin
     % SubAp_idx < SubAp_idx
     % SubAp_idy < SubAp_idy
@@ -34,6 +32,7 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
     
     ac = acquisition;
     j_win = size(FH, 3);
+    resize_ratio = 2;
     
     % shifts is a 1D vector
     % it maps the 2D SubApils grid by iterating column first
@@ -77,20 +76,20 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
     
     SubAp_idref = ceil(obj.n_SubAp/2); % Index of reference subaperture for correlations
     
-    SubAp_init = max(1,floor(obj.SubAp_margin*floor(double(ac.Nx)/obj.n_SubAp)));
+    SubAp_init = max(1,floor(obj.SubAp_margin*floor(double(resize_ratio*ac.Nx)/obj.n_SubAp)));
     % SubAp_init = max(1,floor(double(ac.Nx)/obj.n_SubAp));
-    SubAp_end = ceil(ac.Nx/obj.n_SubAp - SubAp_init);
+    SubAp_end = ceil(resize_ratio*ac.Nx/obj.n_SubAp - SubAp_init);
     
     %FIXME : make a flat mask at the center, with minimal apodization : DANGER xcorr
     %moment_chunk_mask = apodize_image(SubAp_end - SubAp_init + 1, SubAp_end - SubAp_init + 1, 5);
-    moment_chunk_mask  = ones(SubAp_end - SubAp_init + 1, SubAp_end - SubAp_init + 1);
+%     moment_chunk_mask  = ones(SubAp_end - SubAp_init + 1, SubAp_end - SubAp_init + 1);
     
     moment_chunks_array = zeros(ac.Nx,ac.Ny); %Stitched PowerDoppler moments in each subaperture
-    moment_chunks_crop_array = zeros(ac.Nx,ac.Ny);%Stitched cropped PowerDoppler moments in each subaperture
+    moment_chunks_crop_array = zeros(resize_ratio*ac.Nx,resize_ratio*ac.Ny);%Stitched cropped PowerDoppler moments in each subaperture
     SubAp_id_range = [SubAp_idref:obj.n_SubAp 1:SubAp_idref-1];
     correlation_chunks_array = zeros((SubAp_end-SubAp_init+floor(ac.Nx/obj.n_SubAp))*obj.n_SubAp); %Stitched cropped correlations in each subaperture
-    gw = 200 * (ac.Nx/obj.n_SubAp)/512;
-
+    gw = 100 * (ac.Nx/obj.n_SubAp)/512;
+%     gw = 60;
 
     correlation_coef = zeros(1,obj.n_SubAp^2);
 
@@ -160,8 +159,14 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
     
             %
            
-    
             moment_chunks_array(idy_range,idx_range) = moment_chunk;
+%             original_size_moment_chunk = moment_chunk;
+            moment_chunk = imresize(moment_chunk, resize_ratio);
+
+%             moment_chunk = imgaussfilt(moment_chunk,2);
+            moment_chunk = logical(imbinarize(moment_chunk, 'adaptive', 'ForegroundPolarity', 'bright', 'Sensitivity', 0.5));
+
+
 
             %% Computation of the correlations between subapertures
             % get the reference image chunk
@@ -173,8 +178,16 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
                 else
                     moment_chunk_ref = M0;
                 end
+                % FIXME
+                moment_chunk_ref = imresize(moment_chunk_ref, resize_ratio);
                 % compute auxilliary correlation between current and reference image chunk
-                moment_chunk_cropped = moment_chunk(SubAp_init:SubAp_end,SubAp_init:SubAp_end) .* moment_chunk_mask;
+                moment_chunk_cropped = moment_chunk(SubAp_init:SubAp_end,SubAp_init:SubAp_end);
+                %% FIXME additional processing
+%                 moment_chunk_ref = imgaussfilt(moment_chunk_ref,2);
+                moment_chunk_ref = logical(imbinarize(moment_chunk_ref, 'adaptive', 'ForegroundPolarity', 'bright', 'Sensitivity', 0.5));
+%                 
+                
+%                 moment_chunk_cropped_original = original_size_moment_chunk(SubAp_init:SubAp_end,SubAp_init:SubAp_end) .* moment_chunk_mask;
                 c_aux = normxcorr2(moment_chunk_cropped,moment_chunk_ref);
 %                 c_aux = normxcorr2(moment_chunk_cropped, M0);
                 % margins (tails) to suppress in final correlation map
@@ -183,13 +196,14 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
                 % correlation map, with zeros in margins
                 c = zeros(size(c_aux));
                 c(inf_margin_corr:sup_margin_corr,inf_margin_corr:sup_margin_corr)=c_aux(inf_margin_corr:sup_margin_corr,inf_margin_corr:sup_margin_corr);
-                
+                % sub pixel assesment of max of correlation peak
                 aa = length((SubAp_idx-1)*size(correlation_chunks_array,1)/obj.n_SubAp+1:SubAp_idx*size(correlation_chunks_array,1)/obj.n_SubAp);
                 bb = length((SubAp_idy-1)*size(correlation_chunks_array,2)/obj.n_SubAp+1:SubAp_idy*size(correlation_chunks_array,2)/obj.n_SubAp);
                 
                 correlation_chunks_array((SubAp_idx-1)*size(correlation_chunks_array,1)/obj.n_SubAp+1:SubAp_idx*size(correlation_chunks_array,1)/obj.n_SubAp,(SubAp_idy-1)*size(correlation_chunks_array,2)/obj.n_SubAp+1:SubAp_idy*size(correlation_chunks_array,2)/obj.n_SubAp)=c(1:aa, 1:bb);
                 % find correlation peak
                 [xpeak_aux, ypeak_aux] = find(c==max(c(:)));
+                disp([xpeak_aux, ypeak_aux]);
                 if ~calibration
                     correlation_coef(1 + (SubAp_idx - 1) + obj.n_SubAp * (SubAp_idy - 1)) = c(xpeak_aux, ypeak_aux);
                 end
@@ -198,15 +212,17 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
                 xoffSet = ceil(size(c, 1)/2) - xpeak;
                 yoffSet = ceil(size(c, 2)/2) - ypeak;
                 % compute shift between images
-                shift_curr = xoffSet + 1i * yoffSet;
+                %                 shift_curr = xoffSet + 1i * yoffSet;
+                shift_curr = (xoffSet + 1i * yoffSet)/resize_ratio;
                 shifts(1 + (SubAp_idx - 1) + obj.n_SubAp * (SubAp_idy - 1)) = shift_curr(1); %To be sure no double correlation maximum
             else
                 shifts(1 + (SubAp_idx - 1) + obj.n_SubAp * (SubAp_idy - 1)) = 0+1i*0;
             end
     
             % to show sub-apertures used in correlation        
-            idx_range_out = (SubAp_idx-1)*floor(ac.Nx/obj.n_SubAp)+SubAp_init:(SubAp_idx-1)*floor(ac.Nx/obj.n_SubAp)+SubAp_init+numel(SubAp_init:SubAp_end)-1;
-            idy_range_out = (SubAp_idy-1)*floor(ac.Ny/obj.n_SubAp)+SubAp_init:(SubAp_idy-1)*floor(ac.Ny/obj.n_SubAp)+SubAp_init+numel(SubAp_init:SubAp_end)-1;
+            idx_range_out = (SubAp_idx-1)*floor(resize_ratio*ac.Nx/obj.n_SubAp)+SubAp_init:(SubAp_idx-1)*floor(resize_ratio*ac.Nx/obj.n_SubAp)+SubAp_init+numel(SubAp_init:SubAp_end)-1;
+            idy_range_out = (SubAp_idy-1)*floor(resize_ratio*ac.Ny/obj.n_SubAp)+SubAp_init:(SubAp_idy-1)*floor(resize_ratio*ac.Ny/obj.n_SubAp)+SubAp_init+numel(SubAp_init:SubAp_end)-1;
+            
             moment_chunks_crop_array(idy_range_out,idx_range_out) = moment_chunk_cropped;
     
         end %SubAp_idy
@@ -226,20 +242,18 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
         central_shift = shifts(ceil(length(shifts)/2));
         shifts = shifts - central_shift;
         shifts(correlation_coef < correlation_threshold) = NaN ;
-    end
 
+%         figure(1);
+%         imagesc(moment_chunks_array);
+%         axis square;
+%         axis off;
+%         colormap gray;
+    end
 
     moment_chunks_crop_array = flip(moment_chunks_crop_array');
-    num_SubAp = obj.n_SubAp;
-    if ~calibration
-        parallaxFiltering(moment_chunks_array, num_SubAp)
-    end
-    1;
-%     figure(1);
-%     imagesc(moment_chunks_crop_array);
-%     axis square;
-%     axis off;
-%     colormap gray;
+    moment_chunks_crop_array = imresize(moment_chunks_crop_array, 1/resize_ratio);
+
+
 %     print('-f1','-dpng', fullfile('C:\Users\Novokuznetsk\Pictures\Shack_Hart', 'moment_chunk_crop_array')) ;
 % 
 %     figure(2);
