@@ -1,6 +1,7 @@
 classdef ShackHartmann
     properties
         n_SubAp % n_subapertures
+        n_SubAp_inter 
         modes % idx array of zernikes
         calibration_factor
         SubAp_margin
@@ -18,9 +19,11 @@ classdef ShackHartmann
         phase = compute_temporal_SVD_in_SubAp(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition);
         [shifts,StitchedMomentsInSubApertures,StitchedCorrInSubApertures] = spatial_signal_analysis_PCA(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
         SubFH = SubField(obj, FH);
+        moment_chunk = reconstruct_moment_chunk(obj, FH_chunk, enable_svd, f1, f2,fs, gw);
 
-        function obj = ShackHartmann(n_SubAp, p, calibration_factor,SubAp_margin,CorrMap_margin,PowFilterPreCorr,SigmaFilterPreCorr, subimage_size, subimage_stride)
+        function obj = ShackHartmann(n_SubAp, n_SubAp_inter, p, calibration_factor,SubAp_margin,CorrMap_margin,PowFilterPreCorr,SigmaFilterPreCorr, subimage_size, subimage_stride)
             obj.n_SubAp = n_SubAp;
+            obj.n_SubAp_inter = n_SubAp_inter;
             obj.modes = p;
             obj.calibration_factor = calibration_factor;
             obj.SubAp_margin = SubAp_margin;

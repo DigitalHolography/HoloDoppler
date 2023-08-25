@@ -1,8 +1,10 @@
 function [M_aso,StitchedMomentsInMaso] = construct_M_aso(obj, f1, f2, gw, acquisition)
 ac = acquisition;
 
+num_subap_added = (obj.n_SubAp-1)*(obj.n_SubAp_inter*obj.n_SubAp_inter*(obj.n_SubAp-1) + (obj.n_SubAp_inter + obj.n_SubAp_inter)*obj.n_SubAp);
 
-M_aso = zeros(obj.n_SubAp^2, numel(obj.modes));
+% M_aso = zeros(obj.n_SubAp^2, numel(obj.modes));
+M_aso = zeros((num_subap_added + obj.n_SubAp^2), numel(obj.modes));
 StitchedMomentsInMaso = zeros(512,512, numel(obj.modes)); %Stitched PowerDoppler moments in each subaperture
 
 
