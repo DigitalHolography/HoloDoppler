@@ -80,7 +80,7 @@ parfor (batch_idx = 1:num_batches, parfor_arg)
 
     FH = register_FH(FH, local_shifts, j_win, 1);
 
-    if nin == 20 % change this value if function arguments are added or removed
+    if nin == 21 % change this value if function arguments are added or removed
         % if this parameter exist, then so does 'previous_p'
         previous_p = varargin{1};
         previous_coefs = varargin{2};
