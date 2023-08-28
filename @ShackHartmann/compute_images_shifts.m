@@ -323,19 +323,22 @@ imagesc(moment_inter_chunks_crop_array);
 axis off
 axis square
 colormap gray
+
+saveas(gcf, 'moment_inter_chunks_crop_array.png')
     
 figure(2)
 imagesc(moment_inter_chunks_array);
 axis off
 axis square
 colormap gray
+
+saveas(gcf, 'moment_inter_chunks_array.png')
     
 figure(3)
 imagesc(img_centers);
 axis off
 axis square
 colormap gray
-
 
 disp(shifts_inter)
 shifts = reshape(shifts_inter, vx*vy, 1);
@@ -375,11 +378,23 @@ axis off
 axis square
 colormap gray
 
+saveas(gcf, 'shifts_inter_real.png')
+
 figure(5)
 imagesc(imag(shifts_inter))
 axis off
 axis square
 colormap gray
+
+saveas(gcf, 'shifts_inter_im.png')
+
+figure(6)
+imagesc(correlation_coef)
+axis off
+axis square
+colormap gray
+
+saveas(gcf, 'correlation_coef.png')
 
 %     print('-f1','-dpng', fullfile('C:\Users\Novokuznetsk\Pictures\Shack_Hart', 'moment_chunk_crop_array')) ;
 % 
