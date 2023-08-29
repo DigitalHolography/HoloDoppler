@@ -17,7 +17,6 @@ for p = 1:numel(obj.modes)
 %     imagesc(angle(transmittance));
 %      [~] = obj.compute_SVD_for_SubAp(transmittance, f1, f2, gw, true, false, ac);
     [shifts, StichedMomentsInSubapertures] = obj.compute_images_shifts(transmittance, f1, f2, gw, true, false, ac);
-    
     % each mode is a col of M_aso
     M_aso(:,p) = shifts;
     StitchedMomentsInMaso(:,:,p) = StichedMomentsInSubapertures;
