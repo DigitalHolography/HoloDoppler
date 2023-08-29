@@ -3,7 +3,7 @@ function [correction, stiched_moments_video] = compute_correction_shack_hartmann
                                          p, registration_shifts, num_subapertures, num_subapertures_inter,...
                                          calibration_factor, subaperture_margin,...
                                          corrmap_margin,power_filter_corrector,...
-                                         sigma_filter_corrector,varargin)
+                                         sigma_filter_corrector, excluded_subapertures,varargin)
 % Compute an optimal aberration correction given zernike
 % indices.
 %
@@ -65,6 +65,7 @@ else
 end
 
 parfor (batch_idx = 1:num_batches, parfor_arg)
+%for batch_idx = 1:num_batches
     % load interferogram batch
     FH = istream.read_frame_batch(j_win, (batch_idx - 1)* j_step);
 
@@ -80,7 +81,7 @@ parfor (batch_idx = 1:num_batches, parfor_arg)
 
     FH = register_FH(FH, local_shifts, j_win, 1);
 
-    if nin == 21 % change this value if function arguments are added or removed
+    if nin == 22 % change this value if function arguments are added or removed
         % if this parameter exist, then so does 'previous_p'
         previous_p = varargin{1};
         previous_coefs = varargin{2};
@@ -105,7 +106,7 @@ parfor (batch_idx = 1:num_batches, parfor_arg)
     end
 
     [shifts, stiched_moments_subap, stiched_corr_subapp] = shack_hartmann.compute_images_shifts(FH, f1, f2, gw, false, true, acquisition);
-    excluded_subapertures = find(isnan(shifts));
+%     excluded_subapertures = find(isnan(shifts));
     % remove corners
     M_aso = mat_mask(M_aso, excluded_subapertures);
     shifts = mat_mask(shifts, excluded_subapertures);
