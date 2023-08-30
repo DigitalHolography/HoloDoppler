@@ -18,6 +18,7 @@ for i = 1:num_frames
       end
    end
 
-   video(:,:,:,i) = phase;
+%    video(:,:,:,i) = phase;
+   video(:,:,:,i) = angle(exp(-1i .*phase));
 end
 end
