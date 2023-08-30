@@ -29,11 +29,11 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
     % mid_SubAp = floor(obj.n_SubAp/2);
     %(mid_SubAp-1)*floor(ac.Nx/obj.n_SubAp) + 1:mid_SubAp*floor(ac.Nx/obj.n_SubAp),...
     %(mid_SubAp-1)*floor(ac.Ny/obj.n_SubAp) + 1:mid_SubAp*floor(ac.Ny/obj.n_SubAp)
-    
+
     ac = acquisition;
     j_win = size(FH, 3);
     resize_ratio = 1;
-    
+
     % shifts is a 1D vector
     % it maps the 2D SubApils grid by iterating column first
     % example of ordering for a 4x4 SubApil grid
@@ -72,7 +72,6 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
 %     M0 = mat2gray(M0);
 %     figure; 
 %     imshow(flip(M0));
-
     
     SubAp_idref = ceil(obj.n_SubAp/2); % Index of reference subaperture for correlations
     
@@ -391,8 +390,8 @@ correlation_coef = correlation_coef_inter;
 %     %         axis off;
 %     %         colormap gray;
 % end
-    
- 
+
+
 moment_chunks_crop_array = moment_inter_chunks_crop_array;
 moment_chunks_crop_array = flip(moment_chunks_crop_array');
 moment_chunks_crop_array = imresize(moment_chunks_crop_array, 1/resize_ratio);

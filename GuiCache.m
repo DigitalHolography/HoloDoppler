@@ -57,7 +57,8 @@ properties (Access = public)
     % shack-hartmann parameters
     shack_hartmann_aberration_compensation
     shack_hartmann_zernike_ranks
-    num_subapertures
+    image_subapertures_size_ratio
+    num_subapertures_positions
     subaperture_margin
     SubAp_PCA;
     minSubAp_PCA;
