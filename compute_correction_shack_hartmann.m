@@ -1,4 +1,4 @@
-function [correction, stiched_moments_video, shifts_vector] = compute_correction_shack_hartmann(istream, cache, kernel, rephasing_data, gw, complex_mask,...
+function [correction, stiched_moments_video, shifts_vector, stitched_correlation_video] = compute_correction_shack_hartmann(istream, cache, kernel, rephasing_data, gw, complex_mask,...
                                          progress_bar, use_gpu, use_multithread,...
                                          p, registration_shifts, num_subapertures, num_subapertures_inter,...
                                          calibration_factor, subaperture_margin,...
@@ -29,6 +29,7 @@ function [correction, stiched_moments_video, shifts_vector] = compute_correction
 % previously computed corrections for preprocessing before computing the current correction.
 %    p: 1D arrays containing indices of zernikes used for
 %          previous correction
+%          previous correction
 %    coefs: a 1D array containing coefs of the matching
 %          zernikes for previous correction
 
@@ -58,6 +59,7 @@ num_batches = floor((istream.num_frames - j_win) / j_step);
 phase_coefs = zeros(numel(p), num_batches, 'single');
 stiched_moments_video = zeros(Nx, Ny, 1, num_batches, 'single');
 shifts_vector = zeros(num_subapertures_inter^2,num_batches);
+stitched_correlation_video = zeros(Nx, Ny, 1 ,num_batches, 'single');
 
 if use_gpu || ~use_multithread
     parf or_arg = 0;
@@ -108,6 +110,7 @@ parfor (batch_idx = 1:num_batches, parfor_arg)
 
     [shifts, stiched_moments_subap, stiched_corr_subapp] = shack_hartmann.compute_images_shifts(FH, f1, f2, gw, false, true, acquisition);
     shifts_vector(:, batch_idx) = shifts;
+    stitched_correlation_video(:,:,:,batch_idx) = imresize(stiched_corr_subapp, [Nx Ny]);
     %     excluded_subapertures = find(isnan(shifts));
     % remove corners
     M_aso = mat_mask(M_aso, excluded_subapertures);

@@ -294,10 +294,10 @@ for inter_SubAp_idy = inter_SubAp_id_range
             c = zeros(size(c_aux));
             c(inf_margin_corr:sup_margin_corr,inf_margin_corr:sup_margin_corr)=c_aux(inf_margin_corr:sup_margin_corr,inf_margin_corr:sup_margin_corr);
             % sub pixel assesment of max of correlation peak
-            %                 aa = length((SubAp_idx-1)*size(correlation_chunks_array,1)/obj.n_SubAp+1:SubAp_idx*size(correlation_chunks_array,1)/obj.n_SubAp);
-            %                 bb = length((SubAp_idy-1)*size(correlation_chunks_array,2)/obj.n_SubAp+1:SubAp_idy*size(correlation_chunks_array,2)/obj.n_SubAp);
-            %
-            %                 correlation_chunks_array((SubAp_idx-1)*size(correlation_chunks_array,1)/obj.n_SubAp+1:SubAp_idx*size(correlation_chunks_array,1)/obj.n_SubAp,(SubAp_idy-1)*size(correlation_chunks_array,2)/obj.n_SubAp+1:SubAp_idy*size(correlation_chunks_array,2)/obj.n_SubAp)=c(1:aa, 1:bb);
+            aa = length((inter_SubAp_idx-1)*size(correlation_chunks_array,1)/vx+1:inter_SubAp_idx*size(correlation_chunks_array,1)/vx);
+            bb = length((inter_SubAp_idy-1)*size(correlation_chunks_array,2)/vy+1:inter_SubAp_idy*size(correlation_chunks_array,2)/vy);
+
+            correlation_chunks_array((inter_SubAp_idx-1)*size(correlation_chunks_array,1)/vx+1:inter_SubAp_idx*size(correlation_chunks_array,1)/vx,(inter_SubAp_idy-1)*size(correlation_chunks_array,2)/vy+1:inter_SubAp_idy*size(correlation_chunks_array,2)/vy)=c(1:aa, 1:bb);
             %                 % find correlation peak
             [xpeak_aux, ypeak_aux] = find(c==max(c(:)));
 
@@ -395,6 +395,11 @@ end
 moment_chunks_crop_array = moment_inter_chunks_crop_array;
 moment_chunks_crop_array = flip(moment_chunks_crop_array');
 moment_chunks_crop_array = imresize(moment_chunks_crop_array, 1/resize_ratio);
+
+% 
+% disp(size(correlation_chunks_array))
+% disp(size(moment_chunks_crop_array))
+
 
 % figure(4)
 % imagesc(real(shifts_inter))
