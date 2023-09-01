@@ -370,26 +370,26 @@ correlation_coef = correlation_coef_inter;
 
 % correlation_coef = reshape(correlation_tab, 1, []);
 
-% if ~calibration
-%     %         plop = flip(plop');
-%     %         for SubAp_idy = 1:obj.n_SubAp
-%     %             for SubAp_idx = 1:obj.n_SubAp
-%     %                 fprintf("%f   ", plop(SubAp_idy, SubAp_idx));
-%     %             end
-%     %             fprintf("\n");
-%     %         end
+if ~calibration
+    %         plop = flip(plop');
+    %         for SubAp_idy = 1:obj.n_SubAp
+    %             for SubAp_idx = 1:obj.n_SubAp
+    %                 fprintf("%f   ", plop(SubAp_idy, SubAp_idx));
+    %             end
+    %             fprintf("\n");
+    %         end
 %     correlation_threshold = mean(correlation_coef, "all") - std(correlation_coef, 1, "all");
-% 
-%     central_shift = shifts(ceil(length(shifts)/2));
-%     shifts = shifts - central_shift;
+
+    central_shift = shifts(ceil(length(shifts)/2));
+    shifts = shifts - central_shift;
 %     shifts(correlation_coef < correlation_threshold) = NaN ;
-% 
-%     %         figure(1);
-%     %         imagesc(moment_chunks_array);
-%     %         axis square;
-%     %         axis off;
-%     %         colormap gray;
-% end
+
+    %         figure(1);
+    %         imagesc(moment_chunks_array);
+    %         axis square;
+    %         axis off;
+    %         colormap gray;
+end
 
 
 moment_chunks_crop_array = moment_inter_chunks_crop_array;
