@@ -400,6 +400,7 @@ moment_chunks_crop_array = imresize(moment_chunks_crop_array, 1/resize_ratio);
 % disp(size(correlation_chunks_array))
 % disp(size(moment_chunks_crop_array))
 
+correlation_chunks_array = mat2gray(abs(correlation_chunks_array + eps));
 
 % figure(4)
 % imagesc(real(shifts_inter))
@@ -415,11 +416,11 @@ moment_chunks_crop_array = imresize(moment_chunks_crop_array, 1/resize_ratio);
 
 %     print('-f1','-dpng', fullfile('C:\Users\Novokuznetsk\Pictures\Shack_Hart', 'moment_chunk_crop_array')) ;
 % 
-%     figure(2);
-%     imagesc(correlation_chunks_array);
-%     axis square;
-%     axis off;
-%     colormap gray;
+    figure(2);
+    imagesc(mat2gray((abs(correlation_chunks_array + eps))));
+    axis square;
+    axis off;
+    colormap gray;
 %     print('-f2','-dpng', fullfile('C:\Users\Novokuznetsk\Pictures\Shack_Hart', 'correlation_chunks_array')) ;
     
 end
