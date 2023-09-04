@@ -185,7 +185,6 @@ if ny>2
 
     Af(L+(1:m),:) = [rind,cind,dfdy];
     rhs(L+(1:m)) = fy(ind);
-
     L = L+m;
 end
 % do the trailing edge in y, backward diffeence

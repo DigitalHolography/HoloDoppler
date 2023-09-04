@@ -86,7 +86,9 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_im
     moment_chunks_array = zeros(ac.Nx,ac.Ny); %Stitched PowerDoppler moments in each subaperture
     moment_chunks_crop_array = zeros(resize_ratio*ac.Nx,resize_ratio*ac.Ny);%Stitched cropped PowerDoppler moments in each subaperture
     SubAp_id_range = [SubAp_idref:obj.n_SubAp 1:SubAp_idref-1];
-    correlation_chunks_array = zeros((SubAp_end-SubAp_init+floor(ac.Nx/obj.n_SubAp))*obj.n_SubAp); %Stitched cropped correlations in each subaperture
+%     correlation_chunks_array = zeros((SubAp_end-SubAp_init+floor(ac.Nx/obj.n_SubAp))*obj.n_SubAp); %Stitched cropped correlations in each subaperture
+    correlation_chunks_array = zeros((SubAp_end-SubAp_init+resize_ratio*floor(ac.Nx/obj.n_SubAp))*obj.n_SubAp_inter); %Stitched cropped correlations in each subaperture
+
 %     gw = (100 * (ac.Nx/obj.n_SubAp)/512)/obj.n_SubAp;
     gw = 20;
     gw = gw /obj.n_SubAp;
