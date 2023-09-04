@@ -416,11 +416,11 @@ correlation_chunks_array = mat2gray(abs(correlation_chunks_array + eps));
 
 %     print('-f1','-dpng', fullfile('C:\Users\Novokuznetsk\Pictures\Shack_Hart', 'moment_chunk_crop_array')) ;
 % 
-    figure(2);
-    imagesc(mat2gray((abs(correlation_chunks_array + eps))));
-    axis square;
-    axis off;
-    colormap gray;
+%     figure(2);
+%     imagesc(mat2gray((abs(correlation_chunks_array + eps))));
+%     axis square;
+%     axis off;
+%     colormap gray;
 %     print('-f2','-dpng', fullfile('C:\Users\Novokuznetsk\Pictures\Shack_Hart', 'correlation_chunks_array')) ;
     
 end
