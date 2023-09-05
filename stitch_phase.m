@@ -23,8 +23,8 @@ padding = floor((Nxx/stride -1)/2);
 A1 = real(shifts_inter);
 A2 = imag(shifts_inter);
 
-% A1 = interp2(real(shifts_inter), 3);
-% A2 = interp2(imag(shifts_inter), 3);
+A1 = interp2(real(shifts_inter), 3);
+A2 = interp2(imag(shifts_inter), 3);
 % A1 = imresize(real(shifts_inter), [512 512]);
 % A2 = imresize(imag(shifts_inter), [512 512]);
 A = intgrad2(A1, A2, 1, 1, 0);
