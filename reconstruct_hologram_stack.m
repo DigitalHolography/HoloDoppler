@@ -62,7 +62,7 @@ function hologram_stack = reconstruct_hologram_stack(FH, time_transform, acquisi
     fringesAfterHighPassFilter = real(ifft(dcFilterBuffer));
 
     % Apply low pass filter to remove the trend
-    trendFilterBuffer(1:509,:,:) = 0;
+    trendFilterBuffer(1:size(H,1)-5,:,:) = 0;
 
     H = fringesAfterHighPassFilter - trendFilterBuffer;
 
@@ -85,7 +85,8 @@ function hologram_stack = reconstruct_hologram_stack(FH, time_transform, acquisi
     SH = (SH(:,:,1:floor(j_win/2)));
     
     tmp = abs(SH).^2;
-    profile = squeeze(mean(tmp(200:300, 200:300, :),[1 2]));
+    middle = ceil(size(SH,1)/2);
+    profile = squeeze(mean(tmp(middle - 50 : middle + 50, middle - 50 : middle + 50, :),[1 2]));
     filter = ones(256, 1);
     filter(1 : 20) = 0;
     [~, peakLoc] = max(profile.*filter);

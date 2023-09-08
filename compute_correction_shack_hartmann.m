@@ -67,8 +67,8 @@ else
     parfor_arg = Inf;
 end
 
-parfor (batch_idx = 1:num_batches, parfor_arg)
-%for batch_idx = 1:num_batches
+% parfor (batch_idx = 1:num_batches, parfor_arg)
+for batch_idx = 1:num_batches
     % load interferogram batch
     FH = istream.read_frame_batch(j_win, (batch_idx - 1)* j_step);
 

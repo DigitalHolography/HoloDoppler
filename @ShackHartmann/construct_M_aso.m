@@ -8,8 +8,9 @@ StitchedMomentsInMaso = zeros(512,512, numel(obj.modes)); %Stitched PowerDoppler
 
 
 for p = 1:numel(obj.modes)
-%     [~,phi] = zernike_phase(obj.modes(p), 512, 512);
     [~,phi] = zernike_phase(obj.modes(p), 512, 512);
+%     s = floor(512* sqrt(2));
+%     [~,Phi] = zernike_phase(obj.modes(p), s, s);
 %     phi = Phi(floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256, floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256 );
     phi = phi*obj.calibration_factor;
     transmittance = (exp(1i*phi));
