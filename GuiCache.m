@@ -64,6 +64,7 @@ properties (Access = public)
     SubAp_PCA;
     minSubAp_PCA;
     maxSubAp_PCA;
+    zernike_projection;
 
     %masks
     artery_mask;
