@@ -1,19 +1,20 @@
-function phase = stitch_phase(shifts, phase_zernike, ac, shack_hartmann)
+function phase = stitch_phase(shifts, phase_zernike, Nx, Ny, shack_hartmann)
 
 magic_number = 710;
 
-SubAp_Nx = floor(ac.Nx/shack_hartmann.n_SubAp);
-SubAp_Ny = floor(ac.Ny/shack_hartmann.n_SubAp);
+SubAp_Nx = floor(Nx/shack_hartmann.n_SubAp);
+SubAp_Ny = floor(Ny/shack_hartmann.n_SubAp);
 
 
+phase = zeros(Nx, Ny, size(shifts, 3));
 
-shifts = shifts .* (ac.Nx/shack_hartmann.n_SubAp);
-disp(shifts)
-shifts = reshape(shifts, shack_hartmann.n_SubAp_inter, shack_hartmann.n_SubAp_inter);
+shifts = shifts .* (Nx/shack_hartmann.n_SubAp);
+% disp(shifts)
+shifts = reshape(shifts, shack_hartmann.n_SubAp_inter, shack_hartmann.n_SubAp_inter, []);
 % shifts = (shifts');
 
 %normalize shifts
-stride = floor((ac.Nx-SubAp_Nx)/(shack_hartmann.n_SubAp_inter-1));
+stride = floor((Nx-SubAp_Nx)/(shack_hartmann.n_SubAp_inter-1));
 % padding = floor((SubAp_Nx/stride - 1)/2);
 % padding = floor(SubAp_Nx/2) - floor(stride/2);
 
@@ -40,10 +41,12 @@ stride = floor((ac.Nx-SubAp_Nx)/(shack_hartmann.n_SubAp_inter-1));
 % imagesc(angle(phase))
 
 % OLD CODE
-[~, tilt] = zernike_phase(5, ac.Nx, ac.Ny);
+[~, tilt] = zernike_phase(2, Nx, Ny);
 
 cf = linspace(0.01, 60, 50);
 sh = zeros(50, 1);
+half_SubAp_Nx = floor(SubAp_Nx /2);
+half_Nx = floor(Nx/2);
 
 for i = 1 : 50
 % %     disp(i);
@@ -52,21 +55,23 @@ for i = 1 : 50
 % %     s = cf(i);
     tilt_tmp = tilt;
     tilt_phase_pos = exp(1i .* (tilt_tmp .* calibration_factor));
-%     spot_pos = abs(fftshift(fftshift(ifft2(tilt_phase_pos),1),2)).^2;
+    tilt_phase_pos = tilt_phase_pos(half_Nx - half_SubAp_Nx : half_Nx + half_SubAp_Nx, half_Nx - half_SubAp_Nx : half_Nx + half_SubAp_Nx);
+    spot_pos = abs(fftshift(fftshift(ifft2(tilt_phase_pos),1),2)).^2;
 % %     FH_tmp = FH.*spot_pos;
-    [phase_shifts,~,~] = shack_hartmann.compute_images_shifts(tilt_phase_pos, 6, 33, 35, true, true, ac);
-%     tilt_phase_neg = exp(1i .* (-tilt_tmp .* calibration_factor));
-%     spot_neg = abs(fftshift(fftshift(ifft2(tilt_phase_neg),1),2)).^2;
-%     c = normxcorr2(spot_pos,spot_neg);
-%     [xpeak_aux, ypeak_aux] = find(c==max(c(:)));
+%     [phase_shifts,~,~] = shack_hartmann.compute_images_shifts(tilt_phase_pos, 6, 33, 35, true, true, ac);
+    tilt_phase_neg = exp(1i .* (-tilt_tmp .* calibration_factor));
+    tilt_phase_neg = tilt_phase_neg(half_Nx - half_SubAp_Nx : half_Nx + half_SubAp_Nx, half_Nx - half_SubAp_Nx : half_Nx + half_SubAp_Nx);
+    spot_neg = abs(fftshift(fftshift(ifft2(tilt_phase_neg),1),2)).^2;
+    c = normxcorr2(spot_pos,spot_neg);
+    [xpeak_aux, ypeak_aux] = find(c==max(c(:)));
 %     xpeak = xpeak_aux+0.5*(c(xpeak_aux-1,ypeak_aux)-c(xpeak_aux+1,ypeak_aux))/(c(xpeak_aux-1,ypeak_aux)+c(xpeak_aux+1,ypeak_aux)-2.*c(xpeak_aux,ypeak_aux));
-%     ypeak = ypeak_aux+0.5*(c(xpeak_aux,ypeak_aux-1)-c(xpeak_aux,ypeak_aux+1))/(c(xpeak_aux,ypeak_aux-1)+c(xpeak_aux,ypeak_aux+1)-2.*c(xpeak_aux,ypeak_aux));
+    ypeak = ypeak_aux+0.5*(c(xpeak_aux,ypeak_aux-1)-c(xpeak_aux,ypeak_aux+1))/(c(xpeak_aux,ypeak_aux-1)+c(xpeak_aux,ypeak_aux+1)-2.*c(xpeak_aux,ypeak_aux));
 %     xoffSet = ceil(size(c, 1)/2) - xpeak;
-%     yoffSet = ceil(size(c, 2)/2) - ypeak;
+    yoffSet = ceil(size(c, 2)/2) - ypeak;
 %     shift_tilt = (xoffSet + 1i * yoffSet)/2;
 %     shifts = shifts/(abs(yoffSet/2)/0.0131);
-    sh(i) = real(phase_shifts(ceil(shack_hartmann.n_SubAp_inter/2)));
-%     sh(i) = yoffSet;
+%     sh(i) = real(phase_shifts(ceil(shack_hartmann.n_SubAp_inter/2)));
+    sh(i) = yoffSet;
 end
 % % 
 f = fit(abs(sh), cf', 'poly1');
@@ -80,6 +85,10 @@ disp(f.p1);
 fit_coef = f.p1;
 
 shifts = shifts.*fit_coef;
+
+[X, Y] = meshgrid(1 : shack_hartmann.n_SubAp_inter);
+step = (shack_hartmann.n_SubAp_inter-1) / Nx;
+[Xq ,Yq] = meshgrid(1 : step : shack_hartmann.n_SubAp_inter - step);
 
 % gradient_calibration_factor = shack_hartmann.calibration_factor/(floor(shack_hartmann.n_SubAp_inter/2)*abs(imag(shift_tilt)));
 % shift_tilt = shift_tilt * gradient_calibration_factor;
@@ -99,54 +108,58 @@ shifts = shifts.*fit_coef;
 % shifts = shifts .* gradient_calibration_factor;
 % % shifts_inter = shifts_inter./calibration_factor;
 
-Ay = imag(shifts);
-Ax = real(shifts);
+for i = 1 : size(shifts, 3)
 
-[X, Y] = meshgrid(1 : size(Ax));
-step = (size(Ax)-1) / 512;
-[Xq ,Yq] = meshgrid(1 : step : size(Ax) - step);
-Ax = interp2(X, Y, Ax, Xq, Yq);
-Ay = interp2(X, Y, Ay, Xq, Yq);
-% A1 = imresize(real(shifts_inter), [512 512]);
-% A2 = imresize(imag(shifts_inter), [512 512]);
-% dx = SubAp_Nx;
-% dy = SubAp_Ny;
-dx = 1/ac.Nx;
-dy = 1/ac.Ny;
-A = intgrad2(Ax, Ay, dx, dy, 0);
-A = A - mean(A, "all");
-
-[Fx, Fy] = gradient(A);
+    Ay = imag(shifts(:,:,i));
+    Ax = real(shifts(:,:,i));
 
 
-% A_temp = zeros(size(A,1)+2*padding, size(A,2)+2*padding);
-% A_temp(padding+1:end-padding, padding+1:end-padding) = A;
-% A = permute(A, [2 1]); 
+    Ax = interp2(X, Y, Ax, Xq, Yq);
+    Ay = interp2(X, Y, Ay, Xq, Yq);
+    % A1 = imresize(real(shifts_inter), [512 512]);
+    % A2 = imresize(imag(shifts_inter), [512 512]);
+    % dx = SubAp_Nx;
+    % dy = SubAp_Ny;
+    dx = 1/Nx;
+    dy = 1/Ny;
+    A = intgrad2(Ax, Ay, dx, dy, 0);
+    A = A - mean(A, "all");
 
-% [X, Y] = meshgrid(1 : size(A_temp));
-% step = (size(A_temp)-1) / 512;
-% [Xq ,Yq] = meshgrid(1 : step : size(A_temp) - step);
-% A_interp = interp2(X, Y, A, Xq, Yq);
+    % [Fx, Fy] = gradient(A);
+
+
+    % A_temp = zeros(size(A,1)+2*padding, size(A,2)+2*padding);
+    % A_temp(padding+1:end-padding, padding+1:end-padding) = A;
+    % A = permute(A, [2 1]);
+
+    % [X, Y] = meshgrid(1 : size(A_temp));
+    % step = (size(A_temp)-1) / 512;
+    % [Xq ,Yq] = meshgrid(1 : step : size(A_temp) - step);
+    % A_interp = interp2(X, Y, A, Xq, Yq);
+    %
+    % A = A_interp;
+
+    A = A - mean(A, "all");
+    % disp(max(A,[], 'all') - min(A,[], 'all'))
+    A = A .* shack_hartmann.n_SubAp;
+
+    phase(:,:,i) = A;
+
+end
+
+% figure(1)
+% imagesc(A)
+% % surf(X, Y, A)
+% axis square
+% axis off
+
+% phase = exp(-1i .* A);
 % 
-% A = A_interp;
-
-% A = A - mean(A, "all");
-disp(max(A,[], 'all') - min(A,[], 'all'))
-A = A .* shack_hartmann.n_SubAp;
-
-figure(1)
-imagesc(A)
-% surf(X, Y, A)
-axis square
-axis off
-
-phase = exp(-1i .* A);
-
-[phase_shifts,~,~] = shack_hartmann.compute_images_shifts(phase, 1, 1, 1, true, true, ac);
-
-phase_shifts  = reshape(phase_shifts, [shack_hartmann.n_SubAp_inter shack_hartmann.n_SubAp_inter]);
-
-
+% [phase_shifts,~,~] = shack_hartmann.compute_images_shifts(phase, 1, 1, 1, true, true, ac);
+% 
+% phase_shifts  = reshape(phase_shifts, [shack_hartmann.n_SubAp_inter shack_hartmann.n_SubAp_inter]);
+% 
+% 
 if ~isempty(phase_zernike)
     figure(9)
     subplot(2,1,1)
@@ -156,55 +169,55 @@ if ~isempty(phase_zernike)
     axis off
 
     subplot(2,1,2)
-    imagesc(angle(phase))
+    imagesc(angle(exp(1i.*phase)))
     title('Measured')
     axis square
     axis off
 
-    figure(10)
-    subplot(2,2,1);
-    imagesc(real(shifts))
-    title('Real shifts')
-    % clim([-0.06, 0.06])
-    axis square
-    axis off
-
-    subplot(2,2,2);
-    imagesc(imag(shifts))
-    title('Imag shifts')
-    % clim([-0.06, 0.06])
-    axis square
-    axis off
-
-    subplot(2,2,3);
-    imagesc(real(phase_shifts))
-    title('Real phase shifts')
-    % clim([-0.06, 0.06])
-    axis square
-    axis off
-
-    subplot(2,2,4);
-    imagesc(imag(phase_shifts))
-    title('Imag phase shifts')
-    % clim([-0.06, 0.06])
-    axis square
-    axis off
+%     figure(10)
+%     subplot(2,2,1);
+%     imagesc(real(shifts))
+%     title('Real shifts')
+%     % clim([-0.06, 0.06])
+%     axis square
+%     axis off
+% 
+%     subplot(2,2,2);
+%     imagesc(imag(shifts))
+%     title('Imag shifts')
+%     % clim([-0.06, 0.06])
+%     axis square
+%     axis off
+% 
+%     subplot(2,2,3);
+%     imagesc(real(phase_shifts))
+%     title('Real phase shifts')
+%     % clim([-0.06, 0.06])
+%     axis square
+%     axis off
+% 
+%     subplot(2,2,4);
+%     imagesc(imag(phase_shifts))
+%     title('Imag phase shifts')
+%     % clim([-0.06, 0.06])
+%     axis square
+%     axis off
 end
-By = -imag(shifts);
-Bx = -real(shifts);
-
-[X, Y] = meshgrid(1 : size(Bx));
-step = (size(Bx)-1) / 512;
-[Xq ,Yq] = meshgrid(1 : step : size(Bx) - step);
-Bx = interp2(X, Y, Bx, Xq, Yq);
-By = interp2(X, Y, By, Xq, Yq);
-% A1 = imresize(real(shifts_inter), [512 512]);
-% A2 = imresize(imag(shifts_inter), [512 512]);
-B = intgrad2(Bx, By, 1, 1, 0);
-
-figure(2)
-imagesc(B)
-axis square
-axis off
+% By = -imag(shifts);
+% Bx = -real(shifts);
+% 
+% [X, Y] = meshgrid(1 : size(Bx));
+% step = (size(Bx)-1) / 512;
+% [Xq ,Yq] = meshgrid(1 : step : size(Bx) - step);
+% Bx = interp2(X, Y, Bx, Xq, Yq);
+% By = interp2(X, Y, By, Xq, Yq);
+% % A1 = imresize(real(shifts_inter), [512 512]);
+% % A2 = imresize(imag(shifts_inter), [512 512]);
+% B = intgrad2(Bx, By, 1, 1, 0);
+% 
+% figure(2)
+% imagesc(B)
+% axis square
+% axis off
 
 end
