@@ -1,4 +1,4 @@
-function [shifts,moment_chunks_crop_array,correlation_chunks_array] = compute_images_shifts(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
+function [shifts,moment_chunks_crop_array,correlation_chunks_array, pos_inter] = compute_images_shifts(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
     
     % SubAp_margin
     % SubAp_idx < SubAp_idx

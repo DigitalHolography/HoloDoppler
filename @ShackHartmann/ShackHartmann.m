@@ -19,6 +19,7 @@ classdef ShackHartmann
         phase = compute_temporal_SVD_in_SubAp(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition);
         [shifts,StitchedMomentsInSubApertures,StitchedCorrInSubApertures] = spatial_signal_analysis_PCA(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
         SubFH = SubField(obj, FH);
+        [idx_excluded_subap] = excluded_subapertures(obj, Nx, Ny)
         moment_chunk = reconstruct_moment_chunk(obj, FH_chunk, enable_svd, f1, f2,fs, gw);
 
         function obj = ShackHartmann(n_SubAp, n_SubAp_inter, p, calibration_factor,SubAp_margin,CorrMap_margin,PowFilterPreCorr,SigmaFilterPreCorr, subimage_size, subimage_stride)
