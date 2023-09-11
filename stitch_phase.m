@@ -8,7 +8,9 @@ SubAp_Ny = floor(Ny/shack_hartmann.n_SubAp);
 
 phase = zeros(Nx, Ny, size(shifts, 3));
 
-shifts = shifts .* (Nx/shack_hartmann.n_SubAp);
+if ~(isempty(phase_zernike))
+    shifts = shifts .* (Nx/shack_hartmann.n_SubAp);
+end
 % disp(shifts)
 shifts = reshape(shifts, shack_hartmann.n_SubAp_inter, shack_hartmann.n_SubAp_inter, []);
 % shifts = (shifts');
@@ -130,7 +132,7 @@ for i = 1 : size(shifts, 3)
 
     % A_temp = zeros(size(A,1)+2*padding, size(A,2)+2*padding);
     % A_temp(padding+1:end-padding, padding+1:end-padding) = A;
-    % A = permute(A, [2 1]);
+    A = flip(A);
 
     % [X, Y] = meshgrid(1 : size(A_temp));
     % step = (size(A_temp)-1) / 512;
