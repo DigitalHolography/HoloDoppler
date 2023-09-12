@@ -112,8 +112,8 @@ step = (shack_hartmann.n_SubAp_inter-1) / Nx;
 
 for i = 1 : size(shifts, 3)
 
-    Ay = imag(shifts(:,:,i));
-    Ax = real(shifts(:,:,i));
+    Ay = -imag(shifts(:,:,i));
+    Ax = -real(shifts(:,:,i));
 
 
     Ax = interp2(X, Y, Ax, Xq, Yq);
@@ -132,7 +132,7 @@ for i = 1 : size(shifts, 3)
 
     % A_temp = zeros(size(A,1)+2*padding, size(A,2)+2*padding);
     % A_temp(padding+1:end-padding, padding+1:end-padding) = A;
-    A = flip(A);
+    A = permute(A, [2 1]);
 
     % [X, Y] = meshgrid(1 : size(A_temp));
     % step = (size(A_temp)-1) / 512;
