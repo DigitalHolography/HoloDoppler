@@ -1,153 +1,121 @@
 function phase = stitch_phase(shifts, phase_zernike, Nx, Ny, shack_hartmann)
 
-magic_number = 710;
+% magic_number = 710;
 
 SubAp_Nx = floor(Nx/shack_hartmann.n_SubAp);
 SubAp_Ny = floor(Ny/shack_hartmann.n_SubAp);
 
-
+%% Padding when n_subAp_positions > image_to_subap_size_ratio
+stride = floor((Nx-SubAp_Nx)/(shack_hartmann.n_SubAp_inter-1));
+if stride > SubAp_Nx
+    range_x = stride * (shack_hartmann.n_SubAp_inter-1) + SubAp_Nx;
+    range_y = stride * (shack_hartmann.n_SubAp_inter-1) + SubAp_Ny;
+else
+    range_x = stride * (shack_hartmann.n_SubAp_inter);
+    range_y = stride * (shack_hartmann.n_SubAp_inter);
+end
+% pad_x = floor(SubAp_Nx/2) - floor(stride/2);
+% pad_y = floor(SubAp_Nx/2) - floor(stride/2);
+pad_x = floor((Nx - range_x)/2);
+pad_y = floor((Ny - range_y)/2);
 phase = zeros(Nx, Ny, size(shifts, 3));
 
 if ~(isempty(phase_zernike))
     shifts = shifts .* (Nx/shack_hartmann.n_SubAp);
 end
-% disp(shifts)
-shifts = reshape(shifts, shack_hartmann.n_SubAp_inter, shack_hartmann.n_SubAp_inter, []);
-% shifts = (shifts');
 
-%normalize shifts
-stride = floor((Nx-SubAp_Nx)/(shack_hartmann.n_SubAp_inter-1));
-% padding = floor((SubAp_Nx/stride - 1)/2);
-% padding = floor(SubAp_Nx/2) - floor(stride/2);
+% shifts = reshape(shifts, shack_hartmann.n_SubAp_inter, shack_hartmann.n_SubAp_inter, []);
 
-
-%% calculate calibration factor
-% % [~, tilt] = zernike_phase(2, SubAp_Nx, SubAp_Ny);
-% [~, defocus] = zernike_phase(2, stride, stride);
-% calibration_factor = shack_hartmann.calibration_factor;
-% shifts = floor(shifts .* calibration_factor);
-% defocus_phase = exp(1i .* (defocus .* 1));
-% spot = (fftshift(fftshift(ifft2(defocus_phase),1),2));
-% 
-% for idx = 1 : size(shifts, 1)
-%     for idy = 1 : size(shifts, 2)
-%         tmp = circshift(circshift(spot, real(shifts(idx, idy)), 2), imag(shifts(idx, idy)), 1);
-%         phaselet = fft2(fftshift(fftshift(tmp,1),2));
-%         range_x = padding + (idx - 1)*stride + 1 : padding + idx*stride; 
-%         range_y = padding + (idy - 1)*stride + 1 : padding + idy*stride; 
-%         phase(range_x, range_y) = phaselet;
-%     end
-% end
-% 
-% figure(1)
-% imagesc(angle(phase))
-
-% OLD CODE
+% a = DopplerAcquisition(Nx, Ny, 0,0,0,0,0,0,0,0,0);
+% [~, defocus] = zernike_phase(9, Nx, Ny);
+% defocus_phase_pos = exp(1i .* (defocus .* 40));
+% [shifts, ~, ~, ~] = shack_hartmann.compute_images_shifts(defocus_phase_pos, 1, 2, 3, true, false, a);
+% cf = linspace(-25, 25, 50);
+% sh = zeros(50, 1);
 [~, tilt] = zernike_phase(2, Nx, Ny);
-
-cf = linspace(0.01, 60, 50);
+cf = linspace(-60, 60, 50);
 sh = zeros(50, 1);
 half_SubAp_Nx = floor(SubAp_Nx /2);
 half_Nx = floor(Nx/2);
 
 for i = 1 : 50
-% %     disp(i);
-% %     [~, tilt] = zernike_phase(2, 100 + 10*i, 100 + 10*i);
     calibration_factor = cf(i);
-% %     s = cf(i);
-    tilt_tmp = tilt;
-    tilt_phase_pos = exp(1i .* (tilt_tmp .* calibration_factor));
+    tilt_phase_pos = exp(1i .* (tilt));
     tilt_phase_pos = tilt_phase_pos(half_Nx - half_SubAp_Nx : half_Nx + half_SubAp_Nx, half_Nx - half_SubAp_Nx : half_Nx + half_SubAp_Nx);
+    tilt_phase_pos = tilt_phase_pos.^(calibration_factor);
     spot_pos = abs(fftshift(fftshift(ifft2(tilt_phase_pos),1),2)).^2;
-% %     FH_tmp = FH.*spot_pos;
-%     [phase_shifts,~,~] = shack_hartmann.compute_images_shifts(tilt_phase_pos, 6, 33, 35, true, true, ac);
-    tilt_phase_neg = exp(1i .* (-tilt_tmp .* calibration_factor));
-    tilt_phase_neg = tilt_phase_neg(half_Nx - half_SubAp_Nx : half_Nx + half_SubAp_Nx, half_Nx - half_SubAp_Nx : half_Nx + half_SubAp_Nx);
-    spot_neg = abs(fftshift(fftshift(ifft2(tilt_phase_neg),1),2)).^2;
-    c = normxcorr2(spot_pos,spot_neg);
-    [xpeak_aux, ypeak_aux] = find(c==max(c(:)));
-%     xpeak = xpeak_aux+0.5*(c(xpeak_aux-1,ypeak_aux)-c(xpeak_aux+1,ypeak_aux))/(c(xpeak_aux-1,ypeak_aux)+c(xpeak_aux+1,ypeak_aux)-2.*c(xpeak_aux,ypeak_aux));
+%     tilt_phase_neg = exp(1i .* (-tilt));
+%     tilt_phase_neg = tilt_phase_neg(half_Nx - half_SubAp_Nx : half_Nx + half_SubAp_Nx, half_Nx - half_SubAp_Nx : half_Nx + half_SubAp_Nx);
+%     tilt_phase_neg = tilt_phase_neg.^(calibration_factor);
+%     spot_neg = abs(fftshift(fftshift(ifft2(tilt_phase_neg),1),2)).^2;
+%     c = normxcorr2(spot_pos,spot_neg);
+    c = spot_pos;
+    [xpeak_aux, ypeak_aux] = find(spot_pos==max(spot_pos(:)));
     ypeak = ypeak_aux+0.5*(c(xpeak_aux,ypeak_aux-1)-c(xpeak_aux,ypeak_aux+1))/(c(xpeak_aux,ypeak_aux-1)+c(xpeak_aux,ypeak_aux+1)-2.*c(xpeak_aux,ypeak_aux));
-%     xoffSet = ceil(size(c, 1)/2) - xpeak;
-    yoffSet = ceil(size(c, 2)/2) - ypeak;
-%     shift_tilt = (xoffSet + 1i * yoffSet)/2;
-%     shifts = shifts/(abs(yoffSet/2)/0.0131);
-%     sh(i) = real(phase_shifts(ceil(shack_hartmann.n_SubAp_inter/2)));
+    yoffSet = ceil(size(spot_pos, 2)/2) - ypeak;
     sh(i) = yoffSet;
 end
-% % 
-f = fit(abs(sh), cf', 'poly1');
+
+% new_x_shifts = interp1(sh, cf', real(shifts));
+% new_y_shifts = interp1(sh, cf', imag(shifts));
+% shifts = new_x_shifts + 1i.*new_y_shifts;
+
+% Eqn = 'a*sin(b*x + c)+d*x + e';
+f = fit((sh), cf', 'poly1');
+
 figure(5)
-plot(abs(sh), cf)
+plot((sh), cf, 'LineWidth', 2, 'Color', 'k')
 hold on
-plot(f)
+p2 = plot(f, 'k--');
+p2.LineWidth = 2;fontsize(gca,12,"points") ;
+xlabel('Shift [pixel]','FontSize',14) ;
+ylabel('Calibration factor [rad]','FontSize',14) ;
+pbaspect([1.618 1 1]) ;
+set(gca, 'LineWidth', 2);
 hold off
+
+print('-f5','-depsc', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\calibration_factor.eps') ;
 
 disp(f.p1);
 fit_coef = f.p1;
-
+% % 
 shifts = shifts.*fit_coef;
 
+shifts = reshape(shifts, shack_hartmann.n_SubAp_inter, shack_hartmann.n_SubAp_inter, []);
+
 [X, Y] = meshgrid(1 : shack_hartmann.n_SubAp_inter);
-step = (shack_hartmann.n_SubAp_inter-1) / Nx;
+step = (shack_hartmann.n_SubAp_inter-1) / range_x;
 [Xq ,Yq] = meshgrid(1 : step : shack_hartmann.n_SubAp_inter - step);
-
-% gradient_calibration_factor = shack_hartmann.calibration_factor/(floor(shack_hartmann.n_SubAp_inter/2)*abs(imag(shift_tilt)));
-% shift_tilt = shift_tilt * gradient_calibration_factor;
-
-% shifts_tilt = ones(size(shifts)) .* shift_tilt;
-% Ay = -real(shifts_tilt);
-% Ax = -imag(shifts_tilt);
-% 
-% % A1 = interp2(real(shifts_inter), 3);
-% % A2 = interp2(imag(shifts_inter), 3);
-% % A1 = imresize(real(shifts_inter), [512 512]);
-% % A2 = imresize(imag(shifts_inter), [512 512]);
-% A = intgrad2(Ax, Ay, 1, 1, 0);
-% A = A - mean(A, "all");
-% 
-% %% calibrate shifts
-% shifts = shifts .* gradient_calibration_factor;
-% % shifts_inter = shifts_inter./calibration_factor;
 
 for i = 1 : size(shifts, 3)
 
     Ay = -imag(shifts(:,:,i));
     Ax = -real(shifts(:,:,i));
 
-
     Ax = interp2(X, Y, Ax, Xq, Yq);
     Ay = interp2(X, Y, Ay, Xq, Yq);
-    % A1 = imresize(real(shifts_inter), [512 512]);
-    % A2 = imresize(imag(shifts_inter), [512 512]);
-    % dx = SubAp_Nx;
-    % dy = SubAp_Ny;
-    dx = 1/Nx;
-    dy = 1/Ny;
+    dx = 2/range_x;
+    dy = 2/range_y;
     A = intgrad2(Ax, Ay, dx, dy, 0);
+
     A = A - mean(A, "all");
-
-    % [Fx, Fy] = gradient(A);
-
-
-    % A_temp = zeros(size(A,1)+2*padding, size(A,2)+2*padding);
-    % A_temp(padding+1:end-padding, padding+1:end-padding) = A;
     A = permute(A, [2 1]);
+%     A = A .* shack_hartmann.n_SubAp;
 
-    % [X, Y] = meshgrid(1 : size(A_temp));
-    % step = (size(A_temp)-1) / 512;
-    % [Xq ,Yq] = meshgrid(1 : step : size(A_temp) - step);
-    % A_interp = interp2(X, Y, A, Xq, Yq);
-    %
-    % A = A_interp;
-
-    A = A - mean(A, "all");
-    % disp(max(A,[], 'all') - min(A,[], 'all'))
-    A = A .* shack_hartmann.n_SubAp;
-
-    phase(:,:,i) = A;
+    phase(pad_x + 1 : pad_x + range_x, pad_y + 1 : pad_y + range_y,i) = A;
 
 end
+
+Ay = imag(shifts(:,:,i));
+Ax = real(shifts(:,:,i));
+figure(2)
+quiver(X,Y,Ax,Ay)
+% imagesc(angle(exp(1i.*phase(:,:,1))))
+axis square
+axis off
+% colormap gray
+
+% print('-f2','-dpng', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\gradient_19.png') ;
 
 % figure(1)
 % imagesc(A)
@@ -155,26 +123,22 @@ end
 % axis square
 % axis off
 
-% phase = exp(-1i .* A);
-% 
-% [phase_shifts,~,~] = shack_hartmann.compute_images_shifts(phase, 1, 1, 1, true, true, ac);
-% 
-% phase_shifts  = reshape(phase_shifts, [shack_hartmann.n_SubAp_inter shack_hartmann.n_SubAp_inter]);
-% 
-% 
 if ~isempty(phase_zernike)
     figure(9)
     subplot(2,1,1)
     imagesc(angle(exp(1i.*phase_zernike)))
+%     imagesc(angle(exp(1i.*defocus .* 40)))
     title('Projected on Zernike')
     axis square
     axis off
+    colormap gray
 
     subplot(2,1,2)
     imagesc(angle(exp(1i.*phase)))
     title('Measured')
     axis square
     axis off
+    colormap gray
 
 %     figure(10)
 %     subplot(2,2,1);
@@ -205,21 +169,6 @@ if ~isempty(phase_zernike)
 %     axis square
 %     axis off
 end
-% By = -imag(shifts);
-% Bx = -real(shifts);
-% 
-% [X, Y] = meshgrid(1 : size(Bx));
-% step = (size(Bx)-1) / 512;
-% [Xq ,Yq] = meshgrid(1 : step : size(Bx) - step);
-% Bx = interp2(X, Y, Bx, Xq, Yq);
-% By = interp2(X, Y, By, Xq, Yq);
-% % A1 = imresize(real(shifts_inter), [512 512]);
-% % A2 = imresize(imag(shifts_inter), [512 512]);
-% B = intgrad2(Bx, By, 1, 1, 0);
-% 
-% figure(2)
-% imagesc(B)
-% axis square
-% axis off
 
+% print('-f9','-dpng', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\projected_not.png') ;
 end
