@@ -43,6 +43,8 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array, pos_inter] =
     % 13 14 15 16
     %
     shifts = zeros(obj.n_SubAp^2, 1);
+    image = zeros(size(FH, 1), size(FH, 2));
+
     
     % reference SubApil
     % we take one of the four in the center as a reference
@@ -55,7 +57,13 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array, pos_inter] =
     ac.Nx = double(ac.Nx);
     ac.Nx = size(FH, 2);
     ac.Ny = ac.Nx;
-    
+
+    % parameters
+    vx = obj.n_SubAp_inter ; % num of SubAp in x direction
+    vy = obj.n_SubAp_inter ; % num of SubAp in y direction
+    Nxx = floor(ac.Nx/obj.n_SubAp); % size of new SubAp in x
+    Nyy = floor(ac.Nx/obj.n_SubAp); % size of new SubAp in y
+
     %render complete image
     if ~calibration
         H = ifft2(FH);
@@ -68,6 +76,11 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array, pos_inter] =
         M0 = moment0(SH, f1, f2, ac.fs, size(FH ,3), gw);
         M0 = flat_field_correction(M0, gw);
         M0 = imresize(M0, [ac.Ny/obj.n_SubAp ac.Nx/obj.n_SubAp]);
+    else
+        [X, Y] = meshgrid(1:Nxx, 1:Nyy);
+        A = 3;
+        sigma = 1*obj.n_SubAp;
+        G = A*exp(-1/(sigma^2)*((Y-Nxx/2).^2 + (X-Nxx/2).^2));
     end
 %     M0 = mat2gray(M0);
 %     figure; 
@@ -190,11 +203,7 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array, pos_inter] =
 %     end %SubAp_idx
 
 %% Second loop for inter-strides
-% parameters
-vx = obj.n_SubAp_inter ; % num of SubAp in x direction 
-vy = obj.n_SubAp_inter ; % num of SubAp in y direction 
-Nxx = floor(ac.Nx/obj.n_SubAp); % size of new SubAp in x
-Nyy = floor(ac.Nx/obj.n_SubAp); % size of new SubAp in y
+
 
 % structures
 moment_inter_chunks_array = zeros(Nxx*vx, Nyy*vy); %Stitched PowerDoppler moments in each subaperture
@@ -230,6 +239,8 @@ for inter_SubAp_idy = inter_SubAp_id_range
         %                     disp([idx_range(1) idx_range(end) inter_SubAp_idx stride_x])
         %                     disp([SubAp_idy SubAp_idx inter_SubAp_idy inter_SubAp_idx]);
         %                     disp([idx_offset]);
+        image(idy_range, idx_range, 1) = inter_SubAp_idx;
+        image(idy_range, idx_range, 2) = inter_SubAp_idy;
 
         FH_inter_chunk = FH(idy_range,idx_range,:);
         % propagate wave
@@ -274,7 +285,10 @@ for inter_SubAp_idy = inter_SubAp_id_range
             % didn't change
             % compute auxilliary correlation between current and reference image chunk
             if calibration
-                moment_chunk_ref = moment_inter_chunks_array((inter_SubAp_idy_ref-1)*Nyy+1:(inter_SubAp_idy_ref)*Nyy,(inter_SubAp_idx_ref-1)*Nxx+1 : (inter_SubAp_idx_ref)*Nxx);
+%                 moment_chunk_ref = moment_inter_chunks_array((inter_SubAp_idy_ref-1)*Nyy+1:(inter_SubAp_idy_ref)*Nyy,(inter_SubAp_idx_ref-1)*Nxx+1 : (inter_SubAp_idx_ref)*Nxx);
+%                   figure(11)
+%                   imagesc(G)
+                  moment_chunk_ref = G;
             else
                 moment_chunk_ref = M0;
             end
@@ -302,7 +316,8 @@ for inter_SubAp_idy = inter_SubAp_id_range
             correlation_chunks_array((inter_SubAp_idx-1)*size(correlation_chunks_array,1)/vx+1:inter_SubAp_idx*size(correlation_chunks_array,1)/vx,(inter_SubAp_idy-1)*size(correlation_chunks_array,2)/vy+1:inter_SubAp_idy*size(correlation_chunks_array,2)/vy)=c(1:aa, 1:bb);
             %                 % find correlation peak
             [xpeak_aux, ypeak_aux] = find(c==max(c(:)));
-
+            xpeak_aux = xpeak_aux(end);
+            ypeak_aux = ypeak_aux(end);
             if ~calibration
                 correlation_coef_inter(inter_SubAp_idx, inter_SubAp_idy) = c(xpeak_aux, ypeak_aux);
             end
@@ -329,8 +344,11 @@ for inter_SubAp_idy = inter_SubAp_id_range
         stride_x = resize_ratio * floor((ac.Nx-Nxx)/(vx-1));
         stride_y = resize_ratio * floor((ac.Ny-Nyy)/(vy-1));
 
-        idx_range_out = stride_x * (inter_SubAp_idx-1) + 1 + SubAp_init : stride_x * (inter_SubAp_idx-1) + SubAp_init + numel(SubAp_init:SubAp_end);
-        idy_range_out = stride_y * (inter_SubAp_idy-1) + 1 + SubAp_init : stride_y * (inter_SubAp_idy-1) + SubAp_init + numel(SubAp_init:SubAp_end);
+%         idx_range_out = stride_x * (inter_SubAp_idx-1) + 1 + SubAp_init : stride_x * (inter_SubAp_idx-1) + SubAp_init + numel(SubAp_init:SubAp_end);
+%         idy_range_out = stride_y * (inter_SubAp_idy-1) + 1 + SubAp_init : stride_y * (inter_SubAp_idy-1) + SubAp_init + numel(SubAp_init:SubAp_end);
+
+        idx_range_out = stride_x * (inter_SubAp_idx-1) + SubAp_init : stride_x * (inter_SubAp_idx-1) + SubAp_init + numel(SubAp_init:SubAp_end) - 1;
+        idy_range_out = stride_y * (inter_SubAp_idy-1) + SubAp_init : stride_y * (inter_SubAp_idy-1) + SubAp_init + numel(SubAp_init:SubAp_end) - 1;
 
         moment_inter_chunks_crop_array(idy_range_out,idx_range_out) = moment_inter_chunk_cropped;
 
@@ -347,11 +365,6 @@ for i = 1:size(pos_inter_tmp,1)
 end
 
 
-% figure(1)
-% imagesc(moment_inter_chunks_crop_array);
-% axis off
-% axis square
-% colormap gray
 %     
 % figure(2)
 % imagesc(moment_inter_chunks_array);
@@ -370,6 +383,7 @@ end
 shifts = reshape(shifts_inter, vx*vy, 1);
 correlation_coef = correlation_coef_inter;
 
+
 % correlation_coef = reshape(correlation_tab, 1, []);
 
 if ~calibration
@@ -382,8 +396,8 @@ if ~calibration
     %         end
 %     correlation_threshold = mean(correlation_coef, "all") - std(correlation_coef, 1, "all");
 
-    central_shift = shifts(ceil(length(shifts)/2));
-    shifts = shifts - central_shift;
+%     central_shift = shifts(ceil(length(shifts)/2));
+%     shifts = shifts - central_shift;
 %     shifts(correlation_coef < correlation_threshold) = NaN ;
 
     %         figure(1);
