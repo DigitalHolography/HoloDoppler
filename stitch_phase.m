@@ -76,11 +76,11 @@ hold off
 
 print('-f5','-depsc', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\calibration_factor.eps') ;
 
-disp(f.p1);
+
 fit_coef = f.p1;
 % % 
 shifts = shifts.*fit_coef;
-
+disp(fit_coef * (Nx/shack_hartmann.n_SubAp));
 shifts = reshape(shifts, shack_hartmann.n_SubAp_inter, shack_hartmann.n_SubAp_inter, []);
 
 [X, Y] = meshgrid(1 : shack_hartmann.n_SubAp_inter);
