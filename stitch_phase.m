@@ -63,18 +63,23 @@ end
 % Eqn = 'a*sin(b*x + c)+d*x + e';
 f = fit((sh), cf', 'poly1');
 
-figure(5)
-plot((sh), cf, 'LineWidth', 2, 'Color', 'k')
-hold on
-p2 = plot(f, 'k--');
-p2.LineWidth = 2;fontsize(gca,12,"points") ;
-xlabel('Shift [pixel]','FontSize',14) ;
-ylabel('Calibration factor [rad]','FontSize',14) ;
-pbaspect([1.618 1 1]) ;
-set(gca, 'LineWidth', 2);
-hold off
+% figure(5)
+% plot((sh), cf, 'LineWidth', 2, 'Color', 'k')
+% hold on
+% p2 = plot(f, 'k--');
+% p2.LineWidth = 2;fontsize(gca,12,"points") ;
+% xlabel('Shift [pixel]','FontSize',14) ;
+% ylabel('Calibration factor [rad]','FontSize',14) ;
+% pbaspect([1.618 1 1]) ;
+% set(gca, 'LineWidth', 2);
+% hold off
 
-% print('-f5','-depsc', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\calibration_factor.eps') ;
+% figure(5)
+% imagesc(angle(exp(1i.*phase_zernike)))
+% axis square
+% axis off
+% colormap gray
+% print('-f5','-depsc', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\measured_phase.eps') ;
 
 
 fit_coef = f.p1;
@@ -109,19 +114,28 @@ end
 Ay = imag(shifts(:,:,i));
 Ax = real(shifts(:,:,i));
 figure(2)
-quiver(X,Y,Ax,Ay)
+q = quiver(X,Y,Ax,Ay);
 % imagesc(angle(exp(1i.*phase(:,:,1))))
+q.Color = 'black';
 axis square
 axis off
+colormap gray
 % colormap gray
 
-% print('-f2','-dpng', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\gradient_19.png') ;
+print('-f2','-depsc', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\gradient_17_5.eps') ;
 
 % figure(1)
 % imagesc(A)
 % % surf(X, Y, A)
 % axis square
 % axis off
+
+figure(5)
+imagesc(phase)
+axis square
+axis off
+colormap gray
+print('-f5','-depsc', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\integrated_gradient.eps') ;
 
 if ~isempty(phase_zernike)
     figure(9)
