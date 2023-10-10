@@ -1,9 +1,12 @@
-function [idx_excluded_subap] = excluded_subapertures(obj, Nx, Ny)
+function [idx_excluded_subap] = excluded_subapertures(obj)
 
 
 % ac.Nx = double(ac.Nx);
 % ac.Nx = size(FH, 2);
 % ac.Ny = ac.Nx;
+% unnecessary parameters
+Nx = 512;
+Ny = 512;
 
 vx = obj.n_SubAp_inter;
 vy = obj.n_SubAp_inter;

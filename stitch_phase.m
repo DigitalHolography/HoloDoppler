@@ -20,10 +20,14 @@ pad_x = floor((Nx - range_x)/2);
 pad_y = floor((Ny - range_y)/2);
 phase = zeros(Nx, Ny, size(shifts, 3));
 
+shifts = double(shifts);
+
 if ~(isempty(phase_zernike))
     shifts = shifts .* (Nx/shack_hartmann.n_SubAp);
 end
 
+
+% shifts = shifts .* 3;
 % shifts = reshape(shifts, shack_hartmann.n_SubAp_inter, shack_hartmann.n_SubAp_inter, []);
 
 % a = DopplerAcquisition(Nx, Ny, 0,0,0,0,0,0,0,0,0);
@@ -103,7 +107,11 @@ for i = 1 : size(shifts, 3)
     dy = 2/range_y;
     A = intgrad2(Ax, Ay, dx, dy, 0);
 
-    A = A - mean(A, "all");
+    if  ~(isempty(phase_zernike))
+        A = A - (A(half_Nx, half_Nx) - phase_zernike(half_Nx, half_Nx));
+    else
+        A = A - mean(A, "all");
+    end;
     A = permute(A, [2 1]);
 %     A = A .* shack_hartmann.n_SubAp;
 
@@ -136,6 +144,8 @@ axis square
 axis off
 colormap gray
 print('-f5','-depsc', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\integrated_gradient.eps') ;
+
+% phase_zernike = phase_zernike - mean(phase_zernike, "all");
 
 if ~isempty(phase_zernike)
     figure(9)
