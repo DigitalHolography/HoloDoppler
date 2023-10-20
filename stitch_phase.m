@@ -111,7 +111,7 @@ for i = 1 : size(shifts, 3)
         A = A - (A(half_Nx, half_Nx) - phase_zernike(half_Nx, half_Nx));
     else
         A = A - mean(A, "all");
-    end;
+    end
     A = permute(A, [2 1]);
 %     A = A .* shack_hartmann.n_SubAp;
 
