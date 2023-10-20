@@ -77,10 +77,13 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array, pos_inter] =
         M0 = flat_field_correction(M0, gw);
         M0 = imresize(M0, [ac.Ny/obj.n_SubAp ac.Nx/obj.n_SubAp]);
     else
-        [X, Y] = meshgrid(1:Nxx, 1:Nyy);
-        A = 3;
-        sigma = 1*obj.n_SubAp;
-        G = A*exp(-1/(sigma^2)*((Y-Nxx/2).^2 + (X-Nxx/2).^2));
+        x = linspace(-1, 1, Nxx);
+        y = linspace(-1, 1, Nxx);
+        [X, Y] = meshgrid(x, y);
+        A = 1;
+        sigma = 1/Nxx*obj.n_SubAp;
+        G = A*exp(-1/(sigma^2)*((Y).^2 + (X).^2));
+        G = imresize(G, [Nxx Nxx]);
     end
 %     M0 = mat2gray(M0);
 %     figure; 

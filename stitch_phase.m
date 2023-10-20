@@ -130,7 +130,7 @@ axis off
 colormap gray
 % colormap gray
 
-print('-f2','-depsc', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\gradient_17_5.eps') ;
+% print('-f2','-depsc', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\gradient_17_5.eps') ;
 
 % figure(1)
 % imagesc(A)
@@ -143,7 +143,7 @@ imagesc(phase)
 axis square
 axis off
 colormap gray
-print('-f5','-depsc', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\integrated_gradient.eps') ;
+% print('-f5','-depsc', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\integrated_gradient.eps') ;
 
 % phase_zernike = phase_zernike - mean(phase_zernike, "all");
 
