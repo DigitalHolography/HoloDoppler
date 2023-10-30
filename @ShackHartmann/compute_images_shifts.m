@@ -326,8 +326,15 @@ for inter_SubAp_idy = inter_SubAp_id_range
             end
             xpeak = xpeak_aux+0.5*(c(xpeak_aux-1,ypeak_aux)-c(xpeak_aux+1,ypeak_aux))/(c(xpeak_aux-1,ypeak_aux)+c(xpeak_aux+1,ypeak_aux)-2.*c(xpeak_aux,ypeak_aux));
             ypeak = ypeak_aux+0.5*(c(xpeak_aux,ypeak_aux-1)-c(xpeak_aux,ypeak_aux+1))/(c(xpeak_aux,ypeak_aux-1)+c(xpeak_aux,ypeak_aux+1)-2.*c(xpeak_aux,ypeak_aux));
-            xoffSet = ceil(size(c, 1)/2) - xpeak;
-            yoffSet = ceil(size(c, 2)/2) - ypeak;
+           %             xoffSet = ceil(size(c, 1)/2) - xpeak;
+%             yoffSet = ceil(size(c, 2)/2) - ypeak;
+            if rem(size(moment_chunk_ref, 2), 2) == 0 && calibration
+                xoffSet = ceil(size(c, 1)/2) - xpeak - 0.5;
+                yoffSet = ceil(size(c, 2)/2) - ypeak - 0.5;
+            else
+                xoffSet = ceil(size(c, 1)/2) - xpeak;
+                yoffSet = ceil(size(c, 2)/2) - ypeak;
+            end
             % compute shift between images
             shift_curr = (xoffSet + 1i * yoffSet)/resize_ratio;
             shifts_inter(inter_SubAp_idx, inter_SubAp_idy) = shift_curr(1);
