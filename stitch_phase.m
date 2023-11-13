@@ -23,6 +23,7 @@ phase = zeros(Nx, Ny, size(shifts, 3));
 shifts = double(shifts);
 
 if ~(isempty(phase_zernike))
+%     shifts = shifts .* Nx .* 3.1427;
     shifts = shifts .* (Nx/shack_hartmann.n_SubAp);
 end
 
@@ -40,6 +41,7 @@ end
 cf = linspace(-60, 60, 50);
 sh = zeros(50, 1);
 half_SubAp_Nx = floor(SubAp_Nx /2);
+% half_SubAp_Nx = floor(Nx /2) - 1;
 half_Nx = floor(Nx/2);
 
 for i = 1 : 50
@@ -64,7 +66,7 @@ end
 % new_y_shifts = interp1(sh, cf', imag(shifts));
 % shifts = new_x_shifts + 1i.*new_y_shifts;
 
-% Eqn = 'a*sin(b*x + c)+d*x + e';
+Eqn = 'a*sin(b*x + c)+d*x + e';
 f = fit((sh), cf', 'poly1');
 
 % figure(5)
@@ -78,18 +80,20 @@ f = fit((sh), cf', 'poly1');
 % set(gca, 'LineWidth', 2);
 % hold off
 
-% figure(5)
-% imagesc(angle(exp(1i.*phase_zernike)))
-% axis square
-% axis off
-% colormap gray
+figure(5)
+imagesc(angle(exp(1i.*phase_zernike)))
+axis square
+axis off
+colormap gray
 % print('-f5','-depsc', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\measured_phase.eps') ;
 
 
 fit_coef = f.p1;
-% % 
+% disp(fit_coef* (Nx/shack_hartmann.n_SubAp))
+% disp(fit_coef)
+% % % 
 shifts = shifts.*fit_coef;
-disp(fit_coef * (Nx/shack_hartmann.n_SubAp));
+% disp(fit_coef * (Nx/shack_hartmann.n_SubAp));
 shifts = reshape(shifts, shack_hartmann.n_SubAp_inter, shack_hartmann.n_SubAp_inter, []);
 
 [X, Y] = meshgrid(1 : shack_hartmann.n_SubAp_inter);
@@ -138,14 +142,15 @@ colormap gray
 % axis square
 % axis off
 
-figure(5)
-imagesc(phase)
-axis square
-axis off
-colormap gray
+% figure(5)
+% imagesc(phase)
+% axis square
+% axis off
+% colormap gray
 % print('-f5','-depsc', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\integrated_gradient.eps') ;
 
 % phase_zernike = phase_zernike - mean(phase_zernike, "all");
+mask = construct_mask(0, 256, 512, 512);
 
 if ~isempty(phase_zernike)
     figure(9)
@@ -158,7 +163,7 @@ if ~isempty(phase_zernike)
     colormap gray
 
     subplot(2,1,2)
-    imagesc(angle(exp(1i.*phase)))
+    imagesc(angle(exp(1i.*phase)).*mask)
     title('Measured')
     axis square
     axis off

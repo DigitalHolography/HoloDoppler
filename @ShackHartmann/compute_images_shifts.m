@@ -1,4 +1,4 @@
-function [shifts,moment_chunks_crop_array,correlation_chunks_array, pos_inter] = compute_images_shifts(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
+function [shifts,moment_chunks_crop_array,correlation_chunks_array, pos_inter] = compute_images_shifts(obj, FH, f1, f2, gw, calibration, enable_svd, svd_threshold, acquisition)
     
     % SubAp_margin
     % SubAp_idx < SubAp_idx
@@ -68,7 +68,7 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array, pos_inter] =
     if ~calibration
         H = ifft2(FH);
         if enable_svd
-            H = svd_filter(H, f1, ac.fs);
+            H = svd_filter(H, svd_threshold, ac.fs);
         end
         SH = fft(H, [], 3);
         SH = abs(SH).^2;
@@ -294,6 +294,7 @@ for inter_SubAp_idy = inter_SubAp_id_range
                   moment_chunk_ref = G;
             else
                 moment_chunk_ref = M0;
+%                   moment_chunk_ref = moment_inter_chunks_array((inter_SubAp_idy_ref-1)*Nyy+1:(inter_SubAp_idy_ref)*Nyy,(inter_SubAp_idx_ref-1)*Nxx+1 : (inter_SubAp_idx_ref)*Nxx);
             end
             % FIXME
             moment_chunk_ref = imresize(moment_chunk_ref, resize_ratio);

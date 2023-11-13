@@ -50,6 +50,7 @@ j_win = cache.batch_size;
 j_step = cache.batch_stride;
 f1 = cache.time_transform.f1;
 f2 = cache.time_transform.f2;
+svd_threshold = cache.SVDthreshold;
 acquisition = DopplerAcquisition(Nx,Ny,cache.Fs/1000, cache.z, cache.z_retina, cache.z_iris,cache.wavelength,cache.DX,cache.DY,cache.pix_width,cache.pix_height);
 % acquisition = DopplerAcquisition(, app.cache.z, app.cache.z_retina, app.cache.z_iris,app.cache.wavelength,app.cache.DX,app.cache.DY,app.cache.pix_width,app.cache.pix_height);
 
@@ -108,7 +109,7 @@ parfor (batch_idx = 1:num_batches, parfor_arg)
         FH = gpuArray(FH);
     end
 
-    [shifts, stiched_moments_subap, stiched_corr_subapp] = shack_hartmann.compute_images_shifts(FH, f1, f2, gw, false, true, acquisition);
+    [shifts, stiched_moments_subap, stiched_corr_subapp] = shack_hartmann.compute_images_shifts(FH, f1, f2, gw, false, true, svd_threshold, acquisition);
     shifts_vector(:, batch_idx) = shifts;
     stitched_correlation_video(:,:,:,batch_idx) = imresize(stiched_corr_subapp, [Nx Ny]);
     %     excluded_subapertures = find(isnan(shifts));

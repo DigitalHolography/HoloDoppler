@@ -37,6 +37,7 @@ properties (Access = public)
     rephasing
     OCTdata
     SVD
+    SVDthreshold
     save_raw
     
     % color image parameters

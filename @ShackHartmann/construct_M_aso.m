@@ -14,10 +14,13 @@ for p = 1:numel(obj.modes)
 %     phi = Phi(floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256, floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256 );
     phi = phi*obj.calibration_factor;
     transmittance = (exp(1i*phi));
-%     figure;
-%     imagesc(angle(transmittance));
+
+%     if p == 1
+%         figure;
+%         imagesc(angle(transmittance));
+%     end
 %      [~] = obj.compute_SVD_for_SubAp(transmittance, f1, f2, gw, true, false, ac);
-    [shifts, StichedMomentsInSubapertures] = obj.compute_images_shifts(transmittance, f1, f2, gw, true, false, ac);
+    [shifts, StichedMomentsInSubapertures] = obj.compute_images_shifts(transmittance, f1, f2, gw, true, false, 0, ac);
     % each mode is a col of M_aso
     M_aso(:,p) = shifts;
     StitchedMomentsInMaso(:,:,p) = StichedMomentsInSubapertures;
