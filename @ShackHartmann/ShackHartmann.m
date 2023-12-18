@@ -22,7 +22,7 @@ classdef ShackHartmann
         [idx_excluded_subap] = excluded_subapertures(obj, Nx, Ny)
         moment_chunk = reconstruct_moment_chunk(obj, FH_chunk, enable_svd, f1, f2,fs, gw);
 
-        function obj = ShackHartmann(n_SubAp, n_SubAp_inter, p, calibration_factor,SubAp_margin,CorrMap_margin,PowFilterPreCorr,SigmaFilterPreCorr, subimage_size, subimage_stride)
+        function obj = ShackHartmann(n_SubAp, n_SubAp_inter, p, calibration_factor,SubAp_margin,CorrMap_margin,PowFilterPreCorr,SigmaFilterPreCorr)
             obj.n_SubAp = n_SubAp;
             obj.n_SubAp_inter = n_SubAp_inter;
             obj.modes = p;
@@ -31,8 +31,6 @@ classdef ShackHartmann
             obj.CorrMap_margin = CorrMap_margin;
             obj.PowFilterPreCorr = PowFilterPreCorr;
             obj.SigmaFilterPreCorr = SigmaFilterPreCorr;
-            obj.subimage_size = subimage_size;
-            obj.subimage_stride = subimage_stride;
         end
         
         % reload M_aso that was previously constructed

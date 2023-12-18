@@ -127,14 +127,16 @@ Ay = imag(shifts(:,:,i));
 Ax = real(shifts(:,:,i));
 figure(2)
 q = quiver(X,Y,Ax,Ay);
+q.Alignment = 'center';
 % imagesc(angle(exp(1i.*phase(:,:,1))))
-q.Color = 'black';
+q.Color = 'white';
+set(gca,'Color','k')
 axis square
 axis off
 colormap gray
 % colormap gray
 
-% print('-f2','-depsc', 'C:\Users\Bronxville\Pictures\Aberration_correction_no_projection\gradient_17_5.eps') ;
+print('-f2','-depsc', 'C:\Users\Bronxville\Pictures\Aberrations_article\shift_vectors.eps') ;
 
 % figure(1)
 % imagesc(A)
