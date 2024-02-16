@@ -23,7 +23,9 @@ properties (Access = public)
     temporal_filter_flag
     temporal_filter
     parallelism
+    
     registration_via_phase
+    iterative_registration
     aberration_compensation
     notes
     DX
@@ -34,6 +36,7 @@ properties (Access = public)
     rephasing
     OCTdata
     SVD
+    save_raw
     
     % color image parameters
     color_f1

@@ -21,7 +21,7 @@ for pp = 1:num_frames
    end
    alpha = 10;
    shift = floor(Nx*(sqrt(2)-1)/(2*sqrt(2)));
-   
+
    %phase_cropped = phase((1:Nx2)+shift , (1:Ny2)+shift);
    tmp = fftshift(ifft2(exp(1i*alpha.*phase)));
 

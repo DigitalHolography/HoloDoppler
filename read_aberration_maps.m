@@ -1,6 +1,33 @@
 function read_aberration_maps(filename)
-% Function dedicated to reading coefficients maps issued from numerical
-% Shack-Hartmann
+
+%{ 
+FIXME
+data = readmatrix(filename);
+parameters = readmatrix(filename,  'Range' ,  '1:1');
+size_data = [parameters(1) parameters(2)];
+subimage_size = parameters(3);
+subimage_stride = parameters(4);
+path = 'C:\Users\Michael\Documents\191107_RIJ0023' ;
+coef = size(data,1)/parameters(2);
+astyg_g = zeros(size_data(1));
+defocus = zeros(size_data(1));
+astyg_d = zeros(size_data(1));
+my_map = customcolormap_preset('red-white-blue');
+%Fixme : le foutre dans une matrice 512x512 et mettre une interpolation
+%avec un mini filtre qui moyenne sur les voisins
+for i = 1 : coef
+    map = data(size_data(1)*(i-1) + 1 : size_data(1)*(i-1) + size_data(1),  1 : size_data(2));
+    map(abs(map)>25) = 0;
+    map = mat2gray(map);
+    file_name = sprintf('%s_%s.%s', 'Coef', int2str(i) , 'png');
+    %change of color
+    Numcolor = size(my_map, 1);
+    Imgmin = min(map(:)) ;
+    Imgmax = max(map(:)) ;
+    map = uint8((map-Imgmin)./(Imgmax-Imgmin).* (Numcolor-1)) ;
+    imwrite(map,my_map,fullfile(path, file_name));
+%}
+
 
 data = readmatrix(filename);
 parameters = readmatrix(filename,  'Range' ,  '1:1');
@@ -42,7 +69,7 @@ for i = 1 : coef
 
     norm_map = sqrt(sum(map .* map, "all"));
     map = map ./ norm_map;
-    
+
     m = sort(map(:), 'ascend');
     minim = mean(m(1:4));
     map = map - minim;
@@ -55,11 +82,11 @@ for i = 1 : coef
     zern = circshift(zern, -NNx, 1);
     zern = circshift(zern, -NNx, 2);
     zern = zern(1 : size(map,1), 1 : size(map,1), :);
-    
+
     for j = 1 : 3
           projection(j) = sum(zern(:,:,j) .* map, "all")/nnz(~ref);
     end
-    
+
 
     %% display and save
     disp(projection);
