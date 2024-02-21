@@ -47,33 +47,33 @@ for i = 1 : coef
     map = data(size_data(1)*(i-1) + 1 : size_data(1)*(i-1) + size_data(1),  1 : size_data(2));
     centerx = ceil(size(map, 1)/2);
     centery = ceil(size(map, 2)/2);
-    %% remove outliers
-    window_size = floor(0.5 * size(map, 1));
-    corrected_map = map;
-    blurred_map = imgaussfilt(map, floor(size(map,1)/4));
-    s = std(map ,[], "all");
-    threshold = 1;
-    for id_x = 0 : 1 : (size(map, 1) - window_size)
-        for id_y = 0 : 1 :(size(map, 1) - window_size)
-            window = map(id_x + 1 : id_x + window_size, id_y + 1 : id_y + window_size);
-            blurred_window = blurred_map(id_x + 1 : id_x + window_size, id_y + 1 : id_y + window_size);
-            window(abs(window - mean(window, "all")) > threshold*s) = blurred_window(abs(window - mean(window, "all")) > threshold*s);
-            corrected_map(id_x + 1 : id_x + window_size, id_y + 1 : id_y + window_size) = window;
-        end
-    end
-%     map = corrected_map;
-%     map = rmoutliers(map, "mean");
+%     %% remove outliers
+%     window_size = floor(0.5 * size(map, 1));
+%     corrected_map = map;
+%     blurred_map = imgaussfilt(map, floor(size(map,1)/4));
+%     s = std(map ,[], "all");
+%     threshold = 1;
+%     for id_x = 0 : 1 : (size(map, 1) - window_size)
+%         for id_y = 0 : 1 :(size(map, 1) - window_size)
+%             window = map(id_x + 1 : id_x + window_size, id_y + 1 : id_y + window_size);
+%             blurred_window = blurred_map(id_x + 1 : id_x + window_size, id_y + 1 : id_y + window_size);
+%             window(abs(window - mean(window, "all")) > threshold*s) = blurred_window(abs(window - mean(window, "all")) > threshold*s);
+%             corrected_map(id_x + 1 : id_x + window_size, id_y + 1 : id_y + window_size) = window;
+%         end
+%     end
+    map = corrected_map;
+    map = rmoutliers(map, "mean");
 
     %% remove offset and normalize
     ref = (abs(map)>10);
 
-    norm_map = sqrt(sum(map .* map, "all"));
-    map = map ./ norm_map;
-
-    m = sort(map(:), 'ascend');
-    minim = mean(m(1:4));
-    map = map - minim;
-    map(ref) = 0;
+%     norm_map = sqrt(sum(map .* map, "all"));
+%     map = map ./ norm_map;
+% 
+%     m = sort(map(:), 'ascend');
+%     minim = mean(m(1:4));
+%     map = map - minim;
+%     map(ref) = 0;
 
 %%  project on the zernike functions
     projection = zeros(3, 1);

@@ -1,34 +1,36 @@
 classdef ShackHartmann
     properties
         n_SubAp % n_subapertures
+        n_SubAp_inter 
         modes % idx array of zernikes
         calibration_factor
         SubAp_margin
         CorrMap_margin 
         PowFilterPreCorr
         SigmaFilterPreCorr
-        subimage_size
-        subimage_stride
+        ref_image
     end
     methods
         % methods declaration
         [M_aso,StitchedMomentsInMaso] = construct_M_aso(obj, f1, f2, gw, acquisition)
-        [shifts,StitchedMomentsInSubApertures,StitchedCorrInSubApertures] = compute_images_shifts(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
+        [shifts,StitchedMomentsInSubApertures,StitchedCorrInSubApertures, FH] = compute_images_shifts(obj, FH, f1, f2, gw, calibration, enable_svd, svd_threshold, acquisition)
         phase = compute_SVD_for_SubAp(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition);
         phase = compute_temporal_SVD_in_SubAp(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition);
         [shifts,StitchedMomentsInSubApertures,StitchedCorrInSubApertures] = spatial_signal_analysis_PCA(obj, FH, f1, f2, gw, calibration, enable_svd, acquisition)
         SubFH = SubField(obj, FH);
+        [idx_excluded_subap] = excluded_subapertures(obj, Nx, Ny)
+        moment_chunk = reconstruct_moment_chunk(obj, FH_chunk, enable_svd, f1, f2,fs, gw);
 
-        function obj = ShackHartmann(n_SubAp, p, calibration_factor,SubAp_margin,CorrMap_margin,PowFilterPreCorr,SigmaFilterPreCorr, subimage_size, subimage_stride)
+        function obj = ShackHartmann(n_SubAp, n_SubAp_inter, p, calibration_factor,SubAp_margin,CorrMap_margin,PowFilterPreCorr,SigmaFilterPreCorr, ref_image)
             obj.n_SubAp = n_SubAp;
+            obj.n_SubAp_inter = n_SubAp_inter;
             obj.modes = p;
             obj.calibration_factor = calibration_factor;
             obj.SubAp_margin = SubAp_margin;
             obj.CorrMap_margin = CorrMap_margin;
             obj.PowFilterPreCorr = PowFilterPreCorr;
             obj.SigmaFilterPreCorr = SigmaFilterPreCorr;
-            obj.subimage_size = subimage_size;
-            obj.subimage_stride = subimage_stride;
+            obj.ref_image = ref_image;
         end
         
         % reload M_aso that was previously constructed

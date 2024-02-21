@@ -182,7 +182,7 @@ if img_type_list.spectrogram.select
     cubeTargetSize = 256;
     cubeFreqLength = 32 ;
     %img_type_list.spectrogram.SH = SH(1:bin_x:end,1:bin_y:end,1:bin_w:end);
-    img_type_list.spectrogram.SH = imresize3(SH,[cubeTargetSize cubeTargetSize cubeFreqLength],'Method','linear');
+    img_type_list.spectrogram.SH = imresize3(gather(SH),[cubeTargetSize cubeTargetSize cubeFreqLength],'Method','linear');
     img_type_list.spectrogram.vector = zeros(1,j_win);
     img_type_list.spectrogram.image = zeros(size(SH, 1), size(SH, 2));
     %     tmp = zeros(size(SH,1), size(SH,2), 1, size(SH,3),'single');

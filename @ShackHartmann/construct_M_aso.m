@@ -2,18 +2,23 @@ function [M_aso,StitchedMomentsInMaso] = construct_M_aso(obj, f1, f2, gw, acquis
 ac = acquisition;
 
 
-M_aso = zeros(obj.n_SubAp^2, numel(obj.modes));
+% M_aso = zeros(obj.n_SubAp^2, numel(obj.modes));
+M_aso = zeros((obj.n_SubAp_inter^2), numel(obj.modes));
 StitchedMomentsInMaso = zeros(512,512, numel(obj.modes)); %Stitched PowerDoppler moments in each subaperture
 
 
 for p = 1:numel(obj.modes)
-%     [~,phi] = zernike_phase(obj.modes(p), 512, 512);
     [~,phi] = zernike_phase(obj.modes(p), 512, 512);
+%     s = floor(512* sqrt(2));
+%     [~,Phi] = zernike_phase(obj.modes(p), s, s);
 %     phi = Phi(floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256, floor(512* sqrt(2))/2 - 255 : floor(512* sqrt(2))/2 + 256 );
     phi = phi*obj.calibration_factor;
     transmittance = (exp(1i*phi));
-%     figure;
-%     imagesc(angle(transmittance));
+
+%     if p == 1
+%         figure;
+%         imagesc(angle(transmittance));
+%     end
 %      [~] = obj.compute_SVD_for_SubAp(transmittance, f1, f2, gw, true, false, ac);
     [shifts, StichedMomentsInSubapertures] = obj.compute_images_shifts(transmittance, f1, f2, gw, true, false, ac);
     
