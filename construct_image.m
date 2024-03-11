@@ -1,7 +1,7 @@
-function img_type_list = construct_image(FH, wavelength, acquisition, gaussian_width, use_gpu, svd, svdx, Nb_SubAp, phase_correction,...
+function [img_type_list, reference_wave_power, reference_wave_power_std, signal_power, signal_power_std, beating_wave_variance_power, beating_wave_variance_power_std, reference_wave, beating_wave_variance, signal] = construct_image(FH, wavelength, acquisition, gaussian_width, use_gpu, svd, svdx, Nb_SubAp, phase_correction,...
                                                                   color_f1, color_f2, color_f3, img_type_list, is_low_frequency , ...
                                                                   spatial_transformation, time_transform, SubAp_PCA, xy_stride, num_unit_cells_x, r1, ...
-                                                                  local_temporal, phi1, phi2, local_spatial, nu1, nu2, artery_mask)
+                                                                  local_temporal, phi1, phi2, local_spatial, nu1, nu2)
 
 % [~, phase ] = zernike_phase([ 4 ], 512, 512);
 % phase = 30 * 0.5 * phase;
@@ -14,7 +14,6 @@ function img_type_list = construct_image(FH, wavelength, acquisition, gaussian_w
 % FIXME : replace ifs by short name functions
 j_win = size(FH, 3);
 ac = acquisition;
-% artery_mask = flip(artery_mask);
 
 % move data to gpu if available
 if use_gpu
@@ -49,11 +48,21 @@ else
     
 end
 %% SVD filtering
+reference_wave = mean(abs(H),3);
+reference_wave_power = mean(reference_wave(:));
+reference_wave_power_std = std(reference_wave(:));
 
+beating_wave_variance = var(abs(H),[],3);
+beating_wave_variance_power = mean(beating_wave_variance(:));
+beating_wave_variance_power_std = std(beating_wave_variance(:));
 
 if svd
     H = svd_filter(H, time_transform.f1, ac.fs);
 end
+
+signal = var(abs(H),[],3);
+signal_power = mean(signal(:));
+signal_power_std = std(signal(:));
 
 if (svdx)
     H = svd_x_filter(H, time_transform.f1, ac.fs, Nb_SubAp);
@@ -190,8 +199,6 @@ if img_type_list.spectrogram.select
     %         tmp(:,:,1,ii)  = SH(:,:,ii);
     %     img_type_list.spectrogram.SH = tmp;
     %
-    %     %     figure(111)
-    %     %     imagesc(artery_mask);
     %     n1 = ceil(f1 * j_win / ac.fs);
     %     n2 = ceil(f2 * j_win / ac.fs);
     %

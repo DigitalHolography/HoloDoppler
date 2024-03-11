@@ -1,4 +1,4 @@
-function [hologram0, sqrt_hologram0] = reconstruct_hologram(FH, acquisition, gaussian_width, use_gpu, svd, svdx, Nb_SubAp, phase_correction, time_transform, spatial_transformation)
+function [hologram0, sqrt_hologram0, reference_wave_power, reference_wave_power_std, signal_power, signal_power_std, beating_wave_variance_power, beating_wave_variance_power_std, reference_wave, beating_wave_variance, signal] = reconstruct_hologram(FH, acquisition, gaussian_width, use_gpu, svd, svdx, Nb_SubAp, phase_correction, time_transform, spatial_transformation)
 % Compute the moment of a batch of interferograms.
 % For more moment outputs, use reconstruct_hologram_extra, this function
 % only computes one output for speed
@@ -47,11 +47,22 @@ end
 % H = ifft2(FH);
 clear FH;
 
+reference_wave = mean(abs(H),3);
+reference_wave_power = mean(reference_wave(:));
+reference_wave_power_std = std(reference_wave(:));
+
+beating_wave_variance = var(abs(H),[],3);
+beating_wave_variance_power = mean(beating_wave_variance(:));
+beating_wave_variance_power_std = std(beating_wave_variance(:));
+
 %% SVD filtering
 if (svd)
     H = svd_filter(H, time_transform.f1, ac.fs);
 end
 
+signal = var(abs(H),[],3);
+signal_power = mean(signal(:));
+signal_power_std = std(signal(:));
 
 if (svdx)
     H = svd_x_filter(H, time_transform.f1, ac.fs, Nb_SubAp);
