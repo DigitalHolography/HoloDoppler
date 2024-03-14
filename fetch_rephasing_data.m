@@ -9,7 +9,7 @@ function [rephasing_data, found] = fetch_rephasing_data(filepath, filename, file
 
 if ~isempty(selected_dir)
     found = true;
-    rephasing_data = load(fullfile(filepath, selected_dir, sprintf('%s.mat', selected_dir)), 'rephasing_data');
+    rephasing_data = load(fullfile(filepath, selected_dir, 'mat', sprintf('%s.mat', selected_dir)), 'rephasing_data');
     rephasing_data = rephasing_data.rephasing_data;
 
     for i = numel(rephasing_data)

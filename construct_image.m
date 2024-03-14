@@ -33,10 +33,10 @@ end
 
 
 % if we want dark field preview H is calculated by dark field function
-if img_type_list.dark_field_image.select
+if img_type_list.dark_field_image.is_selected
     %for now we assume that both spatial transforms are the same
     H = dark_field(FH, ac.z_retina, spatial_transformation, ac.z_iris, spatial_transformation, ac.lambda, ac.x_step, ac.y_step, xy_stride, time_transform.f1, time_transform.f2, ac.fs, num_unit_cells_x, r1); 
-    img_type_list.dark_field_image.H = H;
+    img_type_list.dark_field_image.parameters = struct("H",H);
 else
     switch spatial_transformation
         case 'angular spectrum'
@@ -78,13 +78,7 @@ end
 
 clear FH;
 
-
-
-
-
-
-
-img_type_list.spectrogram.H = H;
+img_type_list.spectrogram.parameters = struct("H",H);
 
 
 %% Compute moments based on dropdown value
@@ -115,25 +109,25 @@ SH = permute(SH, [2 1 3]);
 SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
 
 
-if img_type_list.pure_PCA.select
+if img_type_list.pure_PCA.is_selected
     img_type_list.pure_PCA.image = cumulant(SH, n1, n2);
     img_type_list.pure_PCA.image = flat_field_correction(img_type_list.pure_PCA.image, gaussian_width);
 end
 
-if img_type_list.dark_field_image.select
+if img_type_list.dark_field_image.is_selected
     img_type_list.dark_field_image.image = log(flat_field_correction(moment0(SH, f1, f2, ac.fs, j_win, gaussian_width),gaussian_width));
 end
 
-if img_type_list.phase_variation.select
+if img_type_list.phase_variation.is_selected
     %FIXME : ecraser H
     C = angle(phase_fluctuation(H));
     C = permute(C, [2 1 3]);
     img_type_list.phase_variation.image = moment0(SH, f1, f2, ac.fs, j_win, gaussian_width);
 end
 
-if img_type_list.power_Doppler.select % Power Doppler has been chosen
+if img_type_list.power_Doppler.is_selected % Power Doppler has been chosen
     [img, sqrt_img] = moment0(SH, f1, f2, ac.fs, j_win, gaussian_width);
-    img_type_list.power_Doppler.M0_sqrt = sqrt_img;
+    img_type_list.power_Doppler.parameters = struct("M0_sqrt",sqrt_img);
     img_type_list.power_Doppler.image = img;
 
     %save image for study
@@ -142,14 +136,14 @@ if img_type_list.power_Doppler.select % Power Doppler has been chosen
 %     imwrite(img, fullfile('C:\Users\Philadelphia\Pictures\local_spatial_220314', sprintf("%s_%d.png", file_name, suffix + 1)));
 end
 
-if img_type_list.power_1_Doppler.select % Power 1 Doppler has been chosen
+if img_type_list.power_1_Doppler.is_selected % Power 1 Doppler has been chosen
     img = moment1(SH, f1, f2, ac.fs, j_win, gaussian_width);
     [img0,~] = moment0(SH, f1, f2, ac.fs, j_win, 0);
     img = img./mean(img0(:));
     img_type_list.power_1_Doppler.image = img;
 end
 
-if img_type_list.power_2_Doppler.select % Power 2 Doppler has been chosen
+if img_type_list.power_2_Doppler.is_selected % Power 2 Doppler has been chosen
     %% FIXME: from now on Power 2 Doppler becomes frequency RMS
     img2 = moment2(SH, f1, f2, ac.fs, j_win, 0); %0 35
     %moment 1
@@ -160,30 +154,30 @@ if img_type_list.power_2_Doppler.select % Power 2 Doppler has been chosen
     img_type_list.power_2_Doppler.image = sqrt(img2./mean(img0(:)));
 end
 
-if img_type_list.color_Doppler.select  % Color Doppler has been chosen
+if img_type_list.color_Doppler.is_selected  % Color Doppler has been chosen
     [freq_low, freq_high] = composite(SH, color_f1, color_f2, color_f3, ac.fs, j_win, gaussian_width);
-    img_type_list.color_Doppler.freq_low = freq_low;
-    img_type_list.color_Doppler.freq_high = freq_high;
+    img_type_list.color_Doppler.parameters = struct("freq_low",freq_low);
+    img_type_list.color_Doppler.parameters = struct("freq_high",freq_high);
     img_type_list.color_Doppler.image = construct_colored_image(sign * gather(freq_low), sign * gather(freq_high), is_low_frequency);
 end
 
-if img_type_list.directional_Doppler.select % Directional Doppler has been chosen
+if img_type_list.directional_Doppler.is_selected % Directional Doppler has been chosen
     [M0_pos, M0_neg] = directional(SH, f1, f2, ac.fs, j_win, gaussian_width);
-    img_type_list.directional_Doppler.M0_pos = M0_pos;
-    img_type_list.directional_Doppler.M0_neg = M0_neg;
+    img_type_list.directional_Doppler.parameters = struct("M0_pos",M0_pos);
+    img_type_list.directional_Doppler.parameters = struct("M0_neg",M0_neg);
     img_type_list.directional_Doppler.image = construct_directional_image(sign * gather(M0_pos), sign *gather(M0_neg), is_low_frequency);
 end
 
-if img_type_list.M0sM1r.select % M1sM0r has been chosen
+if img_type_list.M0sM1r.is_selected % M1sM0r has been chosen
     img = fmean(SH, f1, f2, ac.fs, j_win, gaussian_width);
     img_type_list.M0sM1r.image = img;
 end
 
-if img_type_list.velocity_estimate.select % Velocity Estimate has been chosen
+if img_type_list.velocity_estimate.is_selected % Velocity Estimate has been chosen
    img_type_list.velocity_estimate.image = construct_velocity_video(SH, f1, f2, ac.fs, j_win, gaussian_width, wavelength);
 end
 
-if img_type_list.spectrogram.select
+if img_type_list.spectrogram.is_selected
 %     bin_x = 2;
 %     bin_y = 2;
 %     bin_t = 1;
@@ -191,8 +185,8 @@ if img_type_list.spectrogram.select
     cubeTargetSize = 256;
     cubeFreqLength = 32 ;
     %img_type_list.spectrogram.SH = SH(1:bin_x:end,1:bin_y:end,1:bin_w:end);
-    img_type_list.spectrogram.SH = imresize3(gather(SH),[cubeTargetSize cubeTargetSize cubeFreqLength],'Method','linear');
-    img_type_list.spectrogram.vector = zeros(1,j_win);
+    img_type_list.spectrogram.parameters = struct("SH", imresize3(gather(SH),[cubeTargetSize cubeTargetSize cubeFreqLength],'Method','linear'));
+    img_type_list.spectrogram.parameters = struct("vector", zeros(1,j_win));
     img_type_list.spectrogram.image = zeros(size(SH, 1), size(SH, 2));
     %     tmp = zeros(size(SH,1), size(SH,2), 1, size(SH,3),'single');
     %     for ii = 1:size(SH,3)
@@ -209,18 +203,18 @@ if img_type_list.spectrogram.select
 end
 
 
- if img_type_list.moment0.select % Power 1 Doppler has been chosen
+ if img_type_list.moment0.is_selected % Power 1 Doppler has been chosen
     [img, sqrt_img] = moment0(SH, f1, f2, ac.fs, j_win, 0);
     img_type_list.moment0.image = img;
-    img_type_list.moment0.sqrt_img = sqrt_img;
+    img_type_list.moment0.parameters = struct("sqrt_img",sqrt_img);
  end
 
- if img_type_list.moment1.select % Power 1 Doppler has been chosen
+ if img_type_list.moment1.is_selected % Power 1 Doppler has been chosen
     img = moment1(SH, f1, f2, ac.fs, j_win, 0);
     img_type_list.moment1.image = img;
  end
 
- if img_type_list.moment2.select % Power 1 Doppler has been chosen
+ if img_type_list.moment2.is_selected % Power 1 Doppler has been chosen
     img = moment2(SH, f1, f2, ac.fs, j_win, 0);
     img_type_list.moment2.image = img;
  end
