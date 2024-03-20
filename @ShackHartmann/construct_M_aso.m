@@ -15,6 +15,33 @@ for p = 1:numel(obj.modes)
     phi = phi*obj.calibration_factor;
     transmittance = (exp(1i*phi));
 
+%     Nxx = 512;
+%     num_subap = obj.n_SubAp_inter;
+% 
+%     size_subap = floor(Nxx/num_subap);
+% 
+%     mask = ~(phi~=0);
+%     mask = imgaussfilt(double(mask), 5);
+%     mask = (mask==0);
+%     shifts_2 = zeros(num_subap, num_subap);
+%     for idx = 1 : num_subap
+%         for idy = 1 : num_subap
+%             tmp_phi = phi.*3.14;
+%             range_x = (idx - 1) * size_subap + 1 : idx * size_subap;
+%             range_y = (idy - 1) * size_subap + 1 : idy * size_subap;
+%             chunk = tmp_phi(range_y, range_x);
+%             chunk_mask = mask(range_y, range_x);
+%             [FX,FY] = gradient(chunk, (2*3.14)/(512));
+%             FX = FX .*chunk_mask;
+%             FY = FY .*chunk_mask;
+%             fx = sum(FX, 'all')/nnz(chunk_mask);
+%             fy = sum(FY, 'all')/nnz(chunk_mask);
+%             shifts_2(idx, idy) = -(fy + 1i.*fx)/512 * (512/num_subap) / 3.14;
+% %             shifts_2(idx, idy) = shifts_2(idx, idy)/(512/num_subap)*512;
+%         end
+%     end
+%     shifts = reshape(shifts_2, [num_subap * num_subap 1]);
+
 %     if p == 1
 %         figure;
 %         imagesc(angle(transmittance));
@@ -24,7 +51,7 @@ for p = 1:numel(obj.modes)
     
     % each mode is a col of M_aso
     M_aso(:,p) = shifts;
-    StitchedMomentsInMaso(:,:,p) = StichedMomentsInSubapertures;
+%     StitchedMomentsInMaso(:,:,p) = StichedMomentsInSubapertures;
 end
 
 end
