@@ -33,6 +33,17 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array, pos_inter] =
     ac = acquisition;
     j_win = size(FH, 3);
     resize_ratio = 1;
+    
+%     pad_ratio = 1.25;
+%     H_padded = zeros(pad_ratio*size(FH,1), pad_ratio*size(FH,2), j_win);
+%     H = (ifft2(FH));
+%     H_padded(1:size(FH,1), 1:size(FH,2), :) = H;
+%     H_padded = circshift(H_padded, (pad_ratio - 1)*size(FH, 1)/2, 1);
+%     H_padded = circshift(H_padded, (pad_ratio - 1)*size(FH, 1)/2, 2);
+%     FH_padded = fft2(H_padded);
+%     FH_padded = circshift(FH_padded, -(pad_ratio - 1)*size(FH, 1)/2, 1);
+%     FH_padded = circshift(FH_padded, -(pad_ratio - 1)*size(FH, 1)/2, 2);
+%     FH = FH_padded(1:size(FH,1), 1:size(FH,2), :);
 
     % shifts is a 1D vector
     % it maps the 2D SubApils grid by iterating column first
@@ -107,6 +118,7 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array, pos_inter] =
 
 %     gw = (100 * (ac.Nx/obj.n_SubAp)/512)/obj.n_SubAp;
     gw = 20;
+%     gw = 50;
     gw = gw /obj.n_SubAp;
 
     correlation_coef = zeros(1,obj.n_SubAp^2);
@@ -248,8 +260,14 @@ for inter_SubAp_idy = inter_SubAp_id_range
         FH_inter_chunk = FH(idy_range,idx_range,:);
         % propagate wave
         if calibration
+%             FH_inter_chunk = zeros(2*length(idy_range)+1, 2*length(idx_range)+1, j_win);
+%             FH_inter_chunk(1:length(idy_range), 1:length(idx_range), :) = FH(idy_range,idx_range,:);
+%             FH_inter_chunk = circshift(FH_inter_chunk, (length(idy_range)+1)/2, 1);
+%             FH_inter_chunk = circshift(FH_inter_chunk, (length(idy_range)+1)/2, 2);
             moment_inter_chunk = abs(fftshift(fftshift(ifft2(FH_inter_chunk),1),2)).^2;
+%             moment_inter_chunk = moment_inter_chunk((length(idy_range)+1)/2 + 1 : (length(idy_range)+1)/2 + length(idy_range), (length(idy_range)+1)/2 + 1 : (length(idy_range)+1)/2 + length(idy_range), :);
         else
+%             FH_inter_chunk = FH(idy_range,idx_range,:);
             moment_inter_chunk = obj.reconstruct_moment_chunk(FH_inter_chunk, enable_svd, f1, f2, ac.fs, gw);
         end % calibration
 

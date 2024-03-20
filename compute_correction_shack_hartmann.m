@@ -3,7 +3,7 @@ function [correction, stiched_moments_video, shifts_vector, stitched_correlation
                                          p, registration_shifts, num_subapertures, num_subapertures_inter,...
                                          calibration_factor, subaperture_margin,...
                                          corrmap_margin,power_filter_corrector,...
-                                         sigma_filter_corrector, excluded_subapertures,varargin)
+                                         sigma_filter_corrector, excluded_subapertures,ref_img, varargin)
 % Compute an optimal aberration correction given zernike
 % indices.
 %
@@ -84,7 +84,7 @@ parfor (batch_idx = 1:num_batches, parfor_arg)
 
     FH = register_FH(FH, local_shifts, j_win, 1);
 
-    if nin == 22 % change this value if function arguments are added or removed
+    if nin == 23 % change this value if function arguments are added or removed
         % if this parameter exist, then so does 'previous_p'
         previous_p = varargin{1};
         previous_coefs = varargin{2};
@@ -101,7 +101,7 @@ parfor (batch_idx = 1:num_batches, parfor_arg)
 
     % FH is now registered and pre-processed, we now proceed to aberation
     % computation
-    shack_hartmann = ShackHartmann(num_subapertures, num_subapertures_inter, p, calibration_factor, subaperture_margin, corrmap_margin, power_filter_corrector, sigma_filter_corrector);
+    shack_hartmann = ShackHartmann(num_subapertures, num_subapertures_inter, p, calibration_factor, subaperture_margin, corrmap_margin, power_filter_corrector, sigma_filter_corrector, ref_img);
     [M_aso, stiched_moments_M_aso] = shack_hartmann.construct_M_aso(f1, f2, gw, acquisition);
 
     if use_gpu
