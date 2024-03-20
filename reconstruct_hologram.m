@@ -60,10 +60,6 @@ if (svd)
     H = svd_filter(H, time_transform.f1, ac.fs);
 end
 
-WaveInfo.bwv_post_svd = var(abs(H),[],3);
-WaveInfo.bwv_post_svd_power = mean(WaveInfo.bwv_post_svd(:));
-WaveInfo.bwv_post_svd_power_std = std(WaveInfo.bwv_post_svd(:));
-
 if (svdx)
     H = svd_x_filter(H, time_transform.f1, ac.fs, Nb_SubAp);
 end

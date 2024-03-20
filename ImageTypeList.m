@@ -132,7 +132,6 @@ classdef ImageTypeList < handle
         %             H = fftshift(ifft2(FH));
                       H = fftshift(fft2(FH));
             end
-            
         end
 
         WaveInfo.reference_wave = mean(abs(H),3);
@@ -145,14 +144,9 @@ classdef ImageTypeList < handle
 
         %% SVD filtering
        
-
         if svd
             H = svd_filter(H, time_transform.f1, ac.fs);
         end
-        
-        WaveInfo.bwv_post_svd = var(abs(H),[],3);
-        WaveInfo.bwv_post_svd_power = mean(WaveInfo.bwv_post_svd(:));
-        WaveInfo.bwv_post_svd_power_std = std(WaveInfo.bwv_post_svd(:));
         
         if (svdx)
             H = svd_x_filter(H, time_transform.f1, ac.fs, Nb_SubAp);
