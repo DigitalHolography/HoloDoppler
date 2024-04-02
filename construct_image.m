@@ -48,11 +48,11 @@ else
     
 end
 %% SVD filtering
-reference_wave = mean(abs(H),3);
+reference_wave = single(mean(abs(H),3));
 reference_wave_power = mean(reference_wave(:));
 reference_wave_power_std = std(reference_wave(:));
 
-beating_wave_variance = var(abs(H),[],3);
+beating_wave_variance = single(var(abs(H),[],3));
 beating_wave_variance_power = mean(beating_wave_variance(:));
 beating_wave_variance_power_std = std(beating_wave_variance(:));
 

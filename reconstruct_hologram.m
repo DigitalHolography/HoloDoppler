@@ -47,11 +47,11 @@ end
 % H = ifft2(FH);
 clear FH;
 
-WaveInfo.reference_wave = mean(abs(H),3);
+WaveInfo.reference_wave = single(mean(abs(H),3));
 WaveInfo.reference_wave_power = mean(WaveInfo.reference_wave(:));
 WaveInfo.reference_wave_power_std = std(WaveInfo.reference_wave(:));
 
-WaveInfo.beating_wave_variance = var(abs(H),[],3);
+WaveInfo.beating_wave_variance = single(var(abs(H),[],3));
 WaveInfo.beating_wave_variance_power = mean(WaveInfo.beating_wave_variance(:));
 WaveInfo.beating_wave_variance_power_std = std(WaveInfo.beating_wave_variance(:));
 
