@@ -12,27 +12,25 @@ for frame = 1 : size(z_profile_video, 2)
 z_profile_video(:, frame) = z_profile_video(:, frame)/ sum(z_profile_video(:, frame), "all");
 end
 
+figure (1)
+imagesc(z_profile_video);
 % A = std(z_profile_video, 1, 2);
 % mask = (A > median(A,"all"));
 % z_profile_video = (z_profile_video .* mask);
-figure (1)
-imagesc(z_profile_video);
 % z_profile_video = z_profile_video > sum(z_profile_video, "all")/nnz(z_profile_video);
 % z_profile_video = imbinarize(mat2gray(z_profile_video),0.7);
 
-toc
-
-tic
 for frame = 1 : size(z_profile_video, 2) 
     [c, lags] = xcorr(ref_z_profile, z_profile_video(:, frame));
     [~, idx] = max(c);
-    shifts(frame) = lags(idx);
+    xpeak = lags(idx);
+    xpeak_estimation = xpeak+0.5*(c(idx-1)-c(idx+1))/(c(idx-1)+c(idx+1)-2.*c(idx));
+    shifts(frame) = xpeak_estimation;
 end
 
-toc 
 
 for frame = 1 : size(z_profile_video, 2) 
-z_profile_video(:, frame) = circshift(z_profile_video(:, frame), shifts(frame), 1);
+z_profile_video(:, frame) = circshift(z_profile_video(:, frame), round(shifts(frame)), 1);
 end
 
 figure (2)

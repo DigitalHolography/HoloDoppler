@@ -1,9 +1,9 @@
-function [correction, stiched_moments_video] = compute_correction_shack_hartmann(istream, cache, kernel, rephasing_data, gw, complex_mask,...
+function [correction, stiched_moments_video, shifts_vector, stitched_correlation_video] = compute_correction_shack_hartmann(istream, cache, kernel, rephasing_data, gw, complex_mask,...
                                          progress_bar, use_gpu, use_multithread,...
-                                         p, registration_shifts, num_subapertures,...
+                                         p, registration_shifts, num_subapertures, num_subapertures_inter,...
                                          calibration_factor, subaperture_margin,...
                                          corrmap_margin,power_filter_corrector,...
-                                         sigma_filter_corrector,varargin)
+                                         sigma_filter_corrector, excluded_subapertures,ref_img, varargin)
 % Compute an optimal aberration correction given zernike
 % indices.
 %
@@ -28,6 +28,7 @@ function [correction, stiched_moments_video] = compute_correction_shack_hartmann
 % previous_(p|coefs): optional, arrays containing informations about 
 % previously computed corrections for preprocessing before computing the current correction.
 %    p: 1D arrays containing indices of zernikes used for
+%          previous correction
 %          previous correction
 %    coefs: a 1D array containing coefs of the matching
 %          zernikes for previous correction
@@ -57,6 +58,8 @@ num_batches = floor((istream.num_frames - j_win) / j_step);
 
 phase_coefs = zeros(numel(p), num_batches, 'single');
 stiched_moments_video = zeros(Nx, Ny, 1, num_batches, 'single');
+shifts_vector = zeros(num_subapertures_inter^2,num_batches);
+stitched_correlation_video = zeros(Nx, Ny, 1 ,num_batches, 'single');
 
 if use_gpu || ~use_multithread
     parf or_arg = 0;
@@ -65,6 +68,7 @@ else
 end
 
 parfor (batch_idx = 1:num_batches, parfor_arg)
+% for batch_idx = 1:num_batches
     % load interferogram batch
     FH = istream.read_frame_batch(j_win, (batch_idx - 1)* j_step);
 
@@ -80,7 +84,7 @@ parfor (batch_idx = 1:num_batches, parfor_arg)
 
     FH = register_FH(FH, local_shifts, j_win, 1);
 
-    if nin == 20 % change this value if function arguments are added or removed
+    if nin == 23 % change this value if function arguments are added or removed
         % if this parameter exist, then so does 'previous_p'
         previous_p = varargin{1};
         previous_coefs = varargin{2};
@@ -97,7 +101,7 @@ parfor (batch_idx = 1:num_batches, parfor_arg)
 
     % FH is now registered and pre-processed, we now proceed to aberation
     % computation
-    shack_hartmann = ShackHartmann(num_subapertures, p, calibration_factor, subaperture_margin, corrmap_margin, power_filter_corrector, sigma_filter_corrector, size(FH, 1), size(FH, 1));
+    shack_hartmann = ShackHartmann(num_subapertures, num_subapertures_inter, p, calibration_factor, subaperture_margin, corrmap_margin, power_filter_corrector, sigma_filter_corrector, ref_img);
     [M_aso, stiched_moments_M_aso] = shack_hartmann.construct_M_aso(f1, f2, gw, acquisition);
 
     if use_gpu
@@ -105,7 +109,9 @@ parfor (batch_idx = 1:num_batches, parfor_arg)
     end
 
     [shifts, stiched_moments_subap, stiched_corr_subapp] = shack_hartmann.compute_images_shifts(FH, f1, f2, gw, false, true, acquisition);
-    excluded_subapertures = find(isnan(shifts));
+    shifts_vector(:, batch_idx) = shifts;
+    stitched_correlation_video(:,:,:,batch_idx) = imresize(stiched_corr_subapp, [Nx Ny]);
+    %     excluded_subapertures = find(isnan(shifts));
     % remove corners
     M_aso = mat_mask(M_aso, excluded_subapertures);
     shifts = mat_mask(shifts, excluded_subapertures);

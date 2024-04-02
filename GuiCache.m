@@ -4,6 +4,8 @@ classdef GuiCache
 % so that the user can modify the values in the GUI without messing
 % everything up
 properties (Access = public)
+
+    nb_cpu_cores
     batch_size
     ref_batch_size
     batch_stride
@@ -23,7 +25,9 @@ properties (Access = public)
     temporal_filter_flag
     temporal_filter
     parallelism
+    
     registration_via_phase
+    iterative_registration
     aberration_compensation
     notes
     DX
@@ -57,14 +61,21 @@ properties (Access = public)
     % shack-hartmann parameters
     shack_hartmann_aberration_compensation
     shack_hartmann_zernike_ranks
-    num_subapertures
+    image_subapertures_size_ratio
+    num_subapertures_positions
     subaperture_margin
     SubAp_PCA;
     minSubAp_PCA;
     maxSubAp_PCA;
+    zernike_projection;
+    shack_hartmann_ref_image
 
     %masks
     artery_mask;
+
+    % OCT parameters
+    OCT_range_y
+    OCT_range_z
 end
 methods (Access = public)
     function obj = GuiCache()
