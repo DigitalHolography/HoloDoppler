@@ -34,9 +34,6 @@ classdef ImageTypeList < handle
             obj.moment_1 =  ImageType('M1');
             obj.moment_2 =  ImageType('M2');
         end
-        
-        function obj = copy(obj)
-        end
 
         function clear(obj,varargin)
             if nargin == 1
@@ -85,7 +82,7 @@ classdef ImageTypeList < handle
             end
         end
 
-        function WaveInfo = construct_image(obj, FH, wavelength, acquisition, gaussian_width, use_gpu, svd, svdx, Nb_SubAp, phase_correction,...
+        function NormalizationData = construct_image(obj, FH, wavelength, acquisition, gaussian_width, use_gpu, svd, svdx, Nb_SubAp, phase_correction,...
                                                                           color_f1, color_f2, color_f3, is_low_frequency , ...
                                                                           spatial_transformation, time_transform, SubAp_PCA, xy_stride, num_unit_cells_x, r1, ...
                                                                           local_temporal, phi1, phi2, local_spatial, nu1, nu2)
@@ -134,13 +131,13 @@ classdef ImageTypeList < handle
             end
         end
 
-        WaveInfo.reference_wave = mean(abs(H),3);
-        WaveInfo.reference_wave_power = mean(WaveInfo.reference_wave(:));
-        WaveInfo.reference_wave_power_std = std(WaveInfo.reference_wave(:));
+        NormalizationData.reference_wave = mean(abs(H),3);
+        NormalizationData.reference_wave_power = mean(NormalizationData.reference_wave(:));
+        NormalizationData.reference_wave_power_std = std(NormalizationData.reference_wave(:));
         
-        WaveInfo.beating_wave_variance = var(abs(H),[],3);
-        WaveInfo.beating_wave_variance_power = mean(WaveInfo.beating_wave_variance(:));
-        WaveInfo.beating_wave_variance_power_std = std(WaveInfo.beating_wave_variance(:));
+        NormalizationData.beating_wave_variance = var(abs(H),[],3);
+        NormalizationData.beating_wave_variance_power = mean(NormalizationData.beating_wave_variance(:));
+        NormalizationData.beating_wave_variance_power_std = std(NormalizationData.beating_wave_variance(:));
 
         %% SVD filtering
        
