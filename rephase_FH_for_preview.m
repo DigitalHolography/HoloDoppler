@@ -7,6 +7,8 @@ function [FH, phasePlane] = rephase_FH_for_preview(FH, coefs, zernike_indices)
 % [rephasing_zernikes, shack_zernikes, iterative_opt_zernikes] = ...
 %     rephasing_data.aberration_correction.generate_zernikes(frame_width, frame_height);
 
+disp(coefs{1})
+
 % app.PreviewLabel.Text = sprintf('astig_1 : %0.1f\ndefocus: %0.1f\nastig_2 : %0.1f', coefs(1), coefs(2), coefs(3));
 [n_sub_x, n_sub_y, n_sub_z] = size(coefs);
 layer_thickness = floor(size(FH, 3)/2/n_sub_z);
