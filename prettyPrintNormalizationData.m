@@ -14,9 +14,11 @@ xlabel(strXlabel,'Fontsize',14);
 ylabel(strYlabel,'Fontsize',14);
 pbaspect([1.618 1 1]);
 set(gca,'Linewidth',2);
+title(y_name)
 axis tight;
 
 print('-f','-dpng',fullfile(output_dirpath,'png',strcat(output_dirname,sprintf("_%s.png",figure_name))));
+print('-f','-deps','-tiff',fullfile(output_dirpath,'eps',strcat(output_dirname,sprintf("_%s.eps",figure_name))));
 hold off
 close(f)
 end

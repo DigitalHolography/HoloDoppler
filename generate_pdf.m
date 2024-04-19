@@ -86,4 +86,5 @@ set(chosen_figure,'PaperSize', [str2num(figure_property.Width) str2num(figure_pr
 set(chosen_figure, 'Units', 'inches');
 % hgexport(fullfile(img_dirpath),fullfile(img_dirname, '.pdf'),figure_property); %Set desired file name
 print(chosen_figure, img_dirname, '-dpdf', '-fillpage');
+print(chosen_figure, img_dirname, '-deps', '-fillpage');
 movefile(strcat(img_dirname, '.pdf'), img_dirpath);
