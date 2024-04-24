@@ -39,6 +39,7 @@ properties (Access = public)
     OCTdata
     SVD
     save_raw
+    save_gifs
     
     % color image parameters
     color_f1

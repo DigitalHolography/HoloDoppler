@@ -1,4 +1,4 @@
-function generate_video(video, output_path, name, contrast_enhancement_tol, temporal_filter_sigma, contrast_inversion, export_raw, export_avg_img)
+function generate_video(video, output_path, name, contrast_enhancement_tol, temporal_filter_sigma, contrast_inversion, export_raw, export_avg_img, gif_period, export_gifs)
 % Saves a raw pixel array to a video file, with some post processing
 % commonly done for rendering hologram videos
 %
@@ -25,6 +25,8 @@ if export_raw
     
     output_filename = sprintf('%s_%s.%s', output_dirname, name, 'avi');
     w = VideoWriter(fullfile(output_path, 'raw', output_filename));
+    w.CompressionRatio = 15;
+    w.Quality = 50;
     open(w);
     for i = 1:size(video, 4)
         writeVideo(w, mat2gray(video(:,:,:,i)));
@@ -78,28 +80,32 @@ end
 close(w)
 
 %% save to gif format
-output_filename = sprintf('%s_%s.%s', output_dirname, name, 'gif');
-
-nImages = size(video,4);
-
-fig = figure;
-for idx = 1:nImages
-    imshow(video(:,:,:,idx))
-    drawnow
-    frame = getframe(fig);
-    im{idx} = frame2im(frame);
-end
-close;
-
-for idx = 1:nImages
-    [A,map] = rgb2ind(im{idx},256);
-    if idx == 1
-        imwrite(A,map,sprintf("%s\\gif\\%s",output_path,output_filename),"gif","LoopCount",Inf,"DelayTime",0.02);
-    else
-        imwrite(A,map,sprintf("%s\\gif\\%s",output_path,output_filename),"gif","WriteMode","append","DelayTime",0.02);
+if export_gifs
+    output_filename = sprintf('%s_%s.%s', output_dirname, name, 'gif');
+    
+    nImages = size(video,4);
+    % fig = figure;
+    % for idx = 1:nImages
+    %     imshow(video(:, :, :, idx))
+    %     drawnow
+    %     frame = getframe(fig);
+    %     im{idx} = frame2im(frame);
+    % end
+    % close;
+    
+    for idx = 1:nImages
+        if size(video,3) == 1
+            [A,map] = gray2ind(video(:, :, :, idx), 256);
+        elseif size(video,3) == 3
+            [A,map] = rgb2ind(video(:, :, :, idx), 256);
+        end
+        if idx == 1
+            imwrite(A, map, sprintf("%s\\gif\\%s", output_path, output_filename), "gif", "LoopCount", Inf, "DelayTime", 0.02);
+        else
+            imwrite(A, map, sprintf("%s\\gif\\%s", output_path, output_filename), "gif", "WriteMode", "append", "DelayTime", 0.02);
+        end
     end
 end
-
 %% save temporal average to png
 if export_avg_img
     output_filename = sprintf('%s_%s.%s', output_dirname, name, 'png');
@@ -114,10 +120,10 @@ if export_avg_img
     video_avg = mat2gray(video_avg);
     imwrite(video_avg,sprintf('%s\\png\\%s', output_path, output_filename));
     % EPS figure
-    output_filename = sprintf('%s_%s.%s', output_dirname, name, 'eps');
-    f1 = figure(1);
-    imshow(video_avg)
-    print(f1,sprintf('%s\\eps\\%s', output_path, output_filename),'-deps');
-    close(f1)
+    % output_filename = sprintf('%s_%s.%s', output_dirname, name, 'eps');
+    % f1 = figure(1);
+    % imshow(video_avg)
+    % print(f1,sprintf('%s\\eps\\%s', output_path, output_filename),'-deps');
+    % close(f1)
 end
 end
