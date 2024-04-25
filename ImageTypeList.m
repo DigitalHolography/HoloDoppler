@@ -74,7 +74,7 @@ classdef ImageTypeList < handle
                 end
             else
                 % Else you only select the requested ones
-                for i = 1:nargin-1
+                for i = 1:nargin-3
                     if obj.(varargin{i}).is_selected
                         obj.(varargin{i}).image2png(preview_folder_name,folder_path);
                     end
