@@ -161,7 +161,7 @@ if ~isempty(phase_zernike)
     colormap gray
 end
 
-imwrite(mat2gray(angle(exp(1i.*phase_zernike))), 'C:\Users\Rakushka\Desktop\phase_function_original_zernike_central_subap.png');
-imwrite(mat2gray(angle(exp(1i.*phase))), 'C:\Users\Rakushka\Desktop\phase_function_original_integration_central_subap.png');
+% imwrite(mat2gray(angle(exp(1i.*phase_zernike))), 'C:\Users\Rakushka\Desktop\phase_function_original_zernike_central_subap.png');
+% imwrite(mat2gray(angle(exp(1i.*phase))), 'C:\Users\Rakushka\Desktop\phase_function_original_integration_central_subap.png');
 
 end
