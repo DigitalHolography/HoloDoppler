@@ -59,8 +59,8 @@ classdef PowerNormalization
 
         function generateVideos(obj, output_dirpath, gif_period)
 
-            generate_video(obj.reference_wave, output_dirpath, 'reference_wave', [], [], false, false, false, gif_period, true);
-            generate_video(obj.beating_wave_variance, output_dirpath, 'beating_wave_variance', [], [], false, false, false, gif_period, true); 
+            generate_video(obj.reference_wave, output_dirpath, 'reference_wave', [], [], false, false, false, gif_period);
+            generate_video(obj.beating_wave_variance, output_dirpath, 'beating_wave_variance', [], [], false, false, false, gif_period); 
         end
 
         function obj = resize(obj, var_bin)

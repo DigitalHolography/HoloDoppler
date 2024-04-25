@@ -1,4 +1,4 @@
-function generate_video(video, output_path, name, contrast_enhancement_tol, temporal_filter_sigma, contrast_inversion, export_raw, export_avg_img, gif_period, export_gifs)
+function generate_video(video, output_path, name, contrast_enhancement_tol, temporal_filter_sigma, contrast_inversion, export_raw, export_avg_img, gif_period)
 % Saves a raw pixel array to a video file, with some post processing
 % commonly done for rendering hologram videos
 %
@@ -80,30 +80,28 @@ end
 close(w)
 
 %% save to gif format
-if export_gifs
-    output_filename = sprintf('%s_%s.%s', output_dirname, name, 'gif');
-    
-    nImages = size(video,4);
-    % fig = figure;
-    % for idx = 1:nImages
-    %     imshow(video(:, :, :, idx))
-    %     drawnow
-    %     frame = getframe(fig);
-    %     im{idx} = frame2im(frame);
-    % end
-    % close;
-    
-    for idx = 1:nImages
-        if size(video,3) == 1
-            [A,map] = gray2ind(video(:, :, :, idx), 256);
-        elseif size(video,3) == 3
-            [A,map] = rgb2ind(video(:, :, :, idx), 256);
-        end
-        if idx == 1
-            imwrite(A, map, sprintf("%s\\gif\\%s", output_path, output_filename), "gif", "LoopCount", Inf, "DelayTime", 0.02);
-        else
-            imwrite(A, map, sprintf("%s\\gif\\%s", output_path, output_filename), "gif", "WriteMode", "append", "DelayTime", 0.02);
-        end
+output_filename = sprintf('%s_%s.%s', output_dirname, name, 'gif');
+
+nImages = size(video,4);
+% fig = figure;
+% for idx = 1:nImages
+%     imshow(video(:, :, :, idx))
+%     drawnow
+%     frame = getframe(fig);
+%     im{idx} = frame2im(frame);
+% end
+% close;
+
+for idx = 1:nImages
+    if size(video,3) == 1
+        [A,map] = gray2ind(video(:, :, :, idx), 256);
+    elseif size(video,3) == 3
+        [A,map] = rgb2ind(video(:, :, :, idx), 256);
+    end
+    if idx == 1
+        imwrite(A, map, sprintf("%s\\gif\\%s", output_path, output_filename), "gif", "LoopCount", Inf, "DelayTime", 0.02);
+    else
+        imwrite(A, map, sprintf("%s\\gif\\%s", output_path, output_filename), "gif", "WriteMode", "append", "DelayTime", 0.02);
     end
 end
 %% save temporal average to png
