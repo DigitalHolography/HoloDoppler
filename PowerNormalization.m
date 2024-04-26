@@ -68,5 +68,15 @@ classdef PowerNormalization
         obj.reference_wave = imresize3(squeeze(obj.reference_wave), [ceil(obj.Nx/var_bin) ceil(obj.Ny/var_bin) obj.Nt]);
         obj.beating_wave_variance = imresize3(squeeze(obj.beating_wave_variance), [ceil(obj.Nx/var_bin) ceil(obj.Ny/var_bin) obj.Nt]);
         end
+
+        function save(obj, path)
+            reference_wave = obj.reference_wave;
+            reference_wave_power = obj.reference_wave_power;
+            reference_wave_power_std = obj.reference_wave_power_std;
+            beating_wave_variance = obj.beating_wave_variance;
+            beating_wave_variance_power = obj.beating_wave_variance_power;
+            beating_wave_variance_power_std = obj.beating_wave_variance_power_std;
+            save(path, 'reference_wave', 'reference_wave_power', 'reference_wave_power_std', 'beating_wave_variance', 'beating_wave_variance_power', 'beating_wave_variance_power_std')
+        end
     end
 end

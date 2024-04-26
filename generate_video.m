@@ -25,7 +25,6 @@ if export_raw
     
     output_filename = sprintf('%s_%s.%s', output_dirname, name, 'avi');
     w = VideoWriter(fullfile(output_path, 'raw', output_filename));
-    w.CompressionRatio = 15;
     w.Quality = 50;
     open(w);
     for i = 1:size(video, 4)
