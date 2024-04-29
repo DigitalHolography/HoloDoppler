@@ -30,7 +30,7 @@ classdef ImageType < handle
             end
         end
 
-        function images_png(obj,preview_folder_name,folder_path)
+        function image2png(obj,preview_folder_name,folder_path)
             I = obj.image;
             I = flip(I);
             I = mat2gray(I);
