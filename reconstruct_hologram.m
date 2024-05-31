@@ -46,15 +46,15 @@ end
 
 % H = ifft2(FH);
 clear FH;
+reference_wave = single(mean(abs(H),3));
+reference_wave_power = mean(reference_wave(:));
+reference_wave_power_std = std(reference_wave(:));
 
-NormalizationData.reference_wave = single(mean(abs(H),3));
-NormalizationData.reference_wave_power = mean(NormalizationData.reference_wave(:));
-NormalizationData.reference_wave_power_std = std(NormalizationData.reference_wave(:));
+beating_wave_variance = single(var(abs(H),[],3));
+beating_wave_variance_power = mean(beating_wave_variance(:));
+beating_wave_variance_power_std = std(beating_wave_variance(:));
 
-NormalizationData.beating_wave_variance = single(var(abs(H),[],3));
-NormalizationData.beating_wave_variance_power = mean(NormalizationData.beating_wave_variance(:));
-NormalizationData.beating_wave_variance_power_std = std(NormalizationData.beating_wave_variance(:));
-
+NormalizationData = PowerNormalization(reference_wave,reference_wave_power,reference_wave_power_std,beating_wave_variance,beating_wave_variance_power,beating_wave_variance_power_std);
 %% SVD filtering
 if (svd)
     H = svd_filter(H, time_transform.f1, ac.fs);
