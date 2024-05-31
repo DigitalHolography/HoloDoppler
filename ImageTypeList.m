@@ -261,14 +261,14 @@ classdef ImageTypeList < handle
         end
         
         if obj.spectrogram.is_selected
-        %     bin_x = 2;
-        %     bin_y = 2;
-        %     bin_t = 1;
-        %     bin_w = 16;
-            cubeTargetSize = 256;
-            cubeFreqLength = 32 ;
+            bin_x = 16;
+            bin_y = 16;
+            % bin_t = 1;
+            bin_w = 4;
+            % cubeTargetSize = size(SH,1);
+            % cubeFreqLength = 32 ;
             %obj.spectrogram.SH = SH(1:bin_x:end,1:bin_y:end,1:bin_w:end);
-            obj.spectrogram.parameters.SH = imresize3(gather(SH),[cubeTargetSize cubeTargetSize cubeFreqLength],'Method','linear');
+            obj.spectrogram.parameters.SH = imresize3(gather(SH),[size(SH,1)/bin_x size(SH,2)/bin_y size(SH,3)/bin_w],'Method','linear');
             obj.spectrogram.parameters.vector = zeros(1,j_win);
             obj.spectrogram.image = zeros(size(SH, 1), size(SH, 2));
             %     tmp = zeros(size(SH,1), size(SH,2), 1, size(SH,3),'single');

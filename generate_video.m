@@ -74,7 +74,7 @@ output_filename = sprintf('%s_%s.%s', output_dirname, name, 'mp4');
 w = VideoWriter(sprintf('%s\\mp4\\%s', output_path, output_filename), 'MPEG-4');
 open(w);
 for i = 1:size(video,4)
- writeVideo(w, video(:,:,:,i));   
+    writeVideo(w, video(:,:,:,i));   
 end
 close(w)
 
