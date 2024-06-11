@@ -153,7 +153,7 @@ classdef GuiCache
             % bufferize (and lock during computation) current paremeter values from front end
         end
         
-        function load_Gui(obj, app)
+        function load2Gui(obj, app)
             % set gui parameters from cache
             try
                 app.batchsizeEditField.Value = obj.batch_size;
