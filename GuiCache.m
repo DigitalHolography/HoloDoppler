@@ -152,7 +152,7 @@ classdef GuiCache
 
             % bufferize (and lock during computation) current paremeter values from front end
         end
-        
+
         function load2Gui(obj, app)
             % set gui parameters from cache
             try
@@ -162,6 +162,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             % try
             %     app.numworkersSpinner.Value = obj.nb_cpu_cores;
             % end
@@ -172,156 +173,182 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.refbatchsizeEditField.Value = obj.ref_batch_size;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.batchstrideEditField.Value = obj.batch_stride;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.Switch.Value = obj.z_switch;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.zretinaEditField.Value = obj.z_retina;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.zirisEditField.Value = obj.z_iris;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.time_transform = obj.time_transform;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.blurEditField.Value = obj.blur;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.ImageChoiceDropDown.Value = strrep(data.imageChoice, '_', ' ');
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.timetransformDropDown.Value = app.time_transform.type;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.SVDCheckBox.Value = obj.SVD;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.f1EditField.Value = obj.time_transform.f1;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.f2EditField.Value = obj.time_transform.f2;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.min_PCAEditField.Value = obj.time_transform.min_PCA;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.max_PCAEditField.Value = obj.time_transform.max_PCA;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.imageregistrationCheckBox.Value = obj.registration;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.iterativeregistrationCheckBox.Value = obj.iterativeregistration;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.wavelengthEditField.Value = obj.wavelength;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.outputvideoDropDown.Value = strrep(data.output_videos, '_', ' ');
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.lowmemoryCheckBox.Value = obj.low_memory;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.rephasingCheckBox.Value = obj.rephasing;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.NotesTextArea.Value = obj.notes;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.positioninfileSlider.Value = obj.position_in_file;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.EditField.Value = obj.position_in_file;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.IterativeoptimizationCheckBox.Value = obj.iterative_aberration_compensation;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.masknumiterEditField.Value = obj.mask_num_iter;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             %             app.zernikestolEditField.Value = obj.low_order_zernikes;
             %             app.maxconstraintEditField.Value = obj.low_order_max_constraint;
             try
@@ -330,102 +357,119 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.ZernikeProjectionCheckBox.Value = obj.zernike_projection;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.referenceimageDropDown.Value = obj.shack_hartmann_ref_image;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.shackhartmannzernikeranksEditField.Value = obj.shack_hartmann_zernike_ranks;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.imagesubapsizeratioEditField.Value = obj.image_subapertures_size_ratio;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.subapnumpositionsEditField.Value = obj.num_subapertures_positions;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.subaperturemarginEditField.Value = obj.subaperture_margin;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.SubAp_PCACheckBox.Value = obj.SubAp_PCA;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.minSubAp_PCAEditField_2.Value = obj.minSubAp_PCA;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.maxSubAp_PCAEditField_2.Value = obj.maxSubAp_PCA;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.compositef1EditField.Value = obj.color_f1;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.compositef2EditField.Value = obj.color_f2;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.compositef3EditField.Value = obj.color_f3;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.lowfrequencyCheckBox.Value = obj.low_frequency;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.saverawvideosCheckBox.Value = obj.save_raw;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.OCTdata.range_y = obj.OCT_range_y;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             try
                 app.OCTdata.range_z = obj.OCT_range_z;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
             end
+
             app.outputVideo();
             app.TimeTransform();
         end

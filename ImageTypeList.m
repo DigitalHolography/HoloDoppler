@@ -1,5 +1,5 @@
-classdef ImageTypeList < handle
-
+classdef ImageTypeList < handle % This class is modified dynamically
+% handles preview images and png images output
     properties
         power_Doppler
         power_1_Doppler
