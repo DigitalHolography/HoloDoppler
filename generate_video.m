@@ -91,18 +91,18 @@ nImages = size(video,4);
 % end
 % close;
 
-for idx = 1:nImages
-    if size(video,3) == 1
-        [A,map] = gray2ind(video(:, :, :, idx), 256);
-    elseif size(video,3) == 3
-        [A,map] = rgb2ind(video(:, :, :, idx), 256);
-    end
-    if idx == 1
-        imwrite(A, map, sprintf("%s\\gif\\%s", output_path, output_filename), "gif", "LoopCount", Inf, "DelayTime", 0.02);
-    else
-        imwrite(A, map, sprintf("%s\\gif\\%s", output_path, output_filename), "gif", "WriteMode", "append", "DelayTime", 0.02);
-    end
-end
+% for idx = 1:nImages
+%     if size(video,3) == 1
+%         [A,map] = gray2ind(video(:, :, :, idx), 256);
+%     elseif size(video,3) == 3
+%         [A,map] = rgb2ind(video(:, :, :, idx), 256);
+%     end
+%     if idx == 1
+%         imwrite(A, map, sprintf("%s\\gif\\%s", output_path, output_filename), "gif", "LoopCount", Inf, "DelayTime", 0.02);
+%     else
+%         imwrite(A, map, sprintf("%s\\gif\\%s", output_path, output_filename), "gif", "WriteMode", "append", "DelayTime", 0.02);
+%     end
+% end
 %% save temporal average to png
 if export_avg_img
     output_filename = sprintf('%s_%s.%s', output_dirname, name, 'png');

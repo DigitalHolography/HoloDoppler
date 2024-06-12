@@ -280,7 +280,7 @@ classdef GuiCache
             end
 
             try
-                app.iterativeregistrationCheckBox.Value = obj.iterativeregistration;
+                app.iterative_registrationCheckBox.Value = obj.iterative_registration;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
@@ -470,8 +470,8 @@ classdef GuiCache
                 disp(ME.message)
             end
 
-            app.outputVideo();
-            app.TimeTransform();
+            % app.outputVideo();
+            % app.TimeTransform();
         end
 
     end
