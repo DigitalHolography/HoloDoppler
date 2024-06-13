@@ -161,6 +161,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             % try
@@ -172,6 +175,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -179,6 +185,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -186,6 +195,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -193,6 +205,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -200,6 +215,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -207,6 +225,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -214,6 +235,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -221,20 +245,29 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
-                app.ImageChoiceDropDown.Value = strrep(data.imageChoice, '_', ' ');
+                app.ImageChoiceDropDown.Value = strrep(obj.imageChoice, '_', ' ');
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
-                app.timetransformDropDown.Value = app.time_transform.type;
+                app.timetransformDropDown.Value = obj.time_transform.type;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -242,6 +275,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -249,6 +285,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -256,6 +295,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -263,6 +305,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -270,6 +315,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -277,13 +325,19 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
-                app.iterative_registrationCheckBox.Value = obj.iterative_registration;
+                app.iterativeregistrationCheckBox.Value = obj.iterative_registration;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -291,13 +345,19 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
-                app.outputvideoDropDown.Value = strrep(data.output_videos, '_', ' ');
+                app.outputvideoDropDown.Value = strrep(obj.output_videos, '_', ' ');
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -305,6 +365,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -312,6 +375,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -319,6 +385,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -326,6 +395,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -333,6 +405,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -340,6 +415,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -347,6 +425,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             %             app.zernikestolEditField.Value = obj.low_order_zernikes;
@@ -356,6 +437,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -363,6 +447,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -370,6 +457,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -377,6 +467,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -384,6 +477,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -391,6 +487,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -398,6 +497,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -405,6 +507,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -412,6 +517,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -419,6 +527,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -426,6 +537,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -433,6 +547,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -440,6 +557,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -447,6 +567,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -454,6 +577,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -461,6 +587,9 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
             try
@@ -468,10 +597,11 @@ classdef GuiCache
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
             end
 
-            % app.outputVideo();
-            % app.TimeTransform();
         end
 
     end
