@@ -25,7 +25,6 @@ classdef GuiCache
         notes cell
         position_in_file double
         output_videos char
-        OCTdata OCTdata % A RETIRER POUR ECONOMISER DE L'ESPACE
         SVD logical
 
         % video rendering
@@ -75,9 +74,6 @@ classdef GuiCache
         zernike_projection double
         shack_hartmann_ref_image double
 
-        % OCT parameters
-        OCT_range_y double
-        OCT_range_z double
     end
 
     methods (Access = public)
@@ -104,7 +100,6 @@ classdef GuiCache
             obj.parallelism = app.ParallelismDropDown.Value;
             obj.registration_via_phase = app.phaseregistrationCheckBox.Value;
             obj.aberration_compensation = app.IterativeoptimizationCheckBox.Value;
-            obj.OCTdata = app.OCTdata;
             obj.SVD = app.SVDCheckBox.Value;
 
             obj.notes = app.NotesTextArea.Value;
@@ -146,10 +141,6 @@ classdef GuiCache
             obj.zernike_projection = app.ZernikeProjectionCheckBox.Value;
             obj.shack_hartmann_ref_image = app.referenceimageDropDown.Value;
 
-            % OCT parameters
-            obj.OCT_range_y = app.OCTdata.range_y;
-            obj.OCT_range_z = app.OCTdata.range_z;
-
             % bufferize (and lock during computation) current paremeter values from front end
         end
 
@@ -169,16 +160,6 @@ classdef GuiCache
             % try
             %     app.numworkersSpinner.Value = obj.nb_cpu_cores;
             % end
-            try
-                app.rangeZEditField.Value = obj.OCTdata.range_z(end) - obj.OCTdata.range_z(1);
-                app.rangeYEditField.Value = obj.OCTdata.range_y(end) - obj.OCTdata.range_y(1);
-            catch ME
-                disp('Error Message:')
-                disp(ME.message)
-                for i = 1:numel(ME.stack)
-                    ME.stack(i)
-                end
-            end
 
             try
                 app.refbatchsizeEditField.Value = obj.ref_batch_size;
@@ -574,26 +555,6 @@ classdef GuiCache
 
             try
                 app.saverawvideosCheckBox.Value = obj.save_raw;
-            catch ME
-                disp('Error Message:')
-                disp(ME.message)
-                for i = 1:numel(ME.stack)
-                    ME.stack(i)
-                end
-            end
-
-            try
-                app.OCTdata.range_y = obj.OCT_range_y;
-            catch ME
-                disp('Error Message:')
-                disp(ME.message)
-                for i = 1:numel(ME.stack)
-                    ME.stack(i)
-                end
-            end
-
-            try
-                app.OCTdata.range_z = obj.OCT_range_z;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
