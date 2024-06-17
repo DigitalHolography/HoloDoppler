@@ -162,6 +162,16 @@ classdef GuiCache
             % end
 
             try
+                app.spatialTransformationDropDown.Value = obj.spatialTransformation;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
+
+            try
                 app.refbatchsizeEditField.Value = obj.ref_batch_size;
             catch ME
                 disp('Error Message:')
