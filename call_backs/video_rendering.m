@@ -156,7 +156,6 @@ local_phi2 = app.phi2EditField.Value;
 local_spatial = app.spatialCheckBox.Value;
 local_nu1 = app.nu1EditField.Value;
 local_nu2 = app.nu2EditField.Value;
-local_OCTdata = app.OCTdata;
 local_volume_size = floor(j_win/2);
 local_SVDx = app.SVDxCheckBox.Value;
 local_SVDx_SubAp_num = app.SVDx_SubApEditField.Value;
@@ -284,21 +283,13 @@ else
             local_image_type_list.select('dark_field_image');
             H_dark_field_stack = 1i*ones(app.Nx, app.Ny, j_win, local_num_batches ,'single');
             video_M0_dark_field = zeros(app.Nx, app.Ny, 1, local_num_batches ,'single');
-        case 'OCT cuts'
-            %                         video_3D = zeros(app.Nx, app.Ny, floor(j_win/2), local_num_batches,'single');
-            video_M0_Ycut = zeros(app.Nx, floor(j_win/2), 1, local_num_batches,'single');
-            video_M0_phase_cut = zeros(app.Nx, floor(j_win/2), 1, local_num_batches,'single');
-            video_M0_Zcut = zeros(app.Nx, app.Ny, 1, local_num_batches,'single');
-            z_stack_for_reg = zeros(floor(j_win/2), local_num_batches);
-            xy_for_reg = zeros(app.Nx, app.Ny, 1, local_num_batches,'single');
     end %switch local_output_video
 end
 
 %% Just for OCT: in depth defocus estimation
 % by principle happens before rephasing and registration
 if 0
-    %             if set_up == "OCT"
-    %                 num_layers = floor(j_win/2/(length(local_OCTdata.range_z)-1));
+
     num_layers = 4;
     idx_to_freq_coef = acquisition.fs/j_win;
     layer_freq_thickness = floor(j_win/2/num_layers) * idx_to_freq_coef;
@@ -583,12 +574,6 @@ if local_low_memory
                 beating_wave_variance_power(inner_idx) = gather(NormalizationData.beating_wave_variance_power);
                 beating_wave_variance_power_std(inner_idx) = gather(NormalizationData.beating_wave_variance_power_std);
                 send(D, 0);
-            else % set_up == OCT
-                M0 = reconstruct_hologram_stack(FH_par, local_f1, local_f2, acquisition, local_blur, false, local_svd, local_SVDx, local_SVDx_SubAp_num, [], local_volume_size);
-                M0 = permute(M0, [3 1 2]);
-                % save frame to block buffer
-                block_M0(:,:,:,inner_idx) = gather(M0);
-
             end
             send(D, 0);
         end
@@ -630,10 +615,6 @@ else % ~local_low_memory
         local_image_type_list_par = local_image_type_list;
         if local_rephasing
             FH_par = rephase_FH(FH_par, local_rephasing_data, j_win, (batch_idx - 1) * j_step);
-        end
-
-        if and(local_rephasing, set_up == "OCT")
-            FH_par = rephase_FH_OCT(FH_par, local_rephasing_data, j_win, (batch_idx - 1) * j_step, local_num_frames);
         end
 
         % add tilted phase for FH registration
@@ -698,7 +679,7 @@ else % ~local_low_memory
                         %tmp_SH(:,:,:,:,batch_idx) = gather(local_images_par.spectrogram.parameters.SH);
                         % FIXME : Binning propre x,y,w,t
                         %SH_time(:,:,:,:,batch_idx) = tmp_SH(1:size(SH_time,1),1:size(SH_time,2),1,1:size(SH_time,4),batch_idx);
-                        SH_time(:,:,:,:,batch_idx) = gather(local_image_type_list_par.spectrogram.parameters.SH);
+                        % SH_time(:,:,:,:,batch_idx) = gather(local_image_type_list_par.spectrogram.parameters.SH);
                     end
                     % FIXME : modify entire reconstruct hologram
                     % extras to acquire additional videos
@@ -717,16 +698,6 @@ else % ~local_low_memory
 
 
 
-            end
-        else % set_up == OCT
-            [M0, complex_M0] = reconstruct_hologram_stack(FH_par, local_time_transform, acquisition, local_blur, false, local_svd, [], local_volume_size);
-            switch local_output_video
-                case 'OCT_cuts'
-                    video_M0_phase_cut(:,:,:,batch_idx) = (squeeze(angle(complex_M0(:,floor(size(M0, 2)/2),:))));
-                    video_M0_Zcut(:,:,:,batch_idx) = mat2gray(squeeze(log(mean(M0(:,local_OCTdata.range_y,:),2))));
-                    video_M0_Ycut(:,:,:,batch_idx) = mat2gray(squeeze(log(mean(M0(:,:,local_OCTdata.range_z),3))));
-                    z_stack_for_reg(:, batch_idx) = mat2gray(squeeze((mean(M0(floor(local_Nx/2)-3 : floor(local_Nx/2)+3, floor(local_Ny/2)-3 : floor(local_Ny/2)+3,:), [1 2]))));
-                    xy_for_reg(:,:,:,batch_idx) = squeeze(log(mean(M0(:,:,floor(j_win/8):floor(j_win*3/8)),3)));
             end
         end
 
@@ -754,18 +725,36 @@ else % ~local_low_memory
         tRegistration = tic;
         fprintf("Registration...\n")
 
-        % construct reference image
+        % % construct reference image
+
         reg_frame_batch = app.interferogram_stream.read_frame_batch(app.refbatchsizeEditField.Value, floor(app.positioninfileSlider.Value));
-        reg_FH = fftshift(fft2(reg_frame_batch)) .* app.kernelAngularSpectrum;
+        switch app.cache.spatialTransformation
+            case 'angular spectrum'
+                reg_FH = fftshift(fft2(reg_frame_batch)) .* local_kernel;
+            case 'Fresnel'
+                reg_FH = (reg_frame_batch) .* local_kernel;
+        end
         reg_FH = rephase_FH(reg_FH,local_rephasing_data,app.refbatchsizeEditField.Value,floor(app.positioninfileSlider.Value));
         acquisition = DopplerAcquisition(app.Nx,app.Ny,app.Fs/1000, app.cache.z, app.cache.z_retina, app.cache.z_iris, app.cache.wavelength,app.cache.DX,app.cache.DY,app.pix_width,app.pix_height);
         reg_hologram = reconstruct_hologram(reg_FH, acquisition, app.blur, use_gpu, app.SVDCheckBox.Value, app.SVDxCheckBox.Value, app.SVDx_SubApEditField.Value, [], app.time_transform, local_spatialTransformation);
-        %                     ref_batch_idx = floor((app.cache.position_in_file - app.cache.batch_size) / app.cache.batch_stride);
-        ref_batch_idx = floor((app.cache.position_in_file) / app.cache.batch_stride) + 1;
+        switch app.cache.spatialTransformation
+            case 'Fresnel'
+                reg_hologram = flip(flip(reg_hologram,1),2);
+        end
 
+        if app.showrefCheckBox.Value
+            ref_batch_idx = floor((app.cache.position_in_file) / app.cache.batch_stride) + 1;
+            frame_ = video_M0(:,:,1,ref_batch_idx);
+            figure(7)
+            montage({mat2gray(frame_) mat2gray(reg_hologram)})
+            title('Current frame vs calculated reference for registration')
+            % app.ImageRight.ImageSource = cat(3,reg_hologram,reg_hologram,reg_hologram); % show the ref in the right preview panel
+        end
 
         %                     if or(~exist('reg_hologram', 'var'), isempty(reg_hologram))
+
         if ~exist('reg_hologram', 'var')
+            ref_batch_idx = floor((app.cache.position_in_file) / app.cache.batch_stride) + 1;
             reg_hologram = video_M0(:,:,:,ref_batch_idx);
         end
 
@@ -809,32 +798,6 @@ else % ~local_low_memory
                 else
                     [video_M0_dark_field, shifts] = register_video_from_reference(video_M0_dark_field, video_M0_dark_field(:,:,:,ref_batch_idx));
                 end
-            case 'OCT_cuts'
-
-                %                             [min_image, idx_min_img] = min(video_M0_Zcut, [], 4);
-                %                             video_M0_Zcut = video_M0_Zcut - min_image;
-                %                             z_stack_for_reg = squeeze(mean(video_M0_Zcut, 1));
-                %                               F_video = fft(squeeze(video_M0_Zcut), [], 3);
-                %                               F_video(:,:, end) = 0;
-                %                               video_M0_Zcut(:,:,1,:) = ifft(F_video, [], 3);
-                %                               image_std = std(squeeze(video_M0_Zcut), 1, 3);
-                %                               mask = (image_std > 0.02);
-                %                               %m = mean(video_M0_Zcut.*(~mask), "all");
-                %                               video_M0_Zcut = video_M0_Zcut.*mask;
-                %                             % FIXME saving z shifts like y
-                shifts(3,:) = calculate_shifts_from_z_profile(z_stack_for_reg, z_stack_for_reg(:, 1));
-                if size(local_image_registration, 2) == local_num_batches % if registration from previous folder results
-                    shifts(1:2,:) = local_image_registration(1:2,:);
-                else
-                    [~, shifts(1:2,:)] = register_video_from_reference(xy_for_reg, xy_for_reg(:,:,:,1));
-                end
-                %                             %[~, shifts] = register_video_from_reference(video_M0_Zcut, video_M0_Zcut(:,:,:,1));
-                video_M0_Zcut = mat2gray(register_video_from_shifts(video_M0_Zcut, shifts(2:3, :)));
-                %                             video_3D = register_3D_video_from_shifts(video_M0_Zcut, shifts);
-                %                             video_M0_Ycut = register_video_from_shifts(video_M0_Ycut, shifts(1:2,:));
-                %                             video_3D = video_3D - min(video_3D, [], 4);
-                %                             video_3D = sum(video_3D, 4);
-
         end
 
         % save shifts for export
@@ -847,10 +810,6 @@ else % ~local_low_memory
     end
 
     %% long time processing
-    % OCT
-    if strcmp(local_output_video,'OCT_cuts')
-        video_M0_phase_cut = video_M0_phase_cut - circshift(video_M0_phase_cut, 1, 4);
-    end
 
     export_raw = app.saverawvideosCheckBox.Value;
 
@@ -957,10 +916,6 @@ else % ~local_low_memory
             %                         output_dirname_df = sprintf('%s%s_%d.mat', app.filepath, 'H_dark_field_stack', suffix + 1);
             output_dirname_df = fullfile(app.filepath, output_dirname, 'mat', 'H_dark_field_stack.mat');
             save(output_dirname_df, 'H_dark_field_stack', '-v7.3');
-        case 'OCT_cuts'
-            generate_video(video_M0_Ycut, output_dirpath, 'Ycut', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-            generate_video(video_M0_Zcut, output_dirpath, 'Zcut', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-            generate_video(video_M0_phase_cut, output_dirpath, 'phase_cut', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
     end
     tEndVideoGen = toc(tVideoGen);
     fprintf("Video Generation took %f s\n",tEndVideoGen)
@@ -1040,6 +995,27 @@ end
 
 save(fullfile(output_dirpath_mat, mat_filename), 'cache');
 
+% export the most useful parameters to a json file in the log
+% folder
+
+
+s = struct();
+s.wavelength = cache.wavelength;
+s.fs = cache.Fs;
+s.time_transform = cache.time_transform;
+s.spatial_transform = cache.spatialTransformation;
+s.depth.z = cache.(cache.z_switch);
+s.depth.z_switch = cache.z_switch;
+s.batch_size = cache.batch_size;
+s.ref_batch_size = cache.ref_batch_size;
+s.batch_stride = cache.batch_stride;
+s.SVD = cache.SVD;
+JSON_parameters = jsonencode(s,PrettyPrint=true);
+fid = fopen(fullfile(output_dirpath, 'log', 'RenderingParameters.json'), "wt+");
+fprintf(fid, JSON_parameters);
+fclose(fid);
+%             disp(s)
+
 save(fullfile(output_dirpath_mat, mat_filename), 'aberration_correction', '-append');
 save(fullfile(output_dirpath_mat, mat_filename), 'image_registration', '-append');
 
@@ -1048,14 +1024,14 @@ if app.cache.rephasing
 end
 
 
-save(fullfile(output_dirpath, mat_filename), 'cache');
-
-save(fullfile(output_dirpath, mat_filename), 'aberration_correction', '-append');
-save(fullfile(output_dirpath, mat_filename), 'image_registration', '-append');
-
-if app.cache.rephasing
-    save(fullfile(output_dirpath, mat_filename), 'rephasing_data', '-append');
-end
+% save(fullfile(output_dirpath, mat_filename), 'cache');
+%
+% save(fullfile(output_dirpath, mat_filename), 'aberration_correction', '-append');
+% save(fullfile(output_dirpath, mat_filename), 'image_registration', '-append');
+%
+% if app.cache.rephasing
+%     save(fullfile(output_dirpath, mat_filename), 'rephasing_data', '-append');
+% end
 
 %%Saving of power data for normalization, PNG/VIDEO & TXT files %%
 %PNG/VIDEO%
