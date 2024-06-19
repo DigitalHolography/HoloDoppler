@@ -1,4 +1,4 @@
-function video_rendering(app)
+function Rendervideo(app)
 % main program loop
 % Select a file and call other functions
 % to perform a full computation and create
