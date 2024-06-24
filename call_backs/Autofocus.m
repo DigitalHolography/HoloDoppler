@@ -64,13 +64,13 @@ for nn = 1:nMax
 
     z = double(app.z_reconstruction + (0.0025*512/app.Nx) * coefs(1));
     disp(z);
-    if app.Switch.Value == "z_retina"
-        app.zretinaEditField.Value = z;
-        app.zretinaEditFieldValueChanged();
-    else
-        app.zirisEditField.Value = z;
-        app.zirisEditFieldValueChanged();
-    end
+    % if app.Switch.Value == "z_retina"
+    %     app.zretinaEditField.Value = z;
+    %     app.zretinaEditFieldValueChanged();
+    % else
+    %     app.zirisEditField.Value = z;
+    %     app.zirisEditFieldValueChanged();
+    % end
     Renderpreview(app);
     waitbar(nn/nMax, f, 'Autofocus in progress. Please wait...');
 end

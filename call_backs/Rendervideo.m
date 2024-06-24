@@ -610,7 +610,7 @@ else % ~local_low_memory
     parfor (batch_idx = 1:local_num_batches, parfor_arg)
 
         % for batch_idx = 1:num_batches
-        frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step);
+        frame_batch = gpuArray(istream.read_frame_batch(j_win, (batch_idx - 1) * j_step)); % forcing gpu
         FH_par = compute_FH_from_frame_batch(frame_batch, local_kernel, local_spatialTransformation);
         local_image_type_list_par = local_image_type_list;
         if local_rephasing
