@@ -261,10 +261,10 @@ classdef ImageTypeList < handle % This class is modified dynamically
         end
         
         if obj.spectrogram.is_selected
-            bin_x = 16;
-            bin_y = 16;
-            % bin_t = 1;
-            bin_w = 4;
+            bin_x = 4;
+            bin_y = 4;
+            bin_t = 1;
+            bin_w = 16;
             % cubeTargetSize = size(SH,1);
             % cubeFreqLength = 32 ;
             %obj.spectrogram.SH = SH(1:bin_x:end,1:bin_y:end,1:bin_w:end);
