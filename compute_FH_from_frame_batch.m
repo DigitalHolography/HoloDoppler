@@ -1,4 +1,4 @@
-function FH = compute_FH_from_frame_batch(frame_batch, kernel, spatialTransformation, complex_mask)
+function FH = compute_FH_from_frame_batch(frame_batch, kernel, spatialTransformation,use_gpu, complex_mask)
 % Computes FH from an interferogram batch.
 % The output FH can be used directly to perform
 % aberation computations.
@@ -10,12 +10,20 @@ function FH = compute_FH_from_frame_batch(frame_batch, kernel, spatialTransforma
 % kernel: a wave propagation kernel that can refocus on the camera sensor
 % complex_mask: a complex matrix of size [size(FH,1),size(FH,2)]
 %               that contains a fake aberration to be applied on FH
-
-switch spatialTransformation
-    case 'angular spectrum'
-        FH = fftshift(fft2(frame_batch)) .* kernel;
-    case 'Fresnel'
-        FH = frame_batch .* kernel;
+if use_gpu
+    switch spatialTransformation
+        case 'angular spectrum'
+            FH = fftshift(fft2(gpuArray(frame_batch))) .* kernel;
+        case 'Fresnel'
+            FH = gpuArray(frame_batch) .* kernel;
+    end
+else 
+    switch spatialTransformation
+        case 'angular spectrum'
+            FH = fftshift(fft2(frame_batch)) .* kernel;
+        case 'Fresnel'
+            FH = frame_batch .* kernel;
+    end
 end
 
 % TODO: uncomment this when replica removal works

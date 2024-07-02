@@ -321,7 +321,7 @@ if 0
         % calculate defocus in fuction of depth with Shack
         % Hartman
         frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step);
-        FH = compute_FH_from_frame_batch(frame_batch, local_kernel, local_spatialTransformation);
+        FH = compute_FH_from_frame_batch(frame_batch, local_kernel, local_spatialTransformation,use_gpu);
         for z = 1 : num_layers
             f1_layer = (z-1)*layer_freq_thickness + idx_to_freq_coef;
             f2_layer = z * layer_freq_thickness;
@@ -539,7 +539,7 @@ if local_low_memory
         tParfor = tic;
         parfor (inner_idx = 1:last_iter, parfor_arg)
             frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1 + inner_idx - 1) * j_step);
-            FH_par = compute_FH_from_frame_batch(frame_batch, local_kernel, local_spatialTransformation);
+            FH_par = compute_FH_from_frame_batch(frame_batch, local_kernel, local_spatialTransformation,use_gpu);
 
             if local_rephasing
                 FH_par = rephase_FH(FH_par, local_rephasing_data, j_win, (batch_idx - 1 + inner_idx - 1) * j_step);
@@ -610,8 +610,8 @@ else % ~local_low_memory
     parfor (batch_idx = 1:local_num_batches, parfor_arg)
 
         % for batch_idx = 1:num_batches
-        frame_batch = gpuArray(istream.read_frame_batch(j_win, (batch_idx - 1) * j_step)); % forcing gpu
-        FH_par = compute_FH_from_frame_batch(frame_batch, local_kernel, local_spatialTransformation);
+        frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step); 
+        FH_par = compute_FH_from_frame_batch(frame_batch, local_kernel, local_spatialTransformation,use_gpu);
         local_image_type_list_par = local_image_type_list;
         if local_rephasing
             FH_par = rephase_FH(FH_par, local_rephasing_data, j_win, (batch_idx - 1) * j_step);
@@ -636,7 +636,7 @@ else % ~local_low_memory
         end
 
         if strcmp(set_up, 'Doppler')
-            NormalizationData = local_image_type_list_par.construct_image(FH_par, local_wavelength, acquisition, local_blur, false, local_svd, local_SVDx, local_SVDx_SubAp_num, [], local_color_f1, local_color_f2, local_color_f3, ...
+            NormalizationData = local_image_type_list_par.construct_image(FH_par, local_wavelength, acquisition, local_blur, use_gpu, local_svd, local_SVDx, local_SVDx_SubAp_num, [], local_color_f1, local_color_f2, local_color_f3, ...
                 0, local_spatialTransformation, local_time_transform, local_SubAp_PCA, local_xystride, local_num_unit_cells_x, local_r1, ...
                 local_temporal, local_phi1, local_phi2, local_spatial, local_nu1, local_nu2);
             switch local_output_video
