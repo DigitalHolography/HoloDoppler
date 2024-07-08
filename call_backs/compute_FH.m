@@ -3,7 +3,7 @@ st = app.spatialTransformationDropDown.Value;
 if use_gpu
     switch st
         case 'angular spectrum'
-            app.FH = gpuArray(fftshift(fft2(app.frame_batch)) .* app.kernelAngularSpectrum);
+            app.FH = fftshift(fft2(gpuArray(app.frame_batch))) .* app.kernelAngularSpectrum;
         case 'Fresnel'
             app.FH = gpuArray((app.frame_batch) .* app.kernelFresnel);
     end

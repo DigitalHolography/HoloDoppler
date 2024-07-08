@@ -126,10 +126,11 @@ classdef ImageTypeList < handle % This class is modified dynamically
                 case 'angular spectrum'
                     H = ifft2(FH);
                 case 'Fresnel'
-        %             H = fftshift(ifft2(FH));
-                      H = fftshift(fft2(FH));
+                    H = fftshift(fft2(FH));
             end
+
         end
+        clear FH;
 
         reference_wave = single(mean(abs(H),3));
         reference_wave_power = mean(reference_wave(:));
@@ -159,7 +160,6 @@ classdef ImageTypeList < handle % This class is modified dynamically
             H = local_temporal_PCA(H, phi1, phi2);
         end
         
-        clear FH;
         
         obj.spectrogram.parameters.H = H;
         
@@ -178,6 +178,7 @@ classdef ImageTypeList < handle % This class is modified dynamically
             case 'FFT' % if the time transform is FFT
                 SH = fft(H, [], 3);
         end
+        clear H;
         
         f1 = time_transform.f1;
         f2 = time_transform.f2;

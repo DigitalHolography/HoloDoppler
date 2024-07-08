@@ -124,7 +124,13 @@ function Rendervideo(app)
             % parfor_arg = Inf;
             parfor_arg = num_workers;
             use_multithread = true;
-            use_gpu = true;
+            use_gpu = check_GPU_for_render(app);
+            
+    end
+    if use_gpu 
+        disp("Using GPU.")
+    else 
+        disp("Not using GPU.")
     end
     
     % create proxy variables so that the entire gui
