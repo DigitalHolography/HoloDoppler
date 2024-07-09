@@ -130,7 +130,8 @@ classdef ImageTypeList < handle % This class is modified dynamically
             end
 
         end
-        clear FH;
+        
+        
 
         reference_wave = single(mean(abs(H),3));
         reference_wave_power = mean(reference_wave(:));
@@ -140,7 +141,7 @@ classdef ImageTypeList < handle % This class is modified dynamically
         beating_wave_variance_power = mean(beating_wave_variance(:));
         beating_wave_variance_power_std = std(beating_wave_variance(:));
 
-        NormalizationData = PowerNormalization(reference_wave,reference_wave_power,reference_wave_power_std,beating_wave_variance,beating_wave_variance_power,beating_wave_variance_power_std);
+        NormalizationData = gather(PowerNormalization(reference_wave,reference_wave_power,reference_wave_power_std,beating_wave_variance,beating_wave_variance_power,beating_wave_variance_power_std));
 
         %% SVD filtering
        
@@ -178,7 +179,7 @@ classdef ImageTypeList < handle % This class is modified dynamically
             case 'FFT' % if the time transform is FFT
                 SH = fft(H, [], 3);
         end
-        clear H;
+        
         
         f1 = time_transform.f1;
         f2 = time_transform.f2;

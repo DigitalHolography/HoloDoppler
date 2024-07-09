@@ -4,7 +4,7 @@ if ~app.file_loaded
 end
 app.renderLamp.Color = [1, 0, 0];
 drawnow;
-GPUpreview = 1;%check_GPU_for_preview(app); forcing to save time
+GPUpreview = check_GPU_for_preview(app); 
 if GPUpreview 
     disp("Using GPU.")
 else 
@@ -18,4 +18,5 @@ if strcmp(app.setUpDropDown.Value, 'Doppler')
     compute_hologram(app,GPUpreview);
     show_hologram(app);
 end
+reset(gpuDevice(1));
 end

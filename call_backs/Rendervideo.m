@@ -111,9 +111,10 @@ function Rendervideo(app)
             use_multithread = true;
             use_gpu = false;
         case 'GPU parallelization'
-            parfor_arg = 0;
+            parfor_arg = 3 ;
             use_multithread = false;
-            use_gpu = true;
+            reset(gpuDevice(1)); % clear memory
+            use_gpu = check_GPU_for_render(app,parfor_arg);
         case 'CPU singlethread'
             parfor_arg = 0;
             use_multithread = false;
@@ -124,6 +125,7 @@ function Rendervideo(app)
             % parfor_arg = Inf;
             parfor_arg = num_workers;
             use_multithread = true;
+            reset(gpuDevice(1));
             use_gpu = check_GPU_for_render(app);
             
     end
@@ -617,6 +619,7 @@ function Rendervideo(app)
     
             % for batch_idx = 1:num_batches
             frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step); 
+            use_gpu_par = use_gpu
             FH_par = compute_FH_from_frame_batch(frame_batch, local_kernel, local_spatialTransformation,use_gpu);
             local_image_type_list_par = local_image_type_list;
             if local_rephasing
