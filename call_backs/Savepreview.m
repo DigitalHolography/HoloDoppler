@@ -4,14 +4,15 @@ function Savepreview(app)
 %memory"
 
 app.savelamp.Color = [1, 0, 0];
+drawnow;
 app.cache = GuiCache(app);
 
 % ,''dark_field_image',
 acquisition = DopplerAcquisition(app.Nx,app.Ny,app.Fs/1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value,app.DX,app.DY,app.pix_width,app.pix_height);
 is_low_frequency = app.lowfrequencyCheckBox.Value;
 
-GPUpreview = app.check_GPU_for_preview();
-app.compute_FH(GPUpreview);
+GPUpreview = check_GPU_for_preview(app);
+compute_FH(app,GPUpreview);
 
 [~,file_name,~] = fileparts(app.filename);
 folder_name = strcat( file_name, '_preview');
@@ -40,7 +41,7 @@ app.var_ImageTypeList.select('power_Doppler','color_Doppler','directional_Dopple
 app.var_ImageTypeList.construct_image(app.FH, app.cache.wavelength, acquisition, app.blur, false, app.SVDCheckBox.Value,...
     app.SVDxCheckBox.Value, app.SVDx_SubApEditField.Value, [], app.compositef1EditField.Value, app.compositef2EditField.Value, app.compositef3EditField.Value, is_low_frequency, app.spatialTransformationDropDown.Value, app.time_transform, app.SubAp_PCA, app.xystrideEditField.Value, app.unitcellsinlatticeEditField.Value, app.r1EditField.Value, ...
     app.temporalCheckBox.Value, app.phi1EditField.Value, app.phi2EditField.Value, app.spatialCheckBox.Value, app.nu1EditField.Value, app.nu2EditField.Value);
-app.var_ImageTypeList.images_png(preview_folder_name,folder_path_png,'power_Doppler','color_Doppler','directional_Doppler','velocity_estimate', 'phase_variation',  'spectrogram')
+ app.var_ImageTypeList.images2png(preview_folder_name,folder_path_png,'power_Doppler','color_Doppler','directional_Doppler','velocity_estimate', 'phase_variation',  'spectrogram')
 
 %% Frequency Shift
 freq_nyq = app.Fs/1000;
