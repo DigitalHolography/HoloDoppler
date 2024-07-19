@@ -1,8 +1,8 @@
 function map_RI = construct_resistivity_index(M0,filepath,RI_output_filename)
     %https://en.wikipedia.org/wiki/Arterial_resistivity_index
-    disp(size(M0));
-    disp(max(M0,[],'all')) ; 
-    disp(min(M0,[],'all')) ; 
+%     disp(size(M0));
+%     disp(max(M0,[],'all')) ; 
+%     disp(min(M0,[],'all')) ; 
 
     tmp = zeros(2*size(M0, 1)-1, 2*size(M0, 2)-1, size(M0,3), size(M0,4));
     for mm = 1:size(M0, 3)
@@ -14,11 +14,11 @@ function map_RI = construct_resistivity_index(M0,filepath,RI_output_filename)
 
 %     disp(M0(1:3,1:3,:,1:3)) ; 
     clear tmp;
-    disp('size M0') ; 
-    disp(size(M0));
+%     disp('size M0') ; 
+%     disp(size(M0));
     mask = squeeze(std(M0, 1, 4));
     mask = imbinarize(im2gray(mask), 'adaptive', 'ForegroundPolarity', 'bright', 'Sensitivity', 0.4);
-    disp(size(mask)) ; 
+%     disp(size(mask)) ; 
     arteries = squeeze(sum(M0.* mask, [1 2]))/sum(mask, "all");
 %     figure(1)
 %     imshow(mask) ; 

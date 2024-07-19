@@ -29,6 +29,27 @@ function [shifts,moment_chunks_crop_array,correlation_chunks_array, pos_inter] =
     % mid_SubAp = floor(obj.n_SubAp/2);
     %(mid_SubAp-1)*floor(ac.Nx/obj.n_SubAp) + 1:mid_SubAp*floor(ac.Nx/obj.n_SubAp),...
     %(mid_SubAp-1)*floor(ac.Ny/obj.n_SubAp) + 1:mid_SubAp*floor(ac.Ny/obj.n_SubAp)
+    
+%     Nx = size(FH, 1);
+%     Ny = size(FH, 2);
+%     random_phase = zeros(size(FH, 1), size(FH, 2));
+%     rand_coef = [0.1786    4.2456    4.6700    3.3937    3.7887    3.7157    1.9611];
+% %     p = obj.modes;
+%     for p = 1:numel(obj.modes)
+%         [~,phi] = zernike_phase(obj.modes(p), Nx, Ny);
+% %         rand_coef(p) = rand;
+% %         rand_coef(p) = rand_coef(p) .* 5;
+%         random_phase = random_phase + phi .* rand_coef(p);
+%     end
+%     
+%     phase_function = mat2gray(angle(exp(1i .* random_phase)));
+%     figure(111)
+%     imagesc(phase_function);
+%     imwrite(phase_function, 'C:\Users\Rakushka\Desktop\phase_function_imposed.png');
+% 
+%     disp(rand_coef);
+% 
+%     FH = FH .* exp(1i .* random_phase);
 
     ac = acquisition;
     j_win = size(FH, 3);
