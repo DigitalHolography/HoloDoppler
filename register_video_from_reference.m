@@ -31,10 +31,11 @@ N = double(num_frames);
 frames = mat2gray(frames);
 
 %% apply registration
+%mask = apodize_image(size(frames,1),size(frames,2));
 parfor i = 1:num_frames
     send(D, i);
 
-    reg = registerImages(frames(:,:,:,i), ref_img);
+    reg = registerImages(rescale(frames(:,:,:,i))-0.5, rescale(ref_img)-0.5);
     frames(:,:,:,i) = reg.RegisteredImage;
     shifts(:,i) = [reg.Transformation.T(3,2); reg.Transformation.T(3,1)];
 end

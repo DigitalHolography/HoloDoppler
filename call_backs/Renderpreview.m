@@ -18,5 +18,5 @@ if strcmp(app.setUpDropDown.Value, 'Doppler')
     compute_hologram(app,GPUpreview);
     show_hologram(app);
 end
-reset(gpuDevice(1));
+reset(gpuDevice(1)); % free gpu memory to avoid overflowing
 end
