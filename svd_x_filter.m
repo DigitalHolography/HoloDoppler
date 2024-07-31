@@ -18,8 +18,8 @@ threshold = round(f1 * batch_size / fs)*2 + 1;
 %     H1 = zeros(width, height, batch_size);
     for ii=1:NbSubAp
         for kk=1:NbSubAp
-            H1 = H(round(Lx(ii)):round(Lx(ii+1)),round(Ly(kk)):round(Ly(kk+1)),:);
-            H1 = reshape(H1, (round(Lx(ii+1))-round(Lx(ii))+1)*(round(Ly(kk+1))-round(Ly(kk))+1), batch_size);
+            H1 = H(round(Lx(ii)):round(Lx(ii+1)-1),round(Ly(kk)):round(Ly(kk+1)-1),:);
+            H1 = reshape(H1, (round(Lx(ii+1))-round(Lx(ii)))*(round(Ly(kk+1))-round(Ly(kk))), batch_size);
 
             % SVD of spatio-temporal features
             cov = H1'*H1;
@@ -28,8 +28,8 @@ threshold = round(f1 * batch_size / fs)*2 + 1;
             V = V(:,sort_idx);
             size(V);
             H_tissue = H1 * V(:,1:threshold) * V(:,1:threshold)';
-            H1 = reshape(H1 - H_tissue, (round(Lx(ii+1))-round(Lx(ii))+1), (round(Ly(kk+1))-round(Ly(kk))+1), batch_size);
-            H(round(Lx(ii)):round(Lx(ii+1)),round(Ly(kk)):round(Ly(kk+1)),:) = reshape(H1, (round(Lx(ii+1))-round(Lx(ii))+1), (round(Ly(kk+1))-round(Ly(kk))+1), batch_size);
+            H1 = reshape(H1 - H_tissue, (round(Lx(ii+1))-round(Lx(ii))), (round(Ly(kk+1))-round(Ly(kk))), batch_size);
+            H(round(Lx(ii)):round(Lx(ii+1)-1),round(Ly(kk)):round(Ly(kk+1)-1),:) = reshape(H1, (round(Lx(ii+1))-round(Lx(ii))), (round(Ly(kk+1))-round(Ly(kk))), batch_size);
         end
     end
 %     SVDxVideo(:,:,jj) = mean(abs(H1), [3]);
