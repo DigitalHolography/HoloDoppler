@@ -35,7 +35,7 @@ frames = mat2gray(frames);
 parfor i = 1:num_frames
     send(D, i);
 
-    reg = registerImages(rescale(frames(:,:,:,i))-0.5, rescale(ref_img)-0.5);
+    reg = registerImages(frames(:,:,:,i), ref_img);
     frames(:,:,:,i) = reg.RegisteredImage;
     shifts(:,i) = [reg.Transformation.T(3,2); reg.Transformation.T(3,1)];
 end

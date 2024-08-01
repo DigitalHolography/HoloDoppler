@@ -742,6 +742,7 @@ function Rendervideo(app)
             disc = X.^2+Y.^2 < (disc_ratio * min(Nx,Ny)/2)^2; 
 
             tresh_disc_video_M0 = video_M0 .* disc - disc .* sum(video_M0.* disc,[1,2])/nnz(disc);
+            tresh_disc_video_M0 = rescale(tresh_disc_video_M0,-1,1,'InputMin',min(tresh_disc_video_M0,[],[1,2]),'InputMax',max(tresh_disc_video_M0,[],[1,2]));
     
             % % construct reference image
             ref_batch_idx = min(floor((app.cache.position_in_file) / app.cache.batch_stride) + 1,size(video_M0,4));
@@ -758,6 +759,7 @@ function Rendervideo(app)
             reg_hologram = reconstruct_hologram(reg_FH, acquisition, app.blur, use_gpu, app.SVDCheckBox.Value, app.SVDxCheckBox.Value, app.SVDx_SubApEditField.Value, [], app.time_transform, local_spatialTransformation);
             
             reg_hologram = reg_hologram.*disc - disc .* sum(reg_hologram.*disc,[1,2])/nnz(disc);
+            reg_hologram = rescale(reg_hologram,-1,1);
             
             switch app.cache.spatialTransformation
                 case 'Fresnel'
