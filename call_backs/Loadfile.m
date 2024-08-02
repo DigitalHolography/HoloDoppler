@@ -245,8 +245,8 @@ end
 
 % compute FH
 app.SubAp_PCA.Value = app.SubAp_PCACheckBox.Value;
-app.SubAp_PCA.min = app.minSubAp_PCAEditField_2.Value;
-app.SubAp_PCA.max = app.maxSubAp_PCAEditField_2.Value;
+app.SubAp_PCA.min = app.minSubAp_PCAEditField.Value;
+app.SubAp_PCA.max = app.maxSubAp_PCAEditField.Value;
 
 app.time_transform.type = app.timetransformDropDown.Value;
 app.time_transform.f1 = app.f1EditField.Value;

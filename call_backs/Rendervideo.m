@@ -168,7 +168,7 @@ function Rendervideo(app)
     local_SVDx = app.SVDxCheckBox.Value;
     local_SVDx_SubAp_num = app.SVDx_SubApEditField.Value;
     localSVDTreshold = app.SVDTresholdCheckBox.Value;
-    localSVDTresholdValue = app.SVDTresholdEditField_2.Value;
+    localSVDTresholdValue = app.SVDTresholdEditField.Value;
     
     % FIXME
     num_focus = 1;
