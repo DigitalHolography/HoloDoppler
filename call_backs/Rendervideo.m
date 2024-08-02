@@ -167,6 +167,8 @@ function Rendervideo(app)
     local_volume_size = floor(j_win/2);
     local_SVDx = app.SVDxCheckBox.Value;
     local_SVDx_SubAp_num = app.SVDx_SubApEditField.Value;
+    localSVDTreshold = app.SVDTresholdCheckBox.Value;
+    localSVDTresholdValue = app.SVDTresholdEditField_2.Value;
     
     % FIXME
     num_focus = 1;
@@ -645,7 +647,7 @@ function Rendervideo(app)
             end
     
             if strcmp(set_up, 'Doppler')
-                NormalizationData = local_image_type_list_par.construct_image(FH_par, local_wavelength, acquisition, local_blur, use_gpu, local_svd, local_SVDx, local_SVDx_SubAp_num, [], local_color_f1, local_color_f2, local_color_f3, ...
+                NormalizationData = local_image_type_list_par.construct_image(FH_par, local_wavelength, acquisition, local_blur, use_gpu, local_svd,localSVDTreshold, local_SVDx,localSVDTresholdValue, local_SVDx_SubAp_num, [], local_color_f1, local_color_f2, local_color_f3, ...
                     0, local_spatialTransformation, local_time_transform, local_SubAp_PCA, local_xystride, local_num_unit_cells_x, local_r1, ...
                     local_temporal, local_phi1, local_phi2, local_spatial, local_nu1, local_nu2);
                 switch local_output_video
