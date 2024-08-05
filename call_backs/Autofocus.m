@@ -11,7 +11,16 @@ for nn = 1:nMax
     % Run a Shack-Hartmann simulation on the current frame batch to
     % compute only defocus.
 
-    FH = fftshift(fft2(app.frame_batch)) .* app.kernelAngularSpectrum;
+    st = app.spatialTransformationDropDown.Value;
+    FH=[];
+    switch st
+        case 'angular spectrum'
+            FH = fftshift(fft2(app.frame_batch)) .* app.kernelAngularSpectrum;
+        case 'Fresnel'
+            FH = (app.frame_batch) .* app.kernelFresnel;
+    end
+
+    
     calibration_factor = 60;
     corrmap_margin = 0.4;
     subapertures4autofocus = 3;
