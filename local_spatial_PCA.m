@@ -21,8 +21,8 @@ for id_y = 1 : num_cube_y
     end
 end
 
-for id_y = 4 : 6
-    for id_x = 4 : 6
+for id_y = 1 : num_cube_y
+    for id_x = 1 : num_cube_x
         %filter with spatial PCA
         minicube = squeeze(cube(:,:,:, id_x, id_y));
         minicube = reshape(minicube, Nx_cube * Ny_cube, size(H,3));

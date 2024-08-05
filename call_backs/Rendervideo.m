@@ -777,6 +777,13 @@ function Rendervideo(app)
             tRegistration = tic;
             fprintf("Registration...\n")
 
+            % If iterative registration import last registration before
+            % calculating the next one
+
+            if app.cache.iterative_registration
+                video_M0 = register_video_from_shifts(video_M0, local_image_registration(1:2,:));
+            end
+
             % construct treshold M0 
             Nx=size(video_M0,1);Ny=size(video_M0,2);
 
@@ -820,8 +827,21 @@ function Rendervideo(app)
             end
     
             switch local_output_video
+                case 'moments'
+                    if size(local_image_registration, 2) == local_num_batches && ~app.cache.iterative_registration % if registration from previous folder results
+                        video_M0 = register_video_from_shifts(video_M0, local_image_registration(1:2,:));
+                        shifts(1:2,:) = local_image_registration(1:2,:);
+                    else
+                        % FIXME : use "reg_hologram" as reference (current preview from frontend)
+                        [tresh_disc_video_M0, shifts(1:2,:)] = register_video_from_reference(tresh_disc_video_M0, reg_hologram);
+                        video_M0 = register_video_from_shifts(video_M0, shifts(1:2,:));
+                    end
+                    video_moment0 = register_video_from_shifts(video_moment0, shifts);
+                    video_moment1 = register_video_from_shifts(video_moment1, shifts);
+                    video_moment2 = register_video_from_shifts(video_moment2, shifts);
+                    
                 case 'power_Doppler'
-                    if size(local_image_registration, 2) == local_num_batches % if registration from previous folder results
+                    if size(local_image_registration, 2) == local_num_batches && ~app.cache.iterative_registration % if registration from previous folder results
                         video_M0 = register_video_from_shifts(video_M0, local_image_registration(1:2,:));
                         shifts(1:2,:) = local_image_registration(1:2,:);
                     else
@@ -830,7 +850,7 @@ function Rendervideo(app)
                         video_M0 = register_video_from_shifts(video_M0, shifts(1:2,:));
                     end
                 case 'all_videos'
-                    if size(local_image_registration, 2) == local_num_batches % if registration from previous folder results
+                    if size(local_image_registration, 2) == local_num_batches && ~app.cache.iterative_registration % if registration from previous folder results
                         video_M0 = register_video_from_shifts(video_M0, local_image_registration(1:2,:));
                         shifts(1:2,:) = local_image_registration(1:2,:);
                     else
