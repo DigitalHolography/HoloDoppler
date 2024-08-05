@@ -240,6 +240,33 @@ function Rendervideo(app)
                     beating_wave_variance_power = zeros(1, local_num_batches,'double');
                     beating_wave_variance_power_std = zeros(1, local_num_batches,'double');
                 end
+            case 'moments'
+                local_image_type_list.select('power_Doppler','moment_0','moment_1','moment_2');
+                if not(app.Nx == app.Ny)
+                    video_M0 = zeros(app.Nx, app.Ny, 1, local_num_batches,'single');
+                    video_moment0 = video_M0;
+                    video_moment1 = video_M0;
+                    video_moment2 = video_M0;
+    
+                    reference_wave = zeros(local_Nx, local_Ny, 1,local_num_batches, 'single');
+                    reference_wave_power = zeros(1, local_num_batches,'double');
+                    reference_wave_power_std = zeros(1, local_num_batches,'double');
+                    beating_wave_variance = zeros(local_Nx, local_Ny, 1,local_num_batches, 'single');
+                    beating_wave_variance_power = zeros(1, local_num_batches,'double');
+                    beating_wave_variance_power_std = zeros(1, local_num_batches,'double');
+                else
+                    video_M0 = zeros(app.Nx, app.Ny, 1, local_num_batches,'single');
+                    video_moment0 = video_M0;
+                    video_moment1 = video_M0;
+                    video_moment2 = video_M0;
+    
+                    reference_wave = zeros(local_Nx, local_Ny, 1,local_num_batches, 'single');
+                    reference_wave_power = zeros(1, local_num_batches,'double');
+                    reference_wave_power_std = zeros(1, local_num_batches,'double');
+                    beating_wave_variance = zeros(local_Nx, local_Ny, 1,local_num_batches, 'single');
+                    beating_wave_variance_power = zeros(1, local_num_batches,'double');
+                    beating_wave_variance_power_std = zeros(1, local_num_batches,'double');
+                end
             case 'all_videos'
                 app.time_transform.type = 'FFT';
                 local_image_type_list.select('power_Doppler','power_1_Doppler','power_2_Doppler','color_Doppler','directional_Doppler','M0sM1r','velocity_estimate','spectrogram','moment_0','moment_1','moment_2')
@@ -706,6 +733,20 @@ function Rendervideo(app)
                         beating_wave_variance(:,:,:,batch_idx) = gather(NormalizationData.beating_wave_variance);
                         beating_wave_variance_power(batch_idx) = gather(NormalizationData.beating_wave_variance_power);
                         beating_wave_variance_power_std(batch_idx) = gather(NormalizationData.beating_wave_variance_power_std);
+                    case 'moments'
+                        tmp_video_M0 = gather(local_image_type_list_par.power_Doppler.image);
+                        video_M0(:,:,:,batch_idx) = tmp_video_M0;
+                        reference_wave(:,:,:,batch_idx) = gather(NormalizationData.reference_wave);
+                        reference_wave_power(batch_idx) = gather(NormalizationData.reference_wave_power);
+                        reference_wave_power_std(batch_idx) = gather(NormalizationData.reference_wave_power_std);
+                        beating_wave_variance(:,:,:,batch_idx) = gather(NormalizationData.beating_wave_variance);
+                        beating_wave_variance_power(batch_idx) = gather(NormalizationData.beating_wave_variance_power);
+                        beating_wave_variance_power_std(batch_idx) = gather(NormalizationData.beating_wave_variance_power_std);
+                        
+                        video_moment0(:,:,:,batch_idx) = gather(local_image_type_list_par.moment_0.image);
+                        video_moment1(:,:,:,batch_idx) = gather(local_image_type_list_par.moment_1.image);
+                        video_moment2(:,:,:,batch_idx) = gather(local_image_type_list_par.moment_2.image);
+
     
     
     
@@ -842,6 +883,12 @@ function Rendervideo(app)
             case 'power_Doppler'
                 generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
                 generate_video(tresh_disc_video_M0, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+            case 'moments'
+                generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+                generate_video(tresh_disc_video_M0, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+                generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
+                generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
+                generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
 
             case 'all_videos'
                 generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);

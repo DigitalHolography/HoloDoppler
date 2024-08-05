@@ -155,8 +155,9 @@ classdef ImageTypeList < handle % This class is modified dynamically
         
         if (svdx)
             if svd_treshold
+                H = svd_x_filter(H, time_transform.f1, ac.fs,Nb_SubAp,svd_treshold_value);
             else
-                H = svd_x_filter(H, time_transform.f1, ac.fs, Nb_SubAp,svd_treshold_value);
+                H = svd_x_filter(H, time_transform.f1, ac.fs, Nb_SubAp);
             end
         end
         
