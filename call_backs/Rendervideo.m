@@ -323,63 +323,6 @@ function Rendervideo(app)
         end %switch local_output_video
     end
     
-    %% Just for OCT: in depth defocus estimation
-    % by principle happens before rephasing and registration
-    if 0
-    
-        num_layers = 4;
-        idx_to_freq_coef = acquisition.fs/j_win;
-        layer_freq_thickness = floor(j_win/2/num_layers) * idx_to_freq_coef;
-        defocus_of_layers = zeros(num_layers, local_num_batches);
-        coefs = zeros(num_layers);
-    
-        zernike_indices = 4; % we are just estimating defocus
-        image_subapertures_size_ratio = app.cache.image_subapertures_size_ratio;
-        num_subapertures_positions = app.cache.num_subapertures_positions;
-        %num_subapertures_inter = 1;
-        subaperture_margin = app.cache.subaperture_margin;
-        %                 zernike_projection = app.cache.zernike_projection;
-    
-        %FIXME elsewhere calibration_factor = 60;
-        calibration_factor = 20;
-        corrmap_margin = 0.4;
-    
-        power_filter_corrector = 1;
-        sigma_filter_corrector = 1;
-    
-        subimage_size = local_Nx;
-        subimage_stride = local_Nx;
-    
-        shack_hartmann = ShackHartmann(image_subapertures_size_ratio, num_subapertures_positions, zernike_indices, calibration_factor,subaperture_margin,corrmap_margin,power_filter_corrector,sigma_filter_corrector, subimage_size, subimage_stride);
-        % construct M_aso doesn't require frequencies
-        [M_aso, ~] = shack_hartmann.construct_M_aso(app.f1EditField.Value, app.f2EditField.Value, app.blur,acquisition);
-        %                 for batch_idx = 1 : local_num_batches
-        for batch_idx = 1 %: local_num_batches
-            % calculate defocus in fuction of depth with Shack
-            % Hartman
-            frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step);
-            FH = compute_FH_from_frame_batch(frame_batch, local_kernel, local_spatialTransformation,use_gpu);
-            for z = 1 : num_layers
-                f1_layer = (z-1)*layer_freq_thickness + idx_to_freq_coef;
-                f2_layer = z * layer_freq_thickness;
-                [shifts, ~, ~] = shack_hartmann.compute_images_shifts(FH, f1_layer, f2_layer, local_blur, false, local_svd, local_svd_threshold, acquisition);
-                shifts = shifts / (shack_hartmann.subimage_size/shack_hartmann.n_SubAp);
-                %                         excluded_subap = isnan(shifts);
-                excluded_subap = shack_hartmann.excluded_subapertures();
-                shifts(excluded_subap) = [];
-                M_aso_2 = M_aso;
-                M_aso_2(excluded_subap, :) = [];
-                Y = cat(1, real(shifts), imag(shifts));
-                M_aso_concat = cat(1,real(M_aso_2),imag(M_aso_2));
-                coef = M_aso_concat \ Y;
-                coefs(z) = coef * calibration_factor;
-                defocus_of_layers(z, batch_idx) = coefs(z);
-            end
-        end
-        estimation_defocus_in_depth = squeeze(mean(defocus_of_layers, 2));
-        %                 disp(estimation_defocus_in_depth);
-    end
-    
     % parfor waitbar
     % we have to use a DataQueue
     % since there are no synchronization
@@ -780,7 +723,8 @@ function Rendervideo(app)
             % If iterative registration import last registration before
             % calculating the next one
 
-            if app.cache.iterative_registration
+            if size(local_image_registration, 2) == local_num_batches && app.cache.iterative_registration % si iterative registration est activée et une registration précédente a été trouvée
+                disp('Importing last registration.')
                 video_M0 = register_video_from_shifts(video_M0, local_image_registration(1:2,:));
             end
 
@@ -839,7 +783,7 @@ function Rendervideo(app)
                     video_moment0 = register_video_from_shifts(video_moment0, shifts);
                     video_moment1 = register_video_from_shifts(video_moment1, shifts);
                     video_moment2 = register_video_from_shifts(video_moment2, shifts);
-                    
+
                 case 'power_Doppler'
                     if size(local_image_registration, 2) == local_num_batches && ~app.cache.iterative_registration % if registration from previous folder results
                         video_M0 = register_video_from_shifts(video_M0, local_image_registration(1:2,:));

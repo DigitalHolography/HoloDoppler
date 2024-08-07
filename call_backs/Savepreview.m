@@ -31,6 +31,8 @@ output_dirpath = fullfile(output_dirpath, preview_folder_name);
 
 mkdir(fullfile(output_dirpath, 'png'));
 folder_path_png = fullfile(output_dirpath, 'png');
+mkdir(fullfile(output_dirpath, 'spectrum'));
+folder_path_spec = fullfile(output_dirpath, 'png');
 mkdir(fullfile(output_dirpath, 'freq_shift'));
 folder_path_freq = fullfile(output_dirpath, 'freq_shift');
 
@@ -38,10 +40,15 @@ folder_path_freq = fullfile(output_dirpath, 'freq_shift');
 
 app.var_ImageTypeList.clear();
 app.var_ImageTypeList.select('power_Doppler','color_Doppler','directional_Doppler','velocity_estimate', 'phase_variation',  'spectrogram');
-app.var_ImageTypeList.construct_image(app.FH, app.cache.wavelength, acquisition, app.blur, false, app.SVDCheckBox.Value,...
-    app.SVDxCheckBox.Value, app.SVDx_SubApEditField.Value, [], app.compositef1EditField.Value, app.compositef2EditField.Value, app.compositef3EditField.Value, is_low_frequency, app.spatialTransformationDropDown.Value, app.time_transform, app.SubAp_PCA, app.xystrideEditField.Value, app.unitcellsinlatticeEditField.Value, app.r1EditField.Value, ...
+app.var_ImageTypeList.construct_image(app.FH, app.cache.wavelength, acquisition, app.blur, false, app.SVDCheckBox.Value, app.SVDTresholdCheckBox.Value,...
+    app.SVDxCheckBox.Value, app.SVDTresholdEditField.Value, app.SVDx_SubApEditField.Value, [], app.compositef1EditField.Value, app.compositef2EditField.Value, app.compositef3EditField.Value, is_low_frequency, app.spatialTransformationDropDown.Value, app.time_transform, app.SubAp_PCA, app.xystrideEditField.Value, app.unitcellsinlatticeEditField.Value, app.r1EditField.Value, ...
     app.temporalCheckBox.Value, app.phi1EditField.Value, app.phi2EditField.Value, app.spatialCheckBox.Value, app.nu1EditField.Value, app.nu2EditField.Value);
  app.var_ImageTypeList.images2png(preview_folder_name,folder_path_png,'power_Doppler','color_Doppler','directional_Doppler','velocity_estimate', 'phase_variation',  'spectrogram')
+%% Spectrum
+
+Show_spectrum(app);
+saveas(57,fullfile(folder_path_spec,"spectrum_of_the_full_image.png"));
+close(57);
 
 %% Frequency Shift
 freq_nyq = app.Fs/1000;
@@ -58,10 +65,10 @@ for i=1:local_num_frame
 
     app.time_transform.f1 = freq_basse(i);
     app.time_transform.f2 = freq_haute(i);
-    app.var_ImageTypeList.construct_image(app.FH, app.cache.wavelength, acquisition, app.blur, false, app.SVDCheckBox.Value,...
-        app.SVDxCheckBox.Value, app.SVDx_SubApEditField.Value, [], app.time_transform.f1, app.time_transform.f2, app.compositef3EditField.Value, is_low_frequency, app.spatialTransformationDropDown.Value, app.time_transform, app.SubAp_PCA, app.xystrideEditField.Value, app.unitcellsinlatticeEditField.Value, app.r1EditField.Value, ...
-        app.temporalCheckBox.Value, app.phi1EditField.Value, app.phi2EditField.Value, app.spatialCheckBox.Value, app.nu1EditField.Value, app.nu2EditField.Value);
-
+   app.var_ImageTypeList.construct_image(app.FH, app.cache.wavelength, acquisition, app.blur, false, app.SVDCheckBox.Value, app.SVDTresholdCheckBox.Value,...
+    app.SVDxCheckBox.Value, app.SVDTresholdEditField.Value, app.SVDx_SubApEditField.Value, [], app.compositef1EditField.Value, app.compositef2EditField.Value, app.compositef3EditField.Value, is_low_frequency, app.spatialTransformationDropDown.Value, app.time_transform, app.SubAp_PCA, app.xystrideEditField.Value, app.unitcellsinlatticeEditField.Value, app.r1EditField.Value, ...
+    app.temporalCheckBox.Value, app.phi1EditField.Value, app.phi2EditField.Value, app.spatialCheckBox.Value, app.nu1EditField.Value, app.nu2EditField.Value);
+ 
     app.hologram = app.var_ImageTypeList.('power_Doppler').image;
     app.hologram = flip(app.hologram);
     app.hologram = mat2gray(app.hologram);

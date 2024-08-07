@@ -81,9 +81,11 @@ H=[];
 
 SH = abs(SH).^2;
 
-
-
-spectrum = squeeze(mean(SH,[1,2])); % The full spectrum of the power doppler image
+% [X,Y]=meshgrid(((1:app.Nx) - round(app.Nx/2))*2/app.Nx,((1:app.Ny) - round(app.Ny/2))*2/app.Nx);
+% circle = X.^2+Y.^2<0.5;
+% imshow(circle);
+circle = single(ones([app.Nx,app.Ny]));
+spectrum = squeeze(sum(SH.*circle,[1,2])/nnz(circle)); % The full spectrum of the power doppler image
 
 fullfreq = linspace(-app.Fs/2,app.Fs/2,length(spectrum));
 
@@ -97,7 +99,7 @@ hold off
 title('Spectrum');
 fontsize(gca, 14, "points");
 xlabel("Frequency (kHz)", 'FontSize', 14);
-ylabel("10log(S(f))", 'FontSize', 14);
+ylabel("S(f) (dB)", 'FontSize', 14);
 pbaspect([1.618 1 1]);
 set(gca, 'LineWidth', 2);
 axis tight;

@@ -17,7 +17,8 @@ for nn = 1:nMax
         case 'angular spectrum'
             FH = fftshift(fft2(app.frame_batch)) .* app.kernelAngularSpectrum;
         case 'Fresnel'
-            FH = (app.frame_batch) .* app.kernelFresnel;
+            disp("Autofocus doesn't work when using Fresnel spatial transformation.")
+            return
     end
 
     
@@ -73,13 +74,12 @@ for nn = 1:nMax
 
     z = double(app.z_reconstruction + (0.0025*512/app.Nx) * coefs(1));
     disp(z);
-    % if app.Switch.Value == "z_retina"
-    %     app.zretinaEditField.Value = z;
-    %     app.zretinaEditFieldValueChanged();
-    % else
-    %     app.zirisEditField.Value = z;
-    %     app.zirisEditFieldValueChanged();
-    % end
+    if app.Switch.Value == "z_retina"
+        app.zretinaEditField.Value = z;
+    else
+        app.zirisEditField.Value = z;
+    end
+    app.z_reconstruction = z;
     Renderpreview(app);
     waitbar(nn/nMax, f, 'Autofocus in progress. Please wait...');
 end
