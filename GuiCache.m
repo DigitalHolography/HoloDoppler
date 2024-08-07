@@ -1,40 +1,30 @@
 classdef GuiCache
-    % A parameter cache to store parameters from GUI
+    % A class to store parameters from GUI
     % so that during computations, values are fetched from cache instead of GUI
     % so that the user can modify the values in the GUI without messing
     % everything up
     properties (Access = public)
 
-        nb_cpu_cores double
-        batch_size double
-        spatialTransformation char
-        z double
-        z_retina double
-        z_iris double
-        z_switch char
-        time_transform struct % object with : type of transformation, f1, f2
-        blur double
-        imageChoice char
-        wavelength double
-        Fs double
+        %% File selection
+        % misc info collected on the file 
+        fs double % sampling frequency
+        wavelength double % laser central wavelength
         pix_width double
         pix_height double
-        parallelism char
+        Nx double
+        Ny double
 
-        aberration_compensation logical
-        notes cell
-        position_in_file double
-        output_videos char
-        SVD logical
+        % calculation parameters
+        parrallel_mode char % parrallelization mode
+        nb_workers double % ...
 
-        % video rendering
+        %% Video rendering
 
+        output_video char
         ref_batch_size double
         batch_stride double
         DX double
         DY double
-
-        % video rendering logical checkboxes
         low_memory logical
         save_raw logical
         rephasing logical
@@ -43,17 +33,52 @@ classdef GuiCache
         iterative_registration logical
         temporal_filter_flag logical
         temporal_filter double
+        show_ref logical
+
+        notes cell
+
+        %% Image rendering
+        
+        spatial_transformation char
+        z_retina double
+        z_iris double
+        z_switch char
+        preview_choice char
+        time_transform struct % object with : type of transformation, f1, f2
+        blur double
+        batch_size double
+        low_frequency logical
+        position_in_file double
 
         % color image parameters
         color_f1 double
         color_f2 double
         color_f3 double
-        low_frequency logical
+        
+        %% Advanced Processing
+        SVD logical
+        SVDx logical
+        SVDx_nb_subap double
+        SVD_threshold logical
+        SVD_threshold_value double
+
+        % local filtering
+
+        local_temporal logical
+        phi1 double
+        phi2 double
+        local_spatial logical
+        nu1 double
+        nu2 double
 
         % dark field parameters
         xystride double
         num_unit_cells_x double
         r1 double
+        
+
+        %% Aberration compensation
+        aberration_compensation logical
 
         % iterative optimization parameters
         iterative_aberration_compensation double
@@ -79,56 +104,82 @@ classdef GuiCache
     methods (Access = public)
 
         function obj = GuiCache(app)
-            obj.nb_cpu_cores = app.numworkersSpinner.Value;
-            obj.batch_size = app.batchsizeEditField.Value;
+            % Contructor function 
+            % fetch all the GUI parameters from the app GUI (and internal variables)
+            % to the class object
+            %
+            % : bufferize (and lock during computation) current paremeter values from front end
+
+            %% File selection
+            obj.fs = app.Fs; % TODO should be .Value
+            obj.wavelength = app.wavelengthEditField.Value;
+            obj.pix_width = app.pix_width; % TODO should be .Value
+            obj.pix_height = app.pix_height; % TODO should be .Value
+            obj.parrallel_mode = app.ParallelismDropDown.Value;
+            obj.nb_workers = app.numworkersSpinner.Value;
+            obj.Nx = app.Nx;
+            obj.Ny = app.Ny;
+
+            %% Video rendering
+            obj.output_video = (strrep(app.outputvideoDropDown.Value, ' ', '_')); % replaces all ' ' with '_'
             obj.ref_batch_size = app.refbatchsizeEditField.Value;
             obj.batch_stride = app.batchstrideEditField.Value;
-            obj.spatialTransformation = app.spatialTransformationDropDown.Value; % Fresnel or angular spectrum...&obj.
-            obj.z_switch = app.Switch.Value;
-            obj.z_retina = app.zretinaEditField.Value;
-            obj.z_iris = app.zirisEditField.Value;
-            obj.time_transform = app.time_transform;
-            obj.blur = app.blurEditField.Value;
-            obj.imageChoice = strrep(app.ImageChoiceDropDown.Value, ' ', '_');
-            obj.wavelength = app.wavelengthEditField.Value;
-            obj.Fs = app.Fs;
-            obj.pix_width = app.pix_width;
-            obj.pix_height = app.pix_height;
+            obj.DX = app.DX; % TODO should be .Value
+            obj.DY = app.DY; % TODO should be .Value
+            obj.low_memory = app.lowmemoryCheckBox.Value;
+            obj.save_raw = app.saverawvideosCheckBox.Value;
+            obj.rephasing = app.rephasingCheckBox.Value;
             obj.registration = app.imageregistrationCheckBox.Value;
+            obj.registration_via_phase = app.phaseregistrationCheckBox.Value;
+            obj.iterative_registration = app.iterativeregistrationCheckBox.Value;
             obj.temporal_filter_flag = app.temporalfilterCheckBox.Value;
             obj.temporal_filter = app.temporalfilterEditField.Value;
-            obj.parallelism = app.ParallelismDropDown.Value;
-            obj.registration_via_phase = app.phaseregistrationCheckBox.Value;
-            obj.aberration_compensation = app.IterativeoptimizationCheckBox.Value;
-            obj.SVD = app.SVDCheckBox.Value;
+            % obj.show_ref = app.ShowrefCheckBox.Value;
 
-            obj.notes = app.NotesTextArea.Value;
-            obj.DX = app.DX;
-            obj.DY = app.DY;
+            %% Image rendering
+            obj.spatial_transformation = app.spatialTransformationDropDown.Value; % Fresnel or angular spectrum...&obj.
+            obj.z_retina = app.zretinaEditField.Value;
+            obj.z_iris = app.zirisEditField.Value;
+            obj.z_switch = app.Switch.Value;
+            obj.preview_choice = strrep(app.ImageChoiceDropDown.Value, ' ', '_'); % replaces all ' ' with '_'
+            obj.time_transform = app.time_transform; % here the object time_transform considering it is live updated in the app
+            obj.blur = app.blurEditField.Value;
+            obj.batch_size = app.batchsizeEditField.Value;
             obj.position_in_file = app.positioninfileSlider.Value;
-            obj.output_videos = (strrep(app.outputvideoDropDown.Value, ' ', '_'));
-            obj.low_memory = app.lowmemoryCheckBox.Value;
-            obj.rephasing = app.rephasingCheckBox.Value;
-            obj.save_raw = app.saverawvideosCheckBox.Value;
-
+            % color freq parameters
             obj.color_f1 = app.compositef1EditField.Value;
             obj.color_f2 = app.compositef2EditField.Value;
             obj.color_f3 = app.compositef3EditField.Value;
             obj.low_frequency = app.lowfrequencyCheckBox.Value;
 
-            % dark field parameters
+            %% Advanced Processing
+
+            obj.SVD = app.SVDCheckBox.Value;
+            obj.SVDx = app.SVDxCheckBox.Value;
+            obj.SVDx_nb_subap = app.SVDx_SubApEditField.Value;
+            obj.SVD_threshold = app.SVDTresholdCheckBox.Value;
+            obj.SVD_threshold_value = app.SVDTresholdEditField.Value;
+
+            obj.local_spatial = app.spatialCheckBox.Value;
+            obj.phi1 = app.phi1EditField;
+            obj.phi2 = app.phi2EditField;
+            obj.local_temporal = app.temporalCheckBox.Value;
+            obj.nu1 = app.nu1EditField;
+            obj.nu2 = app.nu2EditField;
+
             obj.xystride = app.xystrideEditField.Value;
             obj.num_unit_cells_x = app.unitcellsinlatticeEditField.Value;
             obj.r1 = app.r1EditField.Value;
 
+            %% Aberration compensation
+
+            obj.aberration_compensation = app.IterativeoptimizationCheckBox.Value;
             % iterative optimization parameters
             obj.iterative_aberration_compensation = app.IterativeoptimizationCheckBox.Value;
             obj.optimization_zernike_ranks = app.optimizationzernikeranksEditField.Value;
             obj.mask_num_iter = app.masknumiterEditField.Value;
             obj.zernikes_tol = app.zernikestolEditField.Value;
             obj.max_constraint = app.maxconstraintEditField.Value;
-            obj.iterative_registration = app.iterativeregistrationCheckBox.Value;
-
             % shack-hartmann parameters
             obj.shack_hartmann_aberration_compensation = app.ShackHartmannCheckBox.Value;
             obj.shack_hartmann_zernike_ranks = app.shackhartmannzernikeranksEditField.Value;
@@ -140,15 +191,18 @@ classdef GuiCache
             obj.maxSubAp_PCA = app.maxSubAp_PCAEditField.Value;
             obj.zernike_projection = app.ZernikeProjectionCheckBox.Value;
             obj.shack_hartmann_ref_image = app.referenceimageDropDown.Value;
+            obj.notes = app.NotesTextArea.Value;
 
-            % bufferize (and lock during computation) current paremeter values from front end
         end
 
         function load2Gui(obj, app)
-            % set gui parameters from cache
+            % set gui parameters from cache 
+            % each in a try catch to insure retrocompatibility
+            % less critical because only for user comfort
+
+            %% File selection
             try
-                app.batchsizeEditField.Value = obj.batch_size;
-                app.max_PCAEditField.Limits = [0 double(app.batchsizeEditField.Value)];
+                app.fsEditField.Value = obj.fs/1000;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
@@ -157,12 +211,64 @@ classdef GuiCache
                 end
             end
 
-            % try
-            %     app.numworkersSpinner.Value = obj.nb_cpu_cores;
-            % end
+            try
+                app.wavelengthEditField.Value = obj.wavelength;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
 
             try
-                app.spatialTransformationDropDown.Value = obj.spatialTransformation;
+                app.ParallelismDropDown.Value = obj.parrallel_mode;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
+
+            try
+                app.numworkersSpinner = obj.nb_workers;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
+
+            %% Video rendering
+           
+
+            try
+                app.batchsizeEditField.Value = obj.batch_size;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
+
+            % No Dx no Dy
+
+            try
+                app.lowmemoryCheckBox = obj.low_memory;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
+
+
+            try
+                app.spatialTransformationDropDown.Value = obj.spatial_transformation;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
@@ -242,7 +348,7 @@ classdef GuiCache
             end
 
             try
-                app.ImageChoiceDropDown.Value = strrep(obj.imageChoice, '_', ' ');
+                app.ImageChoiceDropDown.Value = strrep(obj.preview_choice, '_', ' ');
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
@@ -263,6 +369,45 @@ classdef GuiCache
 
             try
                 app.SVDCheckBox.Value = obj.SVD;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
+
+            try
+                app.SVDxCheckBox.Value = obj.SVDx;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
+
+            try
+                app.SVDx_SubApEditField.Value = obj.SVDx_nb_subap;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
+
+            try
+                app.SVDTresholdCheckBox.Value = obj.SVD_threshold;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
+            try
+                app.SVDTresholdEditField.Value = obj.SVD_threshold_value;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
@@ -332,27 +477,7 @@ classdef GuiCache
             end
 
             try
-                app.wavelengthEditField.Value = obj.wavelength;
-            catch ME
-                disp('Error Message:')
-                disp(ME.message)
-                for i = 1:numel(ME.stack)
-                    ME.stack(i)
-                end
-            end
-
-            try
-                app.outputvideoDropDown.Value = strrep(obj.output_videos, '_', ' ');
-            catch ME
-                disp('Error Message:')
-                disp(ME.message)
-                for i = 1:numel(ME.stack)
-                    ME.stack(i)
-                end
-            end
-
-            try
-                app.lowmemoryCheckBox.Value = obj.low_memory;
+                app.outputvideoDropDown.Value = strrep(obj.output_video, '_', ' ');
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
@@ -383,16 +508,6 @@ classdef GuiCache
 
             try
                 app.positioninfileSlider.Value = obj.position_in_file;
-            catch ME
-                disp('Error Message:')
-                disp(ME.message)
-                for i = 1:numel(ME.stack)
-                    ME.stack(i)
-                end
-            end
-
-            try
-                app.EditField.Value = obj.position_in_file;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
@@ -565,6 +680,66 @@ classdef GuiCache
 
             try
                 app.saverawvideosCheckBox.Value = obj.save_raw;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
+
+            try
+                app.temporalCheckBox.Value = obj.local_temporal;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
+
+            try
+                app.phi1EditField.Value = obj.phi1;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
+
+            try
+                app.phi2EditField.Value = obj.phi2;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
+
+            try
+                app.spatialCheckBox.Value = obj.local_spatial;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
+
+            try
+                app.nu2EditField.Value = obj.nu2;
+            catch ME
+                disp('Error Message:')
+                disp(ME.message)
+                for i = 1:numel(ME.stack)
+                    ME.stack(i)
+                end
+            end
+
+            try
+                app.nu1EditField.Value = obj.nu1;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
