@@ -116,7 +116,7 @@ classdef GuiCache
             obj.wavelength = app.wavelengthEditField.Value;
             obj.pix_width = app.pix_width; % TODO should be .Value
             obj.pix_height = app.pix_height; % TODO should be .Value
-            obj.parrallel_mode = strrep(app.ParallelismDropDown.Value, ' ', '_');
+            obj.parrallel_mode = app.ParallelismDropDown.Value;%strrep(app.ParallelismDropDown.Value, ' ', '_');
             obj.nb_workers = app.numworkersSpinner.Value;
             obj.Nx = app.Nx;
             obj.Ny = app.Ny;
@@ -219,17 +219,17 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
             try
-                app.numworkersSpinner = obj.nb_workers;
+                app.numworkersSpinner.Value = obj.nb_workers;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -242,19 +242,19 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
             % No Dx no Dy
 
             try
-                app.lowmemoryCheckBox = obj.low_memory;
+                app.lowmemoryCheckBox.Value = obj.low_memory;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -265,7 +265,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 

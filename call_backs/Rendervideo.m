@@ -97,13 +97,13 @@ function Rendervideo(app)
     
     
     app.cache = GuiCache(app);
-    num_workers = app.cache.nb_cpu_cores;
+    num_workers = app.cache.nb_workers;
     
     aberration_correction = AberrationCorrection();
     image_registration = ImageRegistration();
-    
+    disp(app.cache.parrallel_mode)
     % select parallelism policy
-    switch app.cache.parallelism
+    switch app.cache.parrallel_mode
         case 'CPU multithread'
             %                     parfor_arg = app.numCPUCores(0.2);
             % parfor_arg = Inf;
@@ -150,10 +150,10 @@ function Rendervideo(app)
     local_Ny = app.Ny;
     local_wavelength = app.cache.wavelength;
     local_svd = app.SVDCheckBox.Value;
-    local_output_video = app.cache.output_videos;
+    local_output_video = app.cache.output_video;
     local_rephasing = app.cache.rephasing;
     local_low_memory = app.cache.low_memory;
-    local_spatialTransformation = app.cache.spatialTransformation;
+    local_spatialTransformation = app.cache.spatial_transformation;
     local_temporal_filter = app.cache.temporal_filter;
     local_SubAp_PCA.Value = app.SubAp_PCA.Value;
     local_SubAp_PCA.min = app.SubAp_PCA.min;
@@ -190,14 +190,14 @@ function Rendervideo(app)
         local_rephasing_data = [];
     end
     
-    switch app.cache.spatialTransformation
+    switch app.cache.spatial_transformation
         case 'angular spectrum'
             local_kernel = app.kernelAngularSpectrum;  % propagation kernel initialization
         case 'Fresnel'
             local_kernel = app.kernelFresnel;  % propagation kernel initialization
     end
     
-    acquisition = DopplerAcquisition(app.Nx,app.Ny,app.cache.Fs/1000, app.cache.z, app.cache.z_retina, app.cache.z_iris,app.cache.wavelength,app.cache.DX,app.cache.DY,app.cache.pix_width,app.cache.pix_height);
+    acquisition = DopplerAcquisition(app.Nx,app.Ny,app.Fs/1000, app.cache.z, app.cache.z_retina, app.cache.z_iris,app.cache.wavelength,app.cache.DX,app.cache.DY,app.cache.pix_width,app.cache.pix_height);
     
     local_low_frequency = app.cache.low_frequency;
     local_color_f1 = app.cache.color_f1;
@@ -742,7 +742,7 @@ function Rendervideo(app)
             ref_batch_idx = min(floor((app.cache.position_in_file) / app.cache.batch_stride) + 1,size(video_M0,4));
     
             reg_frame_batch = app.interferogram_stream.read_frame_batch(app.cache.ref_batch_size, floor(ref_batch_idx*app.cache.batch_stride));
-            switch app.cache.spatialTransformation
+            switch app.cache.spatial_transformation
                 case 'angular spectrum'
                     reg_FH = fftshift(fft2(reg_frame_batch)) .* local_kernel;
                 case 'Fresnel'
