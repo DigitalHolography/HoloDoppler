@@ -82,6 +82,192 @@ classdef ImageTypeList < handle % This class is modified dynamically
             end
         end
 
+        function construct_images(obj,frame_batch,cache,use_gpu,rephasing_data)
+            FH = [];
+            kernelAngularSpectrum = propagation_kernelAngularSpectrum(cache.Nx, cache.Ny, cache.z, cache.wavelength, cache.pix_width, cache.pix_height, use_gpu);
+            kernelFresnel = propagation_kernelFresnel(cache.Nx, cache.Ny, cache.z, cache.wavelength, cache.pix_width, cache.pix_height, use_gpu);
+        
+            if use_gpu
+                switch cache.spatial_transformation
+                    case 'angular spectrum'
+                        FH = fftshift(fft2(gpuArray(frame_batch))) .* kernelAngularSpectrum;
+                    case 'Fresnel'
+                        FH = gpuArray((frame_batch) .* kernelFresnel);
+                end
+            else % no gpu
+                switch spatial_transformation
+                    case 'angular spectrum'
+                        FH = fftshift(fft2(frame_batch)) .* kernelAngularSpectrum;
+                    case 'Fresnel'
+                        FH = (frame_batch) .* kernelFresnel;
+                end
+            end
+
+        
+            if cache.rephasing && nargin==4 % if rephasing data is given
+                FH = rephase_FH(FH, rephasing_data, cache.batch_size, cache.position_in_file);
+            end
+
+            if (cache.SubAp_PCA)
+                FH = subaperture_PCA(FH, cache.SubAp_PCA, cache, cache.SVD, cache.time_transform.f1, cache.time_transform.f2, cache.blur);
+            end
+
+            H=[];
+
+            % if we want dark field preview H is calculated by dark field function
+            if obj.dark_field_image.is_selected
+                %for now we assume that both spatial transforms are the same
+                H = dark_field(FH, cache.z_retina, cache.spatial_transformation, cache.z_iris, cache.spatial_transformation, cache.wavelength, cache.x_step, cache.y_step, cache.xy_stride, cache.time_transform.f1, cache.time_transform.f2, cache.fs, cache.num_unit_cells_x, cache.r1); 
+                obj.dark_field_image.parameters.H = H;
+            else
+                % else we compute regular spatial transform (most often)
+                switch cache.spatial_transformation
+                    case 'angular spectrum'
+                        H = ifft2(FH);
+                    case 'Fresnel'
+                        H = fftshift(fft2(FH));
+                end
+    
+            end
+            
+            FH=[];
+
+            if cache.SVD
+                if cache.SVD_threshold
+                    H = svd_filter(H, cache.time_transform.f1, cache.fs,cache.SVD_treshold_value);
+                else
+                    H = svd_filter(H, cache.time_transform.f1, cache.fs);
+                end
+            end
+            
+            if cache.SVDx
+                if svd_treshold
+                    H = svd_x_filter(H, cache.time_transform.f1, cache.fs,cache.SVDx_nb_subap,cache.SVD_treshold_value);
+                else
+                    H = svd_x_filter(H, cache.time_transform.f1, cache.fs, cache.SVDx_nb_subap);
+                end
+            end
+            
+            if cache.local_spatial
+                H = local_spatial_PCA(H, cache.nu1, cache.nu2);
+            end
+            
+            if cache.local_temporal
+                H = local_temporal_PCA(H, cache.phi1, cache.phi2);
+            end
+
+
+            switch cache.time_transform.type
+                case 'PCA' % if the time transform is PCA
+                    SH = short_time_PCA(H);
+                    
+        
+                case 'FFT' % if the time transform is FFT
+                    SH = fft(H, [], 3);
+                    
+            end
+
+            f1 = cache.time_transform.f1;
+            f2 = cache.time_transform.f2;
+            n1 = cache.time_transform.min_PCA;
+            n2 = cache.time_transform.max_PCA;
+
+            H = [];
+
+            %SH_phase = angle(SH);
+            SH = abs(SH).^2; 
+
+            SH = permute(SH, [2 1 3]); % x<->y
+            SH = circshift(SH, [-cache.DY, cache.DX, 0]);
+
+            if obj.pure_PCA.is_selected
+                obj.pure_PCA.image = flat_field_correction(cumulant(SH, n1, n2), cache.blur);
+            end
+            
+            if obj.dark_field_image.is_selected
+                obj.dark_field_image.image = log(flat_field_correction(moment0(SH, f1, f2, cache.fs, cache.batch_size, cache.blur),cache.blur));
+            end
+            
+            if obj.phase_variation.is_selected
+                obj.phase_variation.image = moment0(SH, f1, f2, cache.fs, cache.batch_size, cache.blur);
+            end
+            
+            if obj.power_Doppler.is_selected % Power Doppler has been chosen
+                [img, sqrt_img] = moment0(SH, f1, f2, cache.fs, cache.batch_size, cache.blur);
+                obj.power_Doppler.parameters.M0_sqrt = sqrt_img;
+                obj.power_Doppler.image = img;
+            end
+            
+            if obj.power_1_Doppler.is_selected % Power 1 Doppler has been chosen
+                img = moment1(SH, f1, f2, cache.fs, cache.batch_size, cache.blur);
+                [img0,~] = moment0(SH, f1, f2, cache.fs, cache.batch_size, 0);
+                img = img./mean(img0(:));
+                obj.power_1_Doppler.image = img;
+            end
+            
+            if obj.power_2_Doppler.is_selected % Power 2 Doppler has been chosen
+                %% FIXME: from now on Power 2 Doppler becomes frequency RMS
+                img2 = moment2(SH, f1, f2, cache.fs, cache.batch_size, 0); %0 35
+                [img0,~] = moment0(SH, f1, f2, cache.fs, cache.batch_size, 0); 
+                obj.power_2_Doppler.image = sqrt(img2./mean(img0(:)));
+            end
+            
+            if obj.color_Doppler.is_selected  % Color Doppler has been chosen
+                [freq_low, freq_high] = composite(SH, cache.color_f1, cache.color_f2, cache.color_f3, cache.fs, cache.batch_size, cache.blur);
+                obj.color_Doppler.parameters.freq_low = freq_low;
+                obj.color_Doppler.parameters.freq_high = freq_high;
+                obj.color_Doppler.image = construct_colored_image(1 * gather(freq_low), 1 * gather(freq_high), cache.low_frequency);
+            end
+            
+            if obj.directional_Doppler.is_selected % Directional Doppler has been chosen
+                [M0_pos, M0_neg] = directional(SH, cache.time_transform.f1, cache.time_transform.f2, cache.time_transform.fs, cache.batch_size, cache.blur);
+                obj.directional_Doppler.parameters.M0_pos = M0_pos;
+                obj.directional_Doppler.parameters.M0_neg = M0_neg;
+                obj.directional_Doppler.image = construct_directional_image(1 * gather(M0_pos), 1 *gather(M0_neg), cache.low_frequency);
+            end
+            
+            if obj.M0sM1r.is_selected % M1sM0r has been chosen
+                img = fmean(SH, cache.time_transform.f1, cache.time_transform.f2, cache.time_transform.fs, cache.batch_size, cache.blur);
+                obj.M0sM1r.image = img;
+            end
+            
+            if obj.velocity_estimate.is_selected % Velocity Estimate has been chosen
+               obj.velocity_estimate.image = construct_velocity_video(SH,cache.time_transform.f1, cache.time_transform.f2, cache.time_transform.fs, cache.batch_size, cache.blur, cache.wavelength);
+            end
+            
+            if obj.spectrogram.is_selected
+                bin_x = 4;
+                bin_y = 4;
+                bin_t = 1;
+                bin_w = 16;
+                obj.spectrogram.parameters.SH = imresize3(gather(SH),[size(SH,1)/bin_x size(SH,2)/bin_y size(SH,3)/bin_w],'Method','linear');
+                obj.spectrogram.parameters.vector = zeros(1,j_win);
+                obj.spectrogram.image = zeros(size(SH, 1), size(SH, 2));
+            end
+            
+            
+             if obj.moment_0.is_selected % Power 1 Doppler has been chosen
+                [img, sqrt_img] = moment0(SH, cache.time_transform.f1, cache.time_transform.f2, cache.time_transform.fs, cache.batch_size, 0);
+                obj.moment_0.image = img;
+                obj.moment_0.parameters.sqrt_img = sqrt_img;
+             end
+            
+             if obj.moment_1.is_selected % Power 1 Doppler has been chosen
+                img = moment1(SH, cache.time_transform.f1, cache.time_transform.f2, cache.time_transform.fs, cache.batch_size, 0);
+                obj.moment_1.image = img;
+             end
+            
+             if obj.moment_2.is_selected % Power 1 Doppler has been chosen
+                img = moment2(SH, cache.time_transform.f1, cache.time_transform.f2, cache.time_transform.fs, cache.batch_size, 0);
+                obj.moment_2.image = img;
+             end
+
+            
+
+        end
+
+        
+
         function NormalizationData = construct_image(obj, FH, wavelength, acquisition, gaussian_width, use_gpu, svd, svd_treshold, svdx, svd_treshold_value, Nb_SubAp, phase_correction,...
                                                                           color_f1, color_f2, color_f3, is_low_frequency , ...
                                                                           spatial_transformation, time_transform, SubAp_PCA, xy_stride, num_unit_cells_x, r1, ...
