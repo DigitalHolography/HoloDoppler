@@ -18,6 +18,7 @@ for nn = 1:nMax
             FH = fftshift(fft2(app.frame_batch)) .* app.kernelAngularSpectrum;
         case 'Fresnel'
             disp("Autofocus doesn't work when using Fresnel spatial transformation.")
+            close(f);
             return
     end
 
