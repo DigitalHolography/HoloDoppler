@@ -11,7 +11,18 @@ for nn = 1:nMax
     % Run a Shack-Hartmann simulation on the current frame batch to
     % compute only defocus.
 
-    FH = fftshift(fft2(app.frame_batch)) .* app.kernelAngularSpectrum;
+    st = app.spatialTransformationDropDown.Value;
+    FH=[];
+    switch st
+        case 'angular spectrum'
+            FH = fftshift(fft2(app.frame_batch)) .* app.kernelAngularSpectrum;
+        case 'Fresnel'
+            disp("Autofocus doesn't work when using Fresnel spatial transformation.")
+            close(f);
+            return
+    end
+
+    
     calibration_factor = 60;
     corrmap_margin = 0.4;
     subapertures4autofocus = 3;
@@ -64,13 +75,12 @@ for nn = 1:nMax
 
     z = double(app.z_reconstruction + (0.0025*512/app.Nx) * coefs(1));
     disp(z);
-    % if app.Switch.Value == "z_retina"
-    %     app.zretinaEditField.Value = z;
-    %     app.zretinaEditFieldValueChanged();
-    % else
-    %     app.zirisEditField.Value = z;
-    %     app.zirisEditFieldValueChanged();
-    % end
+    if app.Switch.Value == "z_retina"
+        app.zretinaEditField.Value = z;
+    else
+        app.zirisEditField.Value = z;
+    end
+    app.z_reconstruction = z;
     Renderpreview(app);
     waitbar(nn/nMax, f, 'Autofocus in progress. Please wait...');
 end

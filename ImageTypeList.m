@@ -82,7 +82,7 @@ classdef ImageTypeList < handle % This class is modified dynamically
             end
         end
 
-        function NormalizationData = construct_image(obj, FH, wavelength, acquisition, gaussian_width, use_gpu, svd, svdx, Nb_SubAp, phase_correction,...
+        function NormalizationData = construct_image(obj, FH, wavelength, acquisition, gaussian_width, use_gpu, svd, svd_treshold, svdx, svd_treshold_value, Nb_SubAp, phase_correction,...
                                                                           color_f1, color_f2, color_f3, is_low_frequency , ...
                                                                           spatial_transformation, time_transform, SubAp_PCA, xy_stride, num_unit_cells_x, r1, ...
                                                                           local_temporal, phi1, phi2, local_spatial, nu1, nu2)
@@ -146,11 +146,19 @@ classdef ImageTypeList < handle % This class is modified dynamically
         %% SVD filtering
        
         if svd
-            H = svd_filter(H, time_transform.f1, ac.fs);
+            if svd_treshold
+                H = svd_filter(H, time_transform.f1, ac.fs,svd_treshold_value);
+            else
+                H = svd_filter(H, time_transform.f1, ac.fs);
+            end
         end
         
         if (svdx)
-            H = svd_x_filter(H, time_transform.f1, ac.fs, Nb_SubAp);
+            if svd_treshold
+                H = svd_x_filter(H, time_transform.f1, ac.fs,Nb_SubAp,svd_treshold_value);
+            else
+                H = svd_x_filter(H, time_transform.f1, ac.fs, Nb_SubAp);
+            end
         end
         
         if local_spatial

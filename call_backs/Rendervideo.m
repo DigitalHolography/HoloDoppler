@@ -167,6 +167,8 @@ function Rendervideo(app)
     local_volume_size = floor(j_win/2);
     local_SVDx = app.SVDxCheckBox.Value;
     local_SVDx_SubAp_num = app.SVDx_SubApEditField.Value;
+    localSVDTreshold = app.SVDTresholdCheckBox.Value;
+    localSVDTresholdValue = app.SVDTresholdEditField.Value;
     
     % FIXME
     num_focus = 1;
@@ -238,6 +240,33 @@ function Rendervideo(app)
                     beating_wave_variance_power = zeros(1, local_num_batches,'double');
                     beating_wave_variance_power_std = zeros(1, local_num_batches,'double');
                 end
+            case 'moments'
+                local_image_type_list.select('power_Doppler','moment_0','moment_1','moment_2');
+                if not(app.Nx == app.Ny)
+                    video_M0 = zeros(app.Nx, app.Ny, 1, local_num_batches,'single');
+                    video_moment0 = video_M0;
+                    video_moment1 = video_M0;
+                    video_moment2 = video_M0;
+    
+                    reference_wave = zeros(local_Nx, local_Ny, 1,local_num_batches, 'single');
+                    reference_wave_power = zeros(1, local_num_batches,'double');
+                    reference_wave_power_std = zeros(1, local_num_batches,'double');
+                    beating_wave_variance = zeros(local_Nx, local_Ny, 1,local_num_batches, 'single');
+                    beating_wave_variance_power = zeros(1, local_num_batches,'double');
+                    beating_wave_variance_power_std = zeros(1, local_num_batches,'double');
+                else
+                    video_M0 = zeros(app.Nx, app.Ny, 1, local_num_batches,'single');
+                    video_moment0 = video_M0;
+                    video_moment1 = video_M0;
+                    video_moment2 = video_M0;
+    
+                    reference_wave = zeros(local_Nx, local_Ny, 1,local_num_batches, 'single');
+                    reference_wave_power = zeros(1, local_num_batches,'double');
+                    reference_wave_power_std = zeros(1, local_num_batches,'double');
+                    beating_wave_variance = zeros(local_Nx, local_Ny, 1,local_num_batches, 'single');
+                    beating_wave_variance_power = zeros(1, local_num_batches,'double');
+                    beating_wave_variance_power_std = zeros(1, local_num_batches,'double');
+                end
             case 'all_videos'
                 app.time_transform.type = 'FFT';
                 local_image_type_list.select('power_Doppler','power_1_Doppler','power_2_Doppler','color_Doppler','directional_Doppler','M0sM1r','velocity_estimate','spectrogram','moment_0','moment_1','moment_2')
@@ -292,63 +321,6 @@ function Rendervideo(app)
                 H_dark_field_stack = 1i*ones(app.Nx, app.Ny, j_win, local_num_batches ,'single');
                 video_M0_dark_field = zeros(app.Nx, app.Ny, 1, local_num_batches ,'single');
         end %switch local_output_video
-    end
-    
-    %% Just for OCT: in depth defocus estimation
-    % by principle happens before rephasing and registration
-    if 0
-    
-        num_layers = 4;
-        idx_to_freq_coef = acquisition.fs/j_win;
-        layer_freq_thickness = floor(j_win/2/num_layers) * idx_to_freq_coef;
-        defocus_of_layers = zeros(num_layers, local_num_batches);
-        coefs = zeros(num_layers);
-    
-        zernike_indices = 4; % we are just estimating defocus
-        image_subapertures_size_ratio = app.cache.image_subapertures_size_ratio;
-        num_subapertures_positions = app.cache.num_subapertures_positions;
-        %num_subapertures_inter = 1;
-        subaperture_margin = app.cache.subaperture_margin;
-        %                 zernike_projection = app.cache.zernike_projection;
-    
-        %FIXME elsewhere calibration_factor = 60;
-        calibration_factor = 20;
-        corrmap_margin = 0.4;
-    
-        power_filter_corrector = 1;
-        sigma_filter_corrector = 1;
-    
-        subimage_size = local_Nx;
-        subimage_stride = local_Nx;
-    
-        shack_hartmann = ShackHartmann(image_subapertures_size_ratio, num_subapertures_positions, zernike_indices, calibration_factor,subaperture_margin,corrmap_margin,power_filter_corrector,sigma_filter_corrector, subimage_size, subimage_stride);
-        % construct M_aso doesn't require frequencies
-        [M_aso, ~] = shack_hartmann.construct_M_aso(app.f1EditField.Value, app.f2EditField.Value, app.blur,acquisition);
-        %                 for batch_idx = 1 : local_num_batches
-        for batch_idx = 1 %: local_num_batches
-            % calculate defocus in fuction of depth with Shack
-            % Hartman
-            frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step);
-            FH = compute_FH_from_frame_batch(frame_batch, local_kernel, local_spatialTransformation,use_gpu);
-            for z = 1 : num_layers
-                f1_layer = (z-1)*layer_freq_thickness + idx_to_freq_coef;
-                f2_layer = z * layer_freq_thickness;
-                [shifts, ~, ~] = shack_hartmann.compute_images_shifts(FH, f1_layer, f2_layer, local_blur, false, local_svd, local_svd_threshold, acquisition);
-                shifts = shifts / (shack_hartmann.subimage_size/shack_hartmann.n_SubAp);
-                %                         excluded_subap = isnan(shifts);
-                excluded_subap = shack_hartmann.excluded_subapertures();
-                shifts(excluded_subap) = [];
-                M_aso_2 = M_aso;
-                M_aso_2(excluded_subap, :) = [];
-                Y = cat(1, real(shifts), imag(shifts));
-                M_aso_concat = cat(1,real(M_aso_2),imag(M_aso_2));
-                coef = M_aso_concat \ Y;
-                coefs(z) = coef * calibration_factor;
-                defocus_of_layers(z, batch_idx) = coefs(z);
-            end
-        end
-        estimation_defocus_in_depth = squeeze(mean(defocus_of_layers, 2));
-        %                 disp(estimation_defocus_in_depth);
     end
     
     % parfor waitbar
@@ -645,7 +617,7 @@ function Rendervideo(app)
             end
     
             if strcmp(set_up, 'Doppler')
-                NormalizationData = local_image_type_list_par.construct_image(FH_par, local_wavelength, acquisition, local_blur, use_gpu, local_svd, local_SVDx, local_SVDx_SubAp_num, [], local_color_f1, local_color_f2, local_color_f3, ...
+                NormalizationData = local_image_type_list_par.construct_image(FH_par, local_wavelength, acquisition, local_blur, use_gpu, local_svd,localSVDTreshold, local_SVDx,localSVDTresholdValue, local_SVDx_SubAp_num, [], local_color_f1, local_color_f2, local_color_f3, ...
                     0, local_spatialTransformation, local_time_transform, local_SubAp_PCA, local_xystride, local_num_unit_cells_x, local_r1, ...
                     local_temporal, local_phi1, local_phi2, local_spatial, local_nu1, local_nu2);
                 switch local_output_video
@@ -704,6 +676,20 @@ function Rendervideo(app)
                         beating_wave_variance(:,:,:,batch_idx) = gather(NormalizationData.beating_wave_variance);
                         beating_wave_variance_power(batch_idx) = gather(NormalizationData.beating_wave_variance_power);
                         beating_wave_variance_power_std(batch_idx) = gather(NormalizationData.beating_wave_variance_power_std);
+                    case 'moments'
+                        tmp_video_M0 = gather(local_image_type_list_par.power_Doppler.image);
+                        video_M0(:,:,:,batch_idx) = tmp_video_M0;
+                        reference_wave(:,:,:,batch_idx) = gather(NormalizationData.reference_wave);
+                        reference_wave_power(batch_idx) = gather(NormalizationData.reference_wave_power);
+                        reference_wave_power_std(batch_idx) = gather(NormalizationData.reference_wave_power_std);
+                        beating_wave_variance(:,:,:,batch_idx) = gather(NormalizationData.beating_wave_variance);
+                        beating_wave_variance_power(batch_idx) = gather(NormalizationData.beating_wave_variance_power);
+                        beating_wave_variance_power_std(batch_idx) = gather(NormalizationData.beating_wave_variance_power_std);
+                        
+                        video_moment0(:,:,:,batch_idx) = gather(local_image_type_list_par.moment_0.image);
+                        video_moment1(:,:,:,batch_idx) = gather(local_image_type_list_par.moment_1.image);
+                        video_moment2(:,:,:,batch_idx) = gather(local_image_type_list_par.moment_2.image);
+
     
     
     
@@ -733,56 +719,88 @@ function Rendervideo(app)
             % registration.
             tRegistration = tic;
             fprintf("Registration...\n")
+
+            % If iterative registration import last registration before
+            % calculating the next one
+
+            if size(local_image_registration, 2) == local_num_batches && app.cache.iterative_registration % si iterative registration est activée et une registration précédente a été trouvée
+                disp('Importing last registration.')
+                video_M0 = register_video_from_shifts(video_M0, local_image_registration(1:2,:));
+            end
+
+            % construct treshold M0 
+            Nx=size(video_M0,1);Ny=size(video_M0,2);
+
+            [X,Y] = meshgrid(linspace(-Nx/2,Nx/2,Nx),linspace(-Ny/2,Ny/2,Ny));
+            disc_ratio = 0.9; % parametrize this coef if needed
+            disc = X.^2+Y.^2 < (disc_ratio * min(Nx,Ny)/2)^2; 
+
+            tresh_disc_video_M0 = video_M0 .* disc - disc .* sum(video_M0.* disc,[1,2])/nnz(disc);
+            tresh_disc_video_M0 = rescale(tresh_disc_video_M0,-1,1,'InputMin',min(tresh_disc_video_M0,[],[1,2]),'InputMax',max(tresh_disc_video_M0,[],[1,2]));
     
             % % construct reference image
+            ref_batch_idx = min(floor((app.cache.position_in_file) / app.cache.batch_stride) + 1,size(video_M0,4));
     
-            reg_frame_batch = app.interferogram_stream.read_frame_batch(app.refbatchsizeEditField.Value, floor(app.positioninfileSlider.Value));
+            reg_frame_batch = app.interferogram_stream.read_frame_batch(app.cache.ref_batch_size, floor(ref_batch_idx*app.cache.batch_stride));
             switch app.cache.spatialTransformation
                 case 'angular spectrum'
                     reg_FH = fftshift(fft2(reg_frame_batch)) .* local_kernel;
                 case 'Fresnel'
                     reg_FH = (reg_frame_batch) .* local_kernel;
             end
-            reg_FH = rephase_FH(reg_FH,local_rephasing_data,app.refbatchsizeEditField.Value,floor(app.positioninfileSlider.Value));
+            reg_FH = rephase_FH(reg_FH,local_rephasing_data,app.cache.ref_batch_size, floor(ref_batch_idx*app.cache.batch_stride));
             acquisition = DopplerAcquisition(app.Nx,app.Ny,app.Fs/1000, app.cache.z, app.cache.z_retina, app.cache.z_iris, app.cache.wavelength,app.cache.DX,app.cache.DY,app.pix_width,app.pix_height);
             reg_hologram = reconstruct_hologram(reg_FH, acquisition, app.blur, use_gpu, app.SVDCheckBox.Value, app.SVDxCheckBox.Value, app.SVDx_SubApEditField.Value, [], app.time_transform, local_spatialTransformation);
+            
+            reg_hologram = reg_hologram.*disc - disc .* sum(reg_hologram.*disc,[1,2])/nnz(disc);
+            reg_hologram = rescale(reg_hologram,-1,1);
+            
             switch app.cache.spatialTransformation
                 case 'Fresnel'
                     reg_hologram = flip(flip(reg_hologram,1),2);
             end
-    
+
+            
+
             if app.showrefCheckBox.Value
-                ref_batch_idx = floor((app.cache.position_in_file) / app.cache.batch_stride) + 1;
-                frame_ = video_M0(:,:,1,ref_batch_idx);
+                frame_ = tresh_disc_video_M0(:,:,1,ref_batch_idx);
+
                 figure(7)
                 montage({mat2gray(frame_) mat2gray(reg_hologram)})
                 title('Current frame vs calculated reference for registration')
-                % app.ImageRight.ImageSource = cat(3,reg_hologram,reg_hologram,reg_hologram); % show the ref in the right preview panel
-            end
-    
-            %                     if or(~exist('reg_hologram', 'var'), isempty(reg_hologram))
-    
-            if ~exist('reg_hologram', 'var')
-                ref_batch_idx = floor((app.cache.position_in_file) / app.cache.batch_stride) + 1;
-                reg_hologram = video_M0(:,:,:,ref_batch_idx);
             end
     
             switch local_output_video
-                case 'power_Doppler'
-                    if size(local_image_registration, 2) == local_num_batches % if registration from previous folder results
+                case 'moments'
+                    if size(local_image_registration, 2) == local_num_batches && ~app.cache.iterative_registration % if registration from previous folder results
                         video_M0 = register_video_from_shifts(video_M0, local_image_registration(1:2,:));
                         shifts(1:2,:) = local_image_registration(1:2,:);
                     else
                         % FIXME : use "reg_hologram" as reference (current preview from frontend)
-                        [video_M0, shifts(1:2,:)] = register_video_from_reference(video_M0, reg_hologram);
+                        [tresh_disc_video_M0, shifts(1:2,:)] = register_video_from_reference(tresh_disc_video_M0, reg_hologram);
+                        video_M0 = register_video_from_shifts(video_M0, shifts(1:2,:));
+                    end
+                    video_moment0 = register_video_from_shifts(video_moment0, shifts);
+                    video_moment1 = register_video_from_shifts(video_moment1, shifts);
+                    video_moment2 = register_video_from_shifts(video_moment2, shifts);
+
+                case 'power_Doppler'
+                    if size(local_image_registration, 2) == local_num_batches && ~app.cache.iterative_registration % if registration from previous folder results
+                        video_M0 = register_video_from_shifts(video_M0, local_image_registration(1:2,:));
+                        shifts(1:2,:) = local_image_registration(1:2,:);
+                    else
+                        % FIXME : use "reg_hologram" as reference (current preview from frontend)
+                        [tresh_disc_video_M0, shifts(1:2,:)] = register_video_from_reference(tresh_disc_video_M0, reg_hologram);
+                        video_M0 = register_video_from_shifts(video_M0, shifts(1:2,:));
                     end
                 case 'all_videos'
-                    if size(local_image_registration, 2) == local_num_batches % if registration from previous folder results
+                    if size(local_image_registration, 2) == local_num_batches && ~app.cache.iterative_registration % if registration from previous folder results
                         video_M0 = register_video_from_shifts(video_M0, local_image_registration(1:2,:));
                         shifts(1:2,:) = local_image_registration(1:2,:);
                     else
                         % FIXME : use "reg_hologram" as reference (current preview from frontend)
-                        [video_M0, shifts(1:2,:)] = register_video_from_reference(video_M0, reg_hologram);
+                        [tresh_disc_video_M0, shifts(1:2,:)] = register_video_from_reference(tresh_disc_video_M0, reg_hologram);
+                        video_M0 = register_video_from_shifts(video_M0, shifts(1:2,:));
                     end
                     video_M1 = register_video_from_shifts(video_M1, shifts);
                     video_M2 = register_video_from_shifts(video_M2, shifts);
@@ -828,11 +846,20 @@ function Rendervideo(app)
         switch local_output_video
             case 'power_Doppler'
                 generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+                generate_video(tresh_disc_video_M0, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+            case 'moments'
+                generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+                generate_video(tresh_disc_video_M0, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+                generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
+                generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
+                generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
+
             case 'all_videos'
                 generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
                 %                         generate_video(video_M1, output_dirpath, 'DopplerAVG', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
                 %                         generate_video(video_M2, output_dirpath, 'DopplerRMS', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-    
+                generate_video(tresh_disc_video_M0, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+
                 generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
                 generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
                 generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
@@ -1044,48 +1071,50 @@ function Rendervideo(app)
     
     %%Saving of power data for normalization, PNG/VIDEO & TXT files %%
     %PNG/VIDEO%
-    fprintf("Figures and Video record...\n")
-    f1 = figure(1);
-    plot(reference_wave_power_std)
-    hold on
-    plot(mean(reference_wave_power_std)*ones(1,local_num_batches),'-k','LineWidth',2);
-    gravstr = sprintf('Mean : %d ',round(mean(reference_wave_power_std),4));
-    legend(gravstr);
-    print('-f1','-dpng',fullfile(output_dirpath,'png',strcat(output_dirname,'_reference_wave_power_std.png')));
-    f2 = figure(2);
-    plot(reference_wave_power)
-    hold on
-    plot(mean(reference_wave_power)*ones(1,local_num_batches),'-k','LineWidth',2);
-    gravstr = sprintf('Mean : %d ',round(mean(reference_wave_power),4));
-    legend(gravstr);
-    print('-f2','-dpng',fullfile(output_dirpath,'png',strcat(output_dirname,'_reference_wave_power.png')));
-    f3 = figure(3);
-    plot(beating_wave_variance_power_std)
-    hold on
-    plot(mean(beating_wave_variance_power_std)*ones(1,local_num_batches),'-k','LineWidth',2);
-    gravstr = sprintf('Mean : %d ',round(mean(beating_wave_variance_power_std),4));
-    legend(gravstr);
-    print('-f3','-dpng',fullfile(output_dirpath,'png',strcat(output_dirname,'_beating_wave_variance_power_std.png')));
-    f4 = figure(4);
-    plot(beating_wave_variance_power)
-    hold on
-    plot(mean(beating_wave_variance_power)*ones(1,local_num_batches),'-k','LineWidth',2);
-    gravstr = sprintf('Mean : %d ',round(mean(beating_wave_variance_power),4));
-    legend(gravstr);
-    print('-f4','-dpng',fullfile(output_dirpath,'png',strcat(output_dirname,'_beating_wave_variance_power.png')));
-    
-    close([f1 f2 f3 f4]);
-    generate_video(reference_wave, output_dirpath, 'reference_wave', [], [], false, false, false);
-    generate_video(log10(abs(beating_wave_variance)), output_dirpath, 'beating_wave_variance', [], [], false, false, false);
-    
-    % Power normalization
-    Nz = size(beating_wave_variance,4);
-    var_bin = 16;
-    beating_wave_variance = imresize3(squeeze(beating_wave_variance),[ceil(app.Nx/var_bin) ceil(app.Ny/var_bin) Nz]);
-    reference_wave = imresize3(squeeze(reference_wave),[ceil(app.Nx/var_bin) ceil(app.Ny/var_bin) Nz]);
-    
-    save(fullfile(output_dirpath, 'mat', "power_normalization.mat"), "reference_wave","beating_wave_variance","reference_wave_power", "reference_wave_power_std", "beating_wave_variance_power","beating_wave_variance_power_std")
-    
+    try
+        fprintf("Figures and Video record...\n")
+        f1 = figure(1);
+        plot(reference_wave_power_std)
+        hold on
+        plot(mean(reference_wave_power_std)*ones(1,local_num_batches),'-k','LineWidth',2);
+        gravstr = sprintf('Mean : %d ',round(mean(reference_wave_power_std),4));
+        legend(gravstr);
+        print('-f1','-dpng',fullfile(output_dirpath,'png',strcat(output_dirname,'_reference_wave_power_std.png')));
+        f2 = figure(2);
+        plot(reference_wave_power)
+        hold on
+        plot(mean(reference_wave_power)*ones(1,local_num_batches),'-k','LineWidth',2);
+        gravstr = sprintf('Mean : %d ',round(mean(reference_wave_power),4));
+        legend(gravstr);
+        print('-f2','-dpng',fullfile(output_dirpath,'png',strcat(output_dirname,'_reference_wave_power.png')));
+        f3 = figure(3);
+        plot(beating_wave_variance_power_std)
+        hold on
+        plot(mean(beating_wave_variance_power_std)*ones(1,local_num_batches),'-k','LineWidth',2);
+        gravstr = sprintf('Mean : %d ',round(mean(beating_wave_variance_power_std),4));
+        legend(gravstr);
+        print('-f3','-dpng',fullfile(output_dirpath,'png',strcat(output_dirname,'_beating_wave_variance_power_std.png')));
+        f4 = figure(4);
+        plot(beating_wave_variance_power)
+        hold on
+        plot(mean(beating_wave_variance_power)*ones(1,local_num_batches),'-k','LineWidth',2);
+        gravstr = sprintf('Mean : %d ',round(mean(beating_wave_variance_power),4));
+        legend(gravstr);
+        print('-f4','-dpng',fullfile(output_dirpath,'png',strcat(output_dirname,'_beating_wave_variance_power.png')));
+        
+        close([f1 f2 f3 f4]);
+        generate_video(reference_wave, output_dirpath, 'reference_wave', [], [], false, false, false);
+        generate_video(log10(abs(beating_wave_variance)), output_dirpath, 'beating_wave_variance', [], [], false, false, false);
+        
+        % Power normalization
+        Nz = size(beating_wave_variance,4);
+        var_bin = 16;
+        beating_wave_variance = imresize3(squeeze(beating_wave_variance),[ceil(app.Nx/var_bin) ceil(app.Ny/var_bin) Nz]);
+        reference_wave = imresize3(squeeze(reference_wave),[ceil(app.Nx/var_bin) ceil(app.Ny/var_bin) Nz]);
+        
+        save(fullfile(output_dirpath, 'mat', "power_normalization.mat"), "reference_wave","beating_wave_variance","reference_wave_power", "reference_wave_power_std", "beating_wave_variance_power","beating_wave_variance_power_std")
+    catch
+    end
     %
     if ~isempty(app.NotesTextArea.Value)
         disp(app.NotesTextArea.Value)

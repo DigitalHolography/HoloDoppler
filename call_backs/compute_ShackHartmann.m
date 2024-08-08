@@ -3,7 +3,7 @@ if ~app.file_loaded
     return
 end
 
-compute_FH(false);
+compute_FH(app,false);
 
 zernike_ranks = app.shackhartmannzernikeranksEditField.Value;
 num_subapertures_positions = app.subapnumpositionsEditField.Value;

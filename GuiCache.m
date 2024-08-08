@@ -136,8 +136,8 @@ classdef GuiCache
             obj.num_subapertures_positions = app.subapnumpositionsEditField.Value;
             obj.subaperture_margin = app.subaperturemarginEditField.Value;
             obj.SubAp_PCA = app.SubAp_PCACheckBox.Value;
-            obj.minSubAp_PCA = app.minSubAp_PCAEditField_2.Value;
-            obj.maxSubAp_PCA = app.maxSubAp_PCAEditField_2.Value;
+            obj.minSubAp_PCA = app.minSubAp_PCAEditField.Value;
+            obj.maxSubAp_PCA = app.maxSubAp_PCAEditField.Value;
             obj.zernike_projection = app.ZernikeProjectionCheckBox.Value;
             obj.shack_hartmann_ref_image = app.referenceimageDropDown.Value;
 
