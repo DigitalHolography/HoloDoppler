@@ -43,6 +43,7 @@ classdef GuiCache
         iterative_registration logical
         temporal_filter_flag logical
         temporal_filter double
+        registration_disc logical
 
         % color image parameters
         color_f1 double
@@ -110,6 +111,7 @@ classdef GuiCache
             obj.low_memory = app.lowmemoryCheckBox.Value;
             obj.rephasing = app.rephasingCheckBox.Value;
             obj.save_raw = app.saverawvideosCheckBox.Value;
+            obj.registration_disc = app.registrationdiscCheckBox.Value;
 
             obj.color_f1 = app.compositef1EditField.Value;
             obj.color_f2 = app.compositef2EditField.Value;
@@ -153,7 +155,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -167,7 +169,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -177,7 +179,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -187,7 +189,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -197,7 +199,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -207,7 +209,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -217,7 +219,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -227,7 +229,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -237,7 +239,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -247,7 +249,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -257,7 +259,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -267,7 +269,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -277,7 +279,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -287,7 +289,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -297,7 +299,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -307,7 +309,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -317,7 +319,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -327,7 +329,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -337,7 +339,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -347,7 +349,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -357,7 +359,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -367,7 +369,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -377,7 +379,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -387,7 +389,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -397,7 +399,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -407,7 +409,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -417,7 +419,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -429,7 +431,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -439,7 +441,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -449,7 +451,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -459,7 +461,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -469,7 +471,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -479,7 +481,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -489,7 +491,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -499,7 +501,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -509,7 +511,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -519,7 +521,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -529,7 +531,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -539,7 +541,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -549,7 +551,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -559,7 +561,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 
@@ -569,7 +571,7 @@ classdef GuiCache
                 disp('Error Message:')
                 disp(ME.message)
                 for i = 1:numel(ME.stack)
-                    ME.stack(i)
+                    ME.stack(i);
                 end
             end
 

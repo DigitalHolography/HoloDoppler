@@ -79,8 +79,10 @@ switch time_transform.type
 end
 H=[];
 
+SH_angle = angle(SH);
 SH = abs(SH).^2;
 
+% if you want it can be a circle
 % [X,Y]=meshgrid(((1:app.Nx) - round(app.Nx/2))*2/app.Nx,((1:app.Ny) - round(app.Ny/2))*2/app.Nx);
 % circle = X.^2+Y.^2<0.5;
 % imshow(circle);
@@ -103,4 +105,24 @@ ylabel("S(f) (dB)", 'FontSize', 14);
 pbaspect([1.618 1 1]);
 set(gca, 'LineWidth', 2);
 axis tight;
+
+% figure(58)
+% spectrum_angle = squeeze(sum(SH_angle.*circle,[1,2])/nnz(circle));
+% 
+% plot(fullfreq/1000, 180/pi * fftshift(spectrum_angle),'k-', 'LineWidth', 2)
+% hold on 
+% xline(time_transform.f1,'k--', 'LineWidth', 2)
+% xline(time_transform.f2,'k--', 'LineWidth', 2)
+% xline(-time_transform.f1,'k--', 'LineWidth', 2)
+% xline(-time_transform.f2,'k--', 'LineWidth', 2)
+% hold off
+% title('Spectrum');
+% fontsize(gca, 14, "points");
+% xlabel("Frequency (kHz)", 'FontSize', 14);
+% ylabel("arg(S(f)) (°)", 'FontSize', 14);
+% pbaspect([1.618 1 1]);
+% set(gca, 'LineWidth', 2);
+% axis tight;
+
+
 end

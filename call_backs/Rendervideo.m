@@ -53,37 +53,42 @@ function Rendervideo(app)
     % SAVING GIT VERSION
     % In the txt file in the folder : "log"
     % checks the git branch used and logs it
+    gitCommand = 'git status';
+    [stat, ~] = system(gitCommand);
+
+    if stat == 0 % if git is initialised
     
-    gitBranchCommand = 'git symbolic-ref --short HEAD';
-    [statusBranch, resultBranch] = system(gitBranchCommand);
-    
-    if statusBranch == 0
-        resultBranch = strtrim(resultBranch);
-        MessBranch = "Current branch : %s \r";
-        git_JSON.GitBranch = resultBranch;
-    else
-        MessBranch = "Error getting current branch name.\r Git command output: %s \r";
-        git_JSON.GitBranch = "Error";
+        gitBranchCommand = 'git symbolic-ref --short HEAD';
+        [statusBranch, resultBranch] = system(gitBranchCommand);
+        
+        if statusBranch == 0
+            resultBranch = strtrim(resultBranch);
+            MessBranch = "Current branch : %s \r";
+            git_JSON.GitBranch = resultBranch;
+        else
+            MessBranch = "Error getting current branch name.\r Git command output: %s \r";
+            git_JSON.GitBranch = "Error";
+        end
+        
+        gitHashCommand = 'git rev-parse HEAD';
+        [statusHash, resultHash] = system(gitHashCommand);
+        
+        if statusHash == 0 %hash command was successful
+            resultHash = strtrim(resultHash);
+            MessHash = "Latest Commit Hash : %s \r";
+            git_JSON.GitHash = resultHash;
+        else
+            MessHash = "Error getting latest commit hash.\r Git command output: %s \r";
+            git_JSON.GitHash = "Error";
+        end
+        
+        encodedGit_JSON = jsonencode(git_JSON,PrettyPrint = true);
+        
+        fid = fopen(fullfile(output_dirpath, 'log', JSON_filename), "wt+");
+        fprintf(fid, encodedGit_JSON);
+        fclose(fid);
+        disp(git_JSON)
     end
-    
-    gitHashCommand = 'git rev-parse HEAD';
-    [statusHash, resultHash] = system(gitHashCommand);
-    
-    if statusHash == 0 %hash command was successful
-        resultHash = strtrim(resultHash);
-        MessHash = "Latest Commit Hash : %s \r";
-        git_JSON.GitHash = resultHash;
-    else
-        MessHash = "Error getting latest commit hash.\r Git command output: %s \r";
-        git_JSON.GitHash = "Error";
-    end
-    
-    encodedGit_JSON = jsonencode(git_JSON,PrettyPrint = true);
-    
-    fid = fopen(fullfile(output_dirpath, 'log', JSON_filename), "wt+");
-    fprintf(fid, encodedGit_JSON);
-    fclose(fid);
-    disp(git_JSON)
     
     % logs = app.cache.notes;
     % save_string_cells_to_file(fullfile(output_dirpath, 'log', txt_filename), logs);
@@ -730,14 +735,20 @@ function Rendervideo(app)
 
             % construct treshold M0 
             Nx=size(video_M0,1);Ny=size(video_M0,2);
+            
+            if app.cache.registration_disc
+                [X,Y] = meshgrid(linspace(-Nx/2,Nx/2,Nx),linspace(-Ny/2,Ny/2,Ny));
+                disc_ratio = 0.9; % parametrize this coef if needed
+                disc = X.^2+Y.^2 < (disc_ratio * min(Nx,Ny)/2)^2; 
+            else
+                disc = ones([Nx,Ny]);
+            end
 
-            [X,Y] = meshgrid(linspace(-Nx/2,Nx/2,Nx),linspace(-Ny/2,Ny/2,Ny));
-            disc_ratio = 0.9; % parametrize this coef if needed
-            disc = X.^2+Y.^2 < (disc_ratio * min(Nx,Ny)/2)^2; 
+            
+            video_M0_reg = video_M0 .* disc - disc .* sum(video_M0.* disc,[1,2])/nnz(disc); % minus the mean of each frame
+            video_M0_reg = video_M0_reg ./(max(abs(video_M0_reg),[],[1,2])); % rescaling each frame but keeps mean at zero
+            
 
-            tresh_disc_video_M0 = video_M0 .* disc - disc .* sum(video_M0.* disc,[1,2])/nnz(disc);
-            tresh_disc_video_M0 = rescale(tresh_disc_video_M0,-1,1,'InputMin',min(tresh_disc_video_M0,[],[1,2]),'InputMax',max(tresh_disc_video_M0,[],[1,2]));
-    
             % % construct reference image
             ref_batch_idx = min(floor((app.cache.position_in_file) / app.cache.batch_stride) + 1,size(video_M0,4));
     
@@ -752,9 +763,10 @@ function Rendervideo(app)
             acquisition = DopplerAcquisition(app.Nx,app.Ny,app.Fs/1000, app.cache.z, app.cache.z_retina, app.cache.z_iris, app.cache.wavelength,app.cache.DX,app.cache.DY,app.pix_width,app.pix_height);
             reg_hologram = reconstruct_hologram(reg_FH, acquisition, app.blur, use_gpu, app.SVDCheckBox.Value, app.SVDxCheckBox.Value, app.SVDx_SubApEditField.Value, [], app.time_transform, local_spatialTransformation);
             
-            reg_hologram = reg_hologram.*disc - disc .* sum(reg_hologram.*disc,[1,2])/nnz(disc);
-            reg_hologram = rescale(reg_hologram,-1,1);
+            reg_hologram = reg_hologram.*disc - disc .* sum(reg_hologram.*disc,[1,2])/nnz(disc); % minus the mean 
+            reg_hologram = reg_hologram./(max(abs(reg_hologram),[],[1,2])); % rescaling but keeps mean at zero
             
+
             switch app.cache.spatialTransformation
                 case 'Fresnel'
                     reg_hologram = flip(flip(reg_hologram,1),2);
@@ -763,13 +775,19 @@ function Rendervideo(app)
             
 
             if app.showrefCheckBox.Value
-                frame_ = tresh_disc_video_M0(:,:,1,ref_batch_idx);
+                frame_ = video_M0_reg(:,:,1,ref_batch_idx);
 
                 figure(7)
                 montage({mat2gray(frame_) mat2gray(reg_hologram)})
                 title('Current frame vs calculated reference for registration')
+                % plot the meanM0 columns for registration
+                plot_columns_reg(video_M0_reg,output_dirpath);
             end
-    
+            
+            
+            
+
+            
             switch local_output_video
                 case 'moments'
                     if size(local_image_registration, 2) == local_num_batches && ~app.cache.iterative_registration % if registration from previous folder results
@@ -777,7 +795,7 @@ function Rendervideo(app)
                         shifts(1:2,:) = local_image_registration(1:2,:);
                     else
                         % FIXME : use "reg_hologram" as reference (current preview from frontend)
-                        [tresh_disc_video_M0, shifts(1:2,:)] = register_video_from_reference(tresh_disc_video_M0, reg_hologram);
+                        [video_M0_reg, shifts(1:2,:)] = register_video_from_reference(video_M0_reg, reg_hologram);
                         video_M0 = register_video_from_shifts(video_M0, shifts(1:2,:));
                     end
                     video_moment0 = register_video_from_shifts(video_moment0, shifts);
@@ -790,7 +808,7 @@ function Rendervideo(app)
                         shifts(1:2,:) = local_image_registration(1:2,:);
                     else
                         % FIXME : use "reg_hologram" as reference (current preview from frontend)
-                        [tresh_disc_video_M0, shifts(1:2,:)] = register_video_from_reference(tresh_disc_video_M0, reg_hologram);
+                        [video_M0_reg, shifts(1:2,:)] = register_video_from_reference(video_M0_reg, reg_hologram);
                         video_M0 = register_video_from_shifts(video_M0, shifts(1:2,:));
                     end
                 case 'all_videos'
@@ -799,7 +817,7 @@ function Rendervideo(app)
                         shifts(1:2,:) = local_image_registration(1:2,:);
                     else
                         % FIXME : use "reg_hologram" as reference (current preview from frontend)
-                        [tresh_disc_video_M0, shifts(1:2,:)] = register_video_from_reference(tresh_disc_video_M0, reg_hologram);
+                        [video_M0_reg, shifts(1:2,:)] = register_video_from_reference(video_M0_reg, reg_hologram);
                         video_M0 = register_video_from_shifts(video_M0, shifts(1:2,:));
                     end
                     video_M1 = register_video_from_shifts(video_M1, shifts);
@@ -843,13 +861,13 @@ function Rendervideo(app)
         fprintf("Video generation...\n")
         tVideoGen = tic;
         % FIXME add 'or' statement
-        switch local_output_video
+          switch local_output_video
             case 'power_Doppler'
                 generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-                generate_video(tresh_disc_video_M0, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+                generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
             case 'moments'
                 generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-                generate_video(tresh_disc_video_M0, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+                generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
                 generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
                 generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
                 generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
@@ -858,7 +876,7 @@ function Rendervideo(app)
                 generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
                 %                         generate_video(video_M1, output_dirpath, 'DopplerAVG', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
                 %                         generate_video(video_M2, output_dirpath, 'DopplerRMS', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-                generate_video(tresh_disc_video_M0, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+                generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
 
                 generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
                 generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
