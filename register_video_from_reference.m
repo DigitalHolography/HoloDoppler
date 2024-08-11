@@ -22,19 +22,19 @@ num_frames = size(frames, 4);
 
 shifts = zeros(2, num_frames, 'single');
 
-% useless progress bar for michael
+w = waitbar(0, 'Video registration in progress...');
+N_ = double(num_frames);
+parforWaitbar(w,N_);
 D = parallel.pool.DataQueue;
-h = waitbar(0, 'Video registration in progress...');
-afterEach(D, @update_registration_waitbar);
-N = double(num_frames);
+afterEach(D,@parforWaitbar);
 
-frames = mat2gray(frames);
+
+%frames = mat2gray(frames);
 
 %% apply registration
 %mask = apodize_image(size(frames,1),size(frames,2));
 parfor i = 1:num_frames
-    send(D, i);
-
+    send(D,i);
     reg = registerImages(frames(:,:,:,i), ref_img);
     frames(:,:,:,i) = reg.RegisteredImage;
     shifts(:,i) = [reg.Transformation.T(3,2); reg.Transformation.T(3,1)];
@@ -48,8 +48,24 @@ end
 %     frames(:,:,:,i) = mat2gray(frames(:,:,:,i));
 % end
 
-function update_registration_waitbar(sig)
-    waitbar(sig / N, h);
+function parforWaitbar(waitbarHandle,iterations)
+    persistent count h N
+    
+    if nargin == 2
+        % Initialize
+        
+        count = 0;
+        h = waitbarHandle;
+        N = iterations;
+    else
+        % Update the waitbar
+        
+        % Check whether the handle is a reference to a deleted object
+        if isvalid(h)
+            count = count + 1;
+            waitbar(count / N,h);
+        end
+    end
 end
-close(h);
+close(w);
 end
