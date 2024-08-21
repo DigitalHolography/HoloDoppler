@@ -33,19 +33,25 @@ afterEach(D,@parforWaitbar);
 
 %% apply registration
 %mask = apodize_image(size(frames,1),size(frames,2));
+% skipped = 0;
 parfor i = 1:num_frames
     send(D,i);
-    reg = registerImages(frames(:,:,:,i), ref_img);
-    [warnMsg, warnId] = lastwarn();
-    if ~isempty(warnMsg) && contains(warnMsg,'Registration failed because optimization diverged.') % checks if optimization diverged
-        shifts(:,i) = [0; 0];
-    else
-        frames(:,:,:,i) = reg.RegisteredImage;
-        shifts(:,i) = [reg.Transformation.T(3,2); reg.Transformation.T(3,1)];
-    end
-    warnMsg = []; % reset for next frame
+    [frames(:,:,:,i),shifts(:,i)] = registerImagesCrossCorrelation(frames(:,:,:,i), ref_img);
+%     frames(:,:,:,i) = reg.RegisteredImage;
+%     shifts(:,i) = [reg.Transformation.T(3,2); reg.Transformation.T(3,1)];
+%     [warnMsg, warnId] = lastwarn();
+%     if ~isempty(warnMsg) && contains(warnMsg,'Registration failed because optimization diverged.') % checks if optimization diverged
+%         shifts(:,i) = [0; 0];
+%         skipped = skipped + 1;
+%     else
+%         frames(:,:,:,i) = reg.RegisteredImage;
+%         shifts(:,i) = [reg.Transformation.T(3,2); reg.Transformation.T(3,1)];
+%     end
+%     warnMsg = []; % reset for next frame
     
 end
+
+% disp(['Skipped ',num2str(skipped),'/',num2str(num_frames),' frames.'])
 
 % figure(10)
 % imagesc(ref_img)

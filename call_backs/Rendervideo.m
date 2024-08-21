@@ -181,6 +181,9 @@ function Rendervideo(app)
     
     if ~isempty(app.image_registration)
         local_image_registration = cat(1, app.image_registration.translation_x, app.image_registration.translation_y);
+        if size(local_image_registration, 2) == floor((app.interferogram_stream.num_frames-app.batchsizeEditField.Value) / app.cache.batch_stride) % if registration from previous folder results
+            disp('found last registration that will be used.')
+        end
     else
         local_image_registration = [];
     end
@@ -738,14 +741,14 @@ function Rendervideo(app)
             
             if app.cache.registration_disc
                 [X,Y] = meshgrid(linspace(-Nx/2,Nx/2,Nx),linspace(-Ny/2,Ny/2,Ny));
-                disc_ratio = 0.9; % parametrize this coef if needed
+                disc_ratio = 0.7; % parametrize this coef if needed
                 disc = X.^2+Y.^2 < (disc_ratio * min(Nx,Ny)/2)^2; 
             else
-                disc = ones([Nx,Ny]);
+                disc = ones([Ny,Nx]);
             end
 
             
-            video_M0_reg = video_M0 .* disc - disc .* sum(video_M0.* disc,[1,2])/nnz(disc); % minus the mean of each frame
+            video_M0_reg = video_M0 .* disc - disc .* sum(video_M0.* disc,[1,2])/nnz(disc); % minus the mean in the disc of each frame
             video_M0_reg = video_M0_reg ./(max(abs(video_M0_reg),[],[1,2])); % rescaling each frame but keeps mean at zero
             
 
@@ -780,8 +783,8 @@ function Rendervideo(app)
                 figure(7)
                 montage({mat2gray(frame_) mat2gray(reg_hologram)})
                 title('Current frame vs calculated reference for registration')
-                % plot the meanM0 columns for registration
-                plot_columns_reg(video_M0_reg,output_dirpath);
+                % plot the mean of M0 columns for registration
+                plot_columns_reg(video_M0_reg,reg_hologram,output_dirpath);
             end
             
             
@@ -861,6 +864,8 @@ function Rendervideo(app)
         fprintf("Video generation...\n")
         tVideoGen = tic;
         % FIXME add 'or' statement
+        % add colors to M0_registration
+        video_M0_reg = cat(3,rescale(video_M0_reg),repmat(rescale(reg_hologram),[1,1,1,size(video_M0,4)]),rescale(video_M0(:,:,1,:))); % new in red, ref in green, old in blue
           switch local_output_video
             case 'power_Doppler'
                 generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);

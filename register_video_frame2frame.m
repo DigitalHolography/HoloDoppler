@@ -16,17 +16,20 @@ afterEach(D,@parforWaitbar);
 
 
 %% caclulate shifts from frame to frame
-
+% skipped = 0;
 parfor i = 1:(num_frames-1)
     send(D,i);
     reg = registerImages(frames(:,:,1,i+1), frames(:,:,1,i));
-    [warnMsg, warnId] = lastwarn();
-    if ~isempty(warnMsg) && contains(warnMsg,'Registration failed because optimization diverged.') % checks if optimization diverged
-        shifts(:,i) = [0; 0];
-    else
-        shifts(:,i) = [reg.Transformation.T(3,2); reg.Transformation.T(3,1)];
-    end
-    warnMsg = []; % reset for next frame
+    shifts(:,i) = [reg.Transformation.T(3,2); reg.Transformation.T(3,1)];
+%     [warnMsg, warnId] = lastwarn();
+%     if ~isempty(warnMsg) && contains(warnMsg,'Registration failed because optimization diverged.') % checks if optimization diverged
+%         shifts(:,i) = [0; 0];
+%         skipped = skipped + 1;
+% 
+%     else
+%         shifts(:,i) = [reg.Transformation.T(3,2); reg.Transformation.T(3,1)];
+%     end
+%     warnMsg = []; % reset for next frame
 end
 
 parfor i=1:num_frames
@@ -36,6 +39,8 @@ parfor i=1:num_frames
     cumulated_shifts(:,i) = cumulated_shift;
 end
 
+
+% disp(['Skipped ',num2str(skipped),'/',num2str(num_frames),' frames.'])
 
 
 
