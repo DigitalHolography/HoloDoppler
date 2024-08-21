@@ -91,13 +91,23 @@ spectrum = squeeze(sum(SH.*circle,[1,2])/nnz(circle)); % The full spectrum of th
 
 fullfreq = linspace(-app.Fs/2,app.Fs/2,length(spectrum));
 
-plot(fullfreq/1000, 10*log(fftshift(spectrum)),'k-', 'LineWidth', 2)
-hold on 
+
+% fitting to a lorentizian
+
+lorentzEqn = '10*log(b/((1+(x/a)^2))+c)'; %'10*log(1/pi*(1/2*a)/(x^2+(1/2*a)^2))';
+x = fullfreq;
+y = 10*log(fftshift(spectrum));
+exclude = abs(x)<time_transform.f1*1000;
+f = fit(x',double(y),lorentzEqn,'Exclude',exclude,'Start',[100, 1e21,1e8])
+
+
+plot(x/1000,y,'k-','LineWidth',2);hold on; plot(x/1000,feval(f,x),'k--','LineWidth',2) ;hold on ;% plot(x,1/pi*(1/2*1)./(x.^2+(1/2*1)^2)*50e9) ;hold on 
 xline(time_transform.f1,'k--', 'LineWidth', 2)
 xline(time_transform.f2,'k--', 'LineWidth', 2)
 xline(-time_transform.f1,'k--', 'LineWidth', 2)
 xline(-time_transform.f2,'k--', 'LineWidth', 2)
 hold off
+legend('avg spectrum','lorentzian model')
 title('Spectrum');
 fontsize(gca, 14, "points");
 xlabel("Frequency (kHz)", 'FontSize', 14);
