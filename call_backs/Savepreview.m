@@ -31,8 +31,6 @@ output_dirpath = fullfile(output_dirpath, preview_folder_name);
 
 mkdir(fullfile(output_dirpath, 'png'));
 folder_path_png = fullfile(output_dirpath, 'png');
-mkdir(fullfile(output_dirpath, 'spectrum'));
-folder_path_spec = fullfile(output_dirpath, 'png');
 mkdir(fullfile(output_dirpath, 'freq_shift'));
 folder_path_freq = fullfile(output_dirpath, 'freq_shift');
 
@@ -47,7 +45,8 @@ app.var_ImageTypeList.construct_image(app.FH, app.cache.wavelength, acquisition,
 %% Spectrum
 
 Show_spectrum(app);
-saveas(57,fullfile(folder_path_spec,"spectrum_of_the_full_image.png"));
+preview_spectrum_name = sprintf('%s_%s.%s', preview_folder_name, "spectrum_of_the_full_image", 'png');
+saveas(57,fullfile(folder_path_png,preview_spectrum_name));
 close(57);
 
 %% Frequency Shift
