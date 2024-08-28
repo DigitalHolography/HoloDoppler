@@ -741,7 +741,7 @@ function Rendervideo(app)
             
             if app.cache.registration_disc
                 [X,Y] = meshgrid(linspace(-Nx/2,Nx/2,Nx),linspace(-Ny/2,Ny/2,Ny));
-                disc_ratio = 0.7; % parametrize this coef if needed
+                disc_ratio = app.cache.registration_disc_ratio;
                 disc = X.^2+Y.^2 < (disc_ratio * min(Nx,Ny)/2)^2; 
             else
                 disc = ones([Ny,Nx]);

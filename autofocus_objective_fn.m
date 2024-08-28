@@ -1,4 +1,4 @@
-function J = autofocus_objective_fn(z,frame_batch, f1, f2, acquisition, gaussian_width, mask, use_gpu)
+ function J = autofocus_objective_fn(z,frame_batch, f1, f2, acquisition, gaussian_width, mask, use_gpu)
 % this is quite similar from the objective function used in objective.m
 % except that we start from frame_batch instead of FH so we have to
 % recompute FH each time this function is called

@@ -8,9 +8,9 @@ path = input_filepath;
 suffix = 0;
 
 
-while exist(fullfile(path, sprintf("%s_HW_%d", filename, suffix)), 'Dir')
+while exist(fullfile(path, sprintf("%s_HD_%d", filename, suffix)), 'Dir')
     suffix = suffix + 1;
 end
 
-output_directory_name = sprintf("%s_HW_%d", filename, suffix);
+output_directory_name = sprintf("%s_HD_%d", filename, suffix);
 end

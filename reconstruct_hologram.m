@@ -64,7 +64,6 @@ if (svdx)
     H = svd_x_filter(H, time_transform.f1, ac.fs, Nb_SubAp);
 end
 
-
 %% squared magnitude of hologram : SH
 switch time_transform.type
     case 'PCA' % if the time transform is PCA
