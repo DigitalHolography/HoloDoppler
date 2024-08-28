@@ -44,6 +44,7 @@ classdef GuiCache
         temporal_filter_flag logical
         temporal_filter double
         registration_disc logical
+        registration_disc_ratio double
 
         % color image parameters
         color_f1 double
@@ -112,6 +113,7 @@ classdef GuiCache
             obj.rephasing = app.rephasingCheckBox.Value;
             obj.save_raw = app.saverawvideosCheckBox.Value;
             obj.registration_disc = app.registrationdiscCheckBox.Value;
+            obj.registration_disc_ratio = app.regDiscRatioEditField.Value;
 
             obj.color_f1 = app.compositef1EditField.Value;
             obj.color_f2 = app.compositef2EditField.Value;
