@@ -32,37 +32,40 @@ function H = svd_x_filter(H, f1, fs, NbSubAp, tresh)
         end 
     end
 
+    tresh = round(tresh/NbSubAp); % scaling the threshold factor
+
     % averaging / linear interpolating with neighboring tiles (testing : not clean code but easy to understand)
     for ii=1:NbSubAp
         for kk=1:NbSubAp
             if ii==1 % first row case
                 if kk==1
-                    V = mean(cat(3,V_AllSubAps{ii,kk},V_AllSubAps{ii,kk+1},V_AllSubAps{ii+1,kk}),3);
+                    V = mean(cat(3,90*V_AllSubAps{ii,kk},5*V_AllSubAps{ii,kk+1},5*V_AllSubAps{ii+1,kk}),3)/100;
                 elseif kk==NbSubAp
-                    V = mean(cat(3,V_AllSubAps{ii,kk},V_AllSubAps{ii,kk-1},V_AllSubAps{ii+1,kk}),3);
+                    V = mean(cat(3,90*V_AllSubAps{ii,kk},5*V_AllSubAps{ii,kk-1},5*V_AllSubAps{ii+1,kk}),3)/100;
                 else
-                    V = mean(cat(3,V_AllSubAps{ii,kk},V_AllSubAps{ii,kk-1},V_AllSubAps{ii,kk+1},V_AllSubAps{ii+1,kk}),3);
+                    V = mean(cat(3,90*V_AllSubAps{ii,kk},5*V_AllSubAps{ii,kk-1},5*V_AllSubAps{ii,kk+1},V_AllSubAps{ii+1,kk}),3)/100;
                 end
             elseif ii==NbSubAp % last row case
                 if kk==1
-                    V = mean(cat(3,V_AllSubAps{ii,kk},V_AllSubAps{ii,kk+1},V_AllSubAps{ii-1,kk}),3);
+                    V = mean(cat(3,90*V_AllSubAps{ii,kk},5*V_AllSubAps{ii,kk+1},5*V_AllSubAps{ii-1,kk}),3)/100;
                 elseif kk==NbSubAp
-                    V = mean(cat(3,V_AllSubAps{ii,kk},V_AllSubAps{ii,kk-1},V_AllSubAps{ii-1,kk}),3);
+                    V = mean(cat(3,90*V_AllSubAps{ii,kk},5*V_AllSubAps{ii,kk-1},5*V_AllSubAps{ii-1,kk}),3)/100;
                 else
-                    V = mean(cat(3,V_AllSubAps{ii,kk},V_AllSubAps{ii,kk-1},V_AllSubAps{ii,kk+1},V_AllSubAps{ii-1,kk}),3);
+                    V = mean(cat(3,90*V_AllSubAps{ii,kk},5*V_AllSubAps{ii,kk-1},5*V_AllSubAps{ii,kk+1},V_AllSubAps{ii-1,kk}),3)/100;
                 end
             else
                 if kk==1 % first column case
-                    V = mean(cat(3,V_AllSubAps{ii,kk},V_AllSubAps{ii-1,kk},V_AllSubAps{ii+1,kk},V_AllSubAps{ii,kk+1}),3);
+                    V = mean(cat(3,85*V_AllSubAps{ii,kk},5*V_AllSubAps{ii-1,kk},5*V_AllSubAps{ii+1,kk},5*V_AllSubAps{ii,kk+1}),3)/100;
                 elseif kk==NbSubAp % last column case
-                    V = mean(cat(3,V_AllSubAps{ii,kk},V_AllSubAps{ii-1,kk},V_AllSubAps{ii+1,kk},V_AllSubAps{ii,kk-1}),3);
+                    V = mean(cat(3,85*V_AllSubAps{ii,kk},5*V_AllSubAps{ii-1,kk},5*V_AllSubAps{ii+1,kk},5*V_AllSubAps{ii,kk-1}),3)/100;
                 else % default case : average of all 4 neighboring tiles and current tile
-                    V = mean(cat(3,V_AllSubAps{ii,kk},V_AllSubAps{ii-1,kk},V_AllSubAps{ii,kk-1},V_AllSubAps{ii+1,kk},V_AllSubAps{ii,kk+1}),3);
+                    V = mean(cat(3,80*V_AllSubAps{ii,kk},5*V_AllSubAps{ii-1,kk},5*V_AllSubAps{ii,kk-1},5*V_AllSubAps{ii+1,kk},5*V_AllSubAps{ii,kk+1}),3)/100;
                 end
             end
 
             %% applying
             H1 = H(round(Lx(ii)):round(Lx(ii+1)-1),round(Ly(kk)):round(Ly(kk+1)-1),:);
+            H1 = reshape(H1, (round(Lx(ii+1))-round(Lx(ii)))*(round(Ly(kk+1))-round(Ly(kk))), batch_size);
             H_tissue = H1 * V(:,1:tresh) * V(:,1:tresh)';
             H1 = reshape(H1 - H_tissue, (round(Lx(ii+1))-round(Lx(ii))), (round(Ly(kk+1))-round(Ly(kk))), batch_size);
             H(round(Lx(ii)):round(Lx(ii+1)-1),round(Ly(kk)):round(Ly(kk+1)-1),:) = reshape(H1, (round(Lx(ii+1))-round(Lx(ii))), (round(Ly(kk+1))-round(Ly(kk))), batch_size);
