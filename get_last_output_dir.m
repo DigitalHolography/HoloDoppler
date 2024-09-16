@@ -13,6 +13,7 @@ found = false;
 for i = 1:numel(directory_list)
     d = directory_list(i).name;
     if contains(d, dir_name_stem)
+        found = true;
         if isempty(selected_dir)
             selected_dir = d;
         else

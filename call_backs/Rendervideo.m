@@ -1069,6 +1069,8 @@ function Rendervideo(app)
     s.ref_batch_size = cache.ref_batch_size;
     s.batch_stride = cache.batch_stride;
     s.SVD = cache.SVD;
+    s.SVDx = local_SVDx;
+    s.SVDxSubAp = local_SVDx_SubAp_num;
     JSON_parameters = jsonencode(s,PrettyPrint=true);
     fid = fopen(fullfile(output_dirpath, 'log', 'RenderingParameters.json'), "wt+");
     fprintf(fid, JSON_parameters);

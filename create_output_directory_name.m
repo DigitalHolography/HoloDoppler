@@ -2,14 +2,16 @@ function output_directory_name = create_output_directory_name(input_filepath, in
 % construct output directory
 % name.cine -> name_<suffix_number>
 % <suffix_number> is computed such that the generated name does
-% not collide with an existing folder.
+% not collide with an existing folder. Suffix will be the last number found + 1.
 path = input_filepath;
-[~,filename,~] = fileparts(input_filename);
-suffix = 0;
+[~,filename,file_ext] = fileparts(input_filename);
 
-
-while exist(fullfile(path, sprintf("%s_HD_%d", filename, suffix)), 'Dir')
-    suffix = suffix + 1;
+[found_dir, found] = get_last_output_dir(path, filename, file_ext);
+if found
+    match = regexp(found_dir, '\d+$', 'match'); 
+    suffix = str2double(match{1}) + 1;
+else
+    suffix = 0;
 end
 
 output_directory_name = sprintf("%s_HD_%d", filename, suffix);
