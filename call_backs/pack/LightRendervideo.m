@@ -7,10 +7,6 @@ function Rendervideo(app)
     % output videos.
 
     %% check the necessary conditions for this function
-    
-    if ~app.file_loaded
-        return
-    end
 
     % only for the main Doppler images output (M0.avi, moment_0.raw ... moment_2.raw) necessary for the pulse analysis
     % no low frequency no darkfield 
@@ -26,11 +22,9 @@ function Rendervideo(app)
         return
     end
 
-    if app.setUpDropDown.Value~='Dopper'
+    if app.setUpDropDown.Value~='Doppler'
         return
     end 
-    set_up = app.setUpDropDown.Value; 
-
 
     
     % start clock to monitor
@@ -176,6 +170,7 @@ function Rendervideo(app)
             case 'Fresnel'
                 H = fftshift(fft2(FH));
         end
+        FH = [];
         if local_svd
             if localSVDThreshold
                 H = svd_filter(H, local_f1, local_fs,localSVDThresholdValue);
@@ -191,6 +186,7 @@ function Rendervideo(app)
             end
         end
         SH = fft(H, [], 3);
+        H = [];
         SH = abs(SH).^2;
 
         %% shifts related to acquisition wrong positioning
@@ -241,12 +237,11 @@ function Rendervideo(app)
             case 'Fresnel'
                 reg_FH = reg_frame_batch .* local_kernel;
         end
-        %% acquisition = DopplerAcquisition(app.Nx,app.Ny,app.Fs/1000, app.cache.z, app.cache.z_retina, app.cache.z_iris, app.cache.wavelength,app.cache.DX,app.cache.DY,app.pix_width,app.pix_height);
         switch local_spatialTransformation
             case 'angular spectrum'
-                H = ifft2(FH);
+                H = ifft2(reg_FH);
             case 'Fresnel'
-                H = fftshift(fft2(FH));
+                H = fftshift(fft2(reg_FH));
         end
         if local_svd
             if localSVDThreshold
@@ -312,115 +307,11 @@ function Rendervideo(app)
     % FIXME add 'or' statement
     % add colors to M0_registration
     video_M0_reg = cat(3,rescale(video_M0_reg),repmat(rescale(reg_hologram),[1,1,1,size(video_M0,4)]),rescale(video_M0(:,:,1,:))); % new in red, ref in green, old in blue
-        switch local_output_video
-        case 'power_Doppler'
-            generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-            generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-        case 'moments'
-            generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-            generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-            generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-            generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-            generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-
-        case 'all_videos'
-            generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-            %                         generate_video(video_M1, output_dirpath, 'DopplerAVG', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-            %                         generate_video(video_M2, output_dirpath, 'DopplerRMS', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-            generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-
-            generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-            generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-            generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-
-            generate_video(video_M1_over_M0, output_dirpath, 'NormalizedDopplerAVG', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-            generate_video(video_M2_over_M0, output_dirpath, 'NormalizedDopplerRMS', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-
-            % no contrast enhancement for color video, it's already
-            % been done previously
-            generate_video(video_color, output_dirpath, 'Color', [], app.cache.temporal_filter, local_low_frequency, 0, false);
-            generate_video(video_directional, output_dirpath, 'Directional', [], [], false, 0, true);
-            generate_video(video_fmean, output_dirpath, 'Fmean', [], [], false, 0, true);
-            generate_video(video_M0_pos, output_dirpath, 'M0pos', [], app.cache.temporal_filter, local_low_frequency, 0, true);
-            generate_video(video_M0_neg, output_dirpath, 'M0neg', [], app.cache.temporal_filter, local_low_frequency, 0, true);
-            generate_video(video_velocity, output_dirpath, 'Velocity', [], app.cache.temporal_filter, local_low_frequency, 0, true);
-            % generate_video(video_mask, output_dirpath, 'Mask', [], app.cache.temporal_filter, local_low_frequency, 0, true);
-            % generate_video(video_mask, output_dirpath, 'Mask', [], app.cache.temporal_filter, local_low_frequency, 0, true);
-            %FIXME Move  tmp_SH_time_avg elsewhere divide by
-            %number of strides/long times
-            %                       tmp_SH_time_avg = SH_time_avg(:,:,:,2:(end-1));
-            %SH_time_avg = SH_time_avg./double(local_num_batches);
-            SH_time = reshape(SH_time,size(SH_time,1),size(SH_time,2),size(SH_time,3),size(SH_time,4)*size(SH_time,5));
-
-            generate_video(SH_time, output_dirpath, 'SH', [], [], false, true, false);
-
-
-
-            if enable_shack_hartmann
-                % phase video
-                video_phase = correction_phase_video(aberration_correction, app.Nx, app.Ny);
-                video_measured_phase = mesured_phase_video(shifts_vector, num_subapertures_positions, measured_phase);
-                video_PSF2D = PSF2D_video(aberration_correction, app.Nx, app.Ny);
-                generate_video(video_measured_phase, output_dirpath, 'MeasuredPhase', [], [], false, false, false);
-                generate_video(video_phase, output_dirpath, 'ZernikePhase', [], [], false, false, false);
-                generate_video(video_PSF2D, output_dirpath, 'PSF2D', [], [], false, false, false);
-                generate_video(stiched_moments_video, output_dirpath, 'StichedMoments', [], [], false, false, false);
-                generate_video(stitched_correlation_video, output_dirpath, 'StichedCorrelations', [], [], false, false, false);
-            end
-
-            % generate additional images
-            if local_low_frequency
-                [color_img, img_low_freq, img_high_freq] = construct_colored_image(video_M_freq_high, video_M_freq_low, true);
-            else
-                [color_img, img_low_freq, img_high_freq] = construct_colored_image(video_M_freq_low, video_M_freq_high, false);
-            end
-
-
-            % convert spectrogram_matrix_video to one spectrogram
-            %                     spectrogram_matrix_video = squeeze(spectrogram_matrix_video(:,:,:,1));%reshape(spectrogram_matrix_video, app.Nx, app.Ny, j_win * local_num_batches);
-            %                     S_video = (fft(spectrogram_matrix_video, [], 3));
-            %
-            %                         S_video = squeeze(mean(abs(spectrogram_matrix_video), 2));
-            %                         figure(1);
-            %                         set(figure(1), 'Visible', 'off');
-            %                         plot(S_video);
-
-            color_output_filename = sprintf('%s_%s.%s', output_dirname, 'Color', 'png');
-            img_low_freq_output_filename = sprintf('%s_%s.%s', output_dirname, 'M0_high_flow', 'png');
-            img_high_freq_output_filename = sprintf('%s_%s.%s', output_dirname, 'M0_low_flow', 'png');
-
-            RI_output_filename = sprintf('%s_%s.%s', output_dirname, 'Resistivity', 'png');
-
-            RI = construct_resistivity_index(video_M0,output_dirpath, RI_output_filename);
-
-            % FIXME : replace sprintf by fullfile
-            imwrite(color_img, sprintf('%s\\png\\%s', output_dirpath, color_output_filename));
-            imwrite(img_low_freq, sprintf('%s\\png\\%s', output_dirpath, img_low_freq_output_filename));
-            imwrite(img_high_freq, sprintf('%s\\png\\%s', output_dirpath, img_high_freq_output_filename));
-            imwrite(RI, sprintf('%s\\png\\%s', output_dirpath, RI_output_filename));
-            % imwrite(mat2gray((abs(spectrogram_array.^2))), sprintf('%s\\png\\%s', output_dirpath, 'spectrogram_artery.png'));
-
-            if exist(fullfile(output_dirpath, 'mat'), 'dir')
-                output_dirpath_mat = fullfile(output_dirpath, 'mat');
-            else
-                output_dirpath_mat = output_dirpath;
-            end
-
-
-            %save(fullfile(output_dirpath_mat, 'spectro.mat'), 'spectrogram_array')
-
-            color_img = flip(color_img);
-            %                         RI = flip(RI);
-
-
-            %FIXME spectrogram
-        case 'dark_field'
-            generate_video(video_M0_dark_field, output_dirpath, 'M0_dark_field', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-
-            %                         [file_name, suffix] = get_last_file_name(app.filepath, 'H_dark_field_stack');
-            %                         output_dirname_df = sprintf('%s%s_%d.mat', app.filepath, 'H_dark_field_stack', suffix + 1);
-            output_dirname_df = fullfile(app.filepath, output_dirname, 'mat', 'H_dark_field_stack.mat');
-            save(output_dirname_df, 'H_dark_field_stack', '-v7.3');
+    generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+    generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+    generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
+    generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
+    generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
     end
     tEndVideoGen = toc(tVideoGen);
     fprintf("Video Generation took %f s\n",tEndVideoGen)
