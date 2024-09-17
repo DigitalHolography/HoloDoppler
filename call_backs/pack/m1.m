@@ -22,5 +22,5 @@ if gw ~= 0
     moment = ff(moment, gw);
 end 
 
-M2 = gather(moment);
+M1 = gather(moment);
 end

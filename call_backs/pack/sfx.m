@@ -22,7 +22,7 @@ function H = sfx(H, threshold)
             [V,S] = eig(cov);
             [~, sort_idx] = sort(diag(S), 'descend');
             V = V(:,sort_idx);
-            H_tissue = H1 * V(:,1:tresh) * V(:,1:tresh)';
+            H_tissue = H1 * V(:,1:threshold) * V(:,1:threshold)';
             H1 = reshape(H1 - H_tissue, (round(Lx(ii+1))-round(Lx(ii))), (round(Ly(kk+1))-round(Ly(kk))), batch_size);
             H(round(Lx(ii)):round(Lx(ii+1)-1),round(Ly(kk)):round(Ly(kk+1)-1),:) = reshape(H1, (round(Lx(ii+1))-round(Lx(ii))), (round(Ly(kk+1))-round(Ly(kk))), batch_size);
         end

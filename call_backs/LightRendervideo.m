@@ -66,6 +66,7 @@ function LightRendervideo(app)
     local_Nx = app.Nx;
     local_Ny = app.Ny;
     local_wavelength = app.cache.wavelength;
+    local_output_video = app.cache.output_videos;
     local_svd = app.SVDCheckBox.Value;
     local_spatialTransformation = app.cache.spatialTransformation;
     local_SVDx = app.SVDxCheckBox.Value;
@@ -138,7 +139,7 @@ function LightRendervideo(app)
 
         %% permute related to acquisition optical inversion of the image
         SH = permute(SH, [2 1 3]);
-        M0 = m0(SH, local_f1, local_f2, local_fs, j_win, gaussian_width); % with flatfield of gaussian_width applied
+        M0 = m0(SH, local_f1, local_f2, local_fs, j_win, local_blur); % with flatfield of gaussian_width applied
         moment0 = m0(SH, local_f1, local_f2, local_fs, j_win, 0); % no flatfield : raw
         moment1 = m1(SH, local_f1, local_f2, local_fs, j_win, 0);
         moment2 = m1(SH, local_f1, local_f2, local_fs, j_win, 0);
@@ -234,7 +235,6 @@ function LightRendervideo(app)
     generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
     generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
     generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-    end
     tEndVideoGen = toc(tVideoGen);
     fprintf("Video Generation took %f s\n",tEndVideoGen)
     
