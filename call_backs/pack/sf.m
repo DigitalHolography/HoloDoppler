@@ -1,4 +1,4 @@
-function H = svd_filter(H, f1, fs, tresh)
+function H = sf(H, f1, fs, tresh)
     % SVD filtering
     %
     % H: an frame batch already propagated to the distance of reconstruction

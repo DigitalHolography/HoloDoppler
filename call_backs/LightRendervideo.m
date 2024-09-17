@@ -1,4 +1,4 @@
-function Rendervideo(app)
+function LightRendervideo(app)
     % main program loop
     % light version designed to use matlab coder and utlimately make a very fast
     % C based rendering function 
@@ -62,26 +62,12 @@ function Rendervideo(app)
 
     j_win = app.cache.batch_size;
     j_step = app.cache.batch_stride;
-    local_time_transform = app.cache.time_transform;
     local_blur = app.cache.blur;
     local_Nx = app.Nx;
     local_Ny = app.Ny;
     local_wavelength = app.cache.wavelength;
     local_svd = app.SVDCheckBox.Value;
-    local_output_video = app.cache.output_videos;
-    local_rephasing = app.cache.rephasing;
-    local_low_memory = app.cache.low_memory;
     local_spatialTransformation = app.cache.spatialTransformation;
-    local_temporal_filter = app.cache.temporal_filter;
-    local_SubAp_PCA.Value = app.SubAp_PCA.Value;
-    local_SubAp_PCA.min = app.SubAp_PCA.min;
-    local_SubAp_PCA.max = app.SubAp_PCA.max;
-    local_temporal = app.temporalCheckBox.Value;
-    local_phi1 = app.phi1EditField.Value;
-    local_phi2 = app.phi2EditField.Value;
-    local_spatial = app.spatialCheckBox.Value;
-    local_nu1 = app.nu1EditField.Value;
-    local_nu2 = app.nu2EditField.Value;
     local_SVDx = app.SVDxCheckBox.Value;
     local_SVDx_SubAp_num = app.SVDx_SubApEditField.Value;
     localSVDThreshold = app.SVDTresholdCheckBox.Value;
@@ -93,21 +79,13 @@ function Rendervideo(app)
     local_registration_disc = app.cache.registration_disc;
     local_registration_disc_ratio = app.cache.registration_disc_ratio;
     local_position_in_file = app.cache.position_in_file;
-    
-    local_image_registration = [];
-    
-    % FIXME : add new elements to cache
-    
+        
     switch app.cache.spatialTransformation
         case 'angular spectrum'
             local_kernel = app.kernelAngularSpectrum;  % propagation kernel initialization
         case 'Fresnel'
             local_kernel = app.kernelFresnel;  % propagation kernel initialization
     end
-    
-    %%acquisition = DopplerAcquisition(app.Nx,app.Ny,app.cache.Fs/1000, app.cache.z, app.cache.z_retina, app.cache.z_iris,app.cache.wavelength,app.cache.DX,app.cache.DY,app.cache.pix_width,app.cache.pix_height);
-    
-    %%local_image_type_list = ImageTypeList();
 
     local_num_frames = istream.num_frames;
     local_num_batches = floor((istream.num_frames-j_win) / j_step);
@@ -146,50 +124,19 @@ function Rendervideo(app)
         poolobj = parpool(parfor_arg);
     end
     
+    if ~localSVDThreshold
+        localSVDThresholdValue = round(local_f1 * j_win / local_fs)*2 + 1; % default value if none specified
+    end
+    
     send(D,-2); % display 'video construction' on progress bar
     fprintf("Parfor loop: %u workers\n",parfor_arg)
     tParfor = tic;
     parfor (batch_idx = 1:local_num_batches, parfor_arg)
 
         frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step);
-        switch local_spatialTransformation
-            case 'angular spectrum'
-                FH = fftshift(fft2(frame_batch)) .* local_kernel;
-            case 'Fresnel'
-                FH = frame_batch .* local_kernel;
-        end
-        %% local_image_type_list_par = local_image_type_list;
+        SH = ri(frame_batch,local_spatialTransformation,local_kernel,local_svd,local_SVDx,localSVDThresholdValue,0);
 
-        %% local_image_type_list_par.construct_image(FH_par, local_wavelength, acquisition, local_blur, use_gpu, local_svd,localSVDTreshold, local_SVDx,localSVDTresholdValue, local_SVDx_SubAp_num, [], local_color_f1, local_color_f2, local_color_f3, ...
-        %%     0, local_spatialTransformation, local_time_transform, local_SubAp_PCA, local_xystride, local_num_unit_cells_x, local_r1, ...
-        %%     local_temporal, local_phi1, local_phi2, local_spatial, local_nu1, local_nu2);
-
-        switch local_spatialTransformation
-            case 'angular spectrum'
-                H = ifft2(FH);
-            case 'Fresnel'
-                H = fftshift(fft2(FH));
-        end
-        FH = [];
-        if local_svd
-            if localSVDThreshold
-                H = svd_filter(H, local_f1, local_fs,localSVDThresholdValue);
-            else
-                H = svd_filter(H, local_f1, local_fs);
-            end
-        end
-        if svdx
-            if svd_treshold
-                H = svd_x_filter(H, local_f1, local_fs,local_SVDx_SubAp_num,svd_treshold_value);
-            else
-                H = svd_x_filter(H, local_f1, local_fs, local_SVDx_SubAp_num);
-            end
-        end
-        SH = fft(H, [], 3);
-        H = [];
-        SH = abs(SH).^2;
-
-        %% shifts related to acquisition wrong positioning
+        %% permute related to acquisition optical inversion of the image
         SH = permute(SH, [2 1 3]);
         M0 = m0(SH, local_f1, local_f2, local_fs, j_win, gaussian_width); % with flatfield of gaussian_width applied
         moment0 = m0(SH, local_f1, local_f2, local_fs, j_win, 0); % no flatfield : raw
@@ -231,36 +178,11 @@ function Rendervideo(app)
         ref_batch_idx = min(floor((local_position_in_file) / j_step) + 1,size(video_M0,4)-j_win);
 
         reg_frame_batch = istream.read_frame_batch(j_win, floor(ref_batch_idx*j_step));
-        switch local_spatialTransformation
-            case 'angular spectrum'
-                reg_FH = fftshift(fft2(reg_frame_batch)) .* local_kernel;
-            case 'Fresnel'
-                reg_FH = reg_frame_batch .* local_kernel;
-        end
-        switch local_spatialTransformation
-            case 'angular spectrum'
-                H = ifft2(reg_FH);
-            case 'Fresnel'
-                H = fftshift(fft2(reg_FH));
-        end
-        if local_svd
-            if localSVDThreshold
-                H = svd_filter(H, local_f1, local_fs,localSVDThresholdValue);
-            else
-                H = svd_filter(H, local_f1, local_fs);
-            end
-        end
-        if svdx
-            if svd_treshold
-                H = svd_x_filter(H, local_f1, local_fs,local_SVDx_SubAp_num,svd_treshold_value);
-            else
-                H = svd_x_filter(H, local_f1, local_fs, local_SVDx_SubAp_num);
-            end
-        end
-        SH = fft(H, [], 3);
-        SH = abs(SH).^2;
+        
+        SH = ri(reg_frame_batch,local_spatialTransformation,local_kernel,local_svd,local_SVDx,localSVDThresholdValue,0);
 
-        %% shifts related to acquisition wrong positioning
+
+        %% permute related to acquisition optical invertion
         SH = permute(SH, [2 1 3]);
         reg_hologram = m0(SH, local_f1, local_f2, local_fs, j_win, gaussian_width); % with flatfield of gaussian_width applied
         

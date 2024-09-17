@@ -1,6 +1,5 @@
-function M0 = moment0(SH, f1, f2, fs, batch_size, gw)
-
-SH = abs(SH);
+function M0 = m0(SH, f1, f2, fs, batch_size, gw)
+    % m0 -> moment 0
 
 %% integration interval
 % convert frequencies to indices
@@ -14,7 +13,7 @@ n4 = size(SH, 3) - n1 + 1;
 moment = squeeze(sum(SH(:, :, n1:n2), 3)) + squeeze(sum(SH(:, :, n3:n4), 3));
 
 if gw ~= 0
-moment = flat_field_correction(moment, gw);
+moment = ff(moment, gw);
 end 
 
 

@@ -1,6 +1,6 @@
 
-function H = svd_x_filter(H, f1, fs, NbSubAp, tresh)
-    % SVD filtering
+function H = sfx(H, threshold)
+    % SVD filtering by sub parts of the image
     %
     % H: an frame batch already propagated to the distance of reconstruction
     % f1: frequency
@@ -11,10 +11,6 @@ function H = svd_x_filter(H, f1, fs, NbSubAp, tresh)
     [width, height, batch_size] = size(H);
     Lx = linspace(1,width,NbSubAp+1);
     Ly = linspace(1,height,NbSubAp+1);
-    if nargin == 4 
-        % third parameter does not exist, so default it to something
-        tresh = round(f1 * batch_size / fs / NbSubAp)*2 + 1;
-    end
 
     for ii=1:NbSubAp
         for kk=1:NbSubAp
