@@ -1,5 +1,5 @@
 
-function H = sfx(H, threshold)
+function H = sfx(H, threshold, nb_sub_ap)
     % SVD filtering by sub parts of the image
     %
     % H: an frame batch already propagated to the distance of reconstruction
@@ -9,13 +9,12 @@ function H = sfx(H, threshold)
     
     
     [width, height, batch_size] = size(H);
-    Lx = linspace(1,width,NbSubAp+1);
-    Ly = linspace(1,height,NbSubAp+1);
+    Lx = linspace(1,width,nb_sub_ap+1);
+    Ly = linspace(1,height,nb_sub_ap+1);
 
-    for ii=1:NbSubAp
-        for kk=1:NbSubAp
-            H1 = H(round(Lx(ii)):round(Lx(ii+1)-1),round(Ly(kk)):round(Ly(kk+1)-1),:);
-            H1 = reshape(H1, (round(Lx(ii+1))-round(Lx(ii)))*(round(Ly(kk+1))-round(Ly(kk))), batch_size);
+    for ii=1:nb_sub_ap
+        for kk=1:nb_sub_ap
+            H1 = reshape(H(round(Lx(ii)):round(Lx(ii+1)-1),round(Ly(kk)):round(Ly(kk+1)-1),:), (round(Lx(ii+1))-round(Lx(ii)))*(round(Ly(kk+1))-round(Ly(kk))), batch_size);
 
             % SVD of spatio-temporal features
             cov = H1'*H1;

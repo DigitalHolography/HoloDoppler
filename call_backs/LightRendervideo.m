@@ -132,17 +132,17 @@ function LightRendervideo(app)
     send(D,-2); % display 'video construction' on progress bar
     fprintf("Parfor loop: %u workers\n",parfor_arg)
     tParfor = tic;
-    parfor (batch_idx = 1:local_num_batches, parfor_arg)
+    parfor (batch_idx = 1:local_num_batches, num_workers)
 
         frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step);
-        SH = ri(frame_batch,local_spatialTransformation,local_kernel,local_svd,local_SVDx,localSVDThresholdValue,0);
+        SH = ri(frame_batch,local_spatialTransformation,local_kernel,local_svd,local_SVDx,localSVDThresholdValue,local_SVDx_SubAp_num,0);
 
         %% permute related to acquisition optical inversion of the image
         SH = permute(SH, [2 1 3]);
         M0 = m0(SH, local_f1, local_f2, local_fs, j_win, local_blur); % with flatfield of gaussian_width applied
         moment0 = m0(SH, local_f1, local_f2, local_fs, j_win, 0); % no flatfield : raw
         moment1 = m1(SH, local_f1, local_f2, local_fs, j_win, 0);
-        moment2 = m1(SH, local_f1, local_f2, local_fs, j_win, 0);
+        moment2 = m2(SH, local_f1, local_f2, local_fs, j_win, 0);
 
 
         video_M0(:,:,:,batch_idx) = M0;
@@ -164,10 +164,10 @@ function LightRendervideo(app)
         fprintf("Registration...\n")
         
         if local_registration_disc
-            [X,Y] = meshgrid(linspace(-Nx/2,Nx/2,Nx),linspace(-Ny/2,Ny/2,Ny));
-            disc = X.^2+Y.^2 < (local_registration_disc_ratio * min(Nx,Ny)/2)^2; 
+            [X,Y] = meshgrid(linspace(-local_Nx/2,local_Nx/2,local_Nx),linspace(-local_Ny/2,local_Ny/2,local_Ny));
+            disc = X.^2+Y.^2 < (local_registration_disc_ratio * min(local_Nx,local_Ny)/2)^2; 
         else
-            disc = ones([Ny,Nx]);
+            disc = ones([local_Ny,local_Nx]);
         end
 
         
@@ -185,7 +185,7 @@ function LightRendervideo(app)
 
         %% permute related to acquisition optical invertion
         SH = permute(SH, [2 1 3]);
-        reg_hologram = m0(SH, local_f1, local_f2, local_fs, j_win, gaussian_width); % with flatfield of gaussian_width applied
+        reg_hologram = m0(SH, local_f1, local_f2, local_fs, j_win, local_blur); % with flatfield of gaussian_width applied
         
         reg_hologram = reg_hologram.*disc - disc .* sum(reg_hologram.*disc,[1,2])/nnz(disc); % minus the mean 
         reg_hologram = reg_hologram./(max(abs(reg_hologram),[],[1,2])); % rescaling but keeps mean at zero
@@ -219,7 +219,6 @@ function LightRendervideo(app)
         % save shifts for export
         image_registration.translation_x = shifts(1,:);
         image_registration.translation_y = shifts(2,:);
-        image_registration.translation_z = shifts(3,:);
 
         tEndRegistration = toc(tRegistration);
         fprintf("Registration took %f s\n",tEndRegistration)
@@ -230,11 +229,11 @@ function LightRendervideo(app)
     % FIXME add 'or' statement
     % add colors to M0_registration
     video_M0_reg = cat(3,rescale(video_M0_reg),repmat(rescale(reg_hologram),[1,1,1,size(video_M0,4)]),rescale(video_M0(:,:,1,:))); % new in red, ref in green, old in blue
-    generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-    generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-    generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-    generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-    generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
+    generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, 0, 0, true);
+    generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, 0, 0, true);
+    generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, 0, export_raw, true);
+    generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, 0, export_raw, true);
+    generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, 0, export_raw, true);
     tEndVideoGen = toc(tVideoGen);
     fprintf("Video Generation took %f s\n",tEndVideoGen)
     

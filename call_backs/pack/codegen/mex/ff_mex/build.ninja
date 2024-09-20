@@ -1,0 +1,95 @@
+# CompilerName=msvc160
+# Mode=optim
+ninja_required_version = 1.3
+
+# Basic folders
+root = .
+builddir = $root\build\win64
+matlabdir = C:\Program Files\MATLAB\R2022b
+startdir = C:\Users\Vladikavkaz\Documents\MATLAB\HoloDoppler\call_backs\pack
+
+# Toolchain information
+cc = cl
+cxx = cl
+linker = link
+linkerxx = link
+
+cflags =  /c /Zc:__cplusplus /Zp8 /GR /W3 /EHs /nologo /MD /D_CRT_SECURE_NO_DEPRECATE /D_SCL_SECURE_NO_DEPRECATE /D_SECURE_SCL=0   /DMATLAB_MEX_FILE  /DMATLAB_MEX_FILE /O2 /Oy- /DNDEBUG /fp:strict /utf-8 /I "$root" /I "$startdir" /I "$matlabdir\extern\include" /I "$root\interface" /I "." -DHAVE_LAPACK_CONFIG_H -DLAPACK_COMPLEX_STRUCTURE -DMW_HAVE_LAPACK_DECLS -DMODEL=ff_mex /openmp /wd4101 
+
+cxxflags =   /c /Zc:__cplusplus /Zp8 /GR /W3 /EHs /nologo /MD /D_CRT_SECURE_NO_DEPRECATE /D_SCL_SECURE_NO_DEPRECATE /D_SECURE_SCL=0   /DMATLAB_MEX_FILE  /DMATLAB_MEX_FILE /O2 /Oy- /DNDEBUG /fp:strict /utf-8 /I "$root" /I "$startdir" /I "$matlabdir\extern\include" /I "$root\interface" /I "." -DHAVE_LAPACK_CONFIG_H -DLAPACK_COMPLEX_STRUCTURE -DMW_HAVE_LAPACK_DECLS -DMODEL=ff_mex /openmp /wd4101 
+
+ldflags =  /nologo /manifest   /DLL /LIBPATH:"$matlabdir\extern\lib\win64\microsoft" libmx.lib libmex.lib libmat.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib  /out:"ff_mex.mexw64" /LIBPATH:"$matlabdir\extern\lib\win64\microsoft" libmwlapack.lib libmwblas.lib libemlrt.lib libcovrt.lib libut.lib libmwmathutil.lib libiomp5md.lib /nodefaultlib:vcomp /LIBPATH:"$matlabdir\bin\win64" /export:mexFunction /export:mexfilerequiredapiversion /export:emlrtMexFcnProperties /export:ff /export:m0 /export:m1 /export:m2 /export:ri /export:sf /export:sfx /export:ff_mex_initialize /export:ff_mex_terminate /export:ff_mex_atexit /export:emxEnsureCapacity_int16_T /export:emxFree_int16_T /export:emxInit_int16_T /export:emxEnsureCapacity_boolean_T /export:emxEnsureCapacity_int32_T /export:emxFree_int32_T /export:emxFree_boolean_T /export:emxInit_boolean_T /export:emxInit_int32_T /export:emxFree_real32_T /export:emxInit_real32_T /export:emxEnsureCapacity_real32_T /export:emxEnsureCapacity_real_T /export:emxFree_real_T /export:emxInit_real_T /export:emxFree_creal32_T /export:emxInit_creal32_T /export:emxEnsureCapacity_creal32_T
+
+linkobjs =  "$matlabdir\extern\lib\win64\microsoft\libmwippfilter.lib" "$matlabdir\extern\lib\win64\microsoft\libmwimfilter.lib"
+
+# Build Rules
+rule cc
+    command = $cc $cflags $in /Fo$out
+
+rule cxx
+    command = $cxx $cxxflags $in /Fo$out
+
+rule link
+    command = $linker @$out.rsp $linkobjs $ldflags
+    rspfile = $out.rsp
+    rspfile_content = $in
+
+rule linkxx
+    command = $linkerxx $in $linkobjs $ldflags
+
+# Build
+build $builddir\ff_mex_data.obj : cc $root\ff_mex_data.c
+build $builddir\rt_nonfinite.obj : cc $root\rt_nonfinite.c
+build $builddir\ff_mex_initialize.obj : cc $root\ff_mex_initialize.c
+build $builddir\ff_mex_terminate.obj : cc $root\ff_mex_terminate.c
+build $builddir\ff.obj : cc $root\ff.c
+build $builddir\applyToMultipleDims.obj : cc $root\applyToMultipleDims.c
+build $builddir\permute.obj : cc $root\permute.c
+build $builddir\imgaussfilt.obj : cc $root\imgaussfilt.c
+build $builddir\colon.obj : cc $root\colon.c
+build $builddir\all.obj : cc $root\all.c
+build $builddir\svd.obj : cc $root\svd.c
+build $builddir\svd1.obj : cc $root\svd1.c
+build $builddir\diag.obj : cc $root\diag.c
+build $builddir\combineVectorElements.obj : cc $root\combineVectorElements.c
+build $builddir\imfilter.obj : cc $root\imfilter.c
+build $builddir\indexShapeCheck.obj : cc $root\indexShapeCheck.c
+build $builddir\assertCompatibleDims.obj : cc $root\assertCompatibleDims.c
+build $builddir\m0.obj : cc $root\m0.c
+build $builddir\sum.obj : cc $root\sum.c
+build $builddir\blockedSummation.obj : cc $root\blockedSummation.c
+build $builddir\m1.obj : cc $root\m1.c
+build $builddir\assertValidSizeArg.obj : cc $root\assertValidSizeArg.c
+build $builddir\m2.obj : cc $root\m2.c
+build $builddir\abs.obj : cc $root\abs.c
+build $builddir\ri.obj : cc $root\ri.c
+build $builddir\ifft2.obj : cc $root\ifft2.c
+build $builddir\eml_mtimes_helper.obj : cc $root\eml_mtimes_helper.c
+build $builddir\mtimes.obj : cc $root\mtimes.c
+build $builddir\eig.obj : cc $root\eig.c
+build $builddir\anyNonFinite.obj : cc $root\anyNonFinite.c
+build $builddir\schur.obj : cc $root\schur.c
+build $builddir\warning.obj : cc $root\warning.c
+build $builddir\xgeev.obj : cc $root\xgeev.c
+build $builddir\sortLE.obj : cc $root\sortLE.c
+build $builddir\linspace.obj : cc $root\linspace.c
+build $builddir\_coder_ff_mex_api.obj : cc $root\interface\_coder_ff_mex_api.c
+build $builddir\_coder_ff_mex_mex.obj : cc $root\interface\_coder_ff_mex_mex.c
+build $builddir\sumMatrixIncludeNaN.obj : cc $root\sumMatrixIncludeNaN.c
+build $builddir\eml_int_forloop_overflow_check.obj : cc $root\eml_int_forloop_overflow_check.c
+build $builddir\squeeze.obj : cc $root\squeeze.c
+build $builddir\fftshift.obj : cc $root\fftshift.c
+build $builddir\sf.obj : cc $root\sf.c
+build $builddir\xgehrd.obj : cc $root\xgehrd.c
+build $builddir\xungorghr.obj : cc $root\xungorghr.c
+build $builddir\xhseqr.obj : cc $root\xhseqr.c
+build $builddir\sort.obj : cc $root\sort.c
+build $builddir\sfx.obj : cc $root\sfx.c
+build $builddir\div.obj : cc $root\div.c
+build $builddir\createGaussianKernel.obj : cc $root\createGaussianKernel.c
+build $builddir\ff_mex_emxutil.obj : cc $root\ff_mex_emxutil.c
+build $builddir\_coder_ff_mex_info.obj : cc $root\interface\_coder_ff_mex_info.c
+build $builddir\c_mexapi_version.obj : cc $matlabdir\extern\version\c_mexapi_version.c
+
+# Link
+build $root\ff_mex.mexw64 : link $builddir\ff_mex_data.obj $builddir\rt_nonfinite.obj $builddir\ff_mex_initialize.obj $builddir\ff_mex_terminate.obj $builddir\ff.obj $builddir\applyToMultipleDims.obj $builddir\permute.obj $builddir\imgaussfilt.obj $builddir\colon.obj $builddir\all.obj $builddir\svd.obj $builddir\svd1.obj $builddir\diag.obj $builddir\combineVectorElements.obj $builddir\imfilter.obj $builddir\indexShapeCheck.obj $builddir\assertCompatibleDims.obj $builddir\m0.obj $builddir\sum.obj $builddir\blockedSummation.obj $builddir\m1.obj $builddir\assertValidSizeArg.obj $builddir\m2.obj $builddir\abs.obj $builddir\ri.obj $builddir\ifft2.obj $builddir\eml_mtimes_helper.obj $builddir\mtimes.obj $builddir\eig.obj $builddir\anyNonFinite.obj $builddir\schur.obj $builddir\warning.obj $builddir\xgeev.obj $builddir\sortLE.obj $builddir\linspace.obj $builddir\_coder_ff_mex_api.obj $builddir\_coder_ff_mex_mex.obj $builddir\sumMatrixIncludeNaN.obj $builddir\eml_int_forloop_overflow_check.obj $builddir\squeeze.obj $builddir\fftshift.obj $builddir\sf.obj $builddir\xgehrd.obj $builddir\xungorghr.obj $builddir\xhseqr.obj $builddir\sort.obj $builddir\sfx.obj $builddir\div.obj $builddir\createGaussianKernel.obj $builddir\ff_mex_emxutil.obj $builddir\_coder_ff_mex_info.obj $builddir\c_mexapi_version.obj 
