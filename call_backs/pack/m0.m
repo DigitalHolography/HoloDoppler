@@ -17,5 +17,5 @@ moment = ff(moment, gw);
 end 
 
 
-M0 = gather(moment);
+M0 = (moment);
 end
