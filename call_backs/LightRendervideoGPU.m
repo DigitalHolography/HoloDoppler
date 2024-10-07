@@ -81,7 +81,7 @@ function LightRendervideoGPU(app)
     local_registration_disc_ratio = app.cache.registration_disc_ratio;
     local_position_in_file = app.cache.position_in_file;
         
-    switch app.cache.spatialTransformation
+    switch local_spatialTransformation
         case 'angular spectrum'
             local_kernel = gpuArray(app.kernelAngularSpectrum);  % propagation kernel initialization
         case 'Fresnel'
@@ -132,32 +132,58 @@ function LightRendervideoGPU(app)
     send(D,-2); % display 'video construction' on progress bar
     fprintf("Parfor loop: %u workers\n",parfor_arg)
     tParfor = tic;
-
-    for batch_mult = 1:floor(local_num_batches/parfor_arg) % skips the end (remainder frames)
-        for slice = 1:parfor_arg
-        
-            batch_idx = (batch_mult-1)*parfor_arg + slice;
-            frame_batch = gpuArray(istream.read_frame_batch(j_win, (min(batch_idx,local_num_batches) - 1) * j_step));
-            SH = rifsf(frame_batch,local_kernel,localSVDThresholdValue);
-            %SH = ri(frame_batch,local_spatialTransformation,local_kernel,local_svd,local_SVDx,localSVDThresholdValue,0);
-    
-            %% permute related to acquisition optical inversion of the image
-            SH = permute(SH, [2 1 3]);
-            M0{slice} = m0(SH, local_f1, local_f2, local_fs, j_win, local_blur); % with flatfield of gaussian_width applied
-            moment0{slice} = m0(SH, local_f1, local_f2, local_fs, j_win, 0); % no flatfield : raw
-            moment1{slice} = m1(SH, local_f1, local_f2, local_fs, j_win, 0);
-            moment2{slice} = m2(SH, local_f1, local_f2, local_fs, j_win, 0);
-        
-            send(D, 0);
-        end
-        for slice = 1:parfor_arg
-            batch_idx = (batch_mult-1)*parfor_arg + slice;
-            video_M0(:,:,:,batch_idx) = gather(M0{slice});
-            video_moment0(:,:,:,batch_idx) = gather(moment0{slice});
-            video_moment1(:,:,:,batch_idx) = gather(moment1{slice});
-            video_moment2(:,:,:,batch_idx) = gather(moment2{slice});
-        end
+    switch local_spatialTransformation
+        case 'angular spectrum'
+            for batch_mult = 1:floor(local_num_batches/parfor_arg) % skips the end (remainder frames)
+                for slice = 1:parfor_arg
+                
+                    batch_idx = (batch_mult-1)*parfor_arg + slice;
+                    frame_batch = gpuArray(istream.read_frame_batch(j_win, (min(batch_idx,local_num_batches) - 1) * j_step));
+                    SH = riassf(frame_batch,local_kernel,localSVDThresholdValue);            
+                    %% permute related to acquisition optical inversion of the image
+                    SH = permute(SH, [2 1 3]);
+                    M0{slice} = m0(SH, local_f1, local_f2, local_fs, j_win, local_blur); % with flatfield of gaussian_width applied
+                    moment0{slice} = m0(SH, local_f1, local_f2, local_fs, j_win, 0); % no flatfield : raw
+                    moment1{slice} = m1(SH, local_f1, local_f2, local_fs, j_win, 0);
+                    moment2{slice} = m2(SH, local_f1, local_f2, local_fs, j_win, 0);
+                
+                    send(D, 0);
+                end
+                for slice = 1:parfor_arg
+                    batch_idx = (batch_mult-1)*parfor_arg + slice;
+                    video_M0(:,:,:,batch_idx) = gather(M0{slice});
+                    video_moment0(:,:,:,batch_idx) = gather(moment0{slice});
+                    video_moment1(:,:,:,batch_idx) = gather(moment1{slice});
+                    video_moment2(:,:,:,batch_idx) = gather(moment2{slice});
+                end
+            end
+        case 'Fresnel'
+            for batch_mult = 1:floor(local_num_batches/parfor_arg) % skips the end (remainder frames)
+                for slice = 1:parfor_arg
+                
+                    batch_idx = (batch_mult-1)*parfor_arg + slice;
+                    frame_batch = gpuArray(istream.read_frame_batch(j_win, (min(batch_idx,local_num_batches) - 1) * j_step));
+                    SH = rifsf(frame_batch,local_kernel,localSVDThresholdValue);
+            
+                    %% permute related to acquisition optical inversion of the image
+                    SH = permute(SH, [2 1 3]);
+                    M0{slice} = m0(SH, local_f1, local_f2, local_fs, j_win, local_blur); % with flatfield of gaussian_width applied
+                    moment0{slice} = m0(SH, local_f1, local_f2, local_fs, j_win, 0); % no flatfield : raw
+                    moment1{slice} = m1(SH, local_f1, local_f2, local_fs, j_win, 0);
+                    moment2{slice} = m2(SH, local_f1, local_f2, local_fs, j_win, 0);
+                
+                    send(D, 0);
+                end
+                for slice = 1:parfor_arg
+                    batch_idx = (batch_mult-1)*parfor_arg + slice;
+                    video_M0(:,:,:,batch_idx) = gather(M0{slice});
+                    video_moment0(:,:,:,batch_idx) = gather(moment0{slice});
+                    video_moment1(:,:,:,batch_idx) = gather(moment1{slice});
+                    video_moment2(:,:,:,batch_idx) = gather(moment2{slice});
+                end
+            end
     end
+    
     
     local_kernel = gather(local_kernel);
     reset(gpuDevice); % free GPU memory allocated with GPUArray
