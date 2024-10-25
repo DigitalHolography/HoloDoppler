@@ -4,7 +4,7 @@ output_filename = sprintf('%s_%s.%s', output_dirname, 'registration_columns', 'a
 v = VideoWriter(fullfile(output_dirpath,'avi',output_filename));
 open(v)
 figure(56);
-aa = [1,size(video_M0_reg,4),min(mean(video_M0_reg(:,:,:),1),[],'all'),max(mean(video_M0_reg(:,:,:),1),[],'all')];
+aa = [1,size(video_M0_reg,1),min(mean(video_M0_reg(:,:,:),1),[],'all'),max(mean(video_M0_reg(:,:,:),1),[],'all')];
 
 for i=1:size(video_M0_reg,4)
     

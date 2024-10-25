@@ -128,59 +128,48 @@ function LightRendervideoGPU(app)
     if ~localSVDThreshold
         localSVDThresholdValue = round(local_f1 * j_win / local_fs)*2 + 1; % default value if none specified
     end
+
+    
     
     send(D,-2); % display 'video construction' on progress bar
     fprintf("Parfor loop: %u workers\n",parfor_arg)
     tParfor = tic;
+    
     switch local_spatialTransformation
         case 'angular spectrum'
-            for batch_mult = 1:floor(local_num_batches/parfor_arg) % skips the end (remainder frames)
-                for slice = 1:parfor_arg
-                
-                    batch_idx = (batch_mult-1)*parfor_arg + slice;
-                    frame_batch = gpuArray(istream.read_frame_batch(j_win, (min(batch_idx,local_num_batches) - 1) * j_step));
-                    SH = riassf(frame_batch,local_kernel,localSVDThresholdValue);            
-                    %% permute related to acquisition optical inversion of the image
-                    SH = permute(SH, [2 1 3]);
-                    M0{slice} = m0(SH, local_f1, local_f2, local_fs, j_win, local_blur); % with flatfield of gaussian_width applied
-                    moment0{slice} = m0(SH, local_f1, local_f2, local_fs, j_win, 0); % no flatfield : raw
-                    moment1{slice} = m1(SH, local_f1, local_f2, local_fs, j_win, 0);
-                    moment2{slice} = m2(SH, local_f1, local_f2, local_fs, j_win, 0);
-                
-                    send(D, 0);
-                end
-                for slice = 1:parfor_arg
-                    batch_idx = (batch_mult-1)*parfor_arg + slice;
-                    video_M0(:,:,:,batch_idx) = gather(M0{slice});
-                    video_moment0(:,:,:,batch_idx) = gather(moment0{slice});
-                    video_moment1(:,:,:,batch_idx) = gather(moment1{slice});
-                    video_moment2(:,:,:,batch_idx) = gather(moment2{slice});
-                end
+            for batch_idx = 1:local_num_batches 
+                frame_batch = gpuArray(istream.read_frame_batch(j_win, (min(batch_idx,local_num_batches) - 1) * j_step));
+                SH = riassf(frame_batch,local_kernel,localSVDThresholdValue);            
+                %% permute related to acquisition optical inversion of the image
+                SH = permute(SH, [2 1 3]);
+                M0 = m0(SH, local_f1, local_f2, local_fs, j_win, local_blur); % with flatfield of gaussian_width applied
+                moment0 = m0(SH, local_f1, local_f2, local_fs, j_win, 0); % no flatfield : raw
+                moment1 = m1(SH, local_f1, local_f2, local_fs, j_win, 0);
+                moment2 = m2(SH, local_f1, local_f2, local_fs, j_win, 0);
+            
+                send(D, 0);
+                video_M0(:,:,:,batch_idx) = gather(M0);
+                video_moment0(:,:,:,batch_idx) = gather(moment0);
+                video_moment1(:,:,:,batch_idx) = gather(moment1);
+                video_moment2(:,:,:,batch_idx) = gather(moment2);
             end
         case 'Fresnel'
-            for batch_mult = 1:floor(local_num_batches/parfor_arg) % skips the end (remainder frames)
-                for slice = 1:parfor_arg
-                
-                    batch_idx = (batch_mult-1)*parfor_arg + slice;
-                    frame_batch = gpuArray(istream.read_frame_batch(j_win, (min(batch_idx,local_num_batches) - 1) * j_step));
-                    SH = rifsf(frame_batch,local_kernel,localSVDThresholdValue);
+            for batch_idx = 1:local_num_batches 
+                frame_batch = gpuArray(istream.read_frame_batch(j_win, (min(batch_idx,local_num_batches) - 1) * j_step));
+                SH = rifsf(frame_batch,local_kernel,localSVDThresholdValue);
+        
+                %% permute related to acquisition optical inversion of the image
+                SH = permute(SH, [2 1 3]);
+                M0 = m0(SH, local_f1, local_f2, local_fs, j_win, local_blur); % with flatfield of gaussian_width applied
+                moment0 = m0(SH, local_f1, local_f2, local_fs, j_win, 0); % no flatfield : raw
+                moment1 = m1(SH, local_f1, local_f2, local_fs, j_win, 0);
+                moment2 = m2(SH, local_f1, local_f2, local_fs, j_win, 0);
             
-                    %% permute related to acquisition optical inversion of the image
-                    SH = permute(SH, [2 1 3]);
-                    M0{slice} = m0(SH, local_f1, local_f2, local_fs, j_win, local_blur); % with flatfield of gaussian_width applied
-                    moment0{slice} = m0(SH, local_f1, local_f2, local_fs, j_win, 0); % no flatfield : raw
-                    moment1{slice} = m1(SH, local_f1, local_f2, local_fs, j_win, 0);
-                    moment2{slice} = m2(SH, local_f1, local_f2, local_fs, j_win, 0);
-                
-                    send(D, 0);
-                end
-                for slice = 1:parfor_arg
-                    batch_idx = (batch_mult-1)*parfor_arg + slice;
-                    video_M0(:,:,:,batch_idx) = gather(M0{slice});
-                    video_moment0(:,:,:,batch_idx) = gather(moment0{slice});
-                    video_moment1(:,:,:,batch_idx) = gather(moment1{slice});
-                    video_moment2(:,:,:,batch_idx) = gather(moment2{slice});
-                end
+                send(D, 0); 
+                video_M0(:,:,:,batch_idx) = gather(M0);
+                video_moment0(:,:,:,batch_idx) = gather(moment0);
+                video_moment1(:,:,:,batch_idx) = gather(moment1);
+                video_moment2(:,:,:,batch_idx) = gather(moment2);
             end
     end
     
@@ -263,7 +252,7 @@ function LightRendervideoGPU(app)
     tVideoGen = tic;
     % FIXME add 'or' statement
     % add colors to M0_registration
-    video_M0_reg = cat(3,rescale(video_M0_reg),repmat(rescale(reg_hologram),[1,1,1,size(video_M0,4)]),rescale(video_M0(:,:,1,:))); % new in red, ref in green, old in blue
+    video_M0_reg = cat(3,rescale(video_M0_reg),repmat(rescale(reg_hologram),[1,1,1,size(video_M0,4)]),rescale(video_M0(:,:,1,:))); % new in red, ref in green
     generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, 0, 0, true);
     generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, 0, 0, true);
     generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, 0, true, true);
