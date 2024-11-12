@@ -150,19 +150,34 @@ app.num_batches.Text = sprintf("/ %d", app.interferogram_stream.num_frames);
 %  cache structure is different and cannot be loaded
 try
     [previous_cache, cache_found] = fetch_cache(app.filepath, app.filename, ext);
-catch
+catch ME
     % the directory is present but is missing files or contains
     % corrupt data
+
+    fprintf("==============================\nERROR\n==============================\n")
     previous_cache = [];
     cache_found = false;
+    disp('Error Message:')
+    disp(ME.message)
+    for i = 1:numel(ME.stack)
+        fprintf('%s : %s, line : %d \n',ME.stack(i).file, ME.stack(i).name, ME.stack(i).line);
+    end
 end
 
 try
     [app.image_registration, ~] = fetch_image_registration(app.filepath, app.filename, ext);
-catch
+catch ME
     % the directory is present but is missing files or contains
     % corrupt data
+
     app.image_registration = [];
+
+    fprintf("==============================\nERROR\n==============================\n")
+    disp('Error Message:')
+    disp(ME.message)
+    for i = 1:numel(ME.stack)
+        fprintf('%s : %s, line : %d \n',ME.stack(i).file, ME.stack(i).name, ME.stack(i).line);
+    end
 end
 
 if ~isempty(config)
@@ -182,9 +197,16 @@ end
 
 try
     [previous_rephasing_data, rephasing_found] = fetch_rephasing_data(app.filepath, app.filename, ext);
-catch
+catch ME
     previous_rephasing_data = [];
     rephasing_found = false;
+
+    fprintf("==============================\nERROR\n==============================\n")
+    disp('Error Message:')
+    disp(ME.message)
+    for i = 1:numel(ME.stack)
+        fprintf('%s : %s, line : %d \n',ME.stack(i).file, ME.stack(i).name, ME.stack(i).line);
+    end
 end
 
 if rephasing_found

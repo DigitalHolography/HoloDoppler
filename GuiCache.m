@@ -508,7 +508,7 @@ classdef GuiCache
             end
 
             try
-                app.minSubAp_PCAEditField_2.Value = obj.minSubAp_PCA;
+                app.minSubAp_PCAEditField.Value = obj.minSubAp_PCA;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)
@@ -518,7 +518,7 @@ classdef GuiCache
             end
 
             try
-                app.maxSubAp_PCAEditField_2.Value = obj.maxSubAp_PCA;
+                app.maxSubAp_PCAEditField.Value = obj.maxSubAp_PCA;
             catch ME
                 disp('Error Message:')
                 disp(ME.message)

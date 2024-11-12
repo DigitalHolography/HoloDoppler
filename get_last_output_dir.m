@@ -3,33 +3,24 @@ function [found_dir, found] = get_last_output_dir(filepath, filename, file_ext)
 % cine file_M0. If no such directory exists, found is set to
 % false.
 
-folder_info = dir(filepath);
-directory_list = folder_info([folder_info.isdir]);
-
 dir_name_stem = strrep(filename, file_ext, '');
-
-selected_dir = [];
-found = false;
-for i = 1:numel(directory_list)
-    d = directory_list(i).name;
-    if contains(d, dir_name_stem)
-        found = true;
-        if isempty(selected_dir)
-            selected_dir = d;
-        else
-            parts = split(d, '_');
-            number = parts(end);
-            number = str2num(cell2mat(number));
-            parts = split(selected_dir, '_');
-            old_number = parts(end);
-            old_number = str2num(cell2mat(old_number));
-
-            if number > old_number
-                selected_dir = d;
-            end
+list_dir = dir(filepath);
+idx = 0;
+for ii = 1:length(list_dir)
+    if contains(list_dir(ii).name, dir_name_stem)
+        match = regexp(list_dir(ii).name, '\d+$', 'match');
+        if ~isempty(match) && str2double(match{1}) >= idx
+            idx = str2double(match{1}) + 1; %suffix
         end
     end
 end
 
-found_dir = selected_dir;
+if idx == 0
+    found = 0;
+    found_dir = [];
+else
+    found = 1;
+    found_dir = sprintf('%s_HD_%d', dir_name_stem, idx-1);
+end
+
 end
