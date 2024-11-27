@@ -95,7 +95,11 @@ function Show_spectrum(app)
     % [X,Y]=meshgrid(((1:app.Nx) - round(app.Nx/2))*2/app.Nx,((1:app.Ny) - round(app.Ny/2))*2/app.Nx);
     % circle = X.^2+Y.^2<0.5;
     % imshow(circle);
-    circle = single(ones([app.Nx, app.Ny]));
+    if ~isempty(app.mask)
+        circle = app.mask;
+    else
+        circle = ones([app.Ny,app.Nx]);
+    end
     spectrum = squeeze(sum(SH .* circle, [1, 2]) / nnz(circle)); % The full spectrum of the power doppler image
 
     j_win = size(app.frame_batch, 3);
@@ -110,7 +114,7 @@ function Show_spectrum(app)
     lorentzEqn = @(a, b, x) ...
         10 * log(1 ./ ((1 + abs(x / a) .^ b)) / sum(1 ./ ((1 + abs(fullfreq(~exclude) / a) .^ b))));
     l = fittype(lorentzEqn);
-    f = fit(x', double(y), l, Exclude = exclude);
+    f = fit(x', double(y), l);
 
     plot(x / 1000, double(y), 'k-', 'LineWidth', 2); hold on; plot(x / 1000, feval(f, x), 'k--', 'LineWidth', 2); hold on; % plot(x,1/pi*(1/2*1)./(x.^2+(1/2*1)^2)*50e9) ;hold on
     xline(time_transform.f1, 'k--', 'LineWidth', 2)

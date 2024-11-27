@@ -22,6 +22,11 @@ image = mat2gray(sign * app.hologram);
 if (size(image, 3) == 1)
     image = repmat(image, 1, 1, 3);
 end
+if ~isempty(app.mask)
+    image(:,:,1) = 2*app.mask .* image(:,:,3)+ ~app.mask.*image(:,:,3);
+    image(:,:,2) = 2*app.mask .* image(:,:,3)+ ~app.mask.*image(:,:,3);
+    image(:,:,3) = 2*app.mask .* image(:,:,3)+ ~app.mask.*image(:,:,3);
+end
 app.ImageLeft.ImageSource = image;
 app.renderLamp.Color = [0, 1, 0];
 end
