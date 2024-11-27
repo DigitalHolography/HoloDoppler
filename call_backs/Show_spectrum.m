@@ -114,9 +114,9 @@ function Show_spectrum(app)
     lorentzEqn = @(a, b, x) ...
         10 * log(1 ./ ((1 + abs(x / a) .^ b)) / sum(1 ./ ((1 + abs(fullfreq(~exclude) / a) .^ b))));
     l = fittype(lorentzEqn);
-    f = fit(x', double(y), l);
+    try f = fit(x', double(y), l);catch disp('Error fitting'); f.a='x';f.b='x';end
 
-    plot(x / 1000, double(y), 'k-', 'LineWidth', 2); hold on; plot(x / 1000, feval(f, x), 'k--', 'LineWidth', 2); hold on; % plot(x,1/pi*(1/2*1)./(x.^2+(1/2*1)^2)*50e9) ;hold on
+    plot(x / 1000, double(y), 'k-', 'LineWidth', 2); hold on; try plot(x / 1000, feval(f, x), 'k--', 'LineWidth', 2); hold on;end % plot(x,1/pi*(1/2*1)./(x.^2+(1/2*1)^2)*50e9) ;hold on
     xline(time_transform.f1, 'k--', 'LineWidth', 2)
     xline(time_transform.f2, 'k--', 'LineWidth', 2)
     xline(-time_transform.f1, 'k--', 'LineWidth', 2)
