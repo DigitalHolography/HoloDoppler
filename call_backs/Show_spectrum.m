@@ -96,7 +96,7 @@ function Show_spectrum(app)
     % circle = X.^2+Y.^2<0.5;
     % imshow(circle);
     if ~isempty(app.mask)
-        circle = app.mask;
+        circle = imrotate(app.mask,90);
     else
         circle = ones([app.Ny,app.Nx]);
     end
@@ -131,22 +131,72 @@ function Show_spectrum(app)
     set(gca, 'LineWidth', 2);
     axis tight;
     axis padded;
-    figure(58)
-    spectrum_angle = squeeze(sum(SH_angle .* circle, [1, 2]) / nnz(circle));
+    % figure(58)
+    % spectrum_angle = squeeze(sum(SH_angle .* circle, [1, 2]) / nnz(circle));
+    % 
+    % plot(fullfreq / 1000, 180 / pi * fftshift(spectrum_angle), 'k-', 'LineWidth', 2)
+    % hold on
+    % xline(time_transform.f1, 'k--', 'LineWidth', 2)
+    % xline(time_transform.f2, 'k--', 'LineWidth', 2)
+    % xline(-time_transform.f1, 'k--', 'LineWidth', 2)
+    % xline(-time_transform.f2, 'k--', 'LineWidth', 2)
+    % hold off
+    % title('Spectrum');
+    % fontsize(gca, 14, "points");
+    % xlabel("Frequency (kHz)", 'FontSize', 14);
+    % ylabel("arg(S(f)) (°)", 'FontSize', 14);
+    % pbaspect([1.618 1 1]);
+    % set(gca, 'LineWidth', 2);
+    % axis tight;
 
-    plot(fullfreq / 1000, 180 / pi * fftshift(spectrum_angle), 'k-', 'LineWidth', 2)
-    hold on
-    xline(time_transform.f1, 'k--', 'LineWidth', 2)
-    xline(time_transform.f2, 'k--', 'LineWidth', 2)
-    xline(-time_transform.f1, 'k--', 'LineWidth', 2)
-    xline(-time_transform.f2, 'k--', 'LineWidth', 2)
-    hold off
-    title('Spectrum');
-    fontsize(gca, 14, "points");
-    xlabel("Frequency (kHz)", 'FontSize', 14);
-    ylabel("arg(S(f)) (°)", 'FontSize', 14);
-    pbaspect([1.618 1 1]);
-    set(gca, 'LineWidth', 2);
-    axis tight;
+    [~,filename,file_ext] = fileparts(app.filename);
+    [found_dir, found] = get_last_output_dir(app.filepath, filename, file_ext);
+    if found
+        if isfolder(fullfile(app.filepath,found_dir,'pulsewave','mask'))
+            if exist(fullfile(app.filepath,found_dir,'pulsewave','mask','forceMaskArtery.png'))
+                disp('found artery mask')
+                maskArtery = mat2gray(mean(imread(fullfile(app.filepath,found_dir,'pulsewave','mask','forceMaskArtery.png')), 3)) > 0;
+                maskArtery = imrotate(maskArtery,-90);
+            elseif ~isempty(app.mask)
+                maskArtery = imrotate(app.mask,-90);
+            end
+           
+                
+                maskArtery = imresize(maskArtery,[app.Ny,app.Nx])>0;
+                % maskNeighbors = imresize(maskNeighbors,[app.Ny,app.Nx])>0;
+                maskNeighbors = imdilate(maskArtery, strel('disk', 4)) - imdilate(maskArtery, strel('disk', 1)); %PW_params.local_background_width = 2
+
+                figure(59)
+
+                spectruma = squeeze(sum(SH .* maskArtery, [1, 2]) / nnz(maskArtery));
+                spectrumb = squeeze(sum(SH .* maskNeighbors, [1, 2]) / nnz(maskNeighbors));
+                plot(fullfreq / 1000, 10*log10(fftshift(spectruma)), 'r-', 'LineWidth', 1); hold on;
+                plot(fullfreq / 1000, 10*log10(fftshift(spectrumb)), 'k-', 'LineWidth', 1); 
+                xline(time_transform.f1, 'k--', 'LineWidth', 1)
+                xline(time_transform.f2, 'k--', 'LineWidth', 1)
+                xline(-time_transform.f1, 'k--', 'LineWidth', 1)
+                xline(-time_transform.f2, 'k--', 'LineWidth', 1)
+                hold off
+                legend('artery', 'neighbors');
+                title('Spectrum');
+                fontsize(gca, 14, "points");
+                xlabel("Frequency (kHz)", 'FontSize', 14);
+                ylabel("S(f) (dB)", 'FontSize', 14);
+                pbaspect([1.618 1 1]);
+                set(gca, 'LineWidth', 2);
+                axis tight;
+                axis padded;
+
+                figure(60)
+                indxs = fftshift(abs(fullfreq) > time_transform.f1);
+                IM0 = rescale(sum(SH(:,:,indxs),3));
+                IM0 = repmat(IM0,1,1,3);
+                IM0(:,:,1) = maskArtery+ ~(maskArtery|maskNeighbors).*IM0(:,:,1);
+                IM0(:,:,2) = maskNeighbors+ ~(maskArtery|maskNeighbors).*IM0(:,:,1);
+                imshow(IM0);
+                axis image;
+        end
+
+    end
 
 end

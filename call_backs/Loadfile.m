@@ -185,7 +185,7 @@ if ~isempty(config)
     % app.outputVideo();
     % app.TimeTransform();
 elseif cache_found
-    previous_cache.load2Gui(app);
+    previous_cache.cache.load2Gui(app);
     % app.outputVideo();
     % app.TimeTransform();
 else
