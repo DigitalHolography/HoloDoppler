@@ -948,12 +948,9 @@ else % ~local_low_memory
             end
             
             % generate additional images
-            if local_low_frequency
-                [color_img, img_low_freq, img_high_freq] = construct_colored_image(video_M_freq_high, video_M_freq_low, true);
-            else
-                [color_img, img_low_freq, img_high_freq] = construct_colored_image(video_M_freq_low, video_M_freq_high, false);
-            end
-            
+
+            [color_img, img_low_freq, img_high_freq] = construct_colored_image(video_M_freq_low, video_M_freq_high);
+
             % convert spectrogram_matrix_video to one spectrogram
             %                     spectrogram_matrix_video = squeeze(spectrogram_matrix_video(:,:,:,1));%reshape(spectrogram_matrix_video, app.Nx, app.Ny, j_win * local_num_batches);
             %                     S_video = (fft(spectrogram_matrix_video, [], 3));

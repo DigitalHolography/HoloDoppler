@@ -251,7 +251,7 @@ classdef ImageTypeList < handle % This class is modified dynamically
             [freq_low, freq_high] = composite(SH, color_f1, color_f2, color_f3, ac.fs, j_win, gaussian_width);
             obj.color_Doppler.parameters.freq_low = freq_low;
             obj.color_Doppler.parameters.freq_high = freq_high;
-            obj.color_Doppler.image = construct_colored_image(sign * gather(freq_low), sign * gather(freq_high), is_low_frequency);
+            obj.color_Doppler.image = construct_colored_image(sign * gather(freq_low), sign * gather(freq_high));
         end
         
         if obj.directional_Doppler.is_selected % Directional Doppler has been chosen
