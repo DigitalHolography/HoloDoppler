@@ -1005,6 +1005,12 @@ for freq_idx = 1:num_F
 end
 fclose(fileID);
 
+imageChoroid = zeros(numX, numY, 3);
+imageChoroid(:,:,1) = mean(images_choroid(:, :, :, :, 1), 4);
+imageChoroid(:,:,2) = mean(images_choroid(:, :, :, :, end), 4);
+imageChoroid(:,:,3) = mean(images_choroid(:, :, :, :, end), 4);
+imwrite(imageChoroid, fullfile(output_dirpath,'png', 'ColorFrequency.png'))
+
 % add computed correction to rephasing data
 new_rephasing_data = RephasingData(app.cache.batch_size, app.cache.batch_stride, aberration_correction);
 new_rephasing_data = new_rephasing_data.compute_frame_ranges();
@@ -1017,7 +1023,7 @@ rephasing_data = [local_rephasing_data new_rephasing_data];
 mat_filename = sprintf('%s.mat', output_dirname);
 cache = app.cache;
 
-if exist(fullfile(output_dirpath, 'mat'), 'dir')
+if isfolder(fullfile(output_dirpath, 'mat'))
     output_dirpath_mat = fullfile(output_dirpath, 'mat');
 else
     output_dirpath_mat = output_dirpath;
@@ -1053,15 +1059,6 @@ save(fullfile(output_dirpath_mat, mat_filename), 'image_registration', '-append'
 if app.cache.rephasing
     save(fullfile(output_dirpath_mat, mat_filename), 'rephasing_data', '-append');
 end
-
-% save(fullfile(output_dirpath, mat_filename), 'cache');
-%
-% save(fullfile(output_dirpath, mat_filename), 'aberration_correction', '-append');
-% save(fullfile(output_dirpath, mat_filename), 'image_registration', '-append');
-%
-% if app.cache.rephasing
-%     save(fullfile(output_dirpath, mat_filename), 'rephasing_data', '-append');
-% end
 
 %%Saving of power data for normalization, PNG/VIDEO & TXT files %%
 %PNG/VIDEO%
