@@ -943,15 +943,18 @@ end
 
 numX = size(images_choroid, 1);
 numY = size(images_choroid, 2);
+[X, Y] = meshgrid(1:X, 1:Y);
+L = (numX + numY) / 2;
 mkdir(fullfile(output_dirpath, 'txt'));
 fileID = fopen(fullfile(output_dirpath, 'txt', 'intervals.txt'),'w');
 
 meanIm = mean(images_choroid(:, :, :, :, freq_idx), [3 4]);
+maskDiaphragm = ((X-numX/2)^2 + (Y-numY/2)^2) < L * 0.4;
 T = graythresh(meanIm);
 for freq_idx = 1:num_F
     meanIm = mean(images_choroid(:, :, :, :, freq_idx), [3 4]);
     binIm = imbinarize(meanIm, T);
-    fprintf(fileID, "Interval %d: %0.2d%%\n", freq_idx, 100 * nnz(binIm) / (numX * numY));
+    fprintf(fileID, "Interval %d: %0.2d%%\n", freq_idx, 100 * nnz(binIm .* maskDiaphragm) / (nnz(maskDiaphragm)));
 end
 fclose(fileID);
 
