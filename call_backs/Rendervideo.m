@@ -45,49 +45,9 @@ diary on
 fprintf("======================================\n")
 fprintf("Current Folder Path: %s\n", app.filepath)
 fprintf("Current File: %s\n", name)
-fprintf("Start Computer Time: %s\n", datestr(now, 'yyyy/mm/dd HH:MM:ss'))
+fprintf("Start Computer Time: %s\n", datetime('now', 'Format', 'yyyy/MM/dd HH:mm:ss'))
 
-JSON_filename = 'git_version.json';
-
-% SAVING GIT VERSION
-% In the txt file in the folder : "log"
-% checks the git branch used and logs it
-gitCommand = 'git status';
-[stat, ~] = system(gitCommand);
-
-if stat == 0 % if git is initialised
-    
-    gitBranchCommand = 'git symbolic-ref --short HEAD';
-    [statusBranch, resultBranch] = system(gitBranchCommand);
-    
-    if statusBranch == 0
-        resultBranch = strtrim(resultBranch);
-        MessBranch = "Current branch : %s \r";
-        git_JSON.GitBranch = resultBranch;
-    else
-        MessBranch = "Error getting current branch name.\r Git command output: %s \r";
-        git_JSON.GitBranch = "Error";
-    end
-    
-    gitHashCommand = 'git rev-parse HEAD';
-    [statusHash, resultHash] = system(gitHashCommand);
-    
-    if statusHash == 0 %hash command was successful
-        resultHash = strtrim(resultHash);
-        MessHash = "Latest Commit Hash : %s \r";
-        git_JSON.GitHash = resultHash;
-    else
-        MessHash = "Error getting latest commit hash.\r Git command output: %s \r";
-        git_JSON.GitHash = "Error";
-    end
-    
-    encodedGit_JSON = jsonencode(git_JSON, PrettyPrint = true);
-    
-    fid = fopen(fullfile(output_dirpath, 'log', JSON_filename), "wt+");
-    fprintf(fid, encodedGit_JSON);
-    fclose(fid);
-    disp(git_JSON)
-end
+saveGit(output_dirpath)
 
 % logs = app.cache.notes;
 % save_string_cells_to_file(fullfile(output_dirpath, 'log', txt_filename), logs);
@@ -984,12 +944,14 @@ end
 numX = size(images_choroid, 1);
 numY = size(images_choroid, 2);
 mkdir(fullfile(output_dirpath, 'txt'));
-fileID = fopen(fullfile(output_dirpath, 'txt', 'intervals'),'w');
+fileID = fopen(fullfile(output_dirpath, 'txt', 'intervals.txt'),'w');
 
+meanIm = mean(images_choroid(:, :, :, :, freq_idx), [3 4]);
+T = graythresh(meanIm);
 for freq_idx = 1:num_F
     meanIm = mean(images_choroid(:, :, :, :, freq_idx), [3 4]);
-    binIm = imbinarize(meanIm);
-    fprintf(fileID, "Interval %d: %0.2d%%\n", freq_idx, nnz(binIm) / (numX * numY));
+    binIm = imbinarize(meanIm, T);
+    fprintf(fileID, "Interval %d: %0.2d%%\n", freq_idx, 100 * nnz(binIm) / (numX * numY));
 end
 fclose(fileID);
 
@@ -1061,7 +1023,7 @@ end
 % close progress bar window
 close(h);
 
-fprintf("End Computer Time: %s\n", datestr(now, 'yyyy/mm/dd HH:MM:ss'))
+fprintf("End Computer Time: %s\n", datetime('now', 'Format', 'yyyy/MM/dd HH:mm:ss'))
 % display elapsed time
 toc;
 
