@@ -85,7 +85,7 @@ if peripheral_flag
     zernike_indices = 4;
 end
 
-shack_hartmann = ShackHartmann(image_subapertures_size_ratio, num_subapertures_positions, zernike_indices, calibration_factor,subaperture_margin,corrmap_margin,power_filter_corrector,sigma_filter_corrector, ref_image);
+shack_hartmann = ShackHartmann(image_subapertures_size_ratio, num_subapertures_positions, zernike_indices, calibration_factor,subaperture_margin,corrmap_margin,power_filter_corrector,sigma_filter_corrector, ref_image,app.cache.spatialTransformation);
 acquisition = DopplerAcquisition(app.Nx,app.Ny,app.Fs/1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value, app.DX, app.DY, app.pix_width, app.pix_height);
 
 

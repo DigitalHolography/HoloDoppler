@@ -9,8 +9,10 @@ function [cache, found] = fetch_cache(filepath, filename, file_ext)
 
 if ~isempty(selected_dir)
     found = true;
-    cache = load(fullfile(filepath, selected_dir, sprintf('%s.mat', selected_dir)), 'cache');
-    cache = cache.cache;
+    cache = load(fullfile(filepath, selected_dir,'mat', sprintf('%s.mat', selected_dir)), 'cache');
+    if size(cache) < 1
+        cache = cache.cache;
+    end
 else
     cache = [];
 end

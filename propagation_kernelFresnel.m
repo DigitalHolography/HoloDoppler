@@ -1,5 +1,6 @@
 function kernel = propagation_kernelFresnel(Nx, Ny, z, lambda, x_step, y_step, use_double_precision)
-
+Nx = double(Nx);
+Ny = double(Ny);
 x(1:Nx)=(((1:Nx)-1)-round(Nx/2))*x_step; %Valeurs de l'axe x
 y(1:Ny)=(((1:Ny)-1)-round(Ny/2))*y_step; %Valeurs de l'axe y
 [X,Y]=meshgrid(x,y); %Grille de calcul

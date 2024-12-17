@@ -28,6 +28,19 @@ skip = skip(2:end-1,2:end-1);
 
 %FIXME gauss2D > apodization2D
 % gauss = ones(subAp_Nx, subAp_Ny);
+    function mat = gauss2D(center, sigma)
+        center = [center center];
+        [R,C] = ndgrid(1:subAp_Nx, 1:subAp_Ny);
+        mat = gaussC(R, C, sigma, center);
+    end
+
+    function val = gaussC(x, y, sigma, center)
+        xc = center(1);
+        yc = center(2);
+        exponent = ((x-xc).^2 + (y-yc).^2)./(2*sigma);
+        val       = (exp(-exponent));
+    end
+
 gauss = gauss2D(subAp_Nx, 0.5); % parameter alpha = 3 
 gauss1 = ones(subAp_Nx, subAp_Ny);
 % gauss = gauss .* hann(subAp_Nx);
