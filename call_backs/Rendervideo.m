@@ -45,49 +45,9 @@ diary on
 fprintf("======================================\n")
 fprintf("Current Folder Path: %s\n", app.filepath)
 fprintf("Current File: %s\n", name)
-fprintf("Start Computer Time: %s\n", datestr(now, 'yyyy/mm/dd HH:MM:ss'))
+fprintf("Start Computer Time: %s\n", datetime('now', 'Format', 'yyyy/MM/dd HH:mm:ss'))
 
-JSON_filename = 'git_version.json';
-
-% SAVING GIT VERSION
-% In the txt file in the folder : "log"
-% checks the git branch used and logs it
-gitCommand = 'git status';
-[stat, ~] = system(gitCommand);
-
-if stat == 0 % if git is initialised
-    
-    gitBranchCommand = 'git symbolic-ref --short HEAD';
-    [statusBranch, resultBranch] = system(gitBranchCommand);
-    
-    if statusBranch == 0
-        resultBranch = strtrim(resultBranch);
-        MessBranch = "Current branch : %s \r";
-        git_JSON.GitBranch = resultBranch;
-    else
-        MessBranch = "Error getting current branch name.\r Git command output: %s \r";
-        git_JSON.GitBranch = "Error";
-    end
-    
-    gitHashCommand = 'git rev-parse HEAD';
-    [statusHash, resultHash] = system(gitHashCommand);
-    
-    if statusHash == 0 %hash command was successful
-        resultHash = strtrim(resultHash);
-        MessHash = "Latest Commit Hash : %s \r";
-        git_JSON.GitHash = resultHash;
-    else
-        MessHash = "Error getting latest commit hash.\r Git command output: %s \r";
-        git_JSON.GitHash = "Error";
-    end
-    
-    encodedGit_JSON = jsonencode(git_JSON, PrettyPrint = true);
-    
-    fid = fopen(fullfile(output_dirpath, 'log', JSON_filename), "wt+");
-    fprintf(fid, encodedGit_JSON);
-    fclose(fid);
-    disp(git_JSON)
-end
+saveGit(output_dirpath)
 
 % logs = app.cache.notes;
 % save_string_cells_to_file(fullfile(output_dirpath, 'log', txt_filename), logs);
@@ -173,6 +133,7 @@ local_SVDx = app.SVDxCheckBox.Value;
 local_SVDx_SubAp_num = app.SVDx_SubApEditField.Value;
 localSVDTreshold = app.SVDTresholdCheckBox.Value;
 localSVDTresholdValue = app.SVDTresholdEditField.Value;
+num_F = app.numFreqEditField.Value;
 
 % FIXME
 num_focus = 1;
@@ -229,66 +190,18 @@ else
     switch local_output_video
         case 'power_Doppler'
             local_image_type_list.select('power_Doppler');
-            
-            if not(app.Nx == app.Ny)
-                video_M0 = zeros(app.Nx, app.Ny, 1, local_num_batches, 'single');
-                
-                reference_wave = zeros(local_Nx, local_Ny, 1, local_num_batches, 'single');
-                reference_wave_power = zeros(1, local_num_batches, 'double');
-                reference_wave_power_std = zeros(1, local_num_batches, 'double');
-                beating_wave_variance = zeros(local_Nx, local_Ny, 1, local_num_batches, 'single');
-                beating_wave_variance_power = zeros(1, local_num_batches, 'double');
-                beating_wave_variance_power_std = zeros(1, local_num_batches, 'double');
-            else
-                video_M0 = zeros(app.Nx, app.Ny, 1, local_num_batches, 'single');
-                
-                reference_wave = zeros(local_Nx, local_Ny, 1, local_num_batches, 'single');
-                reference_wave_power = zeros(1, local_num_batches, 'double');
-                reference_wave_power_std = zeros(1, local_num_batches, 'double');
-                beating_wave_variance = zeros(local_Nx, local_Ny, 1, local_num_batches, 'single');
-                beating_wave_variance_power = zeros(1, local_num_batches, 'double');
-                beating_wave_variance_power_std = zeros(1, local_num_batches, 'double');
-            end
+            video_M0 = zeros(app.Nx, app.Ny, 1, local_num_batches, 'single');
             
         case 'moments'
             local_image_type_list.select('power_Doppler', 'moment_0', 'moment_1', 'moment_2');
-            
-            if not(app.Nx == app.Ny)
-                video_M0 = zeros(app.Nx, app.Ny, 1, local_num_batches, 'single');
-                video_moment0 = video_M0;
-                video_moment1 = video_M0;
-                video_moment2 = video_M0;
-                
-                reference_wave = zeros(local_Nx, local_Ny, 1, local_num_batches, 'single');
-                reference_wave_power = zeros(1, local_num_batches, 'double');
-                reference_wave_power_std = zeros(1, local_num_batches, 'double');
-                beating_wave_variance = zeros(local_Nx, local_Ny, 1, local_num_batches, 'single');
-                beating_wave_variance_power = zeros(1, local_num_batches, 'double');
-                beating_wave_variance_power_std = zeros(1, local_num_batches, 'double');
-            else
-                video_M0 = zeros(app.Nx, app.Ny, 1, local_num_batches, 'single');
-                video_moment0 = video_M0;
-                video_moment1 = video_M0;
-                video_moment2 = video_M0;
-                
-                reference_wave = zeros(local_Nx, local_Ny, 1, local_num_batches, 'single');
-                reference_wave_power = zeros(1, local_num_batches, 'double');
-                reference_wave_power_std = zeros(1, local_num_batches, 'double');
-                beating_wave_variance = zeros(local_Nx, local_Ny, 1, local_num_batches, 'single');
-                beating_wave_variance_power = zeros(1, local_num_batches, 'double');
-                beating_wave_variance_power_std = zeros(1, local_num_batches, 'double');
-            end
+            video_M0 = zeros(app.Nx, app.Ny, 1, local_num_batches, 'single');
+            video_moment0 = video_M0;
+            video_moment1 = video_M0;
+            video_moment2 = video_M0;
             
         case 'all_videos'
             app.time_transform.type = 'FFT';
             local_image_type_list.select('power_Doppler', 'power_1_Doppler', 'power_2_Doppler', 'color_Doppler', 'directional_Doppler', 'M0sM1r', 'velocity_estimate', 'spectrogram', 'moment_0', 'moment_1', 'moment_2')
-            
-            reference_wave = zeros(local_Nx, local_Ny, 1, local_num_batches, 'single');
-            reference_wave_power = zeros(1, local_num_batches, 'double');
-            reference_wave_power_std = zeros(1, local_num_batches, 'double');
-            beating_wave_variance = zeros(local_Nx, local_Ny, 1, local_num_batches, 'single');
-            beating_wave_variance_power = zeros(1, local_num_batches, 'double');
-            beating_wave_variance_power_std = zeros(1, local_num_batches, 'double');
             
             video_M0 = zeros(app.Nx, app.Ny, 1, local_num_batches, 'single');
             video_M1 = video_M0;
@@ -326,12 +239,22 @@ else
             % tmp_SH = zeros(app.Nx, app.Ny, 1, j_win,ceil(local_num_batches/bin_t), 'single');
             % idx_tab_SH_time = 1:ceil(local_num_batches/bin_t);
             % idx_tab_SH_time = repmat(idx_tab_SH_time,2,1);
-            % idx_tab_SH_time = reshape(idx_tab_SH_time,[],1);
+            % idx_tab_SH_time = reshape(idx_tab_SH_time,[],1);s
             
         case 'dark_field'
             local_image_type_list.select('dark_field_image');
             H_dark_field_stack = 1i * ones(app.Nx, app.Ny, j_win, local_num_batches, 'single');
             video_M0_dark_field = zeros(app.Nx, app.Ny, 1, local_num_batches, 'single');
+            
+        case 'choroid'
+            local_image_type_list.select('power_Doppler', 'moment_0', 'moment_1', 'moment_2', 'choroid');
+            video_M0 = zeros(app.Nx, app.Ny, 1, local_num_batches, 'single');
+            video_moment0 = video_M0;
+            video_moment1 = video_M0;
+            video_moment2 = video_M0;
+            images_choroid =  zeros(app.Nx, app.Ny, 1, local_num_batches, num_F, 'single');
+            
+            
     end %switch local_output_video
     
 end
@@ -562,15 +485,9 @@ if local_low_memory
             end
             
             if strcmp(set_up, 'Doppler')
-                [M0, ~, NormalizationData] = reconstruct_hologram(FH_par, acquisition, local_blur, false, local_svd, local_SVDx, local_SVDx_SubAp_num, [], local_time_transform, local_spatialTransformation);
+                [M0, ~, ~] = reconstruct_hologram(FH_par, acquisition, local_blur, false, local_svd, local_SVDx, local_SVDx_SubAp_num, [], local_time_transform, local_spatialTransformation);
                 % save frame to block buffer
                 block_M0(:, :, :, inner_idx) = gather(M0);
-                reference_wave(:, :, :, inner_idx) = gather(NormalizationData.reference_wave);
-                reference_wave_power(inner_idx) = gather(NormalizationData.reference_wave_power);
-                reference_wave_power_std(inner_idx) = gather(NormalizationData.reference_wave_power_std);
-                beating_wave_variance(:, :, :, inner_idx) = gather(NormalizationData.beating_wave_variance);
-                beating_wave_variance_power(inner_idx) = gather(NormalizationData.beating_wave_variance_power);
-                beating_wave_variance_power_std(inner_idx) = gather(NormalizationData.beating_wave_variance_power_std);
                 send(D, 0);
             end
             
@@ -605,17 +522,17 @@ if local_low_memory
     end
     
     export_raw = app.saverawvideosCheckBox.Value;
-    generate_video_low_memory(sprintf('%s\\%s', output_dirpath, output_filename), app.Nx, app.Ny, 1, local_num_batches, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
+    generate_video_low_memory(sprintf('%s\\%s', output_dirpath, output_filename), app.Nx, app.Ny, 1, local_num_batches, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw);
 else % ~local_low_memory
     send(D, -2); % display 'video construction' on progress bar
     fprintf("Parfor loop: %u workers\n", parfor_arg)
     tParfor = tic;
     
-    parfor (batch_idx = 1:local_num_batches, parfor_arg)
+    parfor batch_idx = 1:local_num_batches
         
         % for batch_idx = 1:num_batches
         frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step);
-        use_gpu_par = use_gpu
+        use_gpu_par = use_gpu;
         FH_par = compute_FH_from_frame_batch(frame_batch, local_kernel, local_spatialTransformation, use_gpu);
         local_image_type_list_par = local_image_type_list;
         
@@ -644,20 +561,14 @@ else % ~local_low_memory
         end
         
         if strcmp(set_up, 'Doppler')
-            NormalizationData = local_image_type_list_par.construct_image(FH_par, local_wavelength, acquisition, local_blur, use_gpu, local_svd, localSVDTreshold, local_SVDx, localSVDTresholdValue, local_SVDx_SubAp_num, [], local_color_f1, local_color_f2, local_color_f3, ...
+            local_image_type_list_par.construct_image(FH_par, local_wavelength, acquisition, local_blur, use_gpu, local_svd, localSVDTreshold, local_SVDx, localSVDTresholdValue, local_SVDx_SubAp_num, [], local_color_f1, local_color_f2, local_color_f3, ...
                 0, local_spatialTransformation, local_time_transform, local_SubAp_PCA, local_xystride, local_num_unit_cells_x, local_r1, ...
-                local_temporal, local_phi1, local_phi2, local_spatial, local_nu1, local_nu2);
+                local_temporal, local_phi1, local_phi2, local_spatial, local_nu1, local_nu2, num_F);
             
             switch local_output_video
                 case 'all_videos'
                     %                         [M0, sqrt_M0, M1, M2, M_freq_low, M_freq_high, M0_pos, M0_neg, M1sM0r, velocity] = reconstruct_hologram_extra(FH_par, local_wavelength, local_f1, local_f2, acquisition, local_blur, false, local_svd, [],...
                     %                             local_color_f1, local_color_f2, local_color_f3);
-                    reference_wave(:, :, :, batch_idx) = gather(NormalizationData.reference_wave);
-                    reference_wave_power(batch_idx) = gather(NormalizationData.reference_wave_power);
-                    reference_wave_power_std(batch_idx) = gather(NormalizationData.reference_wave_power_std);
-                    beating_wave_variance(:, :, :, batch_idx) = gather(NormalizationData.beating_wave_variance);
-                    beating_wave_variance_power(batch_idx) = gather(NormalizationData.beating_wave_variance_power);
-                    beating_wave_variance_power_std(batch_idx) = gather(NormalizationData.beating_wave_variance_power_std);
                     
                     tmp_video_M0 = gather(local_image_type_list_par.power_Doppler.image);
                     video_M0(:, :, :, batch_idx) = tmp_video_M0;
@@ -700,25 +611,19 @@ else % ~local_low_memory
                 case 'power_Doppler'
                     tmp_video_M0 = gather(local_image_type_list_par.power_Doppler.image);
                     video_M0(:, :, :, batch_idx) = tmp_video_M0;
-                    reference_wave(:, :, :, batch_idx) = gather(NormalizationData.reference_wave);
-                    reference_wave_power(batch_idx) = gather(NormalizationData.reference_wave_power);
-                    reference_wave_power_std(batch_idx) = gather(NormalizationData.reference_wave_power_std);
-                    beating_wave_variance(:, :, :, batch_idx) = gather(NormalizationData.beating_wave_variance);
-                    beating_wave_variance_power(batch_idx) = gather(NormalizationData.beating_wave_variance_power);
-                    beating_wave_variance_power_std(batch_idx) = gather(NormalizationData.beating_wave_variance_power_std);
                 case 'moments'
                     tmp_video_M0 = gather(local_image_type_list_par.power_Doppler.image);
                     video_M0(:, :, :, batch_idx) = tmp_video_M0;
-                    reference_wave(:, :, :, batch_idx) = gather(NormalizationData.reference_wave);
-                    reference_wave_power(batch_idx) = gather(NormalizationData.reference_wave_power);
-                    reference_wave_power_std(batch_idx) = gather(NormalizationData.reference_wave_power_std);
-                    beating_wave_variance(:, :, :, batch_idx) = gather(NormalizationData.beating_wave_variance);
-                    beating_wave_variance_power(batch_idx) = gather(NormalizationData.beating_wave_variance_power);
-                    beating_wave_variance_power_std(batch_idx) = gather(NormalizationData.beating_wave_variance_power_std);
-                    
                     video_moment0(:, :, :, batch_idx) = gather(local_image_type_list_par.moment_0.image);
                     video_moment1(:, :, :, batch_idx) = gather(local_image_type_list_par.moment_1.image);
                     video_moment2(:, :, :, batch_idx) = gather(local_image_type_list_par.moment_2.image);
+                case 'choroid'
+                    tmp_video_M0 = gather(local_image_type_list_par.power_Doppler.image);
+                    video_M0(:, :, :, batch_idx) = tmp_video_M0;
+                    video_moment0(:, :, :, batch_idx) = gather(local_image_type_list_par.moment_0.image);
+                    video_moment1(:, :, :, batch_idx) = gather(local_image_type_list_par.moment_1.image);
+                    video_moment2(:, :, :, batch_idx) = gather(local_image_type_list_par.moment_2.image);
+                    images_choroid(:, :, :, batch_idx, :) = gather(local_image_type_list_par.choroid.parameters.intervals);
                     
             end
             
@@ -726,6 +631,8 @@ else % ~local_low_memory
         
         send(D, 0);
     end
+    
+    
     
     tEndParfor = toc(tParfor);
     fprintf("Parfor loop took %f s\n", tEndParfor)
@@ -895,64 +802,53 @@ else % ~local_low_memory
     
     switch local_output_video
         case 'power_Doppler'
-            generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-            generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+            generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1);
+            generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1);
         case 'moments'
-            generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-            generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-            generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-            generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-            generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
+            generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1);
+            generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1);
+            generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
+            generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
+            generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
             
         case 'all_videos'
-            generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-            %                         generate_video(video_M1, output_dirpath, 'DopplerAVG', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-            %                         generate_video(video_M2, output_dirpath, 'DopplerRMS', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-            generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+            generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1);
+            generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1);
             
-            generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-            generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
-            generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
+            generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
+            generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
+            generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
             
-            generate_video(video_M1_over_M0, output_dirpath, 'NormalizedDopplerAVG', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
-            generate_video(video_M2_over_M0, output_dirpath, 'NormalizedDopplerRMS', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, true);
+            generate_video(video_M1_over_M0, output_dirpath, 'NormalizedDopplerAVG', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1);
+            generate_video(video_M2_over_M0, output_dirpath, 'NormalizedDopplerRMS', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1);
             
             % no contrast enhancement for color video, it's already
             % been done previously
-            generate_video(video_color, output_dirpath, 'Color', [], app.cache.temporal_filter, local_low_frequency, 0, false);
-            generate_video(video_directional, output_dirpath, 'Directional', [], [], false, 0, true);
-            generate_video(video_fmean, output_dirpath, 'Fmean', [], [], false, 0, true);
-            generate_video(video_M0_pos, output_dirpath, 'M0pos', [], app.cache.temporal_filter, local_low_frequency, 0, true);
-            generate_video(video_M0_neg, output_dirpath, 'M0neg', [], app.cache.temporal_filter, local_low_frequency, 0, true);
-            generate_video(video_velocity, output_dirpath, 'Velocity', [], app.cache.temporal_filter, local_low_frequency, 0, true);
-            % generate_video(video_mask, output_dirpath, 'Mask', [], app.cache.temporal_filter, local_low_frequency, 0, true);
-            % generate_video(video_mask, output_dirpath, 'Mask', [], app.cache.temporal_filter, local_low_frequency, 0, true);
-            %FIXME Move  tmp_SH_time_avg elsewhere divide by
-            %number of strides/long times
-            %                       tmp_SH_time_avg = SH_time_avg(:,:,:,2:(end-1));
-            %SH_time_avg = SH_time_avg./double(local_num_batches);
-            SH_time = reshape(SH_time, size(SH_time, 1), size(SH_time, 2), size(SH_time, 3), size(SH_time, 4) * size(SH_time, 5));
+            generate_video(video_color, output_dirpath, 'Color', [], app.cache.temporal_filter, local_low_frequency, 0, 1);
+            generate_video(video_directional, output_dirpath, 'Directional', [], [], false, 0);
+            generate_video(video_fmean, output_dirpath, 'Fmean', [], [], false, 0);
+            generate_video(video_M0_pos, output_dirpath, 'M0pos', [], app.cache.temporal_filter, local_low_frequency, 0, 1);
+            generate_video(video_M0_neg, output_dirpath, 'M0neg', [], app.cache.temporal_filter, local_low_frequency, 0, 1);
+            generate_video(video_velocity, output_dirpath, 'Velocity', [], app.cache.temporal_filter, local_low_frequency, 0, 1);
             
-            generate_video(SH_time, output_dirpath, 'SH', [], [], false, true, false);
+            SH_time = reshape(SH_time, size(SH_time, 1), size(SH_time, 2), size(SH_time, 3), size(SH_time, 4) * size(SH_time, 5));
+            generate_video(SH_time, output_dirpath, 'SH', [], [], false, true, 1);
             
             if enable_shack_hartmann
                 % phase video
                 video_phase = correction_phase_video(aberration_correction, app.Nx, app.Ny);
                 video_measured_phase = mesured_phase_video(shifts_vector, num_subapertures_positions, measured_phase);
                 video_PSF2D = PSF2D_video(aberration_correction, app.Nx, app.Ny);
-                generate_video(video_measured_phase, output_dirpath, 'MeasuredPhase', [], [], false, false, false);
-                generate_video(video_phase, output_dirpath, 'ZernikePhase', [], [], false, false, false);
-                generate_video(video_PSF2D, output_dirpath, 'PSF2D', [], [], false, false, false);
-                generate_video(stiched_moments_video, output_dirpath, 'StichedMoments', [], [], false, false, false);
-                generate_video(stitched_correlation_video, output_dirpath, 'StichedCorrelations', [], [], false, false, false);
+                generate_video(video_measured_phase, output_dirpath, 'MeasuredPhase', [], [], false, false, 1);
+                generate_video(video_phase, output_dirpath, 'ZernikePhase', [], [], false, false, 1);
+                generate_video(video_PSF2D, output_dirpath, 'PSF2D', [], [], false, false, 1);
+                generate_video(stiched_moments_video, output_dirpath, 'StichedMoments', [], [], false, false, 1);
+                generate_video(stitched_correlation_video, output_dirpath, 'StichedCorrelations', [], [], false, false, 1);
             end
             
             % generate additional images
-            if local_low_frequency
-                [color_img, img_low_freq, img_high_freq] = construct_colored_image(video_M_freq_high, video_M_freq_low, true);
-            else
-                [color_img, img_low_freq, img_high_freq] = construct_colored_image(video_M_freq_low, video_M_freq_high, false);
-            end
+            
+            [color_img, img_low_freq, img_high_freq] = construct_colored_image(video_M_freq_low, video_M_freq_high);
             
             % convert spectrogram_matrix_video to one spectrogram
             %                     spectrogram_matrix_video = squeeze(spectrogram_matrix_video(:,:,:,1));%reshape(spectrogram_matrix_video, app.Nx, app.Ny, j_win * local_num_batches);
@@ -967,45 +863,34 @@ else % ~local_low_memory
             img_low_freq_output_filename = sprintf('%s_%s.%s', output_dirname, 'M0_high_flow', 'png');
             img_high_freq_output_filename = sprintf('%s_%s.%s', output_dirname, 'M0_low_flow', 'png');
             
-            RI_output_filename = sprintf('%s_%s.%s', output_dirname, 'Resistivity', 'png');
+            imwrite(color_img, fullfile(output_dirpath, 'png',  color_output_filename));
+            imwrite(img_low_freq, fullfile(output_dirpath, 'png',  img_low_freq_output_filename));
+            imwrite(img_high_freq, fullfile(output_dirpath, 'png',  img_high_freq_output_filename));
+            imwrite(RI, fullfile(output_dirpath, 'png',  RI_output_filename));
+            % imwrite(mat2gray((abs(spectrogram_array.^2))), fullfile(output_dirpath, 'png',  'spectrogram_artery.png'));
             
-            RI = construct_resistivity_index(video_M0, output_dirpath, RI_output_filename);
-            
-            % FIXME : replace sprintf by fullfile
-            imwrite(color_img, sprintf('%s\\png\\%s', output_dirpath, color_output_filename));
-            imwrite(img_low_freq, sprintf('%s\\png\\%s', output_dirpath, img_low_freq_output_filename));
-            imwrite(img_high_freq, sprintf('%s\\png\\%s', output_dirpath, img_high_freq_output_filename));
-            imwrite(RI, sprintf('%s\\png\\%s', output_dirpath, RI_output_filename));
-            % imwrite(mat2gray((abs(spectrogram_array.^2))), sprintf('%s\\png\\%s', output_dirpath, 'spectrogram_artery.png'));
-            
-            if exist(fullfile(output_dirpath, 'mat'), 'dir')
-                output_dirpath_mat = fullfile(output_dirpath, 'mat');
-            else
-                output_dirpath_mat = output_dirpath;
-            end
-            
-            %save(fullfile(output_dirpath_mat, 'spectro.mat'), 'spectrogram_array')
-            
-            color_img = flip(color_img);
-            %                         RI = flip(RI);
-            
-            %FIXME spectrogram
         case 'dark_field'
-            generate_video(video_M0_dark_field, output_dirpath, 'M0_dark_field', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, true);
+            generate_video(video_M0_dark_field, output_dirpath, 'M0_dark_field', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
             
             %                         [file_name, suffix] = get_last_file_name(app.filepath, 'H_dark_field_stack');
             %                         output_dirname_df = sprintf('%s%s_%d.mat', app.filepath, 'H_dark_field_stack', suffix + 1);
             output_dirname_df = fullfile(app.filepath, output_dirname, 'mat', 'H_dark_field_stack.mat');
             save(output_dirname_df, 'H_dark_field_stack', '-v7.3');
+            
+        case 'choroid'
+            generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1);
+            generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1);
+            generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
+            generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
+            generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
+            for freq_idx = 1:num_F
+                generate_video(images_choroid(:, :, :, :, freq_idx), output_dirpath, sprintf('choroid_%d', freq_idx), 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1);
+            end
+            
     end
     
     tEndVideoGen = toc(tVideoGen);
     fprintf("Video Generation took %f s\n", tEndVideoGen)
-    %switch
-    
-    % ppt presentation
-    %                     generate_pdf(output_dirname, output_dirpath, app.cache.Fs, app.cache.f1, app.cache.f2);
-    %                     generate_ppt(output_dirname, output_dirpath, app.cache.Fs, app.cache.f1, app.cache.f2, fullfile(output_dirpath, output_dirname))
     
 end % local_low_memory
 
@@ -1055,6 +940,23 @@ if registration_pass || app.cache.registration
     aberration_correction.rephasing_zernike_coefs = [shifts(1, :) / local_Nx; shifts(2, :) / local_Ny] * magic_number * 2;
     aberration_correction.rephasing_in_z_coefs = shifts(3, :) / j_win * magic_number * 2;
 end
+
+numX = size(images_choroid, 1);
+numY = size(images_choroid, 2);
+[X, Y] = meshgrid(1:X, 1:Y);
+L = (numX + numY) / 2;
+mkdir(fullfile(output_dirpath, 'txt'));
+fileID = fopen(fullfile(output_dirpath, 'txt', 'intervals.txt'),'w');
+
+meanIm = mean(images_choroid(:, :, :, :, freq_idx), [3 4]);
+maskDiaphragm = ((X-numX/2)^2 + (Y-numY/2)^2) < L * 0.4;
+T = graythresh(meanIm);
+for freq_idx = 1:num_F
+    meanIm = mean(images_choroid(:, :, :, :, freq_idx), [3 4]);
+    binIm = imbinarize(meanIm, T);
+    fprintf(fileID, "Interval %d: %0.2d%%\n", freq_idx, 100 * nnz(binIm .* maskDiaphragm) / (nnz(maskDiaphragm)));
+end
+fclose(fileID);
 
 % add computed correction to rephasing data
 new_rephasing_data = RephasingData(app.cache.batch_size, app.cache.batch_stride, aberration_correction);
@@ -1116,52 +1018,7 @@ end
 
 %%Saving of power data for normalization, PNG/VIDEO & TXT files %%
 %PNG/VIDEO%
-try
-    fprintf("Figures and Video record...\n")
-    f1 = figure(1);
-    plot(reference_wave_power_std)
-    hold on
-    plot(mean(reference_wave_power_std) * ones(1, local_num_batches), '-k', 'LineWidth', 2);
-    gravstr = sprintf('Mean : %d ', round(mean(reference_wave_power_std), 4));
-    legend(gravstr);
-    print('-f1', '-dpng', fullfile(output_dirpath, 'png', strcat(output_dirname, '_reference_wave_power_std.png')));
-    f2 = figure(2);
-    plot(reference_wave_power)
-    hold on
-    plot(mean(reference_wave_power) * ones(1, local_num_batches), '-k', 'LineWidth', 2);
-    gravstr = sprintf('Mean : %d ', round(mean(reference_wave_power), 4));
-    legend(gravstr);
-    print('-f2', '-dpng', fullfile(output_dirpath, 'png', strcat(output_dirname, '_reference_wave_power.png')));
-    f3 = figure(3);
-    plot(beating_wave_variance_power_std)
-    hold on
-    plot(mean(beating_wave_variance_power_std) * ones(1, local_num_batches), '-k', 'LineWidth', 2);
-    gravstr = sprintf('Mean : %d ', round(mean(beating_wave_variance_power_std), 4));
-    legend(gravstr);
-    print('-f3', '-dpng', fullfile(output_dirpath, 'png', strcat(output_dirname, '_beating_wave_variance_power_std.png')));
-    f4 = figure(4);
-    plot(beating_wave_variance_power)
-    hold on
-    plot(mean(beating_wave_variance_power) * ones(1, local_num_batches), '-k', 'LineWidth', 2);
-    gravstr = sprintf('Mean : %d ', round(mean(beating_wave_variance_power), 4));
-    legend(gravstr);
-    print('-f4', '-dpng', fullfile(output_dirpath, 'png', strcat(output_dirname, '_beating_wave_variance_power.png')));
-    
-    close([f1 f2 f3 f4]);
-    generate_video(reference_wave, output_dirpath, 'reference_wave', [], [], false, false, false);
-    generate_video(log10(abs(beating_wave_variance)), output_dirpath, 'beating_wave_variance', [], [], false, false, false);
-    
-    % Power normalization
-    Nz = size(beating_wave_variance, 4);
-    var_bin = 16;
-    beating_wave_variance = imresize3(squeeze(beating_wave_variance), [ceil(app.Nx / var_bin) ceil(app.Ny / var_bin) Nz]);
-    reference_wave = imresize3(squeeze(reference_wave), [ceil(app.Nx / var_bin) ceil(app.Ny / var_bin) Nz]);
-    
-    save(fullfile(output_dirpath, 'mat', "power_normalization.mat"), "reference_wave", "beating_wave_variance", "reference_wave_power", "reference_wave_power_std", "beating_wave_variance_power", "beating_wave_variance_power_std")
-catch
-end
 
-%
 if ~isempty(app.NotesTextArea.Value)
     disp(app.NotesTextArea.Value)
 end
@@ -1169,7 +1026,7 @@ end
 % close progress bar window
 close(h);
 
-fprintf("End Computer Time: %s\n", datestr(now, 'yyyy/mm/dd HH:MM:ss'))
+fprintf("End Computer Time: %s\n", datetime('now', 'Format', 'yyyy/MM/dd HH:mm:ss'))
 % display elapsed time
 toc;
 
