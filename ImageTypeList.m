@@ -145,7 +145,7 @@ classdef ImageTypeList < handle % This class is modified dynamically
                     case 'angular spectrum'
                         H = ifft2(FH);
                     case 'Fresnel'
-                        H = fftshift(fft2(FH));
+                        H = fftshift(fftshift(fft2(FH),1),2);
                 end
                 
             end
