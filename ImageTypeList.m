@@ -100,7 +100,7 @@ classdef ImageTypeList < handle % This class is modified dynamically
             
         end
         
-        function construct_image(obj, FH, wavelength, acquisition, gaussian_width, use_gpu, svd, svd_treshold, svdx, svd_treshold_value, Nb_SubAp, phase_correction, ...
+        function construct_image(obj, FH, wavelength, acquisition, gaussian_width, use_gpu, svd, svd_treshold,svd_stride, svdx, svd_treshold_value, Nb_SubAp, phase_correction, ...
                 color_f1, color_f2, color_f3, is_low_frequency, ...
                 spatial_transformation, time_transform, SubAp_PCA, xy_stride, num_unit_cells_x, r1, ...
                 local_temporal, phi1, phi2, local_spatial, nu1, nu2, num_F)
@@ -155,7 +155,7 @@ classdef ImageTypeList < handle % This class is modified dynamically
             if svd
                 
                 if svd_treshold
-                    H = svd_filter(H, time_transform.f1, ac.fs, svd_treshold_value);
+                    H = svd_filter(H, time_transform.f1, ac.fs, svd_treshold_value,svd_stride);
                 else
                     H = svd_filter(H, time_transform.f1, ac.fs);
                 end

@@ -131,8 +131,9 @@ local_nu2 = app.nu2EditField.Value;
 local_volume_size = floor(j_win / 2);
 local_SVDx = app.SVDxCheckBox.Value;
 local_SVDx_SubAp_num = app.SVDx_SubApEditField.Value;
-localSVDTreshold = app.SVDTresholdCheckBox.Value;
-localSVDTresholdValue = app.SVDTresholdEditField.Value;
+localSVDThreshold = app.SVDThresholdCheckBox.Value;
+localSVDThresholdValue = app.SVDThresholdEditField.Value;
+localSVDStride = app.SVDStrideEditField.Value;
 num_F = app.numFreqEditField.Value;
 
 % FIXME
@@ -253,6 +254,8 @@ else
             video_moment1 = video_M0;
             video_moment2 = video_M0;
             images_choroid =  zeros(app.Nx, app.Ny, 1, local_num_batches, num_F, 'single');
+            video_M_freq_low = video_M0;
+            video_M_freq_high = video_M0;
             
             
     end %switch local_output_video
@@ -445,7 +448,7 @@ if local_low_memory
     reg_FH = fftshift(fft2(reg_frame_batch)) .* app.kernelAngularSpectrum;
     reg_FH = rephase_FH(reg_FH, local_rephasing_data, app.refbatchsizeEditField.Value, floor(app.positioninfileSlider.Value));
     acquisition = DopplerAcquisition(app.Nx, app.Ny, app.Fs / 1000, app.cache.z, app.cache.z_retina, app.cache.z_iris, app.cache.wavelength, app.cache.DX, app.cache.DY, app.pix_width, app.pix_height);
-    reg_hologram = reconstruct_hologram(reg_FH, acquisition, app.blur, use_gpu, app.SVDCheckBox.Value, app.SVDxCheckBox.Value, app.SVDx_SubApEditField.Value, [], app.cache.time_transform, local_spatialTransformation);
+    reg_hologram = reconstruct_hologram(reg_FH, acquisition, app.blur, use_gpu, app.SVDCheckBox.Value,app.SVDThresholdCheckBox.Value, SVDThresholdEditField.Value, app.SVDxCheckBox.Value,  app.SVDx_SubApEditField.Value, [], app.cache.time_transform, local_spatialTransformation);
     
     block_size = 1024; % TODO: this should stay hardcoded but to a higher value
     block_M0 = zeros(app.Nx, app.Ny, 1, block_size);
@@ -561,7 +564,7 @@ else % ~local_low_memory
         end
         
         if strcmp(set_up, 'Doppler')
-            local_image_type_list_par.construct_image(FH_par, local_wavelength, acquisition, local_blur, use_gpu, local_svd, localSVDTreshold, local_SVDx, localSVDTresholdValue, local_SVDx_SubAp_num, [], local_color_f1, local_color_f2, local_color_f3, ...
+            local_image_type_list_par.construct_image(FH_par, local_wavelength, acquisition, local_blur, use_gpu, local_svd, localSVDThreshold,localSVDStride, local_SVDx, localSVDThresholdValue, local_SVDx_SubAp_num, [], local_color_f1, local_color_f2, local_color_f3, ...
                 0, local_spatialTransformation, local_time_transform, local_SubAp_PCA, local_xystride, local_num_unit_cells_x, local_r1, ...
                 local_temporal, local_phi1, local_phi2, local_spatial, local_nu1, local_nu2, num_F);
             
@@ -624,6 +627,9 @@ else % ~local_low_memory
                     video_moment1(:, :, :, batch_idx) = gather(local_image_type_list_par.moment_1.image);
                     video_moment2(:, :, :, batch_idx) = gather(local_image_type_list_par.moment_2.image);
                     images_choroid(:, :, :, batch_idx, :) = gather(local_image_type_list_par.choroid.parameters.intervals);
+                    tmp = images_choroid(:, :, :, batch_idx, :);
+                    video_M_freq_low(:, :, :, batch_idx) = tmp(:,:,:,1);
+                    video_M_freq_high(:, :, :, batch_idx) = tmp(:,:,:,end);
                     
             end
             
@@ -637,7 +643,7 @@ else % ~local_low_memory
     tEndParfor = toc(tParfor);
     fprintf("Parfor loop took %f s\n", tEndParfor)
     
-    if strcmp(local_output_video, 'all_videos')
+    if strcmp(local_output_video, 'all_videos') || strcmp(local_output_video, 'choroid')
         % generate color video
         if local_low_frequency
             video_color = construct_colored_video(video_M_freq_high, video_M_freq_low);
@@ -648,6 +654,7 @@ else % ~local_low_memory
         % generate directional video
         
     end
+    
     
     if app.cache.registration
         % post reconstruction image registration.
@@ -695,7 +702,7 @@ else % ~local_low_memory
         
         reg_FH = rephase_FH(reg_FH, local_rephasing_data, app.cache.ref_batch_size, floor(ref_batch_idx * app.cache.batch_stride));
         acquisition = DopplerAcquisition(app.Nx, app.Ny, app.Fs / 1000, app.cache.z, app.cache.z_retina, app.cache.z_iris, app.cache.wavelength, app.cache.DX, app.cache.DY, app.pix_width, app.pix_height);
-        reg_hologram = reconstruct_hologram(reg_FH, acquisition, app.blur, use_gpu, app.SVDCheckBox.Value, app.SVDxCheckBox.Value, app.SVDx_SubApEditField.Value, [], app.time_transform, local_spatialTransformation);
+        reg_hologram = reconstruct_hologram(reg_FH, acquisition, app.blur, use_gpu, app.SVDCheckBox.Value,localSVDThreshold, localSVDThresholdValue, app.SVDxCheckBox.Value, app.SVDx_SubApEditField.Value, [], app.time_transform, local_spatialTransformation);
         
         reg_hologram = reg_hologram .* disc - disc .* sum(reg_hologram .* disc, [1, 2]) / nnz(disc); % minus the mean
         reg_hologram = reg_hologram ./ (max(abs(reg_hologram), [], [1, 2])); % rescaling but keeps mean at zero
@@ -731,6 +738,23 @@ else % ~local_low_memory
                 video_moment0 = register_video_from_shifts(video_moment0, shifts);
                 video_moment1 = register_video_from_shifts(video_moment1, shifts);
                 video_moment2 = register_video_from_shifts(video_moment2, shifts);
+            case 'choroid'
+                
+                if size(local_image_registration, 2) == local_num_batches && ~app.cache.iterative_registration % if registration from previous folder results
+                    disp('rendering from old registration')
+                    video_M0 = register_video_from_shifts(video_M0, local_image_registration(1:2, :));
+                    shifts(1:2, :) = local_image_registration(1:2, :);
+                else
+                    % FIXME : use "reg_hologram" as reference (current preview from frontend)
+                    [video_M0_reg, shifts(1:2, :)] = register_video_from_reference(video_M0_reg, reg_hologram);
+                    video_M0 = register_video_from_shifts(video_M0, shifts(1:2, :));
+                end
+                
+                video_moment0 = register_video_from_shifts(video_moment0, shifts);
+                video_moment1 = register_video_from_shifts(video_moment1, shifts);
+                video_moment2 = register_video_from_shifts(video_moment2, shifts);
+                video_color = register_video_from_shifts(video_color, shifts);
+
                 
             case 'power_Doppler'
                 
@@ -886,6 +910,10 @@ else % ~local_low_memory
             for freq_idx = 1:num_F
                 generate_video(images_choroid(:, :, :, :, freq_idx), output_dirpath, sprintf('choroid_%d', freq_idx), 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1);
             end
+            generate_video(video_color, output_dirpath, 'Color', [], app.cache.temporal_filter, local_low_frequency, 0, 1);
+
+
+    
             
     end
     
@@ -943,7 +971,7 @@ end
 
 numX = size(images_choroid, 1);
 numY = size(images_choroid, 2);
-[X, Y] = meshgrid(1:X, 1:Y);
+[X, Y] = meshgrid(1:numX, 1:numY);
 L = (numX + numY) / 2;
 mkdir(fullfile(output_dirpath, 'txt'));
 fileID = fopen(fullfile(output_dirpath, 'txt', 'intervals.txt'),'w');
