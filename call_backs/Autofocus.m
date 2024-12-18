@@ -53,7 +53,7 @@ for nn = 1:nMax
     %                 otherwise
     %                     error('Unreachable code was reached. Check value of num_subapertures');
     %             end
-    shack_hartmann = ShackHartmann(subapertures4autofocus, subaperturesinter4autofocus, 4, calibration_factor, subapertureMargin4autofocus, corrmap_margin, power_filter_corrector, sigma_filter_corrector, 'central subaperture');
+    shack_hartmann = ShackHartmann(subapertures4autofocus, subaperturesinter4autofocus, 4, calibration_factor, subapertureMargin4autofocus, corrmap_margin, power_filter_corrector, sigma_filter_corrector, 'central subaperture',app.cache.spatialTransformation);
     f1 = app.f1EditField.Value;
     f2 = app.f2EditField.Value;
     M_aso = shack_hartmann.construct_M_aso(f1,f2,app.blur,acquisition);
