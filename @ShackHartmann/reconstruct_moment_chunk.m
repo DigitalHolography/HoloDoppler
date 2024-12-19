@@ -1,7 +1,12 @@
 function moment_chunk = reconstruct_moment_chunk(obj, FH_chunk, enable_svd, f1, f2, fs, gw)
 
 j_win = size(FH_chunk, 3);
-H_chunk = ifft2(FH_chunk);
+switch obj.spatialTransformType
+    case 'angular spectrum'
+        H_chunk = ifft2(FH_chunk);
+    case 'Fresnel'
+        H_chunk = fftshift(fft2(FH_chunk));
+end
 % Statistical filtering
 if enable_svd
     sz1 = size(H_chunk,1);

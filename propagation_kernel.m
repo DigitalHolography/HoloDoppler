@@ -9,5 +9,5 @@ v = ((1:Ny) - 1 - round(Ny / 2)) * v_step;
 kernel = exp(2 * 1i * pi * z / lambda * sqrt(1 - lambda^2 * (U).^2 - lambda^2 * (V).^2));
 if ~use_double_precision
     kernel = single(kernel);
-end 
+end
 end
