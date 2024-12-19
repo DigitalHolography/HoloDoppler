@@ -15,7 +15,7 @@ if nargin < 4
     % third parameter does not exist, so default it to something
     tresh = round(f1 * batch_size / fs)*2 + 1;
 end
-if nargin < 4
+if nargin < 5
     % tstride_param doesnt exist so default to 1 (full H)
     stride_param = 1;
 end

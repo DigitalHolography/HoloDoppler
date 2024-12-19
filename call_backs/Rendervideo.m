@@ -969,22 +969,24 @@ if registration_pass || app.cache.registration
     aberration_correction.rephasing_in_z_coefs = shifts(3, :) / j_win * magic_number * 2;
 end
 
-numX = size(images_choroid, 1);
-numY = size(images_choroid, 2);
-[X, Y] = meshgrid(1:numX, 1:numY);
-L = (numX + numY) / 2;
-mkdir(fullfile(output_dirpath, 'txt'));
-fileID = fopen(fullfile(output_dirpath, 'txt', 'intervals.txt'),'w');
+if strcmp(local_output_video, 'choroid') == 1
+    numX = size(images_choroid, 1);
+    numY = size(images_choroid, 2);
+    [X, Y] = meshgrid(1:numX, 1:numY);
+    L = (numX + numY) / 2;
+    mkdir(fullfile(output_dirpath, 'txt'));
+    fileID = fopen(fullfile(output_dirpath, 'txt', 'intervals.txt'),'w');
 
-meanIm = mean(images_choroid(:, :, :, :, freq_idx), [3 4]);
-maskDiaphragm = ((X-numX/2)^2 + (Y-numY/2)^2) < L * 0.4;
-T = graythresh(meanIm);
-for freq_idx = 1:num_F
     meanIm = mean(images_choroid(:, :, :, :, freq_idx), [3 4]);
-    binIm = imbinarize(meanIm, T);
-    fprintf(fileID, "Interval %d: %0.2d%%\n", freq_idx, 100 * nnz(binIm .* maskDiaphragm) / (nnz(maskDiaphragm)));
+    maskDiaphragm = ((X-numX/2)^2 + (Y-numY/2)^2) < L * 0.4;
+    T = graythresh(meanIm);
+    for freq_idx = 1:num_F
+        meanIm = mean(images_choroid(:, :, :, :, freq_idx), [3 4]);
+        binIm = imbinarize(meanIm, T);
+        fprintf(fileID, "Interval %d: %0.2d%%\n", freq_idx, 100 * nnz(binIm .* maskDiaphragm) / (nnz(maskDiaphragm)));
+    end
+    fclose(fileID);
 end
-fclose(fileID);
 
 % add computed correction to rephasing data
 new_rephasing_data = RephasingData(app.cache.batch_size, app.cache.batch_stride, aberration_correction);
