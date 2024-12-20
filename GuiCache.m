@@ -76,6 +76,11 @@ classdef GuiCache
         zernike_projection double
         shack_hartmann_ref_image double
 
+
+        num_Freq double
+        SVD_Stride double
+        isSVD_Stride logical
+
     end
 
     methods (Access = public)
@@ -145,6 +150,10 @@ classdef GuiCache
             obj.zernike_projection = app.ZernikeProjectionCheckBox.Value;
             obj.shack_hartmann_ref_image = app.referenceimageDropDown.Value;
 
+            obj.num_Freq = app.numFreqEditField.Value;
+            obj.SVD_Stride = app.SVDStrideEditField.Value;
+            obj.isSVD_Stride = app.SVDThresholdCheckBox.Value;
+
             % bufferize (and lock during computation) current paremeter values from front end
         end
 
@@ -194,7 +203,9 @@ classdef GuiCache
             app.compositef3EditField.Value = loadGUIVariable(obj.color_f3);
             app.lowfrequencyCheckBox.Value = loadGUIVariable(obj.low_frequency);
             app.saverawvideosCheckBox.Value = loadGUIVariable(obj.save_raw);
-
+            app.numFreqEditField.Value = loadGUIVariable(obj.num_Freq);
+            app.SVDStrideEditField.Value = loadGUIVariable(obj.SVD_Stride);
+            app.SVDThresholdCheckBox.Value = loadGUIVariable(obj.isSVD_Stride);
 
         end
 
