@@ -722,6 +722,9 @@ else % ~local_low_memory
                 video_moment1 = register_video_from_shifts(video_moment1, shifts);
                 video_moment2 = register_video_from_shifts(video_moment2, shifts);
                 video_color = register_video_from_shifts(video_color, shifts);
+                for freq_idx = 1:num_F
+                    images_choroid(:, :, :, :, freq_idx) = register_video_from_shifts(images_choroid(:, :, :, :, freq_idx), shifts);
+                end
 
                 
             case 'power_Doppler'
@@ -870,15 +873,15 @@ else % ~local_low_memory
             save(output_dirname_df, 'H_dark_field_stack', '-v7.3');
             
         case 'choroid'
-            generate_video(video_M0, ToolBox.HD_path, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1);
+            generate_video(video_M0, ToolBox.HD_path, 'M0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1); % same as usual
             generate_video(video_M0_reg, ToolBox.HD_path, 'M0_registration', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1);
-            generate_video(video_moment0, ToolBox.HD_path, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
+            generate_video(video_moment0, ToolBox.HD_path, 'moment0', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1); 
             generate_video(video_moment1, ToolBox.HD_path, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
             generate_video(video_moment2, ToolBox.HD_path, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
             for freq_idx = 1:num_F
-                generate_video(images_choroid(:, :, :, :, freq_idx), ToolBox.HD_path, sprintf('choroid_%d', freq_idx), 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1);
+                generate_video(images_choroid(:, :, :, :, freq_idx), ToolBox.HD_path, sprintf('choroid_%d', freq_idx), 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1, cornerNorm = 1.2);
             end
-            generate_video(video_color, ToolBox.HD_path, 'Color', [], app.cache.temporal_filter, local_low_frequency, 0, 1);
+            generate_video(video_color, ToolBox.HD_path, 'Color', [], app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1, cornerNorm = 1.2);
     end
     
     tEndVideoGen = toc(tVideoGen);
