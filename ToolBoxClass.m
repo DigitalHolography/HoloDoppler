@@ -24,7 +24,7 @@ classdef ToolBoxClass < handle
             obj.Holo_path = app.filepath;
             obj.Holo_name = app.filename;
 
-            [filepath, filename, file_ext] = fileparts(obj.Holo_name);
+            [filepath, filename, file_ext] = fileparts(fullfile(obj.Holo_path,obj.Holo_name));
 
             dir_name_stem = strrep(filename, file_ext, '');
             list_dir = dir(filepath);

@@ -10,8 +10,8 @@ function Show_spectrum(app)
     use_gpu = false;
     spatial_transformation = app.spatialTransformationDropDown.Value;
     svd = app.SVDCheckBox.Value;
-    svd_treshold = app.SVDTresholdCheckBox.Value;
-    svd_treshold_value = app.SVDTresholdEditField.Value;
+    svd_treshold = app.SVDThresholdCheckBox.Value;
+    svd_treshold_value = app.SVDThresholdEditField.Value;
     svdx = app.SVDxCheckBox.Value;
     Nb_SubAp = app.SVDx_SubApEditField.Value;
     local_spatial = app.spatialCheckBox.Value;
