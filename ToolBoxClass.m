@@ -84,6 +84,25 @@ classdef ToolBoxClass < handle
             saveGit(obj.HD_path)
         end
 
+        function [path, path_png, path_txt, path_avi, path_mp4, path_log, path_mat] = getPaths(obj)
+            path = obj.HD_path;
+            path_png = obj.HD_path_png;
+            path_txt = obj.HD_path_txt;
+            path_avi = obj.HD_path_avi;
+            path_mp4 = obj.HD_path_mp4;
+            path_log = obj.HD_path_log;
+            path_mat = obj.HD_path_mat;
+        end
+
+        function [path, path_png, path_txt, path_avi, path_mp4, path_log, path_mat] = getNames(obj)
+            path = obj.HD_path;
+            path_png = obj.HD_path_png;
+            path_txt = obj.HD_path_txt;
+            path_avi = obj.HD_path_avi;
+            path_mp4 = obj.HD_path_mp4;
+            path_log = obj.HD_path_log;
+            path_mat = obj.HD_path_mat;
+        end
     end
 
 end

@@ -1,4 +1,4 @@
-function generate_video(video, output_path, name, contrast_enhancement_tol, temporal_filter_sigma, contrast_inversion, export_raw, export_avg_img, options)
+function generate_video(video, output_path, name, temporal_filter_sigma, contrast_inversion, export_raw, export_avg_img, options)
 % Saves a raw pixel array to a video file, with some post processing
 % commonly done for rendering hologram videos
 %
@@ -16,12 +16,13 @@ arguments
     video 
     output_path 
     name 
-    contrast_enhancement_tol 
     temporal_filter_sigma 
     contrast_inversion 
     export_raw 
     export_avg_img
-    options.NoIntensity = false
+    options.FlashCorrection = true
+    options.Contrast = false
+    options.ContrastEnhancement = 0.0005
 end
 
 [~, output_dirname] = fileparts(output_path);
@@ -56,13 +57,13 @@ end
 
 %% fix intensity flashes
 
-if ~options.NoIntensity
+if options.FlashCorrection
     video = video - mean(mean(video, 2), 1);
 end
 
 %% contrast enhancement
-if ~isempty(contrast_enhancement_tol)
-    tol_pdi_low = contrast_enhancement_tol;  % default 0.0005
+if options.Contrast
+    tol_pdi_low = options.ContrastEnhancement;  % default 0.0005
     tol_pdi = [tol_pdi_low 1-tol_pdi_low];
     video = enhance_video_constrast(video, tol_pdi);
 end
