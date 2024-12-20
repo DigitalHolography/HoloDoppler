@@ -285,7 +285,14 @@ for inter_SubAp_idy = inter_SubAp_id_range
 %             FH_inter_chunk(1:length(idy_range), 1:length(idx_range), :) = FH(idy_range,idx_range,:);
 %             FH_inter_chunk = circshift(FH_inter_chunk, (length(idy_range)+1)/2, 1);
 %             FH_inter_chunk = circshift(FH_inter_chunk, (length(idy_range)+1)/2, 2);
-            moment_inter_chunk = abs(fftshift(fftshift(ifft2(FH_inter_chunk),1),2)).^2;
+            switch obj.spatialTransformType
+                case 'angular spectrum'
+                    moment_inter_chunk = abs(fftshift(fftshift(ifft2(FH_inter_chunk),1),2)).^2;
+                case 'Fresnel'
+                    moment_inter_chunk = abs(fft2(FH_inter_chunk)).^2;
+            end
+            
+
 %             moment_inter_chunk = moment_inter_chunk((length(idy_range)+1)/2 + 1 : (length(idy_range)+1)/2 + length(idy_range), (length(idy_range)+1)/2 + 1 : (length(idy_range)+1)/2 + length(idy_range), :);
         else
 %             FH_inter_chunk = FH(idy_range,idx_range,:);

@@ -71,8 +71,8 @@ function LightRendervideoGPU(app)
     local_spatialTransformation = app.cache.spatialTransformation;
     local_SVDx = app.SVDxCheckBox.Value;
     local_SVDx_SubAp_num = app.SVDx_SubApEditField.Value;
-    localSVDThreshold = app.SVDTresholdCheckBox.Value;
-    localSVDThresholdValue = app.SVDTresholdEditField.Value;
+    localSVDThreshold = app.SVDThresholdCheckBox.Value;
+    localSVDThresholdValue = app.SVDThresholdEditField.Value;
     local_f1 = app.cache.time_transform.f1;
     local_f2 = app.cache.time_transform.f2;
     local_fs = app.Fs/1000;

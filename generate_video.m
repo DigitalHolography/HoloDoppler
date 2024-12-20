@@ -22,6 +22,7 @@ arguments
     export_raw 
     export_avg_img
     options.NoIntensity = false
+    options.cornerNorm = false
 end
 
 [~, output_dirname] = fileparts(output_path);
@@ -58,6 +59,17 @@ end
 
 if ~options.NoIntensity
     video = video - mean(mean(video, 2), 1);
+end
+
+%% corner normalizations
+
+if options.cornerNorm > 0
+    Nx = size(video, 1);
+    Ny = size(video, 2);
+    [X, Y] = meshgrid(linspace(-Nx / 2, Nx / 2, Nx), linspace(-Ny / 2, Ny / 2, Ny));
+    disc_ratio = options.cornerNorm;
+    disc = X .^ 2 + Y .^ 2 < (disc_ratio * min(Nx, Ny) / 2) ^ 2;
+    video = video ./ mean(video.*~disc,[1,2]);
 end
 
 %% contrast enhancement

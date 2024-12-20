@@ -10,8 +10,8 @@ f = waitbar(0,'Please wait ...');
 use_gpu = false;
 spatial_transformation = app.spatialTransformationDropDown.Value;
 svd = app.SVDCheckBox.Value;
-svd_treshold = app.SVDTresholdCheckBox.Value;
-svd_treshold_value = app.SVDTresholdEditField.Value;
+svd_treshold = app.SVDThresholdCheckBox.Value;
+svd_treshold_value = app.SVDThresholdEditField.Value;
 svdx = app.SVDxCheckBox.Value;
 Nb_SubAp = app.SVDx_SubApEditField.Value;
 local_spatial = app.spatialCheckBox.Value;
@@ -93,6 +93,18 @@ end
 close(f)
 
 implay(rescale(scan3D));
+
+[~,file_name,~] = fileparts(app.filename);
+folder_name = strcat( file_name, '_preview');
+if exist(fullfile(app.filepath, folder_name), 'dir')
+    output_dirpath = fullfile(app.filepath, folder_name);
+else
+    mkdir(fullfile(app.filepath,folder_name));
+    output_dirpath = fullfile(app.filepath, folder_name);
+end
+preview_folder_name = create_output_directory_name(output_dirpath, sprintf('%s_%s.%s', file_name,'preview', 'cine'));
+mkdir(fullfile(output_dirpath));
+writeVideoOnDisc(rescale(scan3D),fullfile(output_dirpath,sprintf("%s_3Dscan",folder_name)));
 % Careful too much points crashes matlab
 
 % figure(58)

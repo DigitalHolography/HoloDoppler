@@ -78,7 +78,7 @@ switch zernike_ranks
     case 6
         zernike_indices = [3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27];
     otherwise
-        error('Unreachable code was reached. Check value of num_subapertures');
+        error('Unreachable code was reached. Check value of zernike_ranks');
 end
 
 if peripheral_flag
@@ -173,8 +173,15 @@ end
 
 for iter_idx = 1 : num_iter
     for i = -floor(m/2) + 1 : floor(m/2)
-        kernel = propagation_kernelAngularSpectrum(app.Ny, app.Nx, i*(defocus_range/m) , acquisition.lambda, app.pix_width, app.pix_height, 0);
-        psf_3d(:,:,i+floor(m/2)) = fftshift(ifft2(iter_phase(:,:,num_iter) .* kernel));
+        switch shack_hartmann.spatialTransformType
+            case 'angular spectrum'
+                kernel = propagation_kernelAngularSpectrum(app.Nx, app.Ny, i*(defocus_range/m) , acquisition.lambda, app.pix_width, app.pix_height, 0);
+                psf_3d(:,:,i+floor(m/2)) = fftshift(ifft2(iter_phase(:,:,num_iter) .* kernel));
+            case 'Fresnel'
+                kernel = propagation_kernelFresnel(app.Nx, app.Ny, i*(defocus_range/m) , acquisition.lambda, app.pix_width, app.pix_height, 0);
+                psf_3d(:,:,i+floor(m/2)) = fft2(iter_phase(:,:,num_iter) .* kernel);
+        end
+        
     end
     PSF2D_preview = (abs(squeeze(psf_3d(:,floor(app.Nx/2), :))));
     %figure;
