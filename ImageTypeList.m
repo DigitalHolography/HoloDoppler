@@ -302,7 +302,7 @@ classdef ImageTypeList < handle % This class is modified dynamically
                 circleMask = fftshift(sqrt((X-(numX/2)).^2 + (Y-(numY/2)).^2) < 0.15 * L);
                 frequencies = linspace(f1, f2, num_F + 1);
                 for freqIdx = 1:num_F
-                    img = moment0(SH, frequencies(freqIdx), frequencies(freqIdx + 1), ac.fs, j_win, gaussian_width);
+                    img = moment0(SH, frequencies(freqIdx), frequencies(end), ac.fs, j_win, gaussian_width);
                     img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
 
                     obj.choroid.parameters.intervals(:, :, :, freqIdx) = img;  
