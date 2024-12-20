@@ -5,7 +5,7 @@ switch obj.spatialTransformType
     case 'angular spectrum'
         H_chunk = ifft2(FH_chunk);
     case 'Fresnel'
-        H_chunk = fftshift(fft2(FH_chunk));
+        H_chunk = fftshift(fftshift(fft2(FH_chunk),1),2);
 end
 % Statistical filtering
 if enable_svd
