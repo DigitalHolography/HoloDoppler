@@ -1,20 +1,15 @@
 function v = construct_velocity_video(SH, f1, f2, fs, batch_size, gw, wavelength)
-
-% FIXME: batch_size = size(SH, 3)
-
 SH = squeeze(SH);
 
 SH_avg_xy = mean(SH, [1 2]);
 
-% spectral flat field correction
 for ii = 1:batch_size
     SH(:,:,ii) = SH(:,:,ii) - SH_avg_xy(ii);
 end
 
-% enforce positivity
-SH = max(SH,0); 
+SH = max(SH,0); % enforce positivity
 
-% spatial flat field correction 
+% flat field correction 
 SH_sum_xy = sum(SH, [1 2]);
 SH_filtered = imgaussfilt(SH, gw);
 SH_filtered = SH_filtered + eps(SH_filtered(1,1,1));
