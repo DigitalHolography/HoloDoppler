@@ -1,4 +1,4 @@
-classdef ToolBoxClass < handle
+classdef ToolBoxClass 
 
     % Holds useful variables calculated ones and used in the rest of the
     % script

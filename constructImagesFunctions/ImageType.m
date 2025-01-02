@@ -31,9 +31,7 @@ classdef ImageType < handle
             
             if ~isempty(obj.parameters)
                 
-                for field = fieldnames(obj.parameters)'
-                    obj.parameters.(field{:}) = [];
-                end
+                obj.parameters = struct();
                 
             end
             
