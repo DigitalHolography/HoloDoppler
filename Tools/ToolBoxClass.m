@@ -22,12 +22,16 @@ classdef ToolBoxClass
 
         function obj = ToolBoxClass(app)
 
+            if nargin < 1
+                return
+            end
+
             obj.Holo_path = app.filepath;
             obj.Holo_name = app.filename;
 
-            [filepath, filename, file_ext] = fileparts(fullfile(obj.Holo_path,obj.Holo_name));
+            [filepath, filename, file_ext] = fileparts(fullfile(obj.Holo_path, obj.Holo_name));
 
-            CreateToolBox(filepath, filename, file_ext)
+            obj = obj.CreateToolBox(filepath, filename, file_ext);
 
         end
 

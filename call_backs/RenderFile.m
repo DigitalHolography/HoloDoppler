@@ -1,16 +1,10 @@
 function RenderFile(fullfilepath,cache)
 
+    ToolBox = ToolBoxClass();
     [filepath,filename,ext] = fileparts(fullfilepath);
-    output_dirname = create_output_directory_name(filepath, filename);
-    output_dirpath = fullfile(filepath, output_dirname);
-    mkdir(output_dirpath);
-    mkdir(fullfile(output_dirpath, 'avi'));
-    mkdir(fullfile(output_dirpath, 'mp4'));
-    mkdir(fullfile(output_dirpath, 'png'));
-    mkdir(fullfile(output_dirpath, 'mat'));
-    mkdir(fullfile(output_dirpath, 'log'));
-    mkdir(fullfile(output_dirpath, 'raw'));
-
+    ToolBox.CreateToolBox(filepath,filename,ext)
+    output_dirpath = ToolBox.HD_path;
+    
     switch ext
         case '.cine'
             istream = CineReader(fullfilepath);

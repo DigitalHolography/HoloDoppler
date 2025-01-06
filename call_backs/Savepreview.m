@@ -1,6 +1,6 @@
 function Savepreview(app)
 
-%FIXME only works for FFT and darkfiel doesn't work "out of gpu
+%FIXME only works for FFT and darkfield doesn't work "out of gpu
 %memory"
 
 app.savelamp.Color = [1, 0, 0];
@@ -15,6 +15,7 @@ GPUpreview = check_GPU_for_preview(app);
 compute_FH(app,GPUpreview);
 
 [~,file_name,~] = fileparts(app.filename);
+
 folder_name = strcat( file_name, '_preview');
 if exist(fullfile(app.filepath, folder_name), 'dir')
     output_dirpath = fullfile(app.filepath, folder_name);
