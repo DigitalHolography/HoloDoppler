@@ -57,6 +57,9 @@ switch ext
 
         app.pix_width = 1 / double(app.interferogram_stream.horizontal_pix_per_meter);
         app.pix_height = 1 / double(app.interferogram_stream.vertical_pix_per_meter);
+        app.ppx.Value = app.pix_width;
+        app.ppy.Value = app.pix_height;
+
         app.Nx = double(app.interferogram_stream.frame_width);
         app.Ny = double(app.interferogram_stream.frame_height);
     case '.raw'
@@ -102,6 +105,9 @@ switch ext
         app.Ny = single(app.interferogram_stream.frame_width); %% find the real info in the footer
         app.pix_width = app.interferogram_stream.footer.info.pixel_pitch.x * 1e-6;
         app.pix_height = app.interferogram_stream.footer.info.pixel_pitch.y * 1e-6;
+
+        app.ppx.Value = app.pix_width;
+        app.ppy.Value = app.pix_height;
 
         app.zretinaEditField.Value = app.interferogram_stream.footer.compute_settings.image_rendering.propagation_distance;
 

@@ -160,7 +160,8 @@ classdef GuiCache
         function load2Gui(obj, app)
             % set gui parameters from cache
             try
-
+            app.ppx.Value = loadGUIVariable(obj.pix_width);
+            app.ppy.Value = loadGUIVariable(obj.pix_height);
             app.batchsizeEditField.Value = loadGUIVariable(obj.batch_size);
             app.max_PCAEditField.Limits = loadGUIVariable([0 double(app.batchsizeEditField.Value)]);
             app.spatialTransformationDropDown.Value = loadGUIVariable(obj.spatialTransformation);
@@ -207,6 +208,7 @@ classdef GuiCache
             app.numFreqEditField.Value = loadGUIVariable(obj.num_Freq);
             app.SVDStrideEditField.Value = loadGUIVariable(obj.SVD_Stride);
             app.SVDThresholdCheckBox.Value = loadGUIVariable(obj.isSVD_Stride);
+            
             end
 
         end

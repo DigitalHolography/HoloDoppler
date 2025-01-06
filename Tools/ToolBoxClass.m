@@ -15,6 +15,7 @@ classdef ToolBoxClass
         HD_path_mp4 char
         HD_path_log char
         HD_path_mat char
+        HD_path_raw char
     end
 
     methods
@@ -55,6 +56,7 @@ classdef ToolBoxClass
             obj.HD_path_mp4 = fullfile(obj.HD_path, 'mp4');
             obj.HD_path_mat = fullfile(obj.HD_path, 'mat');
             obj.HD_path_log = fullfile(obj.HD_path, 'log');
+            obj.HD_path_raw = fullfile(obj.HD_path, 'raw');
 
             mkdir(obj.HD_path);
             mkdir(obj.HD_path_png);
@@ -63,6 +65,7 @@ classdef ToolBoxClass
             mkdir(obj.HD_path_mp4);
             mkdir(obj.HD_path_mat);
             mkdir(obj.HD_path_log);
+            mkdir(obj.HD_path_raw);
 
             % Turn On Diary Logging
             diary off
