@@ -144,6 +144,8 @@ local_xystride = app.cache.xystride;
 local_num_unit_cells_x = app.cache.num_unit_cells_x;
 local_r1 = app.cache.r1;
 local_image_type_list = ImageTypeList();
+local_spatialfilterratio = app.spatialfilterratio.Value;
+local_spatial_filter_mask = app.spatial_filter_mask;
 
 % allocate video buffers
 %             num_batches = floor((app.interferogram_stream.num_frames - app.cache.batch_size) / app.cache.batch_stride);
@@ -499,12 +501,12 @@ else % ~local_low_memory
     fprintf("Parfor loop: %u workers\n", parfor_arg)
     tParfor = tic;
     
-    parfor batch_idx = 1:local_num_batches
+    for batch_idx = 1:local_num_batches
         
         % for batch_idx = 1:num_batches
         frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step);
-        if app.spatialfilterratio.Value>0 
-            frame_batch = abs(ifft2(fft2(frame_batch).*fftshift(app.spatial_filter_mask)));
+        if local_spatialfilterratio>0 
+            frame_batch = abs(ifft2(fft2(frame_batch).*fftshift(local_spatial_filter_mask)));
         end
         use_gpu_par = use_gpu;
         FH_par = compute_FH_from_frame_batch(frame_batch, local_kernel, local_spatialTransformation, use_gpu);
