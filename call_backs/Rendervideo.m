@@ -18,7 +18,7 @@ end
 
 tic;
 
-ToolBox = ToolBoxClass(app);
+ToolBox = ToolBoxClassHD(app);
 
 % save all gui parameters to a struct.
 % The current computation will fetch every parameter

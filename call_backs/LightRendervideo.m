@@ -33,7 +33,7 @@ function LightRendervideo(app)
     tic
     
     % Generate output directory
-    ToolBox = ToolBoxClass(app);
+    ToolBox = ToolBoxClassHD(app);
     dirpath = ToolBox.HD_path;
     
     app.cache = GuiCache(app);

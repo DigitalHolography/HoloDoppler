@@ -1,6 +1,6 @@
 function RenderFile(fullfilepath,cache)
 
-    ToolBox = ToolBoxClass();
+    ToolBox = ToolBoxClassHD();
     [filepath,filename,ext] = fileparts(fullfilepath);
     ToolBox.CreateToolBox(filepath,filename,ext)
     output_dirpath = ToolBox.HD_path;

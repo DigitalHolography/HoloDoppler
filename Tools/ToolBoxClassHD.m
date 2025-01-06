@@ -1,4 +1,4 @@
-classdef ToolBoxClass 
+classdef ToolBoxClassHD 
 
     % Holds useful variables calculated ones and used in the rest of the
     % script
@@ -20,7 +20,7 @@ classdef ToolBoxClass
 
     methods
 
-        function obj = ToolBoxClass(app)
+        function obj = ToolBoxClassHD(app)
 
             if nargin < 1
                 return
