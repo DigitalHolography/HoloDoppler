@@ -504,7 +504,7 @@ else % ~local_low_memory
         % for batch_idx = 1:num_batches
         frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step);
         if app.spatialfilterratio.Value>0 
-            frame_batch = ifft2(fft2(frame_batch).*app.spatial_filter_mask);
+            frame_batch = abs(ifft2(fft2(frame_batch).*fftshift(app.spatial_filter_mask)));
         end
         use_gpu_par = use_gpu;
         FH_par = compute_FH_from_frame_batch(frame_batch, local_kernel, local_spatialTransformation, use_gpu);
