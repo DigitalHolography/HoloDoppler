@@ -404,10 +404,16 @@ send(D, -2); % display 'video construction' on progress bar
 fprintf("Parfor loop: %u workers\n", parfor_arg)
 tParfor = tic;
 
+spatialFilterRatio = app.spatialfilterratio.Value;
+spatialFilterMask = app.spatial_filter_mask;
+
 parfor batch_idx = 1:local_num_batches
 
     % for batch_idx = 1:num_batches
     frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step);
+    if spatialFilterRatio > 0 
+        frame_batch = ifft2(fft2(frame_batch) .* spatialFilterMask);
+    end
     use_gpu_par = use_gpu;
     FH_par = compute_FH_from_frame_batch(frame_batch, local_kernel, local_spatialTransformation, use_gpu);
     local_image_type_list_par = local_image_type_list;
