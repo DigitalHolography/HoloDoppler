@@ -303,8 +303,5 @@ close(f);
 % imagesc(squeeze(abs(sum(SH_test,3))));
 
 % toc
-% output_dirname = create_output_directory_name(app.filepath, app.filename);
-%             output_dirpath = fullfile(app.filepath, output_dirname);
-% save('C:\Users\Interns\Documents\MATLAB\data\dark_field.mat', 'dark_field_H', '-mat');
 dark_field_H = imresize(dark_field_H, [Nx, Ny], 'nearest');
 end

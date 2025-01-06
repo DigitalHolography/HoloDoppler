@@ -27,6 +27,12 @@ classdef ToolBoxClass
 
             [filepath, filename, file_ext] = fileparts(fullfile(obj.Holo_path,obj.Holo_name));
 
+            CreateToolBox(filepath, filename, file_ext)
+
+        end
+
+        function obj = CreateToolBox(obj, filepath, filename, file_ext)
+
             dir_name_stem = strrep(filename, file_ext, '');
             list_dir = dir(filepath);
             idx = 0;
@@ -85,6 +91,7 @@ classdef ToolBoxClass
             fprintf("==========================================\n")
 
             saveGit(obj.HD_path)
+
         end
 
     end

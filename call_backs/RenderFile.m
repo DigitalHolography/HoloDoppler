@@ -11,8 +11,6 @@ function RenderFile(fullfilepath,cache)
     mkdir(fullfile(output_dirpath, 'log'));
     mkdir(fullfile(output_dirpath, 'raw'));
 
-    
-
     switch ext
         case '.cine'
             istream = CineReader(fullfilepath);
