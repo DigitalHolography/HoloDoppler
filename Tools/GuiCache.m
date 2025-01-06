@@ -35,7 +35,6 @@ classdef GuiCache
         DY double
 
         % video rendering logical checkboxes
-        low_memory logical
         save_raw logical
         rephasing logical
         registration logical
@@ -114,7 +113,6 @@ classdef GuiCache
             obj.DY = app.DY;
             obj.position_in_file = app.positioninfileSlider.Value;
             obj.output_videos = (strrep(app.outputvideoDropDown.Value, ' ', '_'));
-            obj.low_memory = app.lowmemoryCheckBox.Value;
             obj.rephasing = app.rephasingCheckBox.Value;
             obj.save_raw = app.saverawvideosCheckBox.Value;
             obj.registration_disc = app.registrationdiscCheckBox.Value;
@@ -182,7 +180,6 @@ classdef GuiCache
             app.iterativeregistrationCheckBox.Value = loadGUIVariable(obj.iterative_registration);
             app.wavelengthEditField.Value = loadGUIVariable(obj.wavelength);
             app.outputvideoDropDown.Value = loadGUIVariable(strrep(obj.output_videos, '_', ' '));
-            app.lowmemoryCheckBox.Value = loadGUIVariable(obj.low_memory);
             app.rephasingCheckBox.Value = loadGUIVariable(obj.rephasing);
             app.NotesTextArea.Value = loadGUIVariable(obj.notes);
             app.positioninfileSlider.Value = loadGUIVariable(obj.position_in_file);

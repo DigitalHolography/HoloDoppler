@@ -21,7 +21,7 @@ if stat == 0 % if git is initialised
     else
 
         vers = readlines('version.txt');
-        MessBranch = ['PulseWave GitHub version ', char(vers)];
+        MessBranch = ['HoloDoppler GitHub version ', char(vers)];
     end
 
     gitHashCommand = 'git rev-parse HEAD';
