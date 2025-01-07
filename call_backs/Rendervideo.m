@@ -572,7 +572,7 @@ if app.cache.registration
     % % construct reference image
     ref_batch_idx = min(floor((app.cache.position_in_file) / app.cache.batch_stride) + 1, size(video_M0, 4));
 
-    reg_frame_batch = app.interferogram_stream.read_frame_batch(app.cache.ref_batch_size, floor(ref_batch_idx * app.cache.batch_stride));
+    reg_frame_batch = app.interferogram_stream.read_frame_batch(app.cache.ref_batch_size, floor((ref_batch_idx-1) * app.cache.batch_stride));
 
     switch app.cache.spatialTransformation
         case 'angular spectrum'
@@ -793,8 +793,8 @@ switch local_output_video
         generate_video(video_moment1, ToolBox.HD_path, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
         generate_video(video_moment2, ToolBox.HD_path, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
         for freq_idx = 1:num_F
-            generate_video(images_choroid_0(:, :, :, :, freq_idx), ToolBox.HD_path, sprintf('choroid_%d', freq_idx), 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1, cornerNorm = 1.2);
-            generate_video(images_choroid_1(:, :, :, :, freq_idx), ToolBox.HD_path, sprintf('choroid_%d', freq_idx), 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1, cornerNorm = 1.2);
+            generate_video(images_choroid_0(:, :, :, :, freq_idx), ToolBox.HD_path, sprintf('bucket_sym_%d', freq_idx), 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1, cornerNorm = 1.2);
+            generate_video(images_choroid_1(:, :, :, :, freq_idx), ToolBox.HD_path, sprintf('bucket_asy_%d', freq_idx), 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1, cornerNorm = 1.2);
         end
         generate_video(video_color, ToolBox.HD_path, 'Color', [], app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1, cornerNorm = 1.2);
 end
