@@ -35,7 +35,7 @@ classdef ImageTypeList < handle % This class is modified dynamically
             obj.moment_0 = ImageType('M0');
             obj.moment_1 = ImageType('M1');
             obj.moment_2 = ImageType('M2');
-            obj.choroid = ImageType('choroid', struct('intervals', []));
+            obj.choroid = ImageType('choroid', struct('intervals_0', [], 'intervals_1', []));
         end
         
         function clear(obj, varargin)
@@ -297,7 +297,8 @@ classdef ImageTypeList < handle % This class is modified dynamically
                 numX = size(SH, 1);
                 numY = size(SH, 2);
                 L = (numX + numY) / 2;
-                obj.choroid.parameters.intervals = zeros(numX, numY, 1, num_F);
+                obj.choroid.parameters.intervals_0 = zeros(numX, numY, 1, num_F);
+                obj.choroid.parameters.intervals_1 = zeros(numX, numY, 1, num_F);
                 [X, Y] = meshgrid(1:numX, 1:numY);
                 circleMask = fftshift(sqrt((X-(numX/2)).^2 + (Y-(numY/2)).^2) < 0.15 * L);
                 frequencies = linspace(f1, f2, num_F + 1);
@@ -305,10 +306,15 @@ classdef ImageTypeList < handle % This class is modified dynamically
                     img = moment0(SH, frequencies(freqIdx), frequencies(end), ac.fs, j_win, gaussian_width);
                     img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
 
-                    obj.choroid.parameters.intervals(:, :, :, freqIdx) = img;  
+                    obj.choroid.parameters.intervals_0(:, :, :, freqIdx) = img;
+
+                    img = moment1(SH, frequencies(freqIdx), frequencies(end), ac.fs, j_win, gaussian_width);
+                    img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
+
+                    obj.choroid.parameters.intervals_1(:, :, :, freqIdx) = img;
                 end
             end
-            
+
         end
         
     end

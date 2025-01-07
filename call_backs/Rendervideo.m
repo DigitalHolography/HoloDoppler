@@ -214,7 +214,8 @@ switch local_output_video
         video_moment0 = video_M0;
         video_moment1 = video_M0;
         video_moment2 = video_M0;
-        images_choroid =  zeros(app.Nx, app.Ny, 1, local_num_batches, num_F, 'single');
+        images_choroid_0 =  zeros(app.Nx, app.Ny, 1, local_num_batches, num_F, 'single');
+        images_choroid_1 =  zeros(app.Nx, app.Ny, 1, local_num_batches, num_F, 'single');
         video_M_freq_low = video_M0;
         video_M_freq_high = video_M0;
 
@@ -505,8 +506,9 @@ parfor batch_idx = 1:local_num_batches
                 video_moment0(:, :, :, batch_idx) = gather(local_image_type_list_par.moment_0.image);
                 video_moment1(:, :, :, batch_idx) = gather(local_image_type_list_par.moment_1.image);
                 video_moment2(:, :, :, batch_idx) = gather(local_image_type_list_par.moment_2.image);
-                images_choroid(:, :, :, batch_idx, :) = gather(local_image_type_list_par.choroid.parameters.intervals);
-                tmp = images_choroid(:, :, :, batch_idx, :);
+                images_choroid_0(:, :, :, batch_idx, :) = gather(local_image_type_list_par.choroid.parameters.intervals_0);
+                images_choroid_1(:, :, :, batch_idx, :) = gather(local_image_type_list_par.choroid.parameters.intervals_1);
+                tmp = images_choroid_0(:, :, :, batch_idx, :);
                 video_M_freq_low(:, :, :, batch_idx) = tmp(:,:,:,1);
                 video_M_freq_high(:, :, :, batch_idx) = tmp(:,:,:,end);
 
@@ -634,7 +636,8 @@ if app.cache.registration
             video_moment2 = register_video_from_shifts(video_moment2, shifts);
             video_color = register_video_from_shifts(video_color, shifts);
             for freq_idx = 1:num_F
-                images_choroid(:, :, :, :, freq_idx) = register_video_from_shifts(images_choroid(:, :, :, :, freq_idx), shifts);
+                images_choroid_0(:, :, :, :, freq_idx) = register_video_from_shifts(images_choroid_0(:, :, :, :, freq_idx), shifts);
+                images_choroid_1(:, :, :, :, freq_idx) = register_video_from_shifts(images_choroid_1(:, :, :, :, freq_idx), shifts);
             end
 
 
@@ -790,7 +793,8 @@ switch local_output_video
         generate_video(video_moment1, ToolBox.HD_path, 'moment1', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
         generate_video(video_moment2, ToolBox.HD_path, 'moment2', 0.0005, app.cache.temporal_filter, local_low_frequency, export_raw, 1);
         for freq_idx = 1:num_F
-            generate_video(images_choroid(:, :, :, :, freq_idx), ToolBox.HD_path, sprintf('choroid_%d', freq_idx), 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1, cornerNorm = 1.2);
+            generate_video(images_choroid_0(:, :, :, :, freq_idx), ToolBox.HD_path, sprintf('choroid_%d', freq_idx), 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1, cornerNorm = 1.2);
+            generate_video(images_choroid_1(:, :, :, :, freq_idx), ToolBox.HD_path, sprintf('choroid_%d', freq_idx), 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1, cornerNorm = 1.2);
         end
         generate_video(video_color, ToolBox.HD_path, 'Color', [], app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1, cornerNorm = 1.2);
 end
@@ -846,17 +850,17 @@ if registration_pass || app.cache.registration
 end
 
 if strcmp(local_output_video, 'choroid') == 1
-    numX = size(images_choroid, 1);
-    numY = size(images_choroid, 2);
+    numX = size(images_choroid_0, 1);
+    numY = size(images_choroid_0, 2);
     [X, Y] = meshgrid(1:numX, 1:numY);
     L = (numX + numY) / 2;
     fileID = fopen(fullfile(ToolBox.HD_path_txt, 'intervals.txt'),'w');
 
-    meanIm = mean(images_choroid(:, :, :, :, freq_idx), [3 4]);
+    meanIm = mean(images_choroid_0(:, :, :, :, freq_idx), [3 4]);
     maskDiaphragm = ((X-numX/2)^2 + (Y-numY/2)^2) < L * 0.4;
     T = graythresh(meanIm);
     for freq_idx = 1:num_F
-        meanIm = mean(images_choroid(:, :, :, :, freq_idx), [3 4]);
+        meanIm = mean(images_choroid_0(:, :, :, :, freq_idx), [3 4]);
         binIm = imbinarize(meanIm, T);
         fprintf(fileID, "Interval %d: %0.2d%%\n", freq_idx, 100 * nnz(binIm .* maskDiaphragm) / (nnz(maskDiaphragm)));
     end
