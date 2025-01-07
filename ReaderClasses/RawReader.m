@@ -80,41 +80,50 @@ classdef RawReader
             fclose(fd);
             batch = replace_dropped_frames(batch, 0.2);
         end
-        
+
         function batch = read_frame_batch(obj, batch_size, frame_offset)
             ac = obj.acquisition;
-            
+
             final_frame_size = ac.Nx;
             if obj.true_frame_width <= obj.true_frame_height
                 width_skip = floor(0.5*(final_frame_size - obj.true_frame_width));
                 width_range = 1+width_skip:width_skip+obj.true_frame_width;
                 height_range = 1:obj.true_frame_height;
-             else
+            else
                 height_skip = floor(0.5*(final_frame_size - obj.true_frame_height));
                 height_range = 1+height_skip:height_skip+obj.true_frame_height;
                 width_range = 1:obj.true_frame_width;
             end
-             
+
             batch = zeros(ac.Nx, ac.Ny, batch_size, 'single');
-            
+
             fd = fopen(obj.path, 'r');
             frame_bytes_size = obj.true_frame_width * obj.true_frame_height * 2;
             bytes_offset = frame_offset * frame_bytes_size;
-            
+
             fseek(fd, bytes_offset, 'bof');
             data = fread(fd, obj.true_frame_width * obj.true_frame_height * batch_size, 'uint16=>single', obj.endianness);
             batch(width_range, height_range, :) = reshape(data, obj.true_frame_width, obj.true_frame_height, batch_size);
             fclose(fd);
-           
+
             batch = replace_dropped_frames(batch, 0.2);
         end
-        
+
         function width = get_frame_width(obj)
             width = obj.acquisition.Nx;
         end
 
         function height = get_frame_height(obj)
             height = obj.acquisition.Ny;
+        end
+
+        function frame_batches = read_all_frames(obj, batch_size, batch_stride)
+
+            num_batches = floor((obj.num_frames - batch_size) / batch_stride);
+            frame_batches = zeros(obj.frame_width, obj.frame_height, num_batches);
+            for batchIdx = 1:num_batches
+                frame_batches(:, :, :, batchIdx) = obj.read_frame_batch(batch_size, (batchIdx - 1) * batch_stride);
+            end
         end
     end
 end
