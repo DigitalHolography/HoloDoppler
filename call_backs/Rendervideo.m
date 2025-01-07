@@ -143,6 +143,8 @@ local_xystride = app.cache.xystride;
 local_num_unit_cells_x = app.cache.num_unit_cells_x;
 local_r1 = app.cache.r1;
 local_image_type_list = ImageTypeList();
+local_spatialfilterratio = app.spatialfilterratio.Value;
+local_spatial_filter_mask = app.spatial_filter_mask;
 
 % allocate video buffers
 %             num_batches = floor((app.interferogram_stream.num_frames - app.cache.batch_size) / app.cache.batch_stride);
