@@ -233,6 +233,10 @@ switch local_output_video
         video_M_freq_low = video_M0;
         video_M_freq_high = video_M0;
 
+    case 'power pca'
+        local_image_type_list.select('pure_PCA');
+        video_0 = zeros(app.Nx, app.Ny, 1, local_num_batches, 'single');
+
 
 end %switch local_output_video
 
@@ -525,6 +529,11 @@ parfor batch_idx = 1:local_num_batches
                 video_M_freq_low(:, :, :, batch_idx) = tmp(:,:,:,1);
                 video_M_freq_high(:, :, :, batch_idx) = tmp(:,:,:,end);
 
+            case 'power pca'
+                tmp_video_0 = gather(local_image_type_list_par.pure_PCA.image);
+                video_0(:, :, :, batch_idx) = tmp_video_0;
+
+
         end
 
     end
@@ -652,6 +661,17 @@ if app.cache.registration
                 images_choroid_0(:, :, :, :, freq_idx) = register_video_from_shifts(images_choroid_0(:, :, :, :, freq_idx), shifts);
                 images_choroid_1(:, :, :, :, freq_idx) = register_video_from_shifts(images_choroid_1(:, :, :, :, freq_idx), shifts);
             end
+        
+        case 'power pca'
+            % if size(local_image_registration, 2) == local_num_batches && ~app.cache.iterative_registration % if registration from previous folder results
+            %     disp('rendering from old registration')
+            %     video_0 = register_video_from_shifts(video_0, local_image_registration(1:2, :));
+            %     shifts(1:2, :) = local_image_registration(1:2, :);
+            % else
+            %     % FIXME : use "reg_hologram" as reference (current preview from frontend)
+            %     [video_M0_reg, shifts(1:2, :)] = register_video_from_reference(video_M0_reg, reg_hologram);
+            %     video_0 = register_video_from_shifts(video_0, shifts(1:2, :));
+            % end
 
 
         case 'power_Doppler'
@@ -810,6 +830,9 @@ switch local_output_video
             generate_video(images_choroid_1(:, :, :, :, freq_idx), ToolBox.HD_path, sprintf('bucket_asy_%d', freq_idx), 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1, cornerNorm = 1.2);
         end
         generate_video(video_color, ToolBox.HD_path, 'Color', [], app.cache.temporal_filter, local_low_frequency, 0, 1, NoIntensity=1, cornerNorm = 1.2);
+    case 'power pca'
+        generate_video(video_0, ToolBox.HD_path, 'pca0', 0.0005, app.cache.temporal_filter, local_low_frequency, 0, 1); % same as usual
+
 end
 
 tEndVideoGen = toc(tVideoGen);
