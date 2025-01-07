@@ -30,9 +30,9 @@ if app.spatialfilterratio.Value>0
     imshow(rescale(app.spatial_filter_mask));
     figure(6);
     FT_batch = fft2(app.frame_batch);
-    logimg = log10(mean(abs(FT_batch.*fftshift(app.spatial_filter_mask)),3));
-    imshow(fftshift(logimg./max(logimg.*fftshift(app.spatial_filter_mask))));
-    app.frame_batch = abs(ifft2(FT_batch.*fftshift(app.spatial_filter_mask)));
+    logimg = log10(mean(abs(FT_batch.*fftshift(app.spatial_filter_mask')),3));
+    imshow(fftshift(logimg./max(logimg.*fftshift(app.spatial_filter_mask'),[],'all')));
+    app.frame_batch = abs(ifft2(FT_batch.*fftshift(app.spatial_filter_mask')));
 end
 compute_FH(app,GPUpreview);
 if app.ShackHartmannCheckBox.Value
