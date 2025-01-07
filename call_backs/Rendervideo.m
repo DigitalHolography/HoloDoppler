@@ -144,7 +144,19 @@ local_num_unit_cells_x = app.cache.num_unit_cells_x;
 local_r1 = app.cache.r1;
 local_image_type_list = ImageTypeList();
 local_spatialfilterratio = app.spatialfilterratio.Value;
-local_spatial_filter_mask = app.spatial_filter_mask;
+
+if local_spatialfilterratio>0
+    [X, Y] = meshgrid(linspace(-app.Nx / 2, app.Nx / 2, app.Nx), linspace(-app.Ny / 2, app.Ny / 2, app.Ny));
+    disc_ratio = app.spatialfilterratio.Value;
+    disc = X .^ 2 + Y .^ 2 < (disc_ratio * min(app.Nx, app.Ny) / 2) ^ 2;
+    local_spatial_filter_mask = ~disc';
+    [X, Y] = meshgrid(linspace(-app.Nx / 2, app.Nx / 2, app.Nx), linspace(-app.Ny / 2, app.Ny / 2, app.Ny));
+    disc_ratio = app.spatialfilterratiohigh.Value;
+    disc = X .^ 2 + Y .^ 2 < (disc_ratio * min(app.Nx, app.Ny) / 2) ^ 2;
+    local_spatial_filter_mask = local_spatial_filter_mask & disc';
+else 
+    local_spatial_filter_mask = [];
+end
 
 % allocate video buffers
 %             num_batches = floor((app.interferogram_stream.num_frames - app.cache.batch_size) / app.cache.batch_stride);
@@ -407,15 +419,14 @@ send(D, -2); % display 'video construction' on progress bar
 fprintf("Parfor loop: %u workers\n", parfor_arg)
 tParfor = tic;
 
-spatialFilterRatio = app.spatialfilterratio.Value;
-spatialFilterMask = app.spatial_filter_mask;
-
 parfor batch_idx = 1:local_num_batches
 
     % for batch_idx = 1:num_batches
     frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step);
-    if spatialFilterRatio > 0 
-        frame_batch = ifft2(fft2(frame_batch) .* spatialFilterMask);
+    FT_batch = fft2(frame_batch);
+    if local_spatialfilterratio > 0 
+        % you should have performed one preview at least
+        frame_batch = abs(ifft2(FT_batch.*fftshift(local_spatial_filter_mask')));
     end
     use_gpu_par = use_gpu;
     FH_par = compute_FH_from_frame_batch(frame_batch, local_kernel, local_spatialTransformation, use_gpu);
