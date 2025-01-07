@@ -33,16 +33,8 @@ function LightRendervideoGPU(app)
     tic
     
     % Generate output directory
-    output_dirname = create_output_directory_name(app.filepath, app.filename);
-    output_dirpath = fullfile(app.filepath, output_dirname);
-    mkdir(output_dirpath);
-    mkdir(fullfile(output_dirpath, 'avi'));
-    mkdir(fullfile(output_dirpath, 'mp4'));
-    mkdir(fullfile(output_dirpath, 'png'));
-    mkdir(fullfile(output_dirpath, 'mat'));
-    mkdir(fullfile(output_dirpath, 'log'));
-    mkdir(fullfile(output_dirpath, 'raw'));
-    
+    ToolBox = ToolBoxClassHD(app);
+    dirpath = ToolBox.HD_path;
     
     app.cache = GuiCache(app);
     num_workers = app.cache.nb_cpu_cores;
@@ -253,11 +245,11 @@ function LightRendervideoGPU(app)
     % FIXME add 'or' statement
     % add colors to M0_registration
     video_M0_reg = cat(3,rescale(video_M0_reg),repmat(rescale(reg_hologram),[1,1,1,size(video_M0,4)]),rescale(video_M0(:,:,1,:))); % new in red, ref in green
-    generate_video(video_M0, output_dirpath, 'M0', 0.0005, app.cache.temporal_filter, 0, 0, true);
-    generate_video(video_M0_reg, output_dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, 0, 0, true);
-    generate_video(video_moment0, output_dirpath, 'moment0', 0.0005, app.cache.temporal_filter, 0, true, true);
-    generate_video(video_moment1, output_dirpath, 'moment1', 0.0005, app.cache.temporal_filter, 0, true, true);
-    generate_video(video_moment2, output_dirpath, 'moment2', 0.0005, app.cache.temporal_filter, 0, true, true);
+    generate_video(video_M0, dirpath, 'M0', 0.0005, app.cache.temporal_filter, 0, 0, true);
+    generate_video(video_M0_reg, dirpath, 'M0_registration', 0.0005, app.cache.temporal_filter, 0, 0, true);
+    generate_video(video_moment0, dirpath, 'moment0', 0.0005, app.cache.temporal_filter, 0, true, true);
+    generate_video(video_moment1, dirpath, 'moment1', 0.0005, app.cache.temporal_filter, 0, true, true);
+    generate_video(video_moment2, dirpath, 'moment2', 0.0005, app.cache.temporal_filter, 0, true, true);
     tEndVideoGen = toc(tVideoGen);
     fprintf("Video Generation took %f s\n",tEndVideoGen)
     
@@ -313,7 +305,7 @@ function LightRendervideoGPU(app)
     s.SVDx = local_SVDx;
     s.SVDxSubAp = local_SVDx_SubAp_num;
     JSON_parameters = jsonencode(s,PrettyPrint=true);
-    fid = fopen(fullfile(output_dirpath, 'log', 'RenderingParameters.json'), "wt+");
+    fid = fopen(fullfile(dirpath, 'log', 'RenderingParameters.json'), "wt+");
     fprintf(fid, JSON_parameters);
     fclose(fid);
 
