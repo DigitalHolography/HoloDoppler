@@ -101,7 +101,6 @@ classdef GuiCache
             obj.pix_width = app.pix_width;
             obj.pix_height = app.pix_height;
             obj.registration = app.imageregistrationCheckBox.Value;
-            obj.temporal_filter_flag = app.temporalfilterCheckBox.Value;
             obj.temporal_filter = app.temporalfilterEditField.Value;
             obj.parallelism = app.ParallelismDropDown.Value;
             obj.registration_via_phase = app.phaseregistrationCheckBox.Value;

@@ -19,9 +19,15 @@ end
 %                 'YData', [1 app.UIAxes_1.Position(4)]);
 % FIXME trouver autre chose qu'un if
 image = mat2gray(sign * app.hologram);
+
 if (size(image, 3) == 1)
     image = repmat(image, 1, 1, 3);
+    [numX, numY, ~] = size(image);
+    if strcmp(app.spatialTransformationDropDown.Value, 'Fresnel') && (numX ~= numY)
+        image = imresize(image, [max(numX, numY) max(numX, numY)]);
+    end
 end
+
 if ~isempty(app.mask)
     try
         image(:,:,1) = 2*app.mask .* image(:,:,3)+ ~app.mask.*image(:,:,3);

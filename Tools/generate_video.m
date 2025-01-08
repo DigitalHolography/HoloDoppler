@@ -89,6 +89,21 @@ end
 %% prepare for writing
 video = mat2gray(video);
 
+[numX, numY,numCol, numFrames] = size(video);
+ToolBox = getGlobalToolBox;
+if strcmp(ToolBox.SpatialTransform, 'Fresnel') && (numX ~= numY)
+    newvideo = zeros([max(numX, numY) max(numX, numY) numCol numFrames]);
+    parfor i = 1: numFrames
+        if numCol > 1 %if color image
+            newvideo(:,:,:,i) = imresize3(video(:,:,:,i),[max(numX, numY) max(numX, numY) numCol]);
+        else
+            newvideo(:,:,:,i) = imresize(video(:,:,:,i),[max(numX, numY) max(numX, numY)]);
+        end
+    end
+    video = newvideo; newvideo = [];
+    video(video>1) = 1; video(video<0)=0; % fix things induced by resizing
+end
+
 w = VideoWriter(sprintf('%s\\avi\\%s', output_path, output_filename));
 open(w);
 for i = 1:size(video,4)
