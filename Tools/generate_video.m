@@ -64,11 +64,11 @@ end
 %% corner normalizations
 
 if opt.cornerNorm > 0
-    Nx = size(video, 1);
-    Ny = size(video, 2);
-    [X, Y] = meshgrid(linspace(-Nx / 2, Nx / 2, Nx), linspace(-Ny / 2, Ny / 2, Ny));
+    numX = size(video, 1);
+    numY = size(video, 2);
+    [X, Y] = meshgrid(linspace(-numY / 2, numY / 2, numY), linspace(-numX / 2, numX / 2, numX));
     disc_ratio = opt.cornerNorm;
-    disc = X .^ 2 + Y .^ 2 < (disc_ratio * min(Nx, Ny) / 2) ^ 2;
+    disc = X .^ 2 + Y .^ 2 < (disc_ratio * min(numX, numY) / 2) ^ 2;
     video = video ./ mean(video.*~disc,[1,2]);
 end
 

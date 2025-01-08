@@ -17,7 +17,7 @@ end
 % computation duration
 
 tic;
-
+close all
 ToolBox = ToolBoxClassHD(app);
 
 % save all gui parameters to a struct.
@@ -433,7 +433,7 @@ tParfor = tic;
 
 all_batches = uint8(istream.read_all_frames(batch_size, batch_stride));
 
-parfor batch_idx = 1:numBatches
+for batch_idx = 1:numBatches
     
     frame_batch = all_batches(:, :, :, batch_idx);
     
@@ -855,12 +855,12 @@ end
 if strcmp(output_video, 'choroid') == 1
     numX = size(images_choroid_0, 1);
     numY = size(images_choroid_0, 2);
-    [X, Y] = meshgrid(1:numX, 1:numY);
+    [X, Y] = meshgrid(1:numY, 1:numX);
     L = (numX + numY) / 2;
     fileID = fopen(fullfile(ToolBox.HD_path_txt, 'intervals.txt'), 'w');
     
     meanIm = mean(images_choroid_0(:, :, :, :, freq_idx), [3 4]);
-    maskDiaphragm = ((X - numX / 2) ^ 2 + (Y - numY / 2) ^ 2) < L * 0.4;
+    maskDiaphragm = ((X - numX / 2) .^ 2 + (Y - numY / 2) .^ 2) < L * 0.4;
     T = graythresh(meanIm);
     
     for freq_idx = 1:numF
