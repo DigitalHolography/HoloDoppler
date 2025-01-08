@@ -120,9 +120,9 @@ classdef RawReader
         function frame_batches = read_all_frames(obj, batch_size, batch_stride)
 
             num_batches = floor((obj.num_frames - batch_size) / batch_stride);
-            frame_batches = zeros(obj.frame_width, obj.frame_height, num_batches);
+            frame_batches = zeros(obj.j_win, obj.j_step, batch_size, num_batches);
             for batchIdx = 1:num_batches
-                frame_batches(:, :, :, batchIdx) = obj.read_frame_batch(batch_size, (batchIdx - 1) * batch_stride);
+                frame_batches(:, :, :, batchIdx) = int32(obj.read_frame_batch(batch_size, (batchIdx - 1) * batch_stride));
             end
         end
     end

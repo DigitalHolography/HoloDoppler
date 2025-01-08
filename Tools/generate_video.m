@@ -1,4 +1,4 @@
-function generate_video(video, output_path, name, contrast_enhancement_tol, temporal_filter_sigma, contrast_inversion, export_raw, export_avg_img, options)
+function generate_video(video, output_path, name, opt)
 % Saves a raw pixel array to a video file, with some post processing
 % commonly done for rendering hologram videos
 %
@@ -16,13 +16,13 @@ arguments
     video 
     output_path 
     name 
-    contrast_enhancement_tol 
-    temporal_filter_sigma 
-    contrast_inversion 
-    export_raw 
-    export_avg_img
-    options.NoIntensity = false
-    options.cornerNorm = false
+    opt.temporal_filter = []
+    opt.contrast_inversion = false
+    opt.contrast_tol = 0.0005
+    opt.NoIntensity = false
+    opt.cornerNorm = false
+    opt.export_raw = false
+    opt.export_avg_img = true
 end
 
 [~, output_dirname] = fileparts(output_path);
@@ -32,7 +32,7 @@ output_filename = sprintf('%s_%s.%s', output_dirname, name, 'avi');
 video = flip(video);
 
 %% save to raw format
-if export_raw 
+if opt.export_raw 
     output_filename = sprintf('%s_%s.%s', output_dirname, name, 'raw');
     export_raw_video(fullfile(output_path, 'raw', output_filename), (video));
     
@@ -48,8 +48,8 @@ end
 
 
 %% temporal filter
-if ~isempty(temporal_filter_sigma)
-   sigma = [0.0001 0.0001 temporal_filter_sigma];
+if ~isempty(opt.temporal_filter)
+   sigma = [0.0001 0.0001 opt.temporal_filter];
    for c = 1:size(video, 3)
       video(:,:,c,:) = imgaussfilt3(squeeze(video(:,:,c,:)), sigma); 
    end
@@ -57,24 +57,24 @@ end
 
 %% fix intensity flashes
 
-if ~options.NoIntensity
+if ~opt.NoIntensity
     video = video - mean(mean(video, 2), 1);
 end
 
 %% corner normalizations
 
-if options.cornerNorm > 0
+if opt.cornerNorm > 0
     Nx = size(video, 1);
     Ny = size(video, 2);
     [X, Y] = meshgrid(linspace(-Nx / 2, Nx / 2, Nx), linspace(-Ny / 2, Ny / 2, Ny));
-    disc_ratio = options.cornerNorm;
+    disc_ratio = opt.cornerNorm;
     disc = X .^ 2 + Y .^ 2 < (disc_ratio * min(Nx, Ny) / 2) ^ 2;
     video = video ./ mean(video.*~disc,[1,2]);
 end
 
 %% contrast enhancement
-if ~isempty(contrast_enhancement_tol)
-    tol_pdi_low = contrast_enhancement_tol;  % default 0.0005
+if opt.contrast_tol ~= 0
+    tol_pdi_low = opt.contrast_tol;  % default 0.0005
     tol_pdi = [tol_pdi_low 1-tol_pdi_low];
     video = enhance_video_constrast(video, tol_pdi);
 end
@@ -82,7 +82,7 @@ end
 
 
 %% contrast inversion
-if contrast_inversion
+if opt.contrast_inversion
    video = -1.0 * video; 
 end
 
@@ -106,7 +106,7 @@ end
 close(w)
 
 %% save temporal average to png
-if export_avg_img
+if opt.export_avg_img
     generate_image(video, output_path, name);
 end
 end
