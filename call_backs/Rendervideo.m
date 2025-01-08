@@ -434,7 +434,7 @@ end
 
 all_batches = uint8(istream.read_all_frames(batch_size, batch_stride));
 
-for batch_idx = 1:numBatches
+parfor batch_idx = 1:numBatches
 
     frame_batch = all_batches(:, :, :, batch_idx);
 
@@ -678,8 +678,8 @@ if app.cache.registration
             video_M1_over_M0 = register_video_from_shifts(video_M1_over_M0, shifts);
             video_M2_over_M0 = register_video_from_shifts(video_M2_over_M0, shifts);
             video_color = register_video_from_shifts(video_color, shifts);
-            video_M_freq_high = register_video_from_shifts(video_M_freq_high, shifts);
-            video_M_freq_low = register_video_from_shifts(video_M_freq_low, shifts);
+            % video_M_freq_high = register_video_from_shifts(video_M_freq_high, shifts);
+            % video_M_freq_low = register_video_from_shifts(video_M_freq_low, shifts);
             video_M0_pos = register_video_from_shifts(video_M0_pos, shifts);
             video_M0_neg = register_video_from_shifts(video_M0_neg, shifts);
             % video_M0sM1r = register_video_from_shifts(video_M0sM1r, shifts);
@@ -762,7 +762,7 @@ switch output_video
 
         % generate additional images
 
-        [color_img, img_low_freq, img_high_freq] = construct_colored_image(video_M_freq_low, video_M_freq_high);
+        % [color_img, img_low_freq, img_high_freq] = construct_colored_image(video_M_freq_low, video_M_freq_high);
 
         % convert spectrogram_matrix_video to one spectrogram
         %                     spectrogram_matrix_video = squeeze(spectrogram_matrix_video(:,:,:,1));%reshape(spectrogram_matrix_video, numX, numY, batch_size * num_batches);
@@ -773,13 +773,13 @@ switch output_video
         %                         set(figure(1), 'Visible', 'off');
         %                         plot(S_video);
 
-        color_output_filename = sprintf('%s_%s.%s', ToolBox.HD_name, 'Color', 'png');
-        img_low_freq_output_filename = sprintf('%s_%s.%s', ToolBox.HD_name, 'M0_high_flow', 'png');
-        img_high_freq_output_filename = sprintf('%s_%s.%s', ToolBox.HD_name, 'M0_low_flow', 'png');
+        % color_output_filename = sprintf('%s_%s.%s', ToolBox.HD_name, 'Color', 'png');
+        % img_low_freq_output_filename = sprintf('%s_%s.%s', ToolBox.HD_name, 'M0_high_flow', 'png');
+        % img_high_freq_output_filename = sprintf('%s_%s.%s', ToolBox.HD_name, 'M0_low_flow', 'png');
 
-        imwrite(color_img, fullfile(ToolBox.HD_path_png, color_output_filename));
-        imwrite(img_low_freq, fullfile(ToolBox.HD_path_png, img_low_freq_output_filename));
-        imwrite(img_high_freq, fullfile(ToolBox.HD_path_png, img_high_freq_output_filename));
+        % imwrite(color_img, fullfile(ToolBox.HD_path_png, color_output_filename));
+        % imwrite(img_low_freq, fullfile(ToolBox.HD_path_png, img_low_freq_output_filename));
+        % imwrite(img_high_freq, fullfile(ToolBox.HD_path_png, img_high_freq_output_filename));
         % imwrite(RI, fullfile(ToolBox.HD_path_png, RI_output_filename));
         % imwrite(mat2gray((abs(spectrogram_array.^2))), fullfile(ToolBox.HD_path_png,  'spectrogram_artery.png'));
 

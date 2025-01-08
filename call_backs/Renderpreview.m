@@ -12,9 +12,12 @@ GPUpreview = check_GPU_for_preview(app);
 % else
 %     disp("Not using GPU.")
 % end
-app.frame_batch = app.interferogram_stream.read_frame_batch(app.batchsizeEditField.Value, 0);
+app.frame_batch = app.interferogram_stream.read_frame_batch(app.batchsizeEditField.Value, app.positioninfileSlider.Value);
 numX = app.Nx;
 numY = app.Ny;
+FT_batch = fft2(app.frame_batch);
+grayFFT = imresize(fftshift(rescale(log10(mean(abs(FT_batch), 3)))), [max(numX, numY), max(numX, numY)]);
+app.ImageRight.ImageSource = cat(3, grayFFT, grayFFT, grayFFT);
 
 if app.spatialfilterratio.Value ~= 0
     
@@ -26,18 +29,13 @@ if app.spatialfilterratio.Value ~= 0
     disc_ratio = app.spatialfilterratiohigh.Value;
     disc = X .^ 2 + Y .^ 2 < (disc_ratio * min(numX, numY) / 2) ^ 2;
     app.spatial_filter_mask = app.spatial_filter_mask & disc';
-    FT_batch = fft2(app.frame_batch);
+    
     
     if app.showSpatialFilterCheckBox.Value
-        figure(3);
-        imshow(rescale(abs(app.frame_batch(:, :, 1))));
-        figure(4);
-        imshow(fftshift(rescale(log10(mean(abs(fft2(app.frame_batch)), 3)))));
-        figure(5);
-        imshow(rescale(app.spatial_filter_mask));
-        figure(6);
+        
         logimg = log10(mean(abs(FT_batch .* fftshift(app.spatial_filter_mask')), 3));
-        imshow(fftshift(logimg ./ max(logimg .* fftshift(app.spatial_filter_mask'), [], 'all')));
+        logimg = (fftshift(logimg ./ max(logimg .* fftshift(app.spatial_filter_mask'), [], 'all')));
+        app.ImageRight.ImageSource = cat(3, logimg, logimg, logimg);
     end
     
     app.frame_batch = abs(ifft2(FT_batch .* fftshift(app.spatial_filter_mask')));
