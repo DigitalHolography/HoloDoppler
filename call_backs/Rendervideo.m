@@ -160,11 +160,11 @@ end
 
 acquisition = DopplerAcquisition(numX, numY, fs / 1000, z, z_retina, z_iris, wl, Dx, Dy, pix_width, pix_height);
 
-spatialFilterMask = app.spatialfilterratio.Value;
+spatialFilterRatio = app.spatialfilterratio.Value;
 
 if spatialFilterRatio>0
     [X, Y] = meshgrid(linspace(-numX / 2, numX / 2, numX), linspace(-numY / 2, numY / 2, numY));
-    disc_ratio = spatialFilterMask;
+    disc_ratio = spatialFilterRatio;
     disc = X .^ 2 + Y .^ 2 < (disc_ratio * min(numX, numY) / 2) ^ 2;
     spatialFilterMask = ~disc';
     disc_ratio = app.spatialfilterratiohigh.Value;
@@ -431,12 +431,9 @@ fprintf("Parfor loop: %u workers\n", parfor_arg)
 
 tParfor = tic;
 
-spatialFilterRatio = app.spatialfilterratio.Value;
-spatialFilterMask = app.spatial_filter_mask;
-
 all_batches = uint8(istream.read_all_frames(batch_size, batch_stride));
 
-parfor batch_idx = 1:local_num_batches
+parfor batch_idx = 1:numBatches
     
     frame_batch = all_batches(:, :, :, batch_idx);
     

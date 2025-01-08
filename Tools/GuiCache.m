@@ -114,14 +114,12 @@ classdef GuiCache
             obj.position_in_file = app.positioninfileSlider.Value;
             obj.output_videos = (strrep(app.outputvideoDropDown.Value, ' ', '_'));
             obj.rephasing = app.rephasingCheckBox.Value;
-            obj.save_raw = app.saverawvideosCheckBox.Value;
             obj.registration_disc = app.registrationdiscCheckBox.Value;
             obj.registration_disc_ratio = app.regDiscRatioEditField.Value;
 
             obj.color_f1 = app.compositef1EditField.Value;
             obj.color_f2 = app.compositef2EditField.Value;
             obj.color_f3 = app.compositef3EditField.Value;
-            obj.low_frequency = app.lowfrequencyCheckBox.Value;
 
             % dark field parameters
             obj.xystride = app.xystrideEditField.Value;
