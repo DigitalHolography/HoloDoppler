@@ -15,19 +15,17 @@ GPUpreview = check_GPU_for_preview(app);
 app.frame_batch = app.interferogram_stream.read_frame_batch(app.batchsizeEditField.Value, app.positioninfileSlider.Value);
 numX = app.Nx;
 numY = app.Ny;
+
 FT_batch = fft2(app.frame_batch);
-grayFFT = imresize(fftshift(rescale(log10(mean(abs(FT_batch), 3)))), [max(numX, numY), max(numX, numY)]);
-app.ImageRight.ImageSource = cat(3, grayFFT, grayFFT, grayFFT);
 
 if app.spatialfilterratio.Value ~= 0
     
-    [X, Y] = meshgrid(linspace(-numX / 2, numX / 2, numX), linspace(-numY / 2, numY / 2, numY));
+    [Y, X] = meshgrid(linspace(-numX / 2, numX / 2, numX), linspace(-numY / 2, numY / 2, numY));
     disc_ratio = app.spatialfilterratio.Value;
-    disc = X .^ 2 + Y .^ 2 < (disc_ratio * min(numX, numY) / 2) ^ 2;
+    disc = (X/numX) .^ 2 + (Y/numY) .^ 2 < (disc_ratio/ 2) ^ 2;
     app.spatial_filter_mask = ~disc';
-    [X, Y] = meshgrid(linspace(-numX / 2, numX / 2, numX), linspace(-numY / 2, numY / 2, numY));
     disc_ratio = app.spatialfilterratiohigh.Value;
-    disc = X .^ 2 + Y .^ 2 < (disc_ratio * min(numX, numY) / 2) ^ 2;
+    disc = (X/numX).^ 2 + (Y/numY) .^ 2 < (disc_ratio/ 2) ^ 2;
     app.spatial_filter_mask = app.spatial_filter_mask & disc';
     
     
@@ -40,6 +38,9 @@ if app.spatialfilterratio.Value ~= 0
     
     app.frame_batch = abs(ifft2(FT_batch .* fftshift(app.spatial_filter_mask')));
 end
+
+grayFFT = imresize(app.spatial_filter_mask' .* fftshift(rescale(log10(mean(abs( fft2(app.frame_batch)), 3)))), [max(numX, numY), max(numX, numY)]);
+app.ImageRight.ImageSource = cat(3, grayFFT, grayFFT, grayFFT);
 
 compute_FH(app, GPUpreview);
 

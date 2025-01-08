@@ -567,7 +567,7 @@ if app.cache.registration
     if app.cache.registration_disc
         [X, Y] = meshgrid(linspace(-Nx / 2, Nx / 2, Nx), linspace(-Ny / 2, Ny / 2, Ny));
         disc_ratio = app.cache.registration_disc_ratio;
-        disc = X .^ 2 + Y .^ 2 < (disc_ratio * min(Nx, Ny) / 2) ^ 2;
+        disc = (X/ numX) .^ 2 + (Y / numY) .^ 2 < (disc_ratio) ^ 2;
     else
         disc = ones([Nx, Ny]);
     end

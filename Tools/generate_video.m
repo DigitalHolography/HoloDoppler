@@ -68,7 +68,7 @@ if opt.cornerNorm > 0
     numY = size(video, 2);
     [X, Y] = meshgrid(linspace(-numY / 2, numY / 2, numY), linspace(-numX / 2, numX / 2, numX));
     disc_ratio = opt.cornerNorm;
-    disc = X .^ 2 + Y .^ 2 < (disc_ratio * min(numX, numY) / 2) ^ 2;
+    disc = (X / numX) .^ 2 + (Y / numY) .^ 2 < (disc_ratio) ^ 2;
     video = video ./ mean(video.*~disc,[1,2]);
 end
 
