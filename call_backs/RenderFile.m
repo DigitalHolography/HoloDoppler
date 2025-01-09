@@ -11,16 +11,16 @@ function RenderFile(fullfilepath,cache)
             fs = double(istream.frame_rate)/1000;
             pix_width = 1 / double(istream.horizontal_pix_per_meter);
             pix_height = 1 / double(istream.vertical_pix_per_meter);
-            Nx = double(istream.frame_width);
-            Ny = double(istream.frame_height);
+            numX = double(istream.frame_width);
+            numY = double(istream.frame_height);
 
         case '.holo'
             istream = HoloReader(fullfilepath);
             fs = istream.footer.info.input_fps/1000;
             pix_width = istream.footer.info.pixel_pitch.x * 1e-6;
             pix_height = istream.footer.info.pixel_pitch.y * 1e-6;
-            Nx = single(istream.frame_height);
-            Ny = single(istream.frame_width); %% find the real info in the footer
+            numX = single(istream.frame_height);
+            numY = single(istream.frame_width); %% find the real info in the footer
             z = istream.footer.compute_settings.image_rendering.propagation_distance;
     end    
 
@@ -40,8 +40,8 @@ function RenderFile(fullfilepath,cache)
         f1 = 6;
         f2 = fs/2;
         is_registration = true;
-        is_registration_disc = true;
-        registration_disc_ratio = 0.7;
+        is_registration_disk = true;
+        registration_disk_ratio = 0.7;
         position_in_file = 1;
         temporal_filter = 2;
     else
@@ -68,10 +68,10 @@ function RenderFile(fullfilepath,cache)
         f2 = cache.time_transform.f2;
         fs = cache.Fs/1000;
         is_registration = cache.registration;
-        is_registration_disc = cache.registration_disc;
-        registration_disc_ratio = cache.registration_disc_ratio;
-        if isempty(registration_disc_ratio)
-            registration_disc_ratio = 0.7;
+        is_registration_disk = cache.registration_disc;
+        registration_disk_ratio = cache.registration_disc_ratio;
+        if isempty(registration_disk_ratio)
+            registration_disk_ratio = 0.7;
         end
         position_in_file = cache.position_in_file;
         temporal_filter = cache.temporal_filter;
@@ -82,9 +82,9 @@ function RenderFile(fullfilepath,cache)
 
     switch spatialTransformation
         case 'angular spectrum'
-            kernel = propagation_kernelAngularSpectrum(Nx, Ny, z, wavelength, pix_width, pix_height, 0);  % propagation kernel initialization
+            kernel = propagation_kernelAngularSpectrum(numX, numY, z, wavelength, pix_width, pix_height, 0);  % propagation kernel initialization
         case 'Fresnel'
-            kernel = propagation_kernelFresnel(Nx, Ny, z, wavelength, pix_width, pix_height, 0);  % propagation kernel initialization
+            kernel = propagation_kernelFresnel(numX, numY, z, wavelength, pix_width, pix_height, 0);  % propagation kernel initialization
     end
 
     num_batches = floor((istream.num_frames-j_win) / j_step);
@@ -116,7 +116,7 @@ function RenderFile(fullfilepath,cache)
     end
 
     send(D,-2); % display 'Image rendering' on progress bar
-    video_M0 = zeros(Nx, Ny, 1, num_batches,'single');
+    video_M0 = zeros(numX, numY, 1, num_batches,'single');
     video_moment0 = video_M0;
     video_moment1 = video_M0;
     video_moment2 = video_M0;
@@ -159,15 +159,14 @@ function RenderFile(fullfilepath,cache)
         tRegistration = tic;
         fprintf("Registration...\n")
         
-        if is_registration_disc
-            [X,Y] = meshgrid(linspace(-Nx/2,Nx/2,Nx),linspace(-Ny/2,Ny/2,Ny));
-            disc = X.^2+Y.^2 < (registration_disc_ratio * min(Nx,Ny)/2)^2; 
+        if is_registration_disk
+            disk = diskMask(numX, numY, registration_disk_ratio);
         else
-            disc = ones([Ny,Nx]);
+            disk = ones([numY,numX]);
         end
 
         
-        video_M0_reg = video_M0 .* disc - disc .* sum(video_M0.* disc,[1,2])/nnz(disc); % minus the mean in the disc of each frame
+        video_M0_reg = video_M0 .* disk - disk .* sum(video_M0.* disk,[1,2])/nnz(disk); % minus the mean in the disc of each frame
         video_M0_reg = video_M0_reg ./(max(abs(video_M0_reg),[],[1,2])); % rescaling each frame but keeps mean at zero
         
 
@@ -183,7 +182,7 @@ function RenderFile(fullfilepath,cache)
         SH = permute(SH, [2 1 3]);
         reg_hologram = m0(SH, f1, f2, fs, j_win, blur); % with flatfield of gaussian_width applied
         
-        reg_hologram = reg_hologram.*disc - disc .* sum(reg_hologram.*disc,[1,2])/nnz(disc); % minus the mean 
+        reg_hologram = reg_hologram.*disk - disk .* sum(reg_hologram.*disk,[1,2])/nnz(disk); % minus the mean 
         reg_hologram = reg_hologram./(max(abs(reg_hologram),[],[1,2])); % rescaling but keeps mean at zero
 
         [video_M0_reg, shifts(1:2,:)] = register_video_from_reference(video_M0_reg, reg_hologram);

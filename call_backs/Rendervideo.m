@@ -164,15 +164,9 @@ acquisition = DopplerAcquisition(numX, numY, fs / 1000, z, z_retina, z_iris, wl,
 spatialFilterRatio = app.spatialfilterratio.Value;
 
 if spatialFilterRatio~=0
-    [X, Y] = meshgrid(linspace(-numX / 2, numX / 2, numX), linspace(-numY / 2, numY / 2, numY));
-    disc_ratio = spatialFilterRatio;
-    disc = X .^ 2 + Y .^ 2 < (disc_ratio * min(numX, numY) / 2) ^ 2;
-    spatialFilterMask = ~disc';
-    disc_ratio = app.spatialfilterratiohigh.Value;
-    disc = X .^ 2 + Y .^ 2 < (disc_ratio * min(numX, numY) / 2) ^ 2;
-    spatialFilterMask = spatialFilterMask & disc';
+    spatialFilterMask = diskMask(numX, numY, spatialFilterRatio, app.spatialfilterratiohigh.Value);
 else
-    spatialFilterMask = [];
+    spatialFilterMask = ones(numX, numY);
 end
 
 % allocate video buffers
@@ -561,19 +555,18 @@ if app.cache.registration
     end
 
     % construct treshold M0
-    Nx = size(video_M0, 1);
-    Ny = size(video_M0, 2);
+    numX = size(video_M0, 1);
+    numY = size(video_M0, 2);
 
     if app.cache.registration_disc
-        [X, Y] = meshgrid(linspace(-Nx / 2, Nx / 2, Nx), linspace(-Ny / 2, Ny / 2, Ny));
-        disc_ratio = app.cache.registration_disc_ratio;
-        disc = (X/ numX) .^ 2 + (Y / numY) .^ 2 < (disc_ratio) ^ 2;
+        disk_ratio = app.cache.registration_disc_ratio;
+        disk = diskMask(numX, numY, disk_ratio);
     else
-        disc = ones([Nx, Ny]);
+        disk = ones([numX, numY]);
     end
 
-    disc = disc'; % TODO: Understand
-    video_M0_reg = video_M0 .* disc - disc .* sum(video_M0 .* disc, [1, 2]) / nnz(disc); % minus the mean in the disc of each frame
+    disk = disk'; % TODO: Understand
+    video_M0_reg = video_M0 .* disk - disk .* sum(video_M0 .* disk, [1, 2]) / nnz(disk); % minus the mean in the disc of each frame
     video_M0_reg = video_M0_reg ./ (max(abs(video_M0_reg), [], [1, 2])); % rescaling each frame but keeps mean at zero
 
     % % construct reference image
@@ -592,7 +585,7 @@ if app.cache.registration
     acquisition = DopplerAcquisition(numX, numY, fs / 1000, z, z_retina, z_iris, wl, Dx, Dy, pix_width, pix_height);
     reg_hologram = reconstruct_hologram(reg_FH, acquisition, app.blur, use_gpu, app.SVDCheckBox.Value, isSVDThreshold, SVDThresholdValue, app.SVDxCheckBox.Value, app.SVDx_SubApEditField.Value, [], app.time_transform, spatialTransformation);
 
-    reg_hologram = reg_hologram .* disc - disc .* sum(reg_hologram .* disc, [1, 2]) / nnz(disc); % minus the mean
+    reg_hologram = reg_hologram .* disk - disk .* sum(reg_hologram .* disk, [1, 2]) / nnz(disk); % minus the mean
     reg_hologram = reg_hologram ./ (max(abs(reg_hologram), [], [1, 2])); % rescaling but keeps mean at zero
 
     switch app.cache.spatialTransformation
@@ -856,12 +849,10 @@ end
 if strcmp(output_video, 'choroid') == 1
     numX = size(images_choroid_0, 1);
     numY = size(images_choroid_0, 2);
-    [X, Y] = meshgrid(1:numY, 1:numX);
-    L = (numX + numY) / 2;
     fileID = fopen(fullfile(ToolBox.HD_path_txt, 'intervals.txt'), 'w');
 
     meanIm = mean(images_choroid_0(:, :, :, :, freq_idx), [3 4]);
-    maskDiaphragm = ((X - numX / 2) .^ 2 + (Y - numY / 2) .^ 2) < L * 0.4;
+    maskDiaphragm = diskMask(numX, numY, 0.8);
     T = graythresh(meanIm);
 
     for freq_idx = 1:numF

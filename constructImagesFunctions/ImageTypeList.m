@@ -292,11 +292,9 @@ classdef ImageTypeList < handle % This class is modified dynamically
             if obj.choroid.is_selected % Power 1 Doppler has been chosen
                 numX = size(SH, 1);
                 numY = size(SH, 2);
-                L = (numX + numY) / 2;
                 obj.choroid.parameters.intervals_0 = zeros(numX, numY, 1, num_F);
                 obj.choroid.parameters.intervals_1 = zeros(numX, numY, 1, num_F);
-                [X, Y] = meshgrid(1:numY, 1:numX);
-                circleMask = fftshift(sqrt((X-(numX/2)).^2 + (Y-(numY/2)).^2) < 0.15 * L);
+                circleMask = fftshift(diskMask(numX, numY, 0.15));
                 frequencies = linspace(f1, f2, num_F + 1);
                 for freqIdx = 1:num_F
                     img = moment0(SH, frequencies(freqIdx), frequencies(end), ac.fs, j_win, gaussian_width);

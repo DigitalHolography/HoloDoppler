@@ -54,41 +54,41 @@ function LightRendervideoGPU(app)
 
     j_win = app.cache.batch_size;
     j_step = app.cache.batch_stride;
-    local_blur = app.cache.blur;
-    local_Nx = app.Nx;
-    local_Ny = app.Ny;
-    local_wavelength = app.cache.wavelength;
-    local_output_video = app.cache.output_videos;
-    local_svd = app.SVDCheckBox.Value;
-    local_spatialTransformation = app.cache.spatialTransformation;
-    local_SVDx = app.SVDxCheckBox.Value;
-    local_SVDx_SubAp_num = app.SVDx_SubApEditField.Value;
-    localSVDThreshold = app.SVDThresholdCheckBox.Value;
-    localSVDThresholdValue = app.SVDThresholdEditField.Value;
-    local_f1 = app.cache.time_transform.f1;
-    local_f2 = app.cache.time_transform.f2;
-    local_fs = app.Fs/1000;
-    local_registration = app.cache.registration;
-    local_registration_disc = app.cache.registration_disc;
-    local_registration_disc_ratio = app.cache.registration_disc_ratio;
-    local_position_in_file = app.cache.position_in_file;
+    blur = app.cache.blur;
+    numX = app.Nx;
+    numY = app.Ny;
+    wavelength = app.cache.wavelength;
+    output_video = app.cache.output_videos;
+    is_svd = app.SVDCheckBox.Value;
+    spatialTransformation = app.cache.spatialTransformation;
+    is_SVDx = app.SVDxCheckBox.Value;
+    SVDx_SubAp_num = app.SVDx_SubApEditField.Value;
+    is_SVDThreshold = app.SVDThresholdCheckBox.Value;
+    SVDThresholdValue = app.SVDThresholdEditField.Value;
+    f1 = app.cache.time_transform.f1;
+    f2 = app.cache.time_transform.f2;
+    fs = app.Fs/1000;
+    registration = app.cache.registration;
+    registration_disk = app.cache.registration_disc;
+    registration_disk_ratio = app.cache.registration_disc_ratio;
+    position_in_file = app.cache.position_in_file;
         
-    switch local_spatialTransformation
+    switch spatialTransformation
         case 'angular spectrum'
-            local_kernel = gpuArray(app.kernelAngularSpectrum);  % propagation kernel initialization
+            kernel = gpuArray(app.kernelAngularSpectrum);  % propagation kernel initialization
         case 'Fresnel'
-            local_kernel = gpuArray(app.kernelFresnel);  % propagation kernel initialization
+            kernel = gpuArray(app.kernelFresnel);  % propagation kernel initialization
     end
 
-    local_num_frames = istream.num_frames;
-    local_num_batches = floor((istream.num_frames-j_win) / j_step);
+    numFrames = istream.num_frames;
+    numBatches = floor((numFrames-j_win) / j_step);
     
     
-    switch local_output_video
+    switch output_video
         case 'power_Doppler'
             return
         case 'moments'
-            video_M0 = zeros(app.Nx, app.Ny, 1, local_num_batches,'single');
+            video_M0 = zeros(app.Nx, app.Ny, 1, numBatches,'single');
             video_moment0 = video_M0;
             video_moment1 = video_M0;
             video_moment2 = video_M0;
@@ -106,7 +106,7 @@ function LightRendervideoGPU(app)
     D = parallel.pool.DataQueue;
     h = waitbar(0, '');
     afterEach(D, @update_waitbar);
-    N = double(local_num_batches-1);
+    N = double(numBatches-1);
     p = 1;
     
     % poolobj = gcp('nocreate'); % check if a pool already exist
@@ -117,8 +117,8 @@ function LightRendervideoGPU(app)
     %     poolobj = parpool(parfor_arg);
     % end
     
-    if ~localSVDThreshold
-        localSVDThresholdValue = round(local_f1 * j_win / local_fs)*2 + 1; % default value if none specified
+    if ~is_SVDThreshold
+        SVDThresholdValue = round(f1 * j_win / fs)*2 + 1; % default value if none specified
     end
 
     
@@ -127,17 +127,17 @@ function LightRendervideoGPU(app)
     fprintf("Parfor loop: %u workers\n",parfor_arg)
     tParfor = tic;
     
-    switch local_spatialTransformation
+    switch spatialTransformation
         case 'angular spectrum'
-            for batch_idx = 1:local_num_batches 
-                frame_batch = gpuArray(istream.read_frame_batch(j_win, (min(batch_idx,local_num_batches) - 1) * j_step));
-                SH = riassf(frame_batch,local_kernel,localSVDThresholdValue);            
+            for batch_idx = 1:numBatches 
+                frame_batch = gpuArray(istream.read_frame_batch(j_win, (min(batch_idx,numBatches) - 1) * j_step));
+                SH = riassf(frame_batch,kernel,SVDThresholdValue);            
                 %% permute related to acquisition optical inversion of the image
                 SH = permute(SH, [2 1 3]);
-                M0 = m0(SH, local_f1, local_f2, local_fs, j_win, local_blur); % with flatfield of gaussian_width applied
-                moment0 = m0(SH, local_f1, local_f2, local_fs, j_win, 0); % no flatfield : raw
-                moment1 = m1(SH, local_f1, local_f2, local_fs, j_win, 0);
-                moment2 = m2(SH, local_f1, local_f2, local_fs, j_win, 0);
+                M0 = m0(SH, f1, f2, fs, j_win, local_blur); % with flatfield of gaussian_width applied
+                moment0 = m0(SH, f1, f2, fs, j_win, 0); % no flatfield : raw
+                moment1 = m1(SH, f1, f2, fs, j_win, 0);
+                moment2 = m2(SH, f1, f2, fs, j_win, 0);
             
                 send(D, 0);
                 video_M0(:,:,:,batch_idx) = gather(M0);
@@ -146,16 +146,16 @@ function LightRendervideoGPU(app)
                 video_moment2(:,:,:,batch_idx) = gather(moment2);
             end
         case 'Fresnel'
-            for batch_idx = 1:local_num_batches 
-                frame_batch = gpuArray(istream.read_frame_batch(j_win, (min(batch_idx,local_num_batches) - 1) * j_step));
-                SH = rifsf(frame_batch,local_kernel,localSVDThresholdValue);
+            for batch_idx = 1:numBatches 
+                frame_batch = gpuArray(istream.read_frame_batch(j_win, (min(batch_idx,numBatches) - 1) * j_step));
+                SH = rifsf(frame_batch,kernel,SVDThresholdValue);
         
                 %% permute related to acquisition optical inversion of the image
                 SH = permute(SH, [2 1 3]);
-                M0 = m0(SH, local_f1, local_f2, local_fs, j_win, local_blur); % with flatfield of gaussian_width applied
-                moment0 = m0(SH, local_f1, local_f2, local_fs, j_win, 0); % no flatfield : raw
-                moment1 = m1(SH, local_f1, local_f2, local_fs, j_win, 0);
-                moment2 = m2(SH, local_f1, local_f2, local_fs, j_win, 0);
+                M0 = m0(SH, f1, f2, fs, j_win, local_blur); % with flatfield of gaussian_width applied
+                moment0 = m0(SH, f1, f2, fs, j_win, 0); % no flatfield : raw
+                moment1 = m1(SH, f1, f2, fs, j_win, 0);
+                moment2 = m2(SH, f1, f2, fs, j_win, 0);
             
                 send(D, 0); 
                 video_M0(:,:,:,batch_idx) = gather(M0);
@@ -166,12 +166,12 @@ function LightRendervideoGPU(app)
     end
     
     
-    local_kernel = gather(local_kernel);
+    kernel = gather(kernel);
     reset(gpuDevice); % free GPU memory allocated with GPUArray
     tEndParfor = toc(tParfor);
     fprintf("Parfor loop took %f s\n",tEndParfor)
 
-    if local_registration
+    if registration
         % post reconstruction image registration.
         % This registration is performed on the final video,
         % it does not use tilts zernikes to perform the
@@ -179,31 +179,30 @@ function LightRendervideoGPU(app)
         tRegistration = tic;
         fprintf("Registration...\n")
         
-        if local_registration_disc
-            [X,Y] = meshgrid(linspace(-local_Nx/2,local_Nx/2,local_Nx),linspace(-local_Ny/2,local_Ny/2,local_Ny));
-            disc = X.^2+Y.^2 < (local_registration_disc_ratio * min(local_Nx,local_Ny)/2)^2; 
+        if registration_disk
+            disk = diskMask(numX, numY, registration_disk_ratio);
         else
-            disc = ones([local_Ny,local_Nx]);
+            disk = ones([numY,numX]);
         end
 
         
-        video_M0_reg = video_M0 .* disc - disc .* sum(video_M0.* disc,[1,2])/nnz(disc); % minus the mean in the disc of each frame
+        video_M0_reg = video_M0 .* disk - disk .* sum(video_M0.* disk,[1,2])/nnz(disk); % minus the mean in the disc of each frame
         video_M0_reg = video_M0_reg ./(max(abs(video_M0_reg),[],[1,2])); % rescaling each frame but keeps mean at zero
         
 
         % % construct reference image
-        ref_batch_idx = min(floor((local_position_in_file) / j_step) + 1,size(video_M0,4)-j_win);
+        ref_batch_idx = min(floor((position_in_file) / j_step) + 1,size(video_M0,4)-j_win);
 
         reg_frame_batch = istream.read_frame_batch(j_win, floor(ref_batch_idx*j_step));
         
-        SH = ri(reg_frame_batch,local_spatialTransformation,local_kernel,local_svd,local_SVDx,localSVDThresholdValue,0);
+        SH = ri(reg_frame_batch,spatialTransformation,kernel,is_svd,is_SVDx,SVDThresholdValue,0);
 
 
         %% permute related to acquisition optical invertion
         SH = permute(SH, [2 1 3]);
-        reg_hologram = m0(SH, local_f1, local_f2, local_fs, j_win, local_blur); % with flatfield of gaussian_width applied
+        reg_hologram = m0(SH, f1, f2, fs, j_win, local_blur); % with flatfield of gaussian_width applied
         
-        reg_hologram = reg_hologram.*disc - disc .* sum(reg_hologram.*disc,[1,2])/nnz(disc); % minus the mean 
+        reg_hologram = reg_hologram.*disk - disk .* sum(reg_hologram.*disk,[1,2])/nnz(disk); % minus the mean 
         reg_hologram = reg_hologram./(max(abs(reg_hologram),[],[1,2])); % rescaling but keeps mean at zero
         
 
@@ -302,8 +301,8 @@ function LightRendervideoGPU(app)
     s.ref_batch_size =  app.cache.ref_batch_size;
     s.batch_stride =  app.cache.batch_stride;
     s.SVD =  app.cache.SVD;
-    s.SVDx = local_SVDx;
-    s.SVDxSubAp = local_SVDx_SubAp_num;
+    s.SVDx = is_SVDx;
+    s.SVDxSubAp = SVDx_SubAp_num;
     JSON_parameters = jsonencode(s,PrettyPrint=true);
     fid = fopen(fullfile(dirpath, 'log', 'RenderingParameters.json'), "wt+");
     fprintf(fid, JSON_parameters);

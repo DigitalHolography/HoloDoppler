@@ -6,13 +6,9 @@ if (size(image, 3) == 1)
     image = repmat(image, 1, 1, 3);
 end
 [numX, numY, ~] = size(image);
-[Y, X] = meshgrid(linspace(-numY/2,numY/2,numY),linspace(-numX/2,numX/2,numX));
-disc_ratio = app.regDiscRatioEditField.Value;
-small_disc_ratio = disc_ratio -0.01;
-disc = (X/numX).^2+(Y/numY).^2 < (disc_ratio/2)^2;
-small_disc = (X / numX).^2 + (Y/numY).^2 < (small_disc_ratio/2)^2;
+disk_ratio = app.regDiscRatioEditField.Value;
 
-circle = xor(disc,small_disc);
+circle = diskMask(numX, numY, disk_ratio -0.01, disk_ratio);
 
 if yesno
     image(:,:,1) = 2*circle .* image(:,:,3)+ ~circle.*image(:,:,3);

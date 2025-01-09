@@ -21,16 +21,9 @@ FT_batch = fft2(app.frame_batch);
 app.spatial_filter_mask = ones(numX, numY);
 
 if app.spatialfilterratio.Value ~= 0
+
+    app.spatial_filter_mask = diskMask(numX, numY, app.spatialfilterratio.Value, app.spatialfilterratiohigh.Value);
     
-    [X, Y] = meshgrid(linspace(-numX / 2, numX / 2, numX), linspace(-numY / 2, numY / 2, numY));
-    disc_ratio = app.spatialfilterratio.Value;
-    disc = (X / numX) .^ 2 + (Y / numY) .^ 2 < (disc_ratio) ^ 2;
-    app.spatial_filter_mask = ~disc;
-    disc_ratio = app.spatialfilterratiohigh.Value;
-    disc = (X / numX) .^ 2 + (Y / numY) .^ 2 < (disc_ratio) ^ 2;
-    app.spatial_filter_mask = app.spatial_filter_mask & disc;
-
-
     if app.showSpatialFilterCheckBox.Value
 
         logimg = log10(mean(abs(FT_batch .* fftshift(app.spatial_filter_mask)), 3));

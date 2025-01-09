@@ -91,10 +91,6 @@ function Show_spectrum(app)
     SH_angle = angle(SH);
     SH = abs(SH) .^ 2;
 
-    % if you want it can be a circle
-    % [X,Y]=meshgrid(((1:app.Nx) - round(app.Nx/2))*2/app.Nx,((1:app.Ny) - round(app.Ny/2))*2/app.Nx);
-    % circle = X.^2+Y.^2<0.5;
-    % imshow(circle);
     if ~isempty(app.mask)
         circle = imrotate(app.mask,90);
     else
