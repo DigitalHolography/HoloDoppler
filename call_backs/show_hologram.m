@@ -3,22 +3,12 @@ if ~app.file_loaded
     return;
 end
 
-switch app.ImageChoiceDropDown.Value
-    case 'power Doppler'
-        if app.lowfrequencyCheckBox.Value
-            sign = -1;
-        else
-            sign = 1;
-        end
-    otherwise
-        sign = 1;
-end
 % display image preview
-%             imshow(mat2gray(sign*app.hologram), 'Parent', app.UIAxes_1,...
+%             imshow(mat2gray(app.hologram), 'Parent', app.UIAxes_1,...
 %                 'XData', [1 app.UIAxes_1.Position(3)], ...
 %                 'YData', [1 app.UIAxes_1.Position(4)]);
 % FIXME trouver autre chose qu'un if
-image = mat2gray(sign * app.hologram);
+image = mat2gray(app.hologram);
 cache = GuiCache(app);
 
 if (size(image, 3) == 1)
