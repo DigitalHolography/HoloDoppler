@@ -49,7 +49,6 @@ classdef GuiCache
         color_f1 double
         color_f2 double
         color_f3 double
-        low_frequency logical
 
         % dark field parameters
         xystride double
@@ -197,7 +196,6 @@ classdef GuiCache
             app.compositef1EditField.Value = loadGUIVariable(obj.color_f1);
             app.compositef2EditField.Value = loadGUIVariable(obj.color_f2);
             app.compositef3EditField.Value = loadGUIVariable(obj.color_f3);
-            app.lowfrequencyCheckBox.Value = loadGUIVariable(obj.low_frequency);
             app.saverawvideosCheckBox.Value = loadGUIVariable(obj.save_raw);
             app.numFreqEditField.Value = loadGUIVariable(obj.num_Freq);
             app.SVDStrideEditField.Value = loadGUIVariable(obj.SVD_Stride);

@@ -1,10 +1,9 @@
-function img = construct_directionalDoppler_image(M0_pos, M0_neg, is_low_frequency)
+function img = construct_directional_image(M0_pos, M0_neg)
 % Constructs a a directional Doppler image from pos/negatitive Doppler maps
 % M0_pos: positive Doppler freq map
 % M0_neg: negative Doppler freq map
-% is_low_frequency: true if the acquisity was made a low frequency
 
-[Nx, Ny, ~, num_frames] = size(M0_pos);
+[Nx, Ny, ~, ~] = size(M0_pos);
 
 min_M0 = min(min(M0_pos(:)), min(M0_neg(:)));
 max_M0 = max(max(M0_pos(:)), max(M0_neg(:)));

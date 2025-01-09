@@ -4,8 +4,6 @@ function [img,img_low,img_high] = construct_colored_image(M_freq_low, M_freq_hig
 %
 % M_freq_low: hologram stack made with a low frequency band
 % M_freq_high: hologram stack made with a high frequency band
-% is_low_frequency: true if the acquisity was made a low frequency, false
-%                   otherwise
 
 M_freq_low = squeeze(M_freq_low);
 M_freq_high = squeeze(M_freq_high);

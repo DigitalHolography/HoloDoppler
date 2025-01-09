@@ -14,8 +14,8 @@ function Show_spectrum(app)
     svd_treshold_value = app.SVDThresholdEditField.Value;
     svdx = app.SVDxCheckBox.Value;
     Nb_SubAp = app.SVDx_SubApEditField.Value;
-    local_spatial = app.spatialCheckBox.Value;
-    local_temporal = app.temporalCheckBox.Value;
+    is_spatial = app.spatialCheckBox.Value;
+    is_temporal = app.temporalCheckBox.Value;
     time_transform = app.time_transform;
     nu1 = app.nu1EditField.Value;
     nu2 = app.nu2EditField.Value;
@@ -71,12 +71,12 @@ function Show_spectrum(app)
 
     end
 
-    if local_spatial
-        H = local_spatial_PCA(H, nu1, nu2);
+    if is_spatial
+        H = spatial_PCA(H, nu1, nu2);
     end
 
-    if local_temporal
-        H = local_temporal_PCA(H, phi1, phi2);
+    if is_temporal
+        H = temporal_PCA(H, phi1, phi2);
     end
 
     switch time_transform.type
