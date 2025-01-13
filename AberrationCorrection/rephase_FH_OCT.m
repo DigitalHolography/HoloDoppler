@@ -23,8 +23,8 @@ for rephasing_data = rephasing_data
 
         shift = squeeze(mean(coefs(first_frame_idx : last_frame_idx)));
 
-        [Nx, ~, j_win] = size(FH);
-        tilt = evaluate_zernikes(1, 1, Nx, j_win);
+        [numX, ~, j_win] = size(FH);
+        tilt = evaluate_zernikes(1, 1, numX, j_win);
         phase_3d = ones(size(FH));
         for idx_z = 1 : j_win
             phase_3d(:,:,idx_z) = phase_3d(:,:,idx_z) .* squeeze(tilt(1, idx_z, 1));

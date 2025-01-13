@@ -44,7 +44,7 @@ switch app.cache.parallelism
         parfor_arg = 3;
         use_multithread = false;
         reset(gpuDevice(1)); % clear memory
-        use_gpu = check_GPU_for_render(app, parfor_arg);
+        use_gpu = check_GPU(app, parfor_arg);
     case 'CPU singlethread'
         parfor_arg = 0;
         use_multithread = false;
@@ -56,7 +56,7 @@ switch app.cache.parallelism
         parfor_arg = numWorkers;
         use_multithread = true;
         reset(gpuDevice(1));
-        use_gpu = check_GPU_for_render(app);
+        use_gpu = check_GPU(app);
 
 end
 
@@ -81,8 +81,8 @@ batch_stride = app.cache.batch_stride;
 time_transform = app.cache.time_transform;
 blur = app.cache.blur;
 
-numX = app.Nx;
-numY = app.Ny;
+numX = app.numX;
+numY = app.numY;
 numFrames = istream.num_frames;
 numBatches = floor((numFrames - batch_size) / batch_stride);
 
@@ -163,7 +163,7 @@ acquisition = DopplerAcquisition(numX, numY, fs / 1000, z, z_retina, z_iris, wl,
 
 spatialFilterRatio = app.spatialfilterratio.Value;
 
-if spatialFilterRatio~=0
+if spatialFilterRatio ~= 0
     spatialFilterMask = diskMask(numX, numY, spatialFilterRatio, app.spatialfilterratiohigh.Value);
 else
     spatialFilterMask = ones(numX, numY);
@@ -419,6 +419,7 @@ send(D, -2); % display 'video construction' on progress bar
 fprintf("Parfor loop: %u workers\n", parfor_arg)
 
 poolobj = gcp('nocreate'); % check if a pool already exist
+
 if isempty(poolobj)
     parpool(parfor_arg); % create a new pool
 elseif poolobj.NumWorkers ~= parfor_arg
@@ -428,7 +429,7 @@ end
 
 all_batches = uint8(istream.read_all_frames(batch_size, batch_stride));
 
-parfor batch_idx = 1:numBatches
+for batch_idx = 1:numBatches
 
     frame_batch = all_batches(:, :, :, batch_idx);
 
@@ -473,51 +474,51 @@ parfor batch_idx = 1:numBatches
             video_M0(:, :, :, batch_idx) = tmp_video_M0;
             % video_M1(:, :, :, batch_idx) = image_type_list_par.power_1_Doppler.image;
             % video_M2(:, :, :, batch_idx) = image_type_list_par.power_2_Doppler.image;
-            video_moment0(:, :, :, batch_idx) = gather(image_type_list_par.moment_0.image);
-            video_moment1(:, :, :, batch_idx) = gather(image_type_list_par.moment_1.image);
-            video_moment2(:, :, :, batch_idx) = gather(image_type_list_par.moment_2.image);
-            video_M1_over_M0(:, :, :, batch_idx) = gather(image_type_list_par.power_1_Doppler.image) ./ gather(image_type_list_par.power_Doppler.image);
-            video_M2_over_M0(:, :, :, batch_idx) = gather(image_type_list_par.power_2_Doppler.image) ./ gather(image_type_list_par.power_Doppler.parameters.M0_sqrt);
-            video_M_freq_low(:, :, :, batch_idx) = gather(image_type_list_par.color_Doppler.parameters.freq_low);
-            video_M_freq_high(:, :, :, batch_idx) = gather(image_type_list_par.color_Doppler.parameters.freq_high);
-            tmp_video_M0_pos = gather(image_type_list_par.directional_Doppler.parameters.M0_pos);
+            video_moment0(:, :, :, batch_idx) = image_type_list_par.moment_0.image;
+            video_moment1(:, :, :, batch_idx) = image_type_list_par.moment_1.image;
+            video_moment2(:, :, :, batch_idx) = image_type_list_par.moment_2.image;
+            video_M1_over_M0(:, :, :, batch_idx) = image_type_list_par.power_1_Doppler.image ./ image_type_list_par.power_Doppler.image;
+            video_M2_over_M0(:, :, :, batch_idx) = image_type_list_par.power_2_Doppler.image ./ image_type_list_par.power_Doppler.parameters.M0_sqrt;
+            video_M_freq_low(:, :, :, batch_idx) = image_type_list_par.color_Doppler.parameters.freq_low;
+            video_M_freq_high(:, :, :, batch_idx) = image_type_list_par.color_Doppler.parameters.freq_high;
+            tmp_video_M0_pos = image_type_list_par.directional_Doppler.parameters.M0_pos;
             video_M0_pos(:, :, :, batch_idx) = tmp_video_M0_pos;
-            tmp_video_M0_neg = gather(image_type_list_par.directional_Doppler.parameters.M0_neg);
+            tmp_video_M0_neg = image_type_list_par.directional_Doppler.parameters.M0_neg;
             video_M0_neg(:, :, :, batch_idx) = tmp_video_M0_neg;
-            tmp_video_M0sM1r = gather(image_type_list_par.M0sM1r.image);
+            tmp_video_M0sM1r = image_type_list_par.M0sM1r.image;
             % video_M0sM1r(:, :, :, batch_idx) = tmp_video_M0sM1r;
-            video_velocity(:, :, :, batch_idx) = gather(image_type_list_par.velocity_estimate.image);
+            video_velocity(:, :, :, batch_idx) = image_type_list_par.velocity_estimate.image;
             video_directional(:, :, :, batch_idx) = construct_directional_video(tmp_video_M0_pos, tmp_video_M0_neg, t_filt);
             video_fmean(:, :, :, batch_idx) = construct_fmean_video(tmp_video_M0sM1r, tmp_video_M0, t_filt);
 
             bin_t = 1;
 
             if (batch_idx / bin_t) == round(batch_idx / bin_t)
-                SH_time(:, :, :, :, batch_idx) = gather(image_type_list_par.spectrogram.parameters.SH);
+                SH_time(:, :, :, :, batch_idx) = image_type_list_par.spectrogram.parameters.SH;
             end
 
             % FIXME : modify entire reconstruct hologram
             % extras to acquire additional videos
         case 'dark_field'
-            % H_dark_field_stack(:, :, :, batch_idx) = gather(image_type_list_par.dark_field_image.parameters.H);
-            video_M0_dark_field(:, :, :, batch_idx) = gather(image_type_list_par.dark_field_image.image);
+            % H_dark_field_stack(:, :, :, batch_idx) = image_type_list_par.dark_field_image.parameters.H;
+            video_M0_dark_field(:, :, :, batch_idx) = image_type_list_par.dark_field_image.image;
         case 'power_Doppler'
-            tmp_video_M0 = gather(image_type_list_par.power_Doppler.image);
+            tmp_video_M0 = image_type_list_par.power_Doppler.image;
             video_M0(:, :, :, batch_idx) = tmp_video_M0;
         case 'moments'
-            tmp_video_M0 = gather(image_type_list_par.power_Doppler.image);
+            tmp_video_M0 = image_type_list_par.power_Doppler.image;
             video_M0(:, :, :, batch_idx) = tmp_video_M0;
-            video_moment0(:, :, :, batch_idx) = gather(image_type_list_par.moment_0.image);
-            video_moment1(:, :, :, batch_idx) = gather(image_type_list_par.moment_1.image);
-            video_moment2(:, :, :, batch_idx) = gather(image_type_list_par.moment_2.image);
+            video_moment0(:, :, :, batch_idx) = image_type_list_par.moment_0.image;
+            video_moment1(:, :, :, batch_idx) = image_type_list_par.moment_1.image;
+            video_moment2(:, :, :, batch_idx) = image_type_list_par.moment_2.image;
         case 'choroid'
-            tmp_video_M0 = gather(image_type_list_par.power_Doppler.image);
+            tmp_video_M0 = image_type_list_par.power_Doppler.image;
             video_M0(:, :, :, batch_idx) = tmp_video_M0;
-            video_moment0(:, :, :, batch_idx) = gather(image_type_list_par.moment_0.image);
-            video_moment1(:, :, :, batch_idx) = gather(image_type_list_par.moment_1.image);
-            video_moment2(:, :, :, batch_idx) = gather(image_type_list_par.moment_2.image);
-            images_choroid_0(:, :, :, batch_idx, :) = gather(image_type_list_par.choroid.parameters.intervals_0);
-            images_choroid_1(:, :, :, batch_idx, :) = gather(image_type_list_par.choroid.parameters.intervals_1);
+            video_moment0(:, :, :, batch_idx) = image_type_list_par.moment_0.image;
+            video_moment1(:, :, :, batch_idx) = image_type_list_par.moment_1.image;
+            video_moment2(:, :, :, batch_idx) = image_type_list_par.moment_2.image;
+            images_choroid_0(:, :, :, batch_idx, :) = image_type_list_par.choroid.parameters.intervals_0;
+            images_choroid_1(:, :, :, batch_idx, :) = image_type_list_par.choroid.parameters.intervals_1;
             tmp = images_choroid_0(:, :, :, batch_idx, :);
             video_M_freq_low(:, :, :, batch_idx) = tmp(:, :, :, 1);
             video_M_freq_high(:, :, :, batch_idx) = tmp(:, :, :, end);
@@ -555,24 +556,21 @@ if app.cache.registration
     end
 
     % construct treshold M0
-    numX = size(video_M0, 1);
-    numY = size(video_M0, 2);
 
-    if app.cache.registration_disc
-        disk_ratio = app.cache.registration_disc_ratio;
+    if app.cache.registration_disk
+        disk_ratio = app.cache.registration_disk_ratio;
         disk = diskMask(numX, numY, disk_ratio);
     else
         disk = ones([numX, numY]);
     end
 
-    disk = disk'; % TODO: Understand
-    video_M0_reg = video_M0 .* disk - disk .* sum(video_M0 .* disk, [1, 2]) / nnz(disk); % minus the mean in the disc of each frame
+    video_M0_reg = video_M0 .* disk - disk .* sum(video_M0 .* disk, [1, 2]) / nnz(disk); % minus the mean in the disk of each frame
     video_M0_reg = video_M0_reg ./ (max(abs(video_M0_reg), [], [1, 2])); % rescaling each frame but keeps mean at zero
 
     % % construct reference image
     ref_batch_idx = min(floor((app.cache.position_in_file) / batch_stride) + 1, size(video_M0, 4));
 
-    reg_frame_batch = istream.read_frame_batch(app.cache.ref_batch_size, floor((ref_batch_idx-1) * batch_stride));
+    reg_frame_batch = istream.read_frame_batch(app.cache.ref_batch_size, floor((ref_batch_idx - 1) * batch_stride));
 
     switch app.cache.spatialTransformation
         case 'angular spectrum'
@@ -597,7 +595,7 @@ if app.cache.registration
         frame_ = video_M0_reg(:, :, 1, ref_batch_idx);
 
         figure(7)
-        montage({mat2gray(frame_) mat2gray(reg_hologram)})
+        montage({mat2gray(video_M0_reg(:, :, 1, ref_batch_idx)) mat2gray(reg_hologram)})
         title('Current frame vs calculated reference for registration')
         % plot the mean of M0 columns for registration
         plot_columns_reg(video_M0_reg, reg_hologram, ToolBox.HD_path);
@@ -847,8 +845,6 @@ if registration_pass || app.cache.registration
 end
 
 if strcmp(output_video, 'choroid') == 1
-    numX = size(images_choroid_0, 1);
-    numY = size(images_choroid_0, 2);
     fileID = fopen(fullfile(ToolBox.HD_path_txt, 'intervals.txt'), 'w');
 
     meanIm = mean(images_choroid_0(:, :, :, :, freq_idx), [3 4]);

@@ -16,15 +16,15 @@ if ~exist('size_factor', 'var')
     size_factor = 1;
 end
 
-Nx = size(FH, 1);
-Ny = size(FH, 2);
+numX = size(FH, 1);
+numY = size(FH, 2);
 magic_number = 710; % This is the magic number
-zernikes = evaluate_zernikes([1 1], [1 -1], Nx, Ny);
+zernikes = evaluate_zernikes([1 1], [1 -1], numX, numY);
 
 for i = 1:size_factor
     zernike_coefs = shifts(:, i);
-    zernike_coefs(1) = zernike_coefs(1) * magic_number * 2 / Nx;
-    zernike_coefs(2) = zernike_coefs(2) * magic_number * 2 / Ny;
+    zernike_coefs(1) = zernike_coefs(1) * magic_number * 2 / numX;
+    zernike_coefs(2) = zernike_coefs(2) * magic_number * 2 / numY;
     tilts = zernike_coefs(1) .* zernikes(:,:,1) + zernike_coefs(2) .* zernikes(:,:,2);
     phase = exp(-1i * tilts);
     FH(:,:,(i-1)*reg_batch_size + 1:i*reg_batch_size) = FH(:,:,(i-1)*reg_batch_size + 1:i*reg_batch_size) .* phase;

@@ -3,9 +3,8 @@ function scan3D = Show_3D_scan(app)
 if ~app.file_loaded
     return
 end
-f = waitbar(0,'Please wait ...');
 
-
+f = waitbar(0, 'Please wait ...');
 
 use_gpu = false;
 spatial_transformation = app.spatialTransformationDropDown.Value;
@@ -24,27 +23,29 @@ phi2 = app.phi2EditField.Value;
 f1 = app.f1EditField.Value;
 f2 = app.f2EditField.Value;
 blur = app.blurEditField.Value;
+numX = app.numX;
+numY = app.numY;
 
 z_list = (app.z_reconstruction - 0.1):0.005:(app.z_reconstruction + 0.1);
 
-scan3D = zeros([app.Nx,app.Ny,length(z_list)]);
+scan3D = zeros([numX, numY, length(z_list)]);
+frame_batch = app.interferogram_stream.read_frame_batch(app.batchsizeEditField.Value, app.positioninfileSlider.Value);
 
-i=1;
+i = 1;
 
 for z_ = z_list
 
-
-    waitbar(i/length(z_list),f,'Please wait while 3D scan ...');
+    waitbar(i / length(z_list), f, 'Please wait while 3D scan ...');
 
     switch spatial_transformation
         case 'angular spectrum'
-            kernelAngularSpectrum = propagation_kernelAngularSpectrum(app.Nx, app.Ny, z_, app.wavelengthEditField.Value, app.pix_width, app.pix_height, false);
-            FH = fftshift(fft2(app.frame_batch)) .* kernelAngularSpectrum;
+            kernelAngularSpectrum = propagation_kernelAngularSpectrum(numX, numY, z_, app.wavelengthEditField.Value, app.pix_width, app.pix_height, false);
+            FH = fftshift(fft2(frame_batch)) .* kernelAngularSpectrum;
         case 'Fresnel'
-            kernelFresnel = propagation_kernelFresnel(app.Nx, app.Ny, z_, app.wavelengthEditField.Value, app.pix_width, app.pix_height, false);
-            FH = app.frame_batch .* kernelFresnel;
+            kernelFresnel = propagation_kernelFresnel(numX, numY, z_, app.wavelengthEditField.Value, app.pix_width, app.pix_height, false);
+            FH = frame_batch .* kernelFresnel;
     end
-    
+
     switch spatial_transformation
         case 'angular spectrum'
             H = ifft2(FH);
@@ -53,64 +54,71 @@ for z_ = z_list
     end
 
     if svd
+
         if svd_treshold
-            H = svd_filter(H, time_transform.f1, app.Fs/1000,svd_treshold_value);
+            H = svd_filter(H, time_transform.f1, app.Fs / 1000, svd_treshold_value);
         else
-            H = svd_filter(H, time_transform.f1,app.Fs/1000);
+            H = svd_filter(H, time_transform.f1, app.Fs / 1000);
         end
+
     end
 
     if (svdx)
+
         if svd_treshold
-            H = svd_x_filter(H, time_transform.f1, app.Fs/1000,Nb_SubAp,svd_treshold_value);
+            H = svd_x_filter(H, time_transform.f1, app.Fs / 1000, Nb_SubAp, svd_treshold_value);
         else
-            H = svd_x_filter(H, time_transform.f1, app.Fs/1000, Nb_SubAp);
+            H = svd_x_filter(H, time_transform.f1, app.Fs / 1000, Nb_SubAp);
         end
+
     end
 
     if is_spatial
         H = spatial_PCA(H, nu1, nu2);
     end
-    
+
     if is_temporal
         H = temporal_PCA(H, phi1, phi2);
     end
-    
+
     switch time_transform.type
         case 'PCA' % if the time transform is PCA
             SH = short_time_PCA(H);
         case 'FFT' % if the time transform is FFT
             SH = fft(H, [], 3);
     end
-    H=[];
-    
-    SH = abs(SH).^2;
 
-    scan3D(:,:,i) = (moment0(SH, f1, f2, app.Fs/1000, size(app.frame_batch,3), blur))';
-    i = i+1;
+    H = [];
+
+    SH = abs(SH) .^ 2;
+
+    scan3D(:, :, i) = (moment0(SH, f1, f2, app.Fs / 1000, size(frame_batch, 3), blur))';
+    i = i + 1;
 end
 
 close(f)
 
 implay(rescale(scan3D));
 
-[~,file_name,~] = fileparts(app.filename);
-folder_name = strcat( file_name, '_preview');
+[~, file_name, ~] = fileparts(app.filename);
+folder_name = strcat(file_name, '_preview');
+
 if exist(fullfile(app.filepath, folder_name), 'dir')
     output_dirpath = fullfile(app.filepath, folder_name);
 else
-    mkdir(fullfile(app.filepath,folder_name));
+    mkdir(fullfile(app.filepath, folder_name));
     output_dirpath = fullfile(app.filepath, folder_name);
 end
-preview_folder_name = create_output_directory_name(output_dirpath, sprintf('%s_%s.%s', file_name,'preview', 'cine'));
+
+preview_folder_name = create_output_directory_name(output_dirpath, sprintf('%s_%s.%s', file_name, 'preview', 'cine'));
 mkdir(fullfile(output_dirpath));
-writeVideoOnDisc(rescale(scan3D),fullfile(output_dirpath,sprintf("%s_3Dscan",folder_name)));
+writeVideoOnDisk(rescale(scan3D), fullfile(output_dirpath, sprintf("%s_3Dscan", folder_name)));
 % Careful too much points crashes matlab
 
 % figure(58)
-% 
-% X = linspace(-app.Nx/2*app.pix_width,app.Nx/2*app.pix_width,app.Nx);
-% Y = linspace(-app.Ny/2*app.pix_height,app.Ny/2*app.pix_height,app.Ny);
+%
+% X = linspace(-numX/2*app.pix_width,numX/2*app.pix_width,numX);
+% Y = linspace(-numY/2*app.pix_height,numY/2*app.pix_height,numY);
 % Z = single(z_list);
 % isosurface(X,Y,Z,scan3D)
 

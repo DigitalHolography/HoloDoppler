@@ -1,5 +1,5 @@
 function fmean_video = construct_fmean_video(M1sM0r, M0, temporal_filter_sigma)
-[Nx, Ny, ~, num_frames] = size(M1sM0r);
+[numX, numY, ~, numFrames] = size(M1sM0r);
 
 hue = M1sM0r - mean(mean(M1sM0r, 1), 2);
 hue = mat2gray(-hue);
@@ -21,9 +21,9 @@ sat = imadjustn(sat, stretchlim(sat(:), tol));
 tol = [0.005, 1];
 val = imadjustn(val, stretchlim(val(:), tol));
 
-fmean_video = zeros(Nx, Ny, 3, num_frames, 'single');
-for n = 1:num_frames
-   fmean_video(:,:,:,n) = hsv2rgb(hue(:,:,:,n), sat(:,:,:,n), val(:,:,:,n)); 
+fmean_video = zeros(numX, numY, 3, numFrames, 'single');
+for n = 1:numFrames
+    fmean_video(:,:,:,n) = hsv2rgb(hue(:,:,:,n), sat(:,:,:,n), val(:,:,:,n));
 end
 
 fmean_video = mat2gray(fmean_video);

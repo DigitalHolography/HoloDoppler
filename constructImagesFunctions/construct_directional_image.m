@@ -3,7 +3,7 @@ function img = construct_directional_image(M0_pos, M0_neg)
 % M0_pos: positive Doppler freq map
 % M0_neg: negative Doppler freq map
 
-[Nx, Ny, ~, ~] = size(M0_pos);
+[numX, numY, ~, ~] = size(M0_pos);
 
 min_M0 = min(min(M0_pos(:)), min(M0_neg(:)));
 max_M0 = max(max(M0_pos(:)), max(M0_neg(:)));
@@ -21,10 +21,10 @@ M0 = M0 - mean(mean(M0, 1), 2);
 M0 = mat2gray(M0);
 M0 = imadjustn(M0, stretchlim(M0(:), [0.02, 0.998]));
 
-img = zeros(Nx, Ny, 3, 'single');
+img = zeros(numX, numY, 3, 'single');
 
-img1 = hsv2rgb(1 * ones(Nx, Ny), sat(:,:), M0(:,:));
-img2 = hsv2rgb(0.66 * ones(Nx, Ny), sat(:,:), M0(:,:));
+img1 = hsv2rgb(1 * ones(numX, numY), sat(:,:), M0(:,:));
+img2 = hsv2rgb(0.66 * ones(numX, numY), sat(:,:), M0(:,:));
 img(:,:,:) = img1 .* (M0_diff(:,:) > 0) + img2 .* (M0_diff(:,:) < 0);
 
 %FIXME : create adequate img for display with holo/show_hologram (line 260)

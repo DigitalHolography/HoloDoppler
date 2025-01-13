@@ -1,4 +1,4 @@
-function writeVideoOnDisc(data,filename,type)
+function writeVideoOnDisk(data,filename,type)
 % Writing function for videos to make use of parallel capacities 
 % with parfeval
 %  filename - - path to file and file name without extension

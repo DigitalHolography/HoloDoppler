@@ -42,8 +42,8 @@ classdef GuiCache
         iterative_registration logical
         temporal_filter_flag logical
         temporal_filter double
-        registration_disc logical
-        registration_disc_ratio double
+        registration_disk logical
+        registration_disk_ratio double
 
         % color image parameters
         color_f1 double
@@ -112,8 +112,8 @@ classdef GuiCache
             obj.position_in_file = app.positioninfileSlider.Value;
             obj.output_videos = (strrep(app.outputvideoDropDown.Value, ' ', '_'));
             obj.rephasing = app.rephasingCheckBox.Value;
-            obj.registration_disc = app.registrationdiscCheckBox.Value;
-            obj.registration_disc_ratio = app.regDiscRatioEditField.Value;
+            obj.registration_disk = app.registrationdiskCheckBox.Value;
+            obj.registration_disk_ratio = app.regDiskRatioEditField.Value;
 
             obj.color_f1 = app.compositef1EditField.Value;
             obj.color_f2 = app.compositef2EditField.Value;

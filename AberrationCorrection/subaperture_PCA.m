@@ -11,15 +11,15 @@ batch_size = size(FH,3);
 % 13 14 15 16
 %
 
-ac.Nx = double(ac.Nx);
+ac.numX = double(ac.numX);
 n_subAp_x = 4;
 n_subAp_y = 4;
-subAp_Nx = floor(ac.Nx/n_subAp_x); % assume : image is square
-subAp_Ny = floor(ac.Nx/n_subAp_x); % assume : image is square
+subAp_numX = floor(ac.numX/n_subAp_x); % assume : image is square
+subAp_numY = floor(ac.numX/n_subAp_x); % assume : image is square
 
-subAp_M0 = zeros(subAp_Nx, subAp_Ny, n_subAp_x * n_subAp_y);
+subAp_M0 = zeros(subAp_numX, subAp_numY, n_subAp_x * n_subAp_y);
 
-FH_4D = zeros(subAp_Nx, subAp_Ny, batch_size, n_subAp_x * n_subAp_y)+1i*zeros(subAp_Nx, subAp_Ny, batch_size, n_subAp_x * n_subAp_y);
+FH_4D = zeros(subAp_numX, subAp_numY, batch_size, n_subAp_x * n_subAp_y)+1i*zeros(subAp_numX, subAp_numY, batch_size, n_subAp_x * n_subAp_y);
 
 skip = ones(n_subAp_x + 2, n_subAp_y + 2);
 skip = skip .* hann(n_subAp_x + 2);
@@ -27,10 +27,10 @@ skip = skip .* hann(n_subAp_y + 2)';
 skip = skip(2:end-1,2:end-1);
 
 %FIXME gauss2D > apodization2D
-% gauss = ones(subAp_Nx, subAp_Ny);
+% gauss = ones(subAp_numX, subAp_numY);
     function mat = gauss2D(center, sigma)
         center = [center center];
-        [R,C] = ndgrid(1:subAp_Nx, 1:subAp_Ny);
+        [R,C] = ndgrid(1:subAp_numX, 1:subAp_numY);
         mat = gaussC(R, C, sigma, center);
     end
 
@@ -41,10 +41,10 @@ skip = skip(2:end-1,2:end-1);
         val       = (exp(-exponent));
     end
 
-gauss = gauss2D(subAp_Nx, 0.5); % parameter alpha = 3 
-gauss1 = ones(subAp_Nx, subAp_Ny);
-% gauss = gauss .* hann(subAp_Nx);
-% gauss = gauss .* hann(subAp_Ny)';
+gauss = gauss2D(subAp_numX, 0.5); % parameter alpha = 3 
+gauss1 = ones(subAp_numX, subAp_numY);
+% gauss = gauss .* hann(subAp_numX);
+% gauss = gauss .* hann(subAp_numY)';
 % 
 gauss1(1:10, :) = 0;
 gauss1(:, 1:10) = 0;
@@ -56,14 +56,14 @@ gauss = conv2(gauss, gauss1, "same");
 % imagesc(gauss);
 gauss = fft2(gauss);
 
-% t = linspace(-64*pi,64*pi,subAp_Nx);
+% t = linspace(-64*pi,64*pi,subAp_numX);
 % gauss = gauss .*(sinc(t));
 % gauss = gauss .*(sinc(t))';
 % 
-% gauss2 = ones(subAp_Nx, subAp_Ny);
-% gauss3 = ones(subAp_Nx, subAp_Ny);
-% x = linspace(-1,1,subAp_Nx);
-% y = linspace(-1,1,subAp_Ny);
+% gauss2 = ones(subAp_numX, subAp_numY);
+% gauss3 = ones(subAp_numX, subAp_numY);
+% x = linspace(-1,1,subAp_numX);
+% y = linspace(-1,1,subAp_numY);
 % gauss2 = gauss2 .* x;
 % gauss3 = gauss3.* y';
 % 
@@ -75,14 +75,14 @@ gauss = fft2(gauss);
 for id_y = 1 : n_subAp_y
     for id_x = 1 : n_subAp_x
         if (skip(id_x, id_y) >= 0.10)
-            FH_4D(:,:,:,id_x+(id_y-1)*n_subAp_x) = FH((id_y-1)*subAp_Nx+1 : id_y*subAp_Nx, (id_x-1)*subAp_Nx+1 : id_x*subAp_Nx, :);
+            FH_4D(:,:,:,id_x+(id_y-1)*n_subAp_x) = FH((id_y-1)*subAp_numX+1 : id_y*subAp_numX, (id_x-1)*subAp_numX+1 : id_x*subAp_numX, :);
         
             H_chunk = fft2(FH_4D(:,:,:,id_x+(id_y-1)*n_subAp_x));
 
             for i = 1:size(H_chunk,4)
 
 %FIXME gauss2D > apodization2D
-                chunk_for_pca(:,:,:,i) = H_chunk(:,:,:,i) .* gauss2D(subAp_Nx, 100);
+                chunk_for_pca(:,:,:,i) = H_chunk(:,:,:,i) .* gauss2D(subAp_numX, 100);
             end
             
 %             chunk_for_pca = H_chunk;
@@ -134,20 +134,20 @@ for id_y = 1 : n_subAp_y
                 moment_chunk = moment_chunk-mean(moment_chunk(:)); %centering
                 moment_chunk = moment_chunk/max(moment_chunk(:)); %normalisation
             end
-%             gauss = ones(subAp_Nx, subAp_Ny);
-%             gauss = gauss .* hann(subAp_Nx);
-%             gauss = gauss .* hann(subAp_Ny)';
+%             gauss = ones(subAp_numX, subAp_numY);
+%             gauss = gauss .* hann(subAp_numX);
+%             gauss = gauss .* hann(subAp_numY)';
 %             moment_chunk = moment_chunk .* gauss;
             subAp_M0(:, :, id_x+(id_y-1)*n_subAp_x) = (moment_chunk);
         end
     end
 end
 
-M0_stitched = zeros(ac.Nx, ac.Ny);
+M0_stitched = zeros(ac.numX, ac.numY);
 
 for id_y = 1 : n_subAp_y
     for id_x = 1 : n_subAp_x  
-         M0_stitched((id_y-1)*subAp_Nx+1 : id_y*subAp_Nx, (id_x-1)*subAp_Nx+1 : id_x*subAp_Nx) = subAp_M0(:,:,id_x+(id_y-1)*n_subAp_x);
+         M0_stitched((id_y-1)*subAp_numX+1 : id_y*subAp_numX, (id_x-1)*subAp_numX+1 : id_x*subAp_numX) = subAp_M0(:,:,id_x+(id_y-1)*n_subAp_x);
     end
 end 
 
@@ -155,7 +155,7 @@ end
 imagesc(abs(M0_stitched).^2);
 axis square;
 
-FH_2D = reshape(FH_4D, subAp_Nx * subAp_Ny * batch_size, n_subAp_x * n_subAp_y);
+FH_2D = reshape(FH_4D, subAp_numX * subAp_numY * batch_size, n_subAp_x * n_subAp_y);
 
 cov = FH_2D' * FH_2D;
 
@@ -172,17 +172,17 @@ V = V(:,sort_idx);
 %SVD (+ return to direct space)
 for id_y = 1 : n_subAp_y
     for id_x = 1 : n_subAp_x
-        FH_4D(:,:,:,id_x+(id_y-1)*n_subAp_x) = FH((id_y-1)*subAp_Nx+1 : id_y*subAp_Nx, (id_x-1)*subAp_Nx+1 : id_x*subAp_Nx, :);
+        FH_4D(:,:,:,id_x+(id_y-1)*n_subAp_x) = FH((id_y-1)*subAp_numX+1 : id_y*subAp_numX, (id_x-1)*subAp_numX+1 : id_x*subAp_numX, :);
     end
 end
-FH_2D = reshape(FH_4D, subAp_Nx * subAp_Ny * batch_size, n_subAp_x * n_subAp_y);
+FH_2D = reshape(FH_4D, subAp_numX * subAp_numY * batch_size, n_subAp_x * n_subAp_y);
 FH_2D = FH_2D * V(:,SubAp_PCA.min:SubAp_PCA.max) * V(:,SubAp_PCA.min:SubAp_PCA.max)';
 
-FH_4D = reshape(FH_2D,subAp_Nx, subAp_Ny, batch_size, n_subAp_x * n_subAp_y);
+FH_4D = reshape(FH_2D,subAp_numX, subAp_numY, batch_size, n_subAp_x * n_subAp_y);
 
 for id_y = 1 : n_subAp_y
     for id_x = 1 : n_subAp_x
-         FH((id_y-1)*subAp_Nx+1 : id_y*subAp_Nx, (id_x-1)*subAp_Nx+1 : id_x*subAp_Nx, :) = FH_4D(:,:,:,id_x+(id_y-1)*n_subAp_x);
+         FH((id_y-1)*subAp_numX+1 : id_y*subAp_numX, (id_x-1)*subAp_numX+1 : id_x*subAp_numX, :) = FH_4D(:,:,:,id_x+(id_y-1)*n_subAp_x);
     end
 end
 

@@ -25,7 +25,7 @@ y_center = opt.center(2);
 x = linspace(0, 1, numX);
 y = linspace(0, 1, numY);
 
-[X, Y] = meshgrid(x, y);
+[X, Y] = meshgrid(y, x);
 R = (((X - x_center)) .^ 2 + ((Y - y_center)) .^ 2 ) .* 4;
 
 if nargin == 3

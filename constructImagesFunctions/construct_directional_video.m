@@ -1,5 +1,5 @@
 function dir_video = construct_directional_video(M0_pos, M0_neg, temporal_filter_sigma)
-[Nx, Ny, ~, num_frames] = size(M0_pos);
+[numX, numY, ~, numFrames] = size(M0_pos);
 
 sigma = [0.0001 0.0001 temporal_filter_sigma];
 M0_pos(:,:,1,:) = imgaussfilt3(squeeze(M0_pos), sigma);
@@ -21,10 +21,10 @@ M0 = M0 - mean(mean(M0, 1), 2);
 M0 = mat2gray(M0);
 M0 = imadjustn(M0, stretchlim(M0(:), [0.02, 0.998]));
 
-dir_video = zeros(Nx, Ny, 3, num_frames, 'single');
-for n = 1:num_frames
-    img1 = hsv2rgb(1 * ones(Nx, Ny), sat(:,:,n), M0(:,:,n));
-    img2 = hsv2rgb(0.66 * ones(Nx, Ny), sat(:,:,n), M0(:,:,n));
+dir_video = zeros(numX, numY, 3, numFrames, 'single');
+for n = 1:numFrames
+    img1 = hsv2rgb(1 * ones(numX, numY), sat(:,:,n), M0(:,:,n));
+    img2 = hsv2rgb(0.66 * ones(numX, numY), sat(:,:,n), M0(:,:,n));
     dir_video(:,:,:,n) = img1 .* (M0_diff(:,:,:,n) > 0) + img2 .* (M0_diff(:,:,:,n) < 0);
 end
 

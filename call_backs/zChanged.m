@@ -13,6 +13,7 @@ if app.Switch.Value == "z_retina"
 end
 
 app.z_iris = app.zirisEditField.Value;
+
 if app.Switch.Value == "z_iris"
     app.z_reconstruction = app.zirisEditField.Value;
     app.compute_kernel(false);

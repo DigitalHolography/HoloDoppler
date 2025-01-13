@@ -1,9 +1,9 @@
 function [] =  print_zernike()
-Nx = 6000;
-X = 1:Nx;
+numX = 6000;
+X = 1:numX;
 %mask = meshgrid(X);
-%for i = 1:Nx
-%    for j = 1:Nx
+%for i = 1:numX
+%    for j = 1:numX
 %        if sqrt(i^2+j^2)<= 1
 %           mask(i,j) = 0;
 %       else
@@ -11,7 +11,7 @@ X = 1:Nx;
 %        end
 %   end
 %end
-        
+
 path = 'C:\Users\Michael\Desktop\' ;
 mkdir(fullfile(path, 'Zernike'));
 path = 'C:\Users\Michael\Desktop\Zernike' ;
@@ -21,10 +21,10 @@ my_map = customcolormap_preset('red-white-blue');
 Imgmin = 0;
 Imgmax = 0;
 
-for i = mode_min:mode_max 
+for i = mode_min:mode_max
 
-    file_name = sprintf('%s_%s.%s', 'Zernike', int2str(i) , 'png');  
-    [~,phi] = zernike_phase(i, Nx, Nx);
+    file_name = sprintf('%s_%s.%s', 'Zernike', int2str(i) , 'png');
+    [~,phi] = zernike_phase(i, numX, numX);
     im_phase = mat2gray(phi);
     Numcolor = size(my_map, 1);
     Imgmin = min(im_phase(:)) ;

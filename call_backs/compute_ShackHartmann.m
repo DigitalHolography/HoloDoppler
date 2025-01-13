@@ -1,9 +1,10 @@
 function coefs = compute_ShackHartmann(app, peripheral_flag)
+
 if ~app.file_loaded
     return
 end
 
-compute_FH(app,false);
+compute_FH(app, false);
 
 zernike_ranks = app.shackhartmannzernikeranksEditField.Value;
 num_subapertures_positions = app.subapnumpositionsEditField.Value;
@@ -24,9 +25,8 @@ sigma_filter_corrector = 1;
 m = 128;
 defocus_range = 0.05;
 num_iter = 1;
-iter_phase = zeros(app.Ny, app.Nx, num_iter);
-psf_3d = zeros(app.Ny, app.Nx, m);
-
+iter_phase = zeros(app.numY, app.numX, num_iter);
+psf_3d = zeros(app.numY, app.numX, m);
 
 [~, output_file_name, ~] = fileparts(app.filename);
 output_file_name = strcat(output_file_name, '_coefs');
@@ -36,6 +36,7 @@ while exist(fullfile(app.filepath, sprintf("%s_%d.txt", output_file_name, suffix
     suffix = suffix + 1;
     %                     disp(suffix);
 end
+
 output_file_name = sprintf("%s_%d", output_file_name, suffix);
 
 output_file_name = strcat(output_file_name, '.txt');
@@ -65,7 +66,6 @@ disp(output_file);
 %                         error('Unreachable code was reached. Check value of num_subapertures');
 %                 end
 
-
 switch zernike_ranks
     case 2
         zernike_indices = [3 4 5];
@@ -85,40 +85,33 @@ if peripheral_flag
     zernike_indices = 4;
 end
 
-shack_hartmann = ShackHartmann(image_subapertures_size_ratio, num_subapertures_positions, zernike_indices, calibration_factor,subaperture_margin,corrmap_margin,power_filter_corrector,sigma_filter_corrector, ref_image,app.cache.spatialTransformation);
-acquisition = DopplerAcquisition(app.Nx,app.Ny,app.Fs/1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value, app.DX, app.DY, app.pix_width, app.pix_height);
-
+shack_hartmann = ShackHartmann(image_subapertures_size_ratio, num_subapertures_positions, zernike_indices, calibration_factor, subaperture_margin, corrmap_margin, power_filter_corrector, sigma_filter_corrector, ref_image, app.cache.spatialTransformation);
+acquisition = DopplerAcquisition(app.numX, app.numY, app.Fs / 1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value, app.DX, app.DY, app.pix_width, app.pix_height);
 
 %                 SubFH = shack_hartmann.SubField(app.FH);
 
-
-
-
-%             num_SubFH_x = floor((app.Nx - shack_hartmann.subimage_size) / shack_hartmann.subimage_stride) + 1;
-%             num_SubFH_y = floor((app.Ny - shack_hartmann.subimage_size) / shack_hartmann.subimage_stride) + 1;
-
+%             num_SubFH_x = floor((app.numX - shack_hartmann.subimage_size) / shack_hartmann.subimage_stride) + 1;
+%             num_SubFH_y = floor((app.numY - shack_hartmann.subimage_size) / shack_hartmann.subimage_stride) + 1;
 
 num_SubFH_z = 1;
 
 %             shift_cell = cell(1, num_SubFH_z);
-coefs = cell(1,num_SubFH_z);
-idx_to_freq_coef = acquisition.fs/size(app.FH,3);
-layer_freq_thickness = floor(size(app.FH, 3)/2/num_SubFH_z) * idx_to_freq_coef;
-[M_aso, StitchedMomentsInMaso] = shack_hartmann.construct_M_aso(app.f1EditField.Value, app.f2EditField.Value,app.blur,acquisition);
+coefs = cell(1, num_SubFH_z);
+idx_to_freq_coef = acquisition.fs / size(app.FH, 3);
+layer_freq_thickness = floor(size(app.FH, 3) / 2 / num_SubFH_z) * idx_to_freq_coef;
+[M_aso, StitchedMomentsInMaso] = shack_hartmann.construct_M_aso(app.f1EditField.Value, app.f2EditField.Value, app.blur, acquisition);
 %             M_aso = M_aso / (512/shack_hartmann.n_SubAp); %why do we do this?
-M_aso = M_aso / (app.Nx/shack_hartmann.n_SubAp); %why do we do this?
-
-
+M_aso = M_aso / (app.numX / shack_hartmann.n_SubAp); %why do we do this?
 
 %                 M_aso = permute(M_aso, [2 1]);
 %                 M_aso = reshape(M_aso, 1, size(M_aso,1), size(M_aso, 2));
 %                 M_aso = svd_filter(M_aso, 1, 2);
 
-
 %                 y = round(384-shack_hartmann.subimage_size/2);
 FH = app.FH;
 begin = floor(now * 100000);
-for iter_idx = 1 : num_iter
+
+for iter_idx = 1:num_iter
     %                 H = ifft2(FH);
     % progress bar
     %                         current_index = (x-1)+(y-1)*num_SubFH_y+1;
@@ -137,7 +130,7 @@ for iter_idx = 1 : num_iter
         %                             figure;
         %                             imagesc(stiched_corr_subap);
         %                         [~] = shack_hartmann.compute_temporal_SVD_in_SubAp(SubH, app.time_transform.f1, app.time_transform.f2, app.blur, false, app.SVDCheckBox.Value, acquisition);
-        shifts = shifts / (app.Nx/shack_hartmann.n_SubAp);
+        shifts = shifts / (app.numX / shack_hartmann.n_SubAp);
         %                         central_shift = shifts(ceil(length(shifts)/2));
         %                         shifts = shifts - central_shift;
         %                             shift_cell{y, x, z} = shifts;
@@ -157,7 +150,7 @@ for iter_idx = 1 : num_iter
         % separate x shifts from y shifts
         Y = cat(1, real(shifts), imag(shifts));
         %                         disp(M_aso_2);
-        M_aso_concat = cat(1,real(M_aso_2),imag(M_aso_2));
+        M_aso_concat = cat(1, real(M_aso_2), imag(M_aso_2));
         %
 
         %                         % solve linear system
@@ -165,31 +158,34 @@ for iter_idx = 1 : num_iter
 
         coefs{z} = coef * calibration_factor;
     end
+
     %                 disp(coefs{1, 1, 1});
     %FIXME
     % app.FH = SubFH;
-    [FH, iter_phase(:,:,iter_idx)] = rephase_FH_for_preview(FH, coefs, zernike_indices);
+    [FH, iter_phase(:, :, iter_idx)] = rephase_FH_for_preview(FH, coefs, zernike_indices);
 end
 
-for iter_idx = 1 : num_iter
-    for i = -floor(m/2) + 1 : floor(m/2)
+for iter_idx = 1:num_iter
+
+    for i = -floor(m / 2) + 1:floor(m / 2)
+
         switch shack_hartmann.spatialTransformType
             case 'angular spectrum'
-                kernel = propagation_kernelAngularSpectrum(app.Nx, app.Ny, i*(defocus_range/m) , acquisition.lambda, app.pix_width, app.pix_height, 0);
-                psf_3d(:,:,i+floor(m/2)) = fftshift(ifft2(iter_phase(:,:,num_iter) .* kernel));
+                kernel = propagation_kernelAngularSpectrum(app.numX, app.numY, i * (defocus_range / m), acquisition.lambda, app.pix_width, app.pix_height, 0);
+                psf_3d(:, :, i + floor(m / 2)) = fftshift(ifft2(iter_phase(:, :, num_iter) .* kernel));
             case 'Fresnel'
-                kernel = propagation_kernelFresnel(app.Nx, app.Ny, i*(defocus_range/m) , acquisition.lambda, app.pix_width, app.pix_height, 0);
-                psf_3d(:,:,i+floor(m/2)) = fft2(iter_phase(:,:,num_iter) .* kernel);
+                kernel = propagation_kernelFresnel(app.numX, app.numY, i * (defocus_range / m), acquisition.lambda, app.pix_width, app.pix_height, 0);
+                psf_3d(:, :, i + floor(m / 2)) = fft2(iter_phase(:, :, num_iter) .* kernel);
         end
-        
+
     end
-    PSF2D_preview = (abs(squeeze(psf_3d(:,floor(app.Nx/2), :))));
+
+    PSF2D_preview = (abs(squeeze(psf_3d(:, floor(app.numX / 2), :))));
     %figure;
-    %imagesc(abs(squeeze(psf_3d(:,floor(app.Nx/2), :))));
+    %imagesc(abs(squeeze(psf_3d(:,floor(app.numX/2), :))));
     %figure;
     %volshow(abs(psf_3d));
 end
-
 
 %             A = zeros(size(coefs));
 
@@ -223,9 +219,11 @@ if ~peripheral_flag
     %                     'XData', [1 app.UIAxes_3.Position(3)], ...
     %                     'YData', [1 app.UIAxes_3.Position(4)]);
     image = stiched_moments_subap;
+
     if (size(image, 3) == 1)
         image = repmat(image, 1, 1, 3);
     end
+
     app.ImageRight.ImageSource = image;
 
     centerY = ceil(size(coefs, 1) / 2);
@@ -243,12 +241,13 @@ if ~peripheral_flag
     else
         [~, app.phasePlane] = rephase_FH_for_preview(app.FH, coefs, zernike_indices);
         % alternative rephasing
-        phase = stitch_phase(shifts_original, app.phasePlane, app.Nx, app.Ny, shack_hartmann);
-        app.FH = app.FH .* exp(-1i.* phase);
+        phase = stitch_phase(shifts_original, app.phasePlane, app.numX, app.numY, shack_hartmann);
+        app.FH = app.FH .* exp(-1i .* phase);
     end
+
     app.show_aberration_correction();
     image_before_correction = app.ImageLeft.ImageSource;
     %                 disp(["entropy of the image before correction :", entropy(image_before_correction)])
 end
-end
 
+end

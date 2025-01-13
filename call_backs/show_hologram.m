@@ -1,4 +1,5 @@
 function show_hologram(app)
+
 if ~app.file_loaded
     return;
 end
@@ -14,19 +15,23 @@ cache = GuiCache(app);
 if (size(image, 3) == 1)
     image = repmat(image, 1, 1, 3);
     [numX, numY, ~] = size(image);
+
     if strcmp(cache.spatialTransformation, 'Fresnel') && (numX ~= numY)
         image = imresize(image, [max(numX, numY) max(numX, numY)]);
     end
+
 end
 
 if ~isempty(app.mask)
+
     try
-        image(:,:,1) = 2*app.mask .* image(:,:,3)+ ~app.mask.*image(:,:,3);
-        image(:,:,2) = 2*app.mask .* image(:,:,3)+ ~app.mask.*image(:,:,3);
-        image(:,:,3) = 2*app.mask .* image(:,:,3)+ ~app.mask.*image(:,:,3);
+        image(:, :, 1) = 2 * app.mask .* image(:, :, 3) + ~app.mask .* image(:, :, 3);
+        image(:, :, 2) = 2 * app.mask .* image(:, :, 3) + ~app.mask .* image(:, :, 3);
+        image(:, :, 3) = 2 * app.mask .* image(:, :, 3) + ~app.mask .* image(:, :, 3);
     end
+
 end
+
 app.ImageLeft.ImageSource = image;
 app.renderLamp.Color = [0, 1, 0];
 end
-

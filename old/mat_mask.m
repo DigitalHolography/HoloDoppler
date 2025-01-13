@@ -7,11 +7,11 @@ function [M] = mat_mask(M_init,rem_subAp)
 % output:   M_init with a mask
 
 if rem_subAp == 0
-    [Nx_2,Ny] = size(M_init);
-    Nx=sqrt(Nx_2);
-    idx = 1:Nx_2;
-    condition = mod(idx,Nx)~=0 & mod(idx,Nx)~=1 & idx>Nx & idx<=Nx_2-Nx;
-    condition = repmat(condition.',1,Ny);
+    [numX2,numY2] = size(M_init);
+    numX=sqrt(numX2);
+    idx = 1:numX2;
+    condition = mod(idx,numX)~=0 & mod(idx,numX)~=1 & idx>numX & idx<=numX2-numX;
+    condition = repmat(condition.',1,numY2);
     M = M_init(condition);
     M=reshape(M,[size(M,1)/size(condition,2) size(condition,2)]);
 else
@@ -23,25 +23,25 @@ end
 
 %Other versions
 
-% [Nx_2,~] = size(M);
-% Nx=sqrt(Nx_2);
+% [numX_2,~] = size(M);
+% numX=sqrt(numX_2);
 % 
-% for i = 1:Nx_2
-%     idx_row=floor((i-1)/Nx);
-%     idx_col=mod(i-1,Nx);
-%     idx_corner=[0:n_diag_corner-1 Nx-n_diag_corner:Nx-1];
+% for i = 1:numX_2
+%     idx_row=floor((i-1)/numX);
+%     idx_col=mod(i-1,numX);
+%     idx_corner=[0:n_diag_corner-1 numX-n_diag_corner:numX-1];
 %     if ~isempty(find(idx_corner==idx_row,1)) && ~isempty(find(idx_corner==idx_col,1))
-%         M(Nx_2-i+1,:)=[];
+%         M(numX_2-i+1,:)=[];
 %     end
 % end
 
 
-% [Nx,~] = size(M_init);
+% [numX,~] = size(M_init);
 % M_masked = M_init;
 % M_masked(1,:) = 0;
-% M_masked(sqrt(Nx),:) = 0;
-% M_masked(Nx-sqrt(Nx)+1,:) = 0;
-% M_masked(Nx,:) = 0;
+% M_masked(sqrt(numX),:) = 0;
+% M_masked(numX-sqrt(numX)+1,:) = 0;
+% M_masked(numX,:) = 0;
 
 end
 

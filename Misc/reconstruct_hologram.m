@@ -74,8 +74,6 @@ switch time_transform.type
 end
 clear("H");
 SH = abs(SH).^2;
-%% shifts related to acquisition wrong positioning
-SH = permute(SH, [2 1 3]);
 SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
 %% moment
 

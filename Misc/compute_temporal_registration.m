@@ -10,14 +10,14 @@ function reg = compute_temporal_registration(istream, cache, batch_size, batch_s
 % batch_stride: number of frames to skip between each batches
 % gw: size of gaussian filter
 % kernel: wave propagation kernel used to change reconstruction distance
-% complex_mask: apply a fake aberration complex mask (Nx*Ny complex matrix)
+% complex_mask: apply a fake aberration complex mask (numX*numY complex matrix)
 %               ignored if empty
 % progress_bar: gui progress bar to display computation progress
 % use_multithread: enables parfor loops
 
-Nx = istream.get_frame_width();
-Ny = istream.get_frame_height();
-acquisition = DopplerAcquisition(Nx,Ny,cache.Fs/1000,cache.z,cache.wavelength,cache.DX,cache.DY,cache.pix_width,cache.pix_height);
+numX = istream.get_frame_width();
+numY = istream.get_frame_height();
+acquisition = DopplerAcquisition(numX, numY, cache.Fs / 1000, cache.z, cache.wavelength, cache.DX, cache.DY, cache.pix_width, cache.pix_height);
 f1 = cache.f1;
 f2 = cache.f2;
 
@@ -32,10 +32,11 @@ else
 end
 
 % construct holograms
-holograms = zeros(Nx,Ny,1,num_batches,'single');
-parfor (batch_idx = 1:num_batches-1, parfor_flag)
-    frame_batch = istream.read_frame_batch(batch_size, (batch_idx - 1)* batch_stride);
-    
+holograms = zeros(numX, numY, 1, num_batches, 'single');
+
+parfor (batch_idx = 1:num_batches - 1, parfor_flag)
+    frame_batch = istream.read_frame_batch(batch_size, (batch_idx - 1) * batch_stride);
+
     % TODO make complex mask an optional variable
     % instead of checking if it is empty or not
     if ~isempty(complex_mask)
@@ -43,13 +44,13 @@ parfor (batch_idx = 1:num_batches-1, parfor_flag)
     else
         FH = compute_FH_from_frame_batch(frame_batch, kernel);
     end
-    
+
     FH = reconstruct_hologram(FH, f1, f2, acquisition, gw, false, true);
 
-    holograms(:,:,:,batch_idx) = mat2gray(FH);
+    holograms(:, :, :, batch_idx) = mat2gray(FH);
     send(progress_bar, 0); % increment progress bar
 end
 
 % compute registrations
-[~, reg] = register_video(holograms, ref_idx); 
+[~, reg] = register_video(holograms, ref_idx);
 end

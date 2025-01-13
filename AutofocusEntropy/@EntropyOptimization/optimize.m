@@ -1,11 +1,11 @@
-function opt = optimize(obj, FH, f1, f2, acquisition, gaussian_width, mesh_tol, mask_num_iter, retract, use_gpu)
-[~, zernike_eval] = zernike_phase(obj.p, acquisition.Nx, acquisition.Ny);
+function opt = optimize(obj, FH, f1, f2, ac, gaussian_width, mesh_tol, mask_num_iter, retract, use_gpu)
+[~, zernike_eval] = zernike_phase(obj.p, ac.numX, ac.numY);
 current_optimum = obj.initial_guess;
 current_constraint = [obj.min_constraint; obj.max_constraint];
 mask_radiuses = floor(((0:mask_num_iter-1) .* (35 * 0.50)) + 35);
 for r = mask_radiuses
-    mask = construct_mask(0, r, acquisition.Nx, acquisition.Ny);
-    objective_fn = @(coefs)objective(FH, coefs, zernike_eval, f1, f2, mask, acquisition, gaussian_width, use_gpu);
+    mask = construct_mask(0, r, ac.numX, ac.numY);
+    objective_fn = @(coefs)objective(FH, coefs, zernike_eval, f1, f2, mask, ac, gaussian_width, use_gpu);
     
 %     algo_options = optimoptions(@patternsearch, 'Display', 'iter');
     algo_options = optimoptions(@patternsearch);

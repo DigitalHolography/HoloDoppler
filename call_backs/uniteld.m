@@ -1,5 +1,4 @@
-
-SH = ri(frame_batch,local_spatialTransformation,local_kernel,local_svd,local_SVDx,localSVDThresholdValue,local_SVDx_SubAp_num,0);
+SH = ri(frame_batch, local_spatialTransformation, local_kernel, local_svd, local_SVDx, localSVDThresholdValue, local_SVDx_SubAp_num, 0);
 
 %% permute related to acquisition optical inversion of the image
 SH = permute(SH, [2 1 3]);

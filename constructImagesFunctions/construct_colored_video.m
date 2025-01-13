@@ -25,8 +25,8 @@ M_freq_low = imadjustn(M_freq_low, low_high);
 low_high = stretchlim(M_freq_high(:), tol);
 M_freq_high = imadjustn(M_freq_high, low_high);
 
-[Nx, Ny, Nt] = size(M_freq_low);
-vid = zeros(Nx,Ny,3,Nt,'single');
+[numX, numY, numFrames] = size(M_freq_low);
+vid = zeros(numX,numY,3,numFrames,'single');
 
 alpha1 = [51 255 255]/255;
 alpha2 =  [255 51 51]/255;

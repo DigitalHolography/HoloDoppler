@@ -7,6 +7,7 @@ app.extension = ext;
 
 app.filename = fname;
 app.filepath = fpath;
+
 switch ext
     case '.cine'
         app.interferogram_stream = CineReader(fullfile(app.filepath, app.filename));
@@ -16,26 +17,26 @@ switch ext
         % set f values from Fs
         if app.Fs > 20000
             app.f1EditField.Value = 6;
-            app.f2EditField.Value = floor(app.Fs / (2*1000));
+            app.f2EditField.Value = floor(app.Fs / (2 * 1000));
 
             app.compositef1EditField.Value = 2;
             app.compositef2EditField.Value = 10;
-            app.compositef3EditField.Value = floor(app.Fs / (2*1000));
+            app.compositef3EditField.Value = floor(app.Fs / (2 * 1000));
         elseif app.Fs > 2000
 
             app.f1EditField.Value = 0.2;
-            app.f2EditField.Value = floor(app.Fs / (2*1000));
+            app.f2EditField.Value = floor(app.Fs / (2 * 1000));
 
             app.compositef1EditField.Value = 0.2;
             app.compositef2EditField.Value = 1;
-            app.compositef3EditField.Value = floor(app.Fs / (2*1000));
+            app.compositef3EditField.Value = floor(app.Fs / (2 * 1000));
         else
-            app.f1EditField.Value = floor(app.Fs / (8*1000));
-            app.f2EditField.Value = floor(app.Fs / (2*1000));
+            app.f1EditField.Value = floor(app.Fs / (8 * 1000));
+            app.f2EditField.Value = floor(app.Fs / (2 * 1000));
 
-            app.compositef1EditField.Value = floor(app.Fs / (8*1000));
-            app.compositef2EditField.Value = floor(app.Fs / (4*1000));
-            app.compositef3EditField.Value = floor(app.Fs / (2*1000));
+            app.compositef1EditField.Value = floor(app.Fs / (8 * 1000));
+            app.compositef2EditField.Value = floor(app.Fs / (4 * 1000));
+            app.compositef3EditField.Value = floor(app.Fs / (2 * 1000));
         end
 
         % % update GUI text
@@ -46,19 +47,18 @@ switch ext
         % app.LowfrequencyrangeLabel.Text = sprintf('Low frequency range: %d..%d', color_f2, color_f3);
         % app.HighfrequencyrangeLabel.Text = sprintf('High frequency range: %d..%d', color_f1, color_f2);
 
-
         app.pix_width = 1 / double(app.interferogram_stream.horizontal_pix_per_meter);
         app.pix_height = 1 / double(app.interferogram_stream.vertical_pix_per_meter);
         app.ppx.Value = app.pix_width;
         app.ppy.Value = app.pix_height;
 
-        app.Nx = double(app.interferogram_stream.frame_width);
-        app.Ny = double(app.interferogram_stream.frame_height);
+        app.numX = double(app.interferogram_stream.frame_width);
+        app.numY = double(app.interferogram_stream.frame_height);
     case '.raw'
         % raw file - fetching missing data from user
 
         % Dialog box
-        prompt = {'Nx:', 'Ny:', 'Fs:', 'pix width:', 'pix height:', 'endianness (b/l):'};
+        prompt = {'numX:', 'numY:', 'Fs:', 'pix width:', 'pix height:', 'endianness (b/l):'};
         dlgtitle = 'Raw file detected - Input missing data';
         dims = [1 35];
         definput = {'512', '512', '67000', '28e-6', '28e-6', 'l'};
@@ -75,14 +75,14 @@ switch ext
             error('Bad raw data input - file could not be loaded correctly');
         end
 
-        app.f2EditField.Value = floor(app.Fs / (2*1000));
-        app.compositef3EditField.Value = floor(app.Fs / (2*1000));
+        app.f2EditField.Value = floor(app.Fs / (2 * 1000));
+        app.compositef3EditField.Value = floor(app.Fs / (2 * 1000));
 
-        acquisition = DopplerAcquisition(frame_width, frame_height,app.Fs/1000,app.z_reconstruction, app.z_retina, app.z_iris ,app.wavelengthEditField.Value,app.DX,app.DY,app.pix_width,app.pix_height);
+        acquisition = DopplerAcquisition(frame_width, frame_height, app.Fs / 1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value, app.DX, app.DY, app.pix_width, app.pix_height);
         app.interferogram_stream = RawReader(fullfile(app.filepath, app.filename), endianness, acquisition, app.batchsizeEditField.Value, app.batchstrideEditField.Value);
 
-        app.Nx = app.interferogram_stream.acquisition.Nx;
-        app.Ny = app.interferogram_stream.acquisition.Ny;
+        app.numX = app.interferogram_stream.acquisition.numX;
+        app.numY = app.interferogram_stream.acquisition.numY;
     case '.holo'
         app.interferogram_stream = HoloReader(fullfile(app.filepath, app.filename));
 
@@ -90,11 +90,10 @@ switch ext
         % with previous settings
         %app.DialogApp = dialogWindow(app);
 
-
         app.wavelengthEditField.Value = app.interferogram_stream.footer.compute_settings.image_rendering.lambda;
 
-        app.Nx = single(app.interferogram_stream.frame_height);
-        app.Ny = single(app.interferogram_stream.frame_width); %% find the real info in the footer
+        app.numX = single(app.interferogram_stream.frame_height);
+        app.numY = single(app.interferogram_stream.frame_width); % % find the real info in the footer
         app.pix_width = app.interferogram_stream.footer.info.pixel_pitch.x * 1e-6;
         app.pix_height = app.interferogram_stream.footer.info.pixel_pitch.y * 1e-6;
 
@@ -105,18 +104,19 @@ switch ext
 
         % FIXME
         % for now set default Fs
-        app.Fs = app.interferogram_stream.footer.info.input_fps ;
+        app.Fs = app.interferogram_stream.footer.info.input_fps;
 
         app.f1EditField.Value = 0.1;
-        app.f2EditField.Value = app.Fs / (2*1000);
+        app.f2EditField.Value = app.Fs / (2 * 1000);
 
         app.compositef1EditField.Value = 0.2;
         app.compositef2EditField.Value = 1;
-        app.compositef3EditField.Value = floor(app.Fs / (2*1000));
+        app.compositef3EditField.Value = floor(app.Fs / (2 * 1000));
 
         if isfield(app.interferogram_stream.footer.compute_settings, 'batchSize')
             reconstructWithPreviousSettings(app, 1)
         end
+
 end
 
 % failsafe: set max batch size to file size
@@ -131,15 +131,14 @@ end
 
 % display file name in GUI
 app.CurrentFilePanel.Title = sprintf("Current file: %s", fullfile(app.filepath, app.filename));
-app.fsEditField.Value = app.Fs/1000;
+app.fsEditField.Value = app.Fs / 1000;
 
 % change position slider limits according to number of frames in the file
-app.positioninfileSlider.Limits = [0, max(double(app.interferogram_stream.num_frames-app.batchsizeEditField.Value), 1)];
+app.positioninfileSlider.Limits = [0, max(double(app.interferogram_stream.num_frames - app.batchsizeEditField.Value), 1)];
 app.positioninfileSlider.Value = 0;
-app.EditField.Limits = [0, max(double(app.interferogram_stream.num_frames-app.batchsizeEditField.Value), 1)];
+app.EditField.Limits = [0, max(double(app.interferogram_stream.num_frames - app.batchsizeEditField.Value), 1)];
 app.EditField.Value = 0;
 app.num_batches.Text = sprintf("/ %d", app.interferogram_stream.num_frames);
-
 
 %% Load settings from previous runs if available
 %  This might not work, for instance if previous runs were made
@@ -156,9 +155,11 @@ catch ME
     cache_found = false;
     disp('Error Message:')
     disp(ME.message)
+
     for i = 1:numel(ME.stack)
-        fprintf('%s : %s, line : %d \n',ME.stack(i).file, ME.stack(i).name, ME.stack(i).line);
+        fprintf('%s : %s, line : %d \n', ME.stack(i).file, ME.stack(i).name, ME.stack(i).line);
     end
+
 end
 
 try
@@ -172,9 +173,11 @@ catch ME
     fprintf("==============================\nERROR\n==============================\n")
     disp('Error Message:')
     disp(ME.message)
+
     for i = 1:numel(ME.stack)
-        fprintf('%s : %s, line : %d \n',ME.stack(i).file, ME.stack(i).name, ME.stack(i).line);
+        fprintf('%s : %s, line : %d \n', ME.stack(i).file, ME.stack(i).name, ME.stack(i).line);
     end
+
 end
 
 if ~isempty(config)
@@ -201,14 +204,17 @@ catch ME
     fprintf("==============================\nERROR\n==============================\n")
     disp('Error Message:')
     disp(ME.message)
+
     for i = 1:numel(ME.stack)
-        fprintf('%s : %s, line : %d \n',ME.stack(i).file, ME.stack(i).name, ME.stack(i).line);
+        fprintf('%s : %s, line : %d \n', ME.stack(i).file, ME.stack(i).name, ME.stack(i).line);
     end
+
 end
 
 if rephasing_found
     app.rephasing_data = previous_rephasing_data;
     app.NotesTextArea.Value = {''};
+
     for i = 1:numel(previous_rephasing_data)
         r = previous_rephasing_data(i);
         reg = ~isempty(r.aberration_correction.rephasing_zernike_coefs);
@@ -218,43 +224,42 @@ if rephasing_found
 
         % compute mean correction
         if shack
-            mean_1 = mean(r.aberration_correction.shack_hartmann_zernike_coefs(1,:));
-            mean_2 = mean(r.aberration_correction.shack_hartmann_zernike_coefs(2,:));
-            mean_3 = mean(r.aberration_correction.shack_hartmann_zernike_coefs(3,:));
+            mean_1 = mean(r.aberration_correction.shack_hartmann_zernike_coefs(1, :));
+            mean_2 = mean(r.aberration_correction.shack_hartmann_zernike_coefs(2, :));
+            mean_3 = mean(r.aberration_correction.shack_hartmann_zernike_coefs(3, :));
         end
 
         if opt
-            mean_1 = mean(r.aberration_correction.iterative_opt_zernike_coefs(1,:));
-            mean_2 = mean(r.aberration_correction.iterative_opt_zernike_coefs(2,:));
-            mean_3 = mean(r.aberration_correction.iterative_opt_zernike_coefs(3,:));
+            mean_1 = mean(r.aberration_correction.iterative_opt_zernike_coefs(1, :));
+            mean_2 = mean(r.aberration_correction.iterative_opt_zernike_coefs(2, :));
+            mean_3 = mean(r.aberration_correction.iterative_opt_zernike_coefs(3, :));
         end
 
         if shack && opt
-            mean_1 = mean(r.aberration_correction.shack_hartmann_zernike_coefs(1,:) + r.aberration_correction.iterative_opt_zernike_coefs(1,:));
-            mean_2 = mean(r.aberration_correction.shack_hartmann_zernike_coefs(2,:) + r.aberration_correction.iterative_opt_zernike_coefs(2,:));
-            mean_3 = mean(r.aberration_correction.shack_hartmann_zernike_coefs(3,:) + r.aberration_correction.iterative_opt_zernike_coefs(3,:));
+            mean_1 = mean(r.aberration_correction.shack_hartmann_zernike_coefs(1, :) + r.aberration_correction.iterative_opt_zernike_coefs(1, :));
+            mean_2 = mean(r.aberration_correction.shack_hartmann_zernike_coefs(2, :) + r.aberration_correction.iterative_opt_zernike_coefs(2, :));
+            mean_3 = mean(r.aberration_correction.shack_hartmann_zernike_coefs(3, :) + r.aberration_correction.iterative_opt_zernike_coefs(3, :));
         end
 
         if shack || opt
             text = sprintf('%s\nastig 1 = %0.1f, defocus = %0.1f, astig 2 = %0.1f', text, mean_1, mean_2, mean_3);
         end
 
-        text = sprintf('%s\n',text);
+        text = sprintf('%s\n', text);
 
         app.NotesTextArea.Value = [{text}; app.NotesTextArea.Value];
     end
+
     app.NotesTextArea.Value = [{'Rephasing found:'}; app.NotesTextArea.Value];
 else
     app.NotesTextArea.Value = {''};
 end
 
-% load data required to display images in the GUI
-app.frame_batch = app.interferogram_stream.read_frame_batch(app.batchsizeEditField.Value, floor(app.positioninfileSlider.Value));
-
 %% display images on file load
 
 app.z_iris = app.zirisEditField.Value;
 app.z_retina = app.zretinaEditField.Value;
+
 switch app.Switch.Value
     case 'z_iris'
         app.z_reconstruction = app.z_iris;
@@ -273,13 +278,11 @@ app.time_transform.f2 = app.f2EditField.Value;
 app.time_transform.min_PCA = app.min_PCAEditField.Value;
 app.time_transform.max_PCA = app.max_PCAEditField.Value;
 
-
 app.file_loaded = true;
 app.compute_kernel(false);
 
-
 Renderpreview(app);
-%             GPUpreview = app.check_GPU_for_preview();
+%             GPUpreview =check_GPU(app);
 %             app.compute_FH(GPUpreview);
 %             app.compute_hologram(GPUpreview);
 %             app.show_hologram();
