@@ -1,19 +1,17 @@
-function Loadfile(app, fname, fpath, config)
+function Loadfile(app, fname, fpath, gui)
 app.renderLamp.Color = [1, 0, 0];
 drawnow;
 app.Label_2.Text = '';
+
+file = fullfile(fpath, fname);
 [~, ~, ext] = fileparts(fname);
-app.extension = ext;
 
-app.filename = fname;
-app.filepath = fpath;
-
-batchStride = app.batchstrideEditField.Value;
-batchSize = app.batchsizeEditField.Value;
+batchStride = gui.batch_stride;
+batchSize = gui.batch_size;
 
 switch ext
     case '.cine'
-        app.interferogram_stream = CineReader(fullfile(app.filepath, app.filename));
+        app.interferogram_stream = CineReader(file);
 
         % fetch data from cine file
         app.Fs = double(app.interferogram_stream.frame_rate);
@@ -82,12 +80,12 @@ switch ext
         app.compositef3EditField.Value = floor(app.Fs / (2 * 1000));
 
         acquisition = DopplerAcquisition(frame_width, frame_height, app.Fs / 1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value, app.pix_width, app.pix_height);
-        app.interferogram_stream = RawReader(fullfile(app.filepath, app.filename), endianness, acquisition, batchSize, batchStride);
+        app.interferogram_stream = RawReader(file, endianness, acquisition, batchSize, batchStride);
 
         app.numX = app.interferogram_stream.acquisition.numX;
         app.numY = app.interferogram_stream.acquisition.numY;
     case '.holo'
-        app.interferogram_stream = HoloReader(fullfile(app.filepath, app.filename));
+        app.interferogram_stream = HoloReader(file);
 
         % Older version : DialogWindow, now direct reconstruction
         % with previous settings
@@ -135,7 +133,7 @@ if double(numFrames) < batchSize
 end
 
 % display file name in GUI
-app.CurrentFilePanel.Title = sprintf("Current file: %s", fullfile(app.filepath, app.filename));
+app.CurrentFilePanel.Title = sprintf("Current file: %s", file);
 app.fsEditField.Value = app.Fs / 1000;
 
 % change position slider limits according to number of frames in the file
@@ -150,7 +148,7 @@ app.num_batches.Text = sprintf("/ %d", numFrames);
 %  with a different version of the software, such that the
 %  cache structure is different and cannot be loaded
 try
-    [previous_cache, cache_found] = fetch_cache(app.filepath, app.filename, ext);
+    [previous_cache, cache_found] = fetch_cache(fpath, fname, ext);
 catch ME
     % the directory is present but is missing files or contains
     % corrupt data
@@ -168,7 +166,7 @@ catch ME
 end
 
 try
-    [app.image_registration, ~] = fetch_image_registration(app.filepath, app.filename, ext);
+    [app.image_registration, ~] = fetch_image_registration(fpath, fname, ext);
 catch ME
     % the directory is present but is missing files or contains
     % corrupt data
@@ -185,8 +183,8 @@ catch ME
 
 end
 
-if ~isempty(config)
-    config.load2Gui(app);
+if ~isempty(gui)
+    gui.load2Gui(app);
     % app.outputVideo();
     % app.TimeTransform();
 elseif cache_found
@@ -201,7 +199,7 @@ else
 end
 
 try
-    [previous_rephasing_data, rephasing_found] = fetch_rephasing_data(app.filepath, app.filename, ext);
+    [previous_rephasing_data, rephasing_found] = fetch_rephasing_data(fpath, fname, ext);
 catch ME
     previous_rephasing_data = [];
     rephasing_found = false;

@@ -31,8 +31,6 @@ classdef GuiCache
 
         ref_batch_size double
         batch_stride double
-        DX double
-        DY double
 
         % video rendering logical checkboxes
         save_raw logical
