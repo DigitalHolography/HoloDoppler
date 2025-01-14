@@ -23,7 +23,7 @@ else % no gpu
 
 end
 
-if app.rephasingCheckBox.Value
+if app.UseRephasingDataCheckBox.Value
     app.FH = rephase_FH(app.FH, app.rephasing_data, app.batchsizeEditField.Value, app.positioninfileSlider.Value);
 end
 

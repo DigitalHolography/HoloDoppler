@@ -74,7 +74,6 @@ switch time_transform.type
 end
 clear("H");
 SH = abs(SH).^2;
-SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
 %% moment
 
 switch time_transform.type

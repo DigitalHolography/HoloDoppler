@@ -8,6 +8,9 @@ app.extension = ext;
 app.filename = fname;
 app.filepath = fpath;
 
+batchStride = app.batchstrideEditField.Value;
+batchSize = app.batchsizeEditField.Value;
+
 switch ext
     case '.cine'
         app.interferogram_stream = CineReader(fullfile(app.filepath, app.filename));
@@ -78,8 +81,8 @@ switch ext
         app.f2EditField.Value = floor(app.Fs / (2 * 1000));
         app.compositef3EditField.Value = floor(app.Fs / (2 * 1000));
 
-        acquisition = DopplerAcquisition(frame_width, frame_height, app.Fs / 1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value, app.DX, app.DY, app.pix_width, app.pix_height);
-        app.interferogram_stream = RawReader(fullfile(app.filepath, app.filename), endianness, acquisition, app.batchsizeEditField.Value, app.batchstrideEditField.Value);
+        acquisition = DopplerAcquisition(frame_width, frame_height, app.Fs / 1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value, app.pix_width, app.pix_height);
+        app.interferogram_stream = RawReader(fullfile(app.filepath, app.filename), endianness, acquisition, batchSize, batchStride);
 
         app.numX = app.interferogram_stream.acquisition.numX;
         app.numY = app.interferogram_stream.acquisition.numY;
@@ -123,10 +126,12 @@ end
 % FIXME: check integrity of num_frames with footer
 % app.interferogram_stream.num_frames is read from header by
 % the function HoloReader
+numFrames = double(app.interferogram_stream.num_frames);
+app.EndFrameEditField.Value = numFrames; 
 
-if double(app.interferogram_stream.num_frames) < app.batchsizeEditField.Value
-    app.batchsizeEditField.Value = round(double(app.interferogram_stream.num_frames) / 2);
-    app.refbatchsizeEditField.Value = app.batchsizeEditField.Value;
+if double(numFrames) < batchSize
+    app.batchsizeEditField.Value = round(double(numFrames) / 2);
+    app.refbatchsizeEditField.Value = batchSize;
 end
 
 % display file name in GUI
@@ -134,11 +139,11 @@ app.CurrentFilePanel.Title = sprintf("Current file: %s", fullfile(app.filepath, 
 app.fsEditField.Value = app.Fs / 1000;
 
 % change position slider limits according to number of frames in the file
-app.positioninfileSlider.Limits = [0, max(double(app.interferogram_stream.num_frames - app.batchsizeEditField.Value), 1)];
+app.positioninfileSlider.Limits = [0, max(double(numFrames - batchSize), 1)];
 app.positioninfileSlider.Value = 0;
-app.EditField.Limits = [0, max(double(app.interferogram_stream.num_frames - app.batchsizeEditField.Value), 1)];
+app.EditField.Limits = [0, max(double(numFrames - batchSize), 1)];
 app.EditField.Value = 0;
-app.num_batches.Text = sprintf("/ %d", app.interferogram_stream.num_frames);
+app.num_batches.Text = sprintf("/ %d", numFrames);
 
 %% Load settings from previous runs if available
 %  This might not work, for instance if previous runs were made
@@ -213,7 +218,6 @@ end
 
 if rephasing_found
     app.rephasing_data = previous_rephasing_data;
-    app.NotesTextArea.Value = {''};
 
     for i = 1:numel(previous_rephasing_data)
         r = previous_rephasing_data(i);
@@ -247,7 +251,6 @@ if rephasing_found
 
         text = sprintf('%s\n', text);
 
-        app.NotesTextArea.Value = [{text}; app.NotesTextArea.Value];
     end
 
     app.NotesTextArea.Value = [{'Rephasing found:'}; app.NotesTextArea.Value];

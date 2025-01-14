@@ -15,7 +15,7 @@ app.cache = GuiCache(app);
 
 %FIXME : change function name DopplerAcquisition ->
 %HologramRenderingParameters & Remove Fs ?
-acquisition = DopplerAcquisition(app.numX, app.numY, app.Fs / 1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value, app.DX, app.DY, app.pix_width, app.pix_height);
+acquisition = DopplerAcquisition(app.numX, app.numY, app.Fs / 1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value, app.pix_width, app.pix_height);
 
 % change the reconstruction type name to a form compatible with
 % structures
@@ -53,7 +53,21 @@ app.FH = [];
 %             save(output_dirname, 'H_df');
 
 app.hologram = app.var_ImageTypeList.(type).image;
-% app.hologram = flip(app.hologram);
+if app.FlipLefttoRightCheckBox.Value
+    app.hologram = fliplr(app.hologram);
+end
+if app.FlipToptoBottomCheckBox.Value
+    app.hologram = flipud(app.hologram);
+end
+switch app.RotateDropDown.Value
+    case 'Rotate Right (90°)'
+        app.hologram = rot90(app.hologram, 1);
+    case 'Rotate 180°'
+        app.hologram = rot90(app.hologram, 2);
+    case 'Rotate Left (90°)'
+        app.hologram = rot90(app.hologram, 3);
+
+end
 app.var_ImageTypeList.clear();
 
 end

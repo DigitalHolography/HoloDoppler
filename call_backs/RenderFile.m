@@ -27,9 +27,9 @@ end
 if nargin == 1 || isempty(cache) % if no parameter cache is given
     num_workers = 10;
     wavelength = 852e-9;
-    j_win = 512;
-    ref_j_win = 1024;
-    j_step = 512;
+    batch_size = 512;
+    ref_batch_size = 1024;
+    batch_stride = 512;
     blur = 35;
     is_svd = true;
     spatialTransformation = 'Fresnel';
@@ -47,9 +47,9 @@ if nargin == 1 || isempty(cache) % if no parameter cache is given
 else
     num_workers = cache.nb_cpu_cores;
     wavelength = cache.wavelength;
-    j_win = cache.batch_size;
-    ref_j_win = cache.ref_batch_size;
-    j_step = cache.batch_stride;
+    batch_size = cache.batch_size;
+    ref_batch_size = cache.ref_batch_size;
+    batch_stride = cache.batch_stride;
     blur = cache.blur;
     is_svd = cache.SVD;
     spatialTransformation = cache.spatialTransformation;
@@ -91,7 +91,7 @@ switch spatialTransformation
         kernel = propagation_kernelFresnel(numX, numY, z, wavelength, pix_width, pix_height, 0); % propagation kernel initialization
 end
 
-num_batches = floor((istream.num_frames - j_win) / j_step);
+num_batches = floor((istream.num_frames - batch_size) / batch_stride);
 
 % parfor waitbar
 % we have to use a DataQueue
@@ -115,7 +115,7 @@ elseif poolobj.NumWorkers ~= parfor_arg
 end
 
 if ~is_SVDThreshold
-    SVDThresholdValue = round(f1 * j_win / fs) * 2 + 1; % default value if none specified
+    SVDThresholdValue = round(f1 * batch_size / fs) * 2 + 1; % default value if none specified
 end
 
 send(D, -2); % display 'Image rendering' on progress bar
@@ -129,15 +129,15 @@ tParfor = tic;
 
 parfor (batch_idx = 1:num_batches, parfor_arg)
 
-    frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step);
+    frame_batch = istream.read_frame_batch(batch_size, (batch_idx - 1) * batch_stride);
     SH = ri(frame_batch, spatialTransformation, kernel, is_svd, is_SVDx, SVDThresholdValue, 0);
 
     %% permute related to acquisition optical inversion of the image
     SH = permute(SH, [2 1 3]);
-    M0 = m0(SH, f1, f2, fs, j_win, blur); % with flatfield of gaussian_width applied
-    moment0 = m0(SH, f1, f2, fs, j_win, 0); % no flatfield : raw
-    moment1 = m1(SH, f1, f2, fs, j_win, 0);
-    moment2 = m1(SH, f1, f2, fs, j_win, 0);
+    M0 = m0(SH, f1, f2, fs, batch_size, blur); % with flatfield of gaussian_width applied
+    moment0 = m0(SH, f1, f2, fs, batch_size, 0); % no flatfield : raw
+    moment1 = m1(SH, f1, f2, fs, batch_size, 0);
+    moment2 = m1(SH, f1, f2, fs, batch_size, 0);
 
     video_M0(:, :, :, batch_idx) = M0;
     video_moment0(:, :, :, batch_idx) = moment0;
@@ -170,15 +170,15 @@ if is_registration
     video_M0_reg = video_M0_reg ./ (max(abs(video_M0_reg), [], [1, 2])); % rescaling each frame but keeps mean at zero
 
     % % construct reference image
-    ref_batch_idx = min(floor((position_in_file) / j_step) + 1, size(video_M0, 4) - j_win);
+    ref_batch_idx = min(floor((position_in_file) / batch_stride) + 1, size(video_M0, 4) - batch_size);
 
-    reg_frame_batch = istream.read_frame_batch(ref_j_win, floor(ref_batch_idx * j_step));
+    reg_frame_batch = istream.read_frame_batch(ref_batch_size, floor(ref_batch_idx * batch_stride));
 
     SH = ri(reg_frame_batch, spatialTransformation, kernel, is_svd, is_SVDx, SVDThresholdValue, 0);
 
     %% permute related to acquisition optical invertion
     SH = permute(SH, [2 1 3]);
-    reg_hologram = m0(SH, f1, f2, fs, j_win, blur); % with flatfield of gaussian_width applied
+    reg_hologram = m0(SH, f1, f2, fs, batch_size, blur); % with flatfield of gaussian_width applied
 
     reg_hologram = reg_hologram .* disk - disk .* sum(reg_hologram .* disk, [1, 2]) / nnz(disk); % minus the mean
     reg_hologram = reg_hologram ./ (max(abs(reg_hologram), [], [1, 2])); % rescaling but keeps mean at zero
@@ -263,9 +263,9 @@ time_transform.f2 = f2;
 s.time_transform = time_transform;
 s.spatial_transform = spatialTransformation;
 s.depth.z = z;
-s.batch_size = j_win;
-s.ref_batch_size = j_win;
-s.batch_stride = j_step;
+s.batch_size = batch_size;
+s.ref_batch_size = batch_size;
+s.batch_stride = batch_stride;
 s.SVD = is_svd;
 s.SVDThreshold = is_SVDThreshold;
 s.SVDThresholdValue = SVDThresholdValue;

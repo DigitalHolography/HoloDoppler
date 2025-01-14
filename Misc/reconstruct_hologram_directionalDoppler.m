@@ -52,8 +52,6 @@ SH = fft(H, [], 3);
 SH2 = abs(SH).^2; 
 
 %% shifts related to acquisition wrong positioning
-SH2 = permute(SH2, [2 1 3]);
-SH2 = circshift(SH2, [-ac.delta_y, ac.delta_x, 0]);
 
 %% Compute moments
 velocity = construct_velocity_video(SH2, f1, f2, ac.fs, j_win, gaussian_width, wavelength);

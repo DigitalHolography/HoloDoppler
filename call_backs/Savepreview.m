@@ -8,7 +8,7 @@ drawnow;
 app.cache = GuiCache(app);
 
 % ,''dark_field_image',
-acquisition = DopplerAcquisition(app.numX, app.numY, app.Fs / 1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value, app.DX, app.DY, app.pix_width, app.pix_height);
+acquisition = DopplerAcquisition(app.numX, app.numY, app.Fs / 1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value, app.pix_width, app.pix_height);
 
 GPUpreview = check_GPU(app);
 compute_FH(app, GPUpreview);

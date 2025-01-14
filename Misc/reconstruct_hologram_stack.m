@@ -80,10 +80,6 @@ function hologram_stack = reconstruct_hologram_stack(FH, time_transform, acquisi
 
     %% calculate spectrogram
     SH = fft(H, [], 3);
-
-    %% shifts related to acquisition wrong positioning
-    SH = permute(SH, [2 1 3]);
-    SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
     SH = (SH(:,:,1:floor(j_win/2)));
 
     tmp = abs(SH).^2;

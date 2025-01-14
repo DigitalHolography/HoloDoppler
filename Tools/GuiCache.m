@@ -99,20 +99,18 @@ classdef GuiCache
             obj.Fs = app.Fs;
             obj.pix_width = app.pix_width;
             obj.pix_height = app.pix_height;
-            obj.registration = app.imageregistrationCheckBox.Value;
+            obj.registration = app.ImageRegistrationCheckBox.Value;
             obj.temporal_filter = app.temporalfilterEditField.Value;
             obj.parallelism = app.ParallelismDropDown.Value;
-            obj.registration_via_phase = app.phaseregistrationCheckBox.Value;
+            obj.registration_via_phase = app.PhaseRegistrationCheckBox.Value;
             obj.aberration_compensation = app.IterativeoptimizationCheckBox.Value;
             obj.SVD = app.SVDCheckBox.Value;
 
             obj.notes = app.NotesTextArea.Value;
-            obj.DX = app.DX;
-            obj.DY = app.DY;
             obj.position_in_file = app.positioninfileSlider.Value;
-            obj.output_videos = (strrep(app.outputvideoDropDown.Value, ' ', '_'));
-            obj.rephasing = app.rephasingCheckBox.Value;
-            obj.registration_disk = app.registrationdiskCheckBox.Value;
+            obj.output_videos = (strrep(app.OutputVideoDropDown.Value, ' ', '_'));
+            obj.rephasing = app.UseRephasingDataCheckBox.Value;
+            obj.registration_disk = app.registrationdiskratioCheckBox.Value;
             obj.registration_disk_ratio = app.regDiskRatioEditField.Value;
 
             obj.color_f1 = app.compositef1EditField.Value;
@@ -130,7 +128,7 @@ classdef GuiCache
             obj.mask_num_iter = app.masknumiterEditField.Value;
             obj.zernikes_tol = app.zernikestolEditField.Value;
             obj.max_constraint = app.maxconstraintEditField.Value;
-            obj.iterative_registration = app.iterativeregistrationCheckBox.Value;
+            obj.iterative_registration = app.IterativeRegistrationCheckBox.Value;
 
             % shack-hartmann parameters
             obj.shack_hartmann_aberration_compensation = app.ShackHartmannCheckBox.Value;
@@ -173,11 +171,11 @@ classdef GuiCache
             app.f2EditField.Value = loadGUIVariable(obj.time_transform.f2);
             app.min_PCAEditField.Value = loadGUIVariable(obj.time_transform.min_PCA);
             app.max_PCAEditField.Value = loadGUIVariable(obj.time_transform.max_PCA);
-            app.imageregistrationCheckBox.Value = loadGUIVariable(obj.registration);
+            app.ImageRegistrationCheckBox.Value = loadGUIVariable(obj.registration);
             app.iterativeregistrationCheckBox.Value = loadGUIVariable(obj.iterative_registration);
             app.wavelengthEditField.Value = loadGUIVariable(obj.wavelength);
             app.outputvideoDropDown.Value = loadGUIVariable(strrep(obj.output_videos, '_', ' '));
-            app.rephasingCheckBox.Value = loadGUIVariable(obj.rephasing);
+            app.UseRephasingDataCheckBox.Value = loadGUIVariable(obj.rephasing);
             app.NotesTextArea.Value = loadGUIVariable(obj.notes);
             app.positioninfileSlider.Value = loadGUIVariable(obj.position_in_file);
             app.EditField.Value = loadGUIVariable(obj.position_in_file);

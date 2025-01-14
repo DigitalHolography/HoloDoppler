@@ -196,9 +196,8 @@ classdef ImageTypeList < handle % This class is modified dynamically
             n1 = time_transform.min_PCA;
             n2 = time_transform.max_PCA;
 
-            % clear("H");
+            clear H;
             SH = abs(SH) .^ 2;
-            SH = circshift(SH, [-ac.delta_y, ac.delta_x, 0]);
 
             if obj.pure_PCA.is_selected
                 obj.pure_PCA.image = cumulant(SH, n1, n2);

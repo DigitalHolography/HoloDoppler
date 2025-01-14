@@ -9,7 +9,7 @@ nMax = 2; % autofocus iterations
 frame_batch = app.interferogram_stream.read_frame_batch(app.batchsizeEditField.Value, app.positioninfileSlider.Value);
 
 for nn = 1:nMax
-    acquisition = DopplerAcquisition(app.numX, app.numY, app.Fs / 1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value, app.DX, app.DY, app.pix_width, app.pix_height);
+    acquisition = DopplerAcquisition(app.numX, app.numY, app.Fs / 1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value, app.pix_width, app.pix_height);
 
     % Run a Shack-Hartmann simulation on the current frame batch to
     % compute only defocus.
