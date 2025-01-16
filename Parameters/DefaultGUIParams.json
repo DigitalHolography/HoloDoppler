@@ -1,0 +1,94 @@
+{
+    "Parallel" : 
+    {
+        "NbCPUCores" : 8,
+        "Parallelism" : "CPU multithread"
+    },
+    "Propagation" :
+    {
+        "Transform" : "Fresnel",
+        "z_retina" : 0.2,
+        "z_iris" : 0.5,
+        "flagRetinal" : true
+    },
+    "Spatial" :
+    {
+        "gaussian_blur" : 35,
+        "low_pass" : 0,
+        "high_pass" : 0.7       
+    },
+    "Temporal" :
+    {
+        "Transform" : "FFT",
+        "batch_size" : 512,
+        "f_low" : 6,
+        "f_high" : 12,
+        "PCA_min" : 1,
+        "PCA_max" : 16
+    },
+    "Advanced" :
+    {
+        "flagSVD" : false, 
+        "flagSVDThreshold" : false,
+        "SVDThresholdValue" : 64,
+        "SVDStride" : 1,
+        "flagSVDx" : false,
+        "SVDx_SubAp_num" : 3
+    },
+    "Registration":
+    {
+        "flagRegistration" : true,
+        "refBatchSize" : 1024,
+        "refPosition" : 1,
+        "flagRegistrationDisk" : true,
+        "registrationDiskRatio" : 0.4,
+        "flagRephasing" : false,
+        "flagPhase" : false ,
+        "flagIterative" : false 
+    },
+    "Video" :
+    {
+        "Choice" : "Moments",
+        "batch_stride" : 512,
+        "flagTemporalFilter" : false,
+        "temporalFilter" : 2
+    },
+    "Images" :
+    {
+        "Choice" : "color Doppler",
+        "color_f1" : 6,
+        "color_f2" : 9,
+        "color_f3" : 12,
+        "numFreq" : 1
+    },
+    "Compensation" :
+    {
+        "flagShackHartmann" : false,
+        "flagZernike" : false,
+        "flagSubApPCA" : false
+    },
+    "IterativeOpti" :
+    {
+        "flagIterative_aberration_compensation" : false,
+        "optimization_zernike_ranks" : 2,
+        "mask_num_iter" : 1,
+        "zernikes_tol" : 0.05,
+        "max_constraint" : 10
+    },
+    "ShackHartmann" :
+    {
+        "shack_hartmann_zernike_ranks" : 2,
+        "image_subapertures_size_ratio" : 5,
+        "num_subapertures_positions" : 5,
+        "subaperture_margin" : 0.3,
+        "minSubAp_PCA" : 10,
+        "maxSubAp_PCA" : 10,
+        "shack_hartmann_ref_image" : "central subaperture"
+    },
+    "DarkField" :
+    {
+        "xystride" : 32,
+        "num_unit_cells_x" : 8,
+        "r1" : 3
+    }
+}

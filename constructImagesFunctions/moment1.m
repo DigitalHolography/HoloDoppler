@@ -19,10 +19,9 @@ SH(:,:,n3:n4) = SH(:,:,n3:n4) .* reshape(f_range_sym, 1, 1, numel(f_range_sym));
 % moment = gather(squeeze(sum(abs(SH(:, :, n1:n2)), 3))) + gather(squeeze(sum(abs(SH(:, :, n3:n4)), 3)));
 moment = gather(squeeze(sum(SH(:, :, n1:n2), 3))) + gather(squeeze(sum(SH(:, :, n3:n4), 3)));
 
-% M1 =  flat_field_correction(moment, gw);
-% if gw ~= 0
-% moment = moment ./ imgaussfilt(moment, gw);
-% end
-% 
+if gw ~= 0
+moment =  flat_field_correction(moment, gw);
+end 
+
 M1 = moment;
 end
