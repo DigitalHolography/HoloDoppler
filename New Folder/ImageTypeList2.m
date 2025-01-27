@@ -71,7 +71,15 @@ classdef ImageTypeList2 < handle
             else
                 % Else you only select the requested ones
 
+                if varargin{1} == "all"
+                    for field = fieldnames(obj)'
+                        obj.(field{:}).select();
+                    end
+                    return
+                end
+
                 obj.select(); %clear all first
+
 
                 for i = 1:nargin - 1
                     obj.(varargin{i}).select();

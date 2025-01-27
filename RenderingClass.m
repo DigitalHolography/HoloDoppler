@@ -21,6 +21,7 @@ classdef RenderingClass < handle
         end
 
         function setInitParams(obj)
+            % set the initial parameters for all the parameters used in this class
 
             Params = struct();
             Params.fs = 1; % camera frame rate
@@ -72,7 +73,7 @@ classdef RenderingClass < handle
             fields = fieldnames(Params);
             for i = 1:numel(fields)
                 if isfield(obj.LastParams,fields{i})
-                    ParamChanged.(fields{i}) = Params.(fields{i}) ~= obj.LastParams.(fields{i}) ;
+                    ParamChanged.(fields{i}) = ~ isequal(Params.(fields{i}), obj.LastParams.(fields{i}));
                     % if the parameter was different
                     % there is need to recalculate
                 else
