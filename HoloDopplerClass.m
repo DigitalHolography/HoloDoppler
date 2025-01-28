@@ -48,8 +48,8 @@ classdef HoloDopplerClass < handle
                 obj.file.lambda = obj.reader.footer.compute_settings.image_rendering.lambda;
                 obj.file.Nx = obj.reader.frame_width;
                 obj.file.Ny = obj.reader.frame_height;
-                obj.file.ppx = obj.reader.footer.info.pixel_pitch.x;
-                obj.file.ppy = obj.reader.footer.info.pixel_pitch.y;
+                obj.file.ppx = obj.reader.footer.info.pixel_pitch.x * 1e-6; %given in µm
+                obj.file.ppy = obj.reader.footer.info.pixel_pitch.y * 1e-6; %given in µm
                 try
                     obj.file.fs = obj.reader.footer.info.camera_fps/1000; %conversion in kHz;    
                 catch
@@ -132,7 +132,19 @@ classdef HoloDopplerClass < handle
             end
             obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, obj.params.frame_position));
             obj.view.Render(obj.params,obj.params.image_types);
-            images = obj.view.getImages(obj.params.image_types);
+            images = obj.showPreviewImages();
+        end
+
+        function images = showPreviewImages(obj,images_types)
+            if nargin<2
+                images_types = obj.params.image_types;
+            end
+            images = obj.view.getImages(images_types);
+            images_res = cell(1, length(images));
+            for i =1:length(images)
+                images_res{i} = rescale(images{i});
+            end
+            figure(18);montage(images_res);
         end
 
         function VideoRendering(obj)
@@ -142,58 +154,114 @@ classdef HoloDopplerClass < handle
                 error("No file loaded")
             end
 
-            num_batches = ceil(obj.file.num_frames/obj.params.batch_size);
+            num_batches = floor(obj.file.num_frames/obj.params.batch_size);
+
+
+            h = waitbar(0, '');
+            N = double(num_batches - 1);
+            p = 1;
+            function update_waitbar(sig)
+                % signal table
+                % 0 => increment value
+                % 1 => reset for stage 1 (registration)
+                % 2 => reset for stage 2 (video_M0 computation)
+                switch sig
+                    case 0
+                        waitbar(p / N, h);
+                        p = p + 1;
+                    case -1
+                        waitbar(0, h, 'Registration...');
+                        p = 1;
+                        disp('Registration...')
+                    case -2
+                        waitbar(0, h, 'Image rendering...');
+                        p = 1;
+                        disp('Image rendering...')
+                    case 1
+                        waitbar(0, h, 'Optimizing defocus...');
+                        p = 1;
+                        disp('Optimizing defocus...')
+                    case 2
+                        waitbar(0, h, 'Optimizing astigmatism...');
+                        p = 1;
+                        disp('Optimizing astigmatism...')
+                    case 3
+                        waitbar(0, h, 'Shack-Hartmann...')
+                        p = 1;
+                        disp('Shack-Hartmann...')
+                    otherwise
+                        waitbar(0, h, 'Iterative optimization...');
+                        p = 1;
+                        disp('Iterative optimization')
+                end
+
+            end
+
+            update_waitbar(-2); 
 
             % 1) Initialize the video object
-            obj.video(1,num_batches) = ImageTypeList2();
+            if isempty(obj.video)
+                obj.video(1,num_batches) = ImageTypeList2();
+            end
 
             % 2) Loop over the batches
             if obj.params.parfor_arg == 0
-                for i = 1:num_batches
+                
+                for i = 1:(num_batches-1)
                     obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, (i-1) * obj.params.batch_stride + 1));
                     obj.view.Render(obj.params,obj.params.image_types);
                     obj.video(i) = obj.view.Output;
+                    update_waitbar(0); 
                 end
             else
+                D = parallel.pool.DataQueue;
+                afterEach(D, @update_waitbar);
+
+           
                 file_path = obj.file.path;
                 params = obj.params;
                 video = obj.video;
-                parfor i = 1:num_batches
+
+                [dir,name,ext] = fileparts(file_path);
+                parfor (i = 1:(num_batches-1), obj.params.parfor_arg)
                     view = RenderingClass();
                     switch ext
-                    case 'holo'
+                    case '.holo'
                         reader = HoloReader(file_path);
-                    case 'cine'
+                    case '.cine'
                         reader = CineReader(file_path);
                     end
                     view.setFrames(reader.read_frame_batch(params.batch_size, (i-1) * params.batch_stride + 1));
                     view.Render(params,params.image_types,cache_intermediate_results=false);
                     video(i) = view.Output;
+                    send(D,0);
                 end
                 obj.video = video;
             end
+            close(h);
 
         end
 
-        function RegisterVideo(obj)
+        function CalculateRegistration(obj)
             %RegisterVideo Register the current Video according to the current params
             if isempty(obj.video)
                 error("No video rendered")
             end
             num_batches = numel(obj.video);
+            obj.registration = struct('shifts',[],'rotation',[],'scale',[]);
 
-            obj.registration(num_batches) = struct('shifts',[],'rotation',[],'scale',[]);
-
-            M0_video = zeros(obj.file.Nx,obj.file.Ny,1,num_batches);
+            video_M0 = zeros(obj.file.Ny,obj.file.Nx,1,num_batches);
             for i = 1:num_batches
-                M0_video(:,:,1,i) = obj.video(i).power_Doppler.image;
+                if not(isempty(obj.video(i).power_Doppler.image))
+                    video_M0(:,:,1,i) = obj.video(i).power_Doppler.image;
+                end
             end
 
             numX = size(video_M0, 1);
             numY = size(video_M0, 2);
 
             if obj.params.registration_disc_ratio > 0
-                disk_ratio = app.cache.registration_disc_ratio;
+                disk_ratio = obj.params.registration_disc_ratio;
                 disk = diskMask(numY, numX, disk_ratio);
             else
                 disk = ones([numX, numY]);
@@ -210,13 +278,36 @@ classdef HoloDopplerClass < handle
             ref_img = ref_img .* disk - disk .* sum(ref_img .* disk, [1, 2]) / nnz(disk); % minus the mean
             ref_img = ref_img ./ (max(abs(ref_img), [], [1, 2])); % rescaling but keeps mean at zero
 
-            [video_M0_reg, obj.registration(i).shifts] = register_video_from_reference(video_M0_reg, ref_img);
-        
+            [video_M0_reg, obj.registration.shifts] = register_video_from_reference(video_M0_reg, ref_img);
+        end
+
+        function ApplyRegistration(obj)
+            num_batches = numel(obj.video);
+
             for i = 1:num_batches
                 for j = 1:length(obj.params.image_types)
-                    obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, floor(obj.registration(i).shifts));
+                    obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, floor(obj.registration.shifts(i)));
                 end
             end
+        end
+
+        function UndoRegistration(obj)
+
+            num_batches = numel(obj.video);
+
+            for i = 1:num_batches
+                for j = 1:length(obj.params.image_types)
+                    obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, - floor(obj.registration.shifts(i)));
+                end
+            end
+        end
+
+        function showVideo(obj,images_type)
+            if nargin<2
+                images_type = obj.params.image_types{1};
+            end
+            tmp = [obj.video.(images_type)];
+            implay(rescale(improve_video(reshape([tmp.image],size(tmp(1).image,1),size(tmp(1).image,2),[]),0.0005,2,0)));
         end
 
         function SelfTesting(obj)

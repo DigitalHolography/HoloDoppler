@@ -38,8 +38,8 @@ classdef RenderingClass < handle
             Params.svd_threshold = false;
             Params.svd_stride = [];
             Params.time_transform = "FFT";
-            Params.time_range = [0.1,0.5];
-            Params.flatfield_gw = 0;
+            Params.time_range = [1.1,10.5];
+            Params.flatfield_gw = 35;
             obj.LastParams = Params;
 
         end
@@ -94,7 +94,7 @@ classdef RenderingClass < handle
 
             if ParamChanged.spatial_filter | ParamChanged.spatial_filter_range | obj.FramesChanged % change or if the frames changed
                 if Params.spatial_filter
-                    if ParamChanged.spatial_filter_range | obj.FramesChanged
+                    if ParamChanged.spatial_filter_range | obj.FramesChanged | isempty(obj.SpatialFilterMask)
                         [NY,NX,~] = size(obj.Frames);
                         obj.SpatialFilterMask = fftshift(diskMask(NY,NX,Params.spatial_filter_range(:)));
                     end
@@ -105,13 +105,13 @@ classdef RenderingClass < handle
             if ParamChanged.spatial_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | obj.FramesChanged % change or if the frames changed
                 switch Params.spatial_transformation
                     case "angular spectrum"
-                        if ParamChanged.spatial_propagation | ParamChanged.spatial_transformation
+                        if ParamChanged.spatial_propagation | ParamChanged.spatial_transformation | isempty(obj.SpatialKernel)
                             [NY,NX,~] = size(obj.Frames);
                             obj.SpatialKernel = propagation_kernelAngularSpectrum(NX,NY,Params.spatial_propagation,Params.lambda,Params.ppx,Params.ppy,0);
                         end
                         obj.FH = single(fft2(obj.Frames)) .* obj.SpatialKernel;
                     case "Fresnel"
-                        if ParamChanged.spatial_propagation | ParamChanged.spatial_transformation
+                        if ParamChanged.spatial_propagation | ParamChanged.spatial_transformation | isempty(obj.SpatialKernel)
                             [NY,NX,~] = size(obj.Frames);
                             [obj.SpatialKernel,obj.PhaseFactor] = propagation_kernelFresnel(NX,NY,Params.spatial_propagation,Params.lambda,Params.ppx,Params.ppy,0);
                         end
@@ -165,9 +165,6 @@ classdef RenderingClass < handle
 
             obj.SH = permute(obj.SH, [2 1 3]); % x<->y transpose due to the lens imaging
 
-            if ~ options.cache_intermediate_results
-                obj.SH = [];
-            end
 
             obj.Output.construct_image(Params,obj.SH);
 
