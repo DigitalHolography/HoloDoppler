@@ -30,7 +30,7 @@ classdef RenderingClass < handle
             Params.ppy = 20e-6;
 
             Params.spatial_filter = false;
-            Params.hilbert_transform = false;
+            Params.hilbert_filter = false;
             Params.spatial_filter_range = [0, 1];
             Params.spatial_transformation = "Fresnel";
             Params.spatial_propagation = 0.5;
@@ -100,6 +100,7 @@ classdef RenderingClass < handle
                     tmp = reshape(tmp, width*height, batch_size);
                     tmp = hilbert(tmp);
                     obj.Frames = reshape(tmp, width, height, batch_size);
+                    clear tmp;
                 end
             end
 
@@ -112,8 +113,6 @@ classdef RenderingClass < handle
                     obj.Frames = ifft2(fft2(obj.Frames).*obj.SpatialFilterMask);
                 end
             end
-
-            
 
             if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | obj.FramesChanged % change or if the frames changed
                 switch Params.spatial_transformation

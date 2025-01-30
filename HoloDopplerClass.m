@@ -125,6 +125,21 @@ classdef HoloDopplerClass < handle
             end
         end
 
+        function getparamsfromGUI(obj,app)
+            % HD params and renderer params
+            
+            fields = fieldnames(obj.params); 
+            for i = 1:numel(fields)
+                try
+                    obj.params.(fields{i}) = app.(fields{i}).Value;
+                catch e 
+                    warning("Couldn't set the parameter %s due to error :%s",fields{i},e);
+                end
+            end
+
+            
+        end
+
         function images = PreviewRendering(obj)
             %PreviewRendering Construct the image according to the current params
             if isempty(obj.reader)

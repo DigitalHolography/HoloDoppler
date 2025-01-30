@@ -127,9 +127,12 @@ classdef ImageTypeList2 < handle
             SH = abs(SH) .^ 2;
 
             if obj.pure_PCA.is_selected
-                if ~(isinteger(r1) && ~isinteger(r2)) 
+                if ~(r1-floor(r1)==0) && ~(r2-floor(r2)==0) 
                     r1p = floor(r1*2/Params.fs*NT);
                     r2p = floor(r2*2/Params.fs*NT);
+                else
+                    r1p =r1;
+                    r2p=r2;
                 end
                 r1p = min(max(r1p,1),NT);
                 r2p = min(max(r2p,1),NT);
