@@ -5,9 +5,9 @@ classdef HoloDopplerClass < handle
         file % stores main file information : path, camera pixel pitches, dimensions, wavelength used, frame rate etc
         drawer_list cell % stores the path of files to be processed
         reader % class obj to read new parts of the file
-        view RenderingClass
+        view %RenderingClass
         params % rendering parameters
-        video ImageTypeList2% store all the output images classes rendered at the end of a cycle
+        video %ImageTypeList2% store all the output images classes rendered at the end of a cycle
         registration % store the shifts calculated to register images at the end (so that it can be reversed)
     end
 
@@ -15,8 +15,8 @@ classdef HoloDopplerClass < handle
         function obj = HoloDopplerClass()
             %HoloDopplerClass Construct an instance of this class
             setInitParams(obj);
-            obj.view = RenderingClass();
             addpath("New Folder\","ReaderClasses\");
+            obj.view = RenderingClass();
         end
 
         function LoadFile(obj,file_path)
