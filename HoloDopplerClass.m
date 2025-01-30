@@ -16,6 +16,7 @@ classdef HoloDopplerClass < handle
             %HoloDopplerClass Construct an instance of this class
             setInitParams(obj);
             obj.view = RenderingClass();
+            addpath("New Folder\","ReaderClasses\");
         end
 
         function LoadFile(obj,file_path)
@@ -225,6 +226,7 @@ classdef HoloDopplerClass < handle
                 [dir,name,ext] = fileparts(file_path);
                 parfor (i = 1:(num_batches-1), obj.params.parfor_arg)
                     view = RenderingClass();
+                    reader = [];
                     switch ext
                     case '.holo'
                         reader = HoloReader(file_path);
@@ -239,6 +241,33 @@ classdef HoloDopplerClass < handle
                 obj.video = video;
             end
             close(h);
+
+        end
+
+        function SaveVideo(obj, image_types)
+            if nargin<2
+                image_types = obj.params.image_types;
+            end
+
+            result_folder_path = fullfile(obj.file.dir,strcat(obj.file.name,'_HD'));
+            if not(exist(result_folder_path))
+                mkdir(result_folder_path);
+                mkdir(fullfile(result_folder_path,'avi'));
+                mkdir(fullfile(result_folder_path,'raw'));
+                mkdir(fullfile(result_folder_path,'png'));
+                mkdir(fullfile(result_folder_path,'json'));
+            end
+
+            for i = 1:numel(image_types)
+                tmp = [obj.video.(image_types{i})];
+                mat = rescale((reshape([tmp.image],size(tmp(1).image,1),size(tmp(1).image,2),size(tmp(1).image,3),[])));
+                
+                if strcmp(image_types{i},'moment_0') || strcmp(image_types{i},'moment_1') || strcmp(image_types{i},'moment_2')
+                    generate_video(mat,result_folder_path,strcat(obj.file.name,'_',image_types{i}),export_raw=1,temporal_filter = 2);
+                else
+                    generate_video(mat,result_folder_path,strcat(obj.file.name,'_',image_types{i}),temporal_filter = 2);
+                end
+            end
 
         end
 
@@ -307,7 +336,7 @@ classdef HoloDopplerClass < handle
                 images_type = obj.params.image_types{1};
             end
             tmp = [obj.video.(images_type)];
-            implay(rescale(improve_video(reshape([tmp.image],size(tmp(1).image,1),size(tmp(1).image,2),[]),0.0005,2,0)));
+            implay(rescale(improve_video(reshape([tmp.image],size(tmp(1).image,1),size(tmp(1).image,2),size(tmp(1).image,3),[]),0.0005,2,0)));
         end
 
         function SelfTesting(obj)
