@@ -86,7 +86,7 @@ classdef RenderingClass < handle
             fields = fieldnames(obj.LastParams);
             for i = 1:numel(fields)
                 if ~isfield(Params,fields{i})
-                    ParamChanged.(fields{i}) = true; % need to calculate
+                    ParamChanged.(fields{i}) = false; % by default user should not need to calculate
                     Params.(fields{i}) = obj.LastParams.(fields{i});
                 end
             end
@@ -175,7 +175,11 @@ classdef RenderingClass < handle
                 obj.H = [];
             end
 
-            obj.SH = permute(obj.SH, [2 1 3]); % x<->y transpose due to the lens imaging
+            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svd_filter | ParamChanged.svdx_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | ParamChanged.time_transform | obj.FramesChanged
+
+                obj.SH = permute(obj.SH, [2 1 3]); % x<->y transpose due to the lens imaging
+
+            end
 
 
             obj.Output.construct_image(Params,obj.SH);

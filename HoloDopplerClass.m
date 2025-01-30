@@ -146,7 +146,10 @@ classdef HoloDopplerClass < handle
             if isempty(obj.reader)
                 error("No file loaded")
             end
-            obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, obj.params.frame_position));
+            firstframe = obj.reader.read_frame_batch(1, obj.params.frame_position);
+            if ~isequal(obj.view.Frames(:,:,1),firstframe) || obj.params.batch_size~=size(obj.view.Frames,3) % if first frame is different of batch sized changed
+                obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, obj.params.frame_position));
+            end
             obj.view.Render(obj.params,obj.params.image_types);
             images = obj.showPreviewImages();
         end
