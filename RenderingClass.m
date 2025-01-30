@@ -2,7 +2,7 @@ classdef RenderingClass < handle
     % handles rendering
     properties
         LastParams struct
-        Frames uint8
+        Frames
         FramesChanged logical
         SpatialFilterMask logical
         SpatialKernel single
@@ -30,6 +30,7 @@ classdef RenderingClass < handle
             Params.ppy = 20e-6;
 
             Params.spatial_filter = false;
+            Params.hilbert_filter = false;
             Params.spatial_filter_range = [0, 1];
             Params.spatial_transformation = "Fresnel";
             Params.spatial_propagation = 0.5;
@@ -92,7 +93,18 @@ classdef RenderingClass < handle
 
             obj.LastParams = Params;
 
-            if ParamChanged.spatial_filter | ParamChanged.spatial_filter_range | obj.FramesChanged % change or if the frames changed
+            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | obj.FramesChanged % change or if the frames changed
+                if Params.hilbert_filter
+                    tmp = obj.Frames;
+                    [width, height, batch_size] = size(tmp);
+                    tmp = reshape(tmp, width*height, batch_size);
+                    tmp = hilbert(tmp);
+                    obj.Frames = reshape(tmp, width, height, batch_size);
+                    clear tmp;
+                end
+            end
+
+            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | obj.FramesChanged % change or if the frames changed
                 if Params.spatial_filter
                     if ParamChanged.spatial_filter_range | obj.FramesChanged | isempty(obj.SpatialFilterMask)
                         [NY,NX,~] = size(obj.Frames);
@@ -102,7 +114,7 @@ classdef RenderingClass < handle
                 end
             end
 
-            if ParamChanged.spatial_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | obj.FramesChanged % change or if the frames changed
+            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | obj.FramesChanged % change or if the frames changed
                 switch Params.spatial_transformation
                     case "angular spectrum"
                         if ParamChanged.spatial_propagation | ParamChanged.spatial_transformation | isempty(obj.SpatialKernel)
@@ -134,19 +146,19 @@ classdef RenderingClass < handle
                 obj.FH = [];
             end
 
-            if ParamChanged.spatial_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svd_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | obj.FramesChanged
+            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svd_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | obj.FramesChanged
                 if Params.svd_filter
                     obj.H = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
                 end
             end
 
-            if ParamChanged.spatial_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svdx_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | obj.FramesChanged
+            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svdx_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | obj.FramesChanged
                 if Params.svdx_filter
                     obj.H = svd_x_filter(obj.H,Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
                 end
             end
 
-            if ParamChanged.spatial_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svd_filter | ParamChanged.svdx_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | ParamChanged.time_transform | obj.FramesChanged
+            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svd_filter | ParamChanged.svdx_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | ParamChanged.time_transform | obj.FramesChanged
                 switch Params.time_transform
                     case 'PCA'
                         obj.SH = short_time_PCA(obj.H);

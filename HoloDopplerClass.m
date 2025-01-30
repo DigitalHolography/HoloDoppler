@@ -54,7 +54,7 @@ classdef HoloDopplerClass < handle
                 try
                     obj.file.fs = obj.reader.footer.info.camera_fps/1000; %conversion in kHz;    
                 catch
-                    obj.file.fs = 1;
+                    obj.file.fs = obj.reader.footer.info.input_fps/1000; %conversion in kHz;
                 end
                 obj.file.num_frames = obj.reader.num_frames;
             case '.cine'
@@ -124,6 +124,21 @@ classdef HoloDopplerClass < handle
             for i = 1:length(fields)
                 obj.params.(fields{i}) = params.(fields{i});
             end
+        end
+
+        function getparamsfromGUI(obj,app)
+            % HD params and renderer params
+            
+            fields = fieldnames(obj.params); 
+            for i = 1:numel(fields)
+                try
+                    obj.params.(fields{i}) = app.(fields{i}).Value;
+                catch e 
+                    warning("Couldn't set the parameter %s due to error :%s",fields{i},e);
+                end
+            end
+
+            
         end
 
         function images = PreviewRendering(obj)
