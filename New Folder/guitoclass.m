@@ -14,11 +14,9 @@ function guitoclass(HD, app)
     HD.params.registration_disc_ratio = app.registration_disc_ratio.Value;
 
     % Handle image types as a cell array
-    HD.params.image_types = app.image_types.Value;
+    HD.params.image_types = app.Image_typesListBox.Value;
 
     HD.params.frame_position = app.frame_position.Value;
-    HD.params.frame_position = app.positioninfileSlider.Value;
-    HD.file.num_frames = app.positioninfileSlider.Limits(2);
     HD.params.image_registration = app.image_registration.Value;
 
     % Spatial filtering parameters
@@ -37,9 +35,7 @@ function guitoclass(HD, app)
     HD.params.time_range = [app.time_range1.Value, app.time_range2.Value];
 
     % Flatfield correction
-    HD.params.flatfield_gw = app.flatfield_gw.Value;
+    HD.params.flatfield_gw = app.flat_field_gw.Value;
 
-    % Show image type
-    HD.params.image_types{1} = app.show_image_type.Value;
 
 end

@@ -127,7 +127,7 @@ classdef ImageTypeList2 < handle
             SH = abs(SH) .^ 2;
 
             if obj.pure_PCA.is_selected
-                if ~(r1-floor(r1)==0) && ~(r2-floor(r2)==0) 
+                if ~(r1-floor(r1)==0) && ~(r2-floor(r2)==0) %both not integer
                     r1p = floor(r1*2/Params.fs*NT);
                     r2p = floor(r2*2/Params.fs*NT);
                 else
@@ -143,6 +143,16 @@ classdef ImageTypeList2 < handle
             if obj.power_Doppler.is_selected % Power Doppler has been chosen
                 img = moment0(SH, r1, r2, Params.fs, NT, Params.flatfield_gw);
                 obj.power_Doppler.image = img;
+            end
+
+            if obj.power_1_Doppler.is_selected % Power Doppler has been chosen
+                img = moment1(SH, r1, r2, Params.fs, NT, Params.flatfield_gw);
+                obj.power_1_Doppler.image = img;
+            end
+
+            if obj.power_2_Doppler.is_selected % Power Doppler has been chosen
+                img = moment2(SH, r1, r2, Params.fs, NT, Params.flatfield_gw);
+                obj.power_2_Doppler.image = img;
             end
 
             if obj.color_Doppler.is_selected % Color Doppler has been chosen
@@ -200,9 +210,16 @@ classdef ImageTypeList2 < handle
             end
 
             if obj.denoised.is_selected 
+                try 
                 SHdenoised = denoiseNGMeet(SH,'Sigma',0.01,'NumIterations',2);
                 img = moment0(SHdenoised, r1, r2 , Params.fs, NT, 0);
-                obj.denoised.image = img;            
+                obj.denoised.image = img;
+                catch ME
+                    % Display error message and line number
+                    fprintf('Error: %s\n', ME.message);
+                    fprintf('Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
+                    obj.denoised.image = [];
+                end
             end
 
         end

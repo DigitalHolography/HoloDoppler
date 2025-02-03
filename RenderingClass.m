@@ -225,7 +225,12 @@ classdef RenderingClass < handle
                 if ~isprop(obj.Output,image_types{i})
                     error(sprintf("%s isnt a known image type try any of [ %s ]",image_types{i},sprintf("%s,",string(fields(obj.Output)))));
                 end
-                r{i} = mat2gray(obj.Output.(image_types{i}).image);
+                if isempty(obj.Output.(image_types{i}).image)
+                    fprintf("unfortunately %s wasnt outputed \n",image_types{i})
+                    r{i} = [];
+                else
+                    r{i} = mat2gray(obj.Output.(image_types{i}).image);
+                end
             end
         end
 

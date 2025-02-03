@@ -76,8 +76,8 @@ classdef HoloDopplerClass < handle
                 obj.file.lambda = 852e-9;
                 obj.file.Nx = obj.reader.frame_width;
                 obj.file.Ny = obj.reader.frame_height;
-                obj.ppx = 1/obj.reader.horizontal_pix_per_meter;
-                obj.ppy = 1/obj.reader.vertical_pix_per_meter;
+                obj.file.ppx = 1/obj.reader.horizontal_pix_per_meter;
+                obj.file.ppy = 1/obj.reader.vertical_pix_per_meter;
                 obj.file.fs = obj.reader.frame_rate;
                 obj.file.num_frames = obj.reader.num_frames;
 
@@ -102,6 +102,20 @@ classdef HoloDopplerClass < handle
                 obj.params.spatial_transformation = 'angular spectrum';
                 obj.params.spatial_propagation = 0.5; % meters
             end
+            
+            obj.params.time_range(1) = obj.view.LastParams.time_range(1);
+            obj.params.time_range(2) = obj.params.fs/2;
+
+
+            % 3 or 4) Add last params from the default init
+
+            fields = fieldnames(obj.view.LastParams);
+            for i = 1:numel(fields)
+                if ~isfield(obj.params,fields{i})
+                    obj.params.(fields{i}) = obj.view.LastParams.(fields{i});
+                end
+            end
+
         end
 
         function setInitParams(obj)
@@ -112,10 +126,11 @@ classdef HoloDopplerClass < handle
             obj.params.frame_stride = 1;
             obj.params.frame_position = 1;
             obj.params.registration_disc_ratio = 0.8;
-            obj.params.image_types = {'power_Doppler','color_Doppler','directional_Doppler','moment_0','moment_1'};
+            obj.params.image_types = {'power_Doppler','color_Doppler','directional_Doppler','moment_0','moment_1','moment_2'};
             obj.params.parfor_arg = 0;
             obj.params.batch_size_registration_ref = 512;
-
+            obj.params.image_registration = true;
+        
         end
 
         function setParams(obj,params)
@@ -151,7 +166,7 @@ classdef HoloDopplerClass < handle
                 obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, obj.params.frame_position));
             end
             obj.view.Render(obj.params,obj.params.image_types);
-            images = obj.showPreviewImages();
+            images = obj.view.getImages(obj.params.image_types);
         end
 
         function images = showPreviewImages(obj,images_types)
@@ -166,6 +181,25 @@ classdef HoloDopplerClass < handle
             figure(18);montage(images_res);
         end
 
+        function savePreview(obj, image_types)
+            if nargin<2
+                image_types = obj.params.image_types;
+            end
+
+            result_folder_path = fullfile(obj.file.dir,strcat(obj.file.name,'_HD_SavedPreview'));
+            if not(exist(result_folder_path))
+                mkdir(result_folder_path);
+            end
+
+            
+            images = obj.view.getImages(image_types);
+            
+            for i=1:numel(images)
+                imwrite(images{i},fullfile(result_folder_path,strcat(obj.file.name,'_',image_types{i})));
+            end
+        end
+
+
         function VideoRendering(obj)
             %VideoRendering Construct the Video according to the current params
 
@@ -173,7 +207,11 @@ classdef HoloDopplerClass < handle
                 error("No file loaded")
             end
 
-            num_batches = floor(obj.file.num_frames/obj.params.batch_size);
+            num_batches = floor(obj.file.num_frames/obj.params.batch_stride);
+
+            disp(['Rendering ' num2str(num_batches) 'frames.']);
+
+            VideoRenderingTime = tic;
 
 
             h = waitbar(0, '');
@@ -220,7 +258,8 @@ classdef HoloDopplerClass < handle
 
             % 1) Initialize the video object
             if isempty(obj.video)
-                obj.video(1,num_batches) = ImageTypeList2();
+                v(1,num_batches) = ImageTypeList2();
+                obj.video= v; clear v;
             end
 
             % 2) Loop over the batches
@@ -260,6 +299,12 @@ classdef HoloDopplerClass < handle
             end
             close(h);
 
+            if obj.params.image_registration
+                obj.CalculateRegistration();
+                obj.ApplyRegistration();
+            end
+
+            fprintf("Video Rendering took : %f s",toc(VideoRenderingTime));
         end
 
         function SaveVideo(obj, image_types)
