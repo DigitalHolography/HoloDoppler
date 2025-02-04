@@ -93,6 +93,8 @@ classdef RenderingClass < handle
 
             obj.LastParams = Params;
 
+            %1) Apply corrections to interferograms
+
             if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | obj.FramesChanged % change or if the frames changed
                 if Params.hilbert_filter
                     tmp = obj.Frames;
@@ -114,7 +116,9 @@ classdef RenderingClass < handle
                 end
             end
 
-            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | obj.FramesChanged % change or if the frames changed
+             %2) Spatial transformation (from Frames to H)
+
+            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | obj.FramesChanged | ~options.cache_intermediate_results % change or if the frames changed
                 switch Params.spatial_transformation
                     case "angular spectrum"
                         if ParamChanged.spatial_propagation | ParamChanged.spatial_transformation | isempty(obj.SpatialKernel)
@@ -132,6 +136,9 @@ classdef RenderingClass < handle
                         obj.FH = [];
                         
                 end
+            end
+            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svd_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | obj.FramesChanged | ~options.cache_intermediate_results% change or if the frames changed
+                
                 switch Params.spatial_transformation
                     case "angular spectrum"
                         obj.H = ifft2(obj.FH);
@@ -146,19 +153,23 @@ classdef RenderingClass < handle
                 obj.FH = [];
             end
 
-            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svd_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | obj.FramesChanged
+            %3) H fluctuation batch filtering
+
+            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svd_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | obj.FramesChanged | ~options.cache_intermediate_results
                 if Params.svd_filter
                     obj.H = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
                 end
             end
 
-            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svdx_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | obj.FramesChanged
+            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svdx_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | obj.FramesChanged | ~options.cache_intermediate_results
                 if Params.svdx_filter
                     obj.H = svd_x_filter(obj.H,Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
                 end
             end
 
-            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svd_filter | ParamChanged.svdx_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | ParamChanged.time_transform | obj.FramesChanged
+            %4) Short-time transformation
+
+            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svd_filter | ParamChanged.svdx_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | ParamChanged.time_transform | obj.FramesChanged | ~options.cache_intermediate_results
                 switch Params.time_transform
                     case 'PCA'
                         obj.SH = short_time_PCA(obj.H);
@@ -175,7 +186,7 @@ classdef RenderingClass < handle
                 obj.H = [];
             end
 
-            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svd_filter | ParamChanged.svdx_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | ParamChanged.time_transform | obj.FramesChanged
+            if ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.svd_filter | ParamChanged.svdx_filter | ParamChanged.svd_threshold | ParamChanged.time_range  | ParamChanged.time_transform | obj.FramesChanged | ~options.cache_intermediate_results % basicly if SH was recalculated
 
                 obj.SH = permute(obj.SH, [2 1 3]); % x<->y transpose due to the lens imaging
 

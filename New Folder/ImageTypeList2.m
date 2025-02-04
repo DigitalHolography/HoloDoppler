@@ -115,16 +115,16 @@ classdef ImageTypeList2 < handle
             
         end
         
-        function construct_image(obj,Params, SH)
+        function construct_image(obj,Params, SHin)
             r1 = Params.time_range(1);
             r2 = Params.time_range(2);
-            [~,~,NT] = size(SH);
+            [~,~,NT] = size(SHin);
 
             
 
             
             % clear phase
-            SH = abs(SH) .^ 2;
+            SH = abs(SHin) .^ 2;
 
             if obj.pure_PCA.is_selected
                 if ~(r1-floor(r1)==0) && ~(r2-floor(r2)==0) %both not integer
