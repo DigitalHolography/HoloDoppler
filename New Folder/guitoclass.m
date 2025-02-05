@@ -21,6 +21,7 @@ function guitoclass(HD, app)
 
     % Spatial filtering parameters
     HD.params.spatial_filter = app.spatial_filter.Value;
+    HD.params.hilbert_filter = app.hilbert_filter.Value;
     HD.params.spatial_filter_range = [app.spatial_filter_range1.Value, app.spatial_filter_range2.Value];
     HD.params.spatial_transformation = app.spatial_transformation.Value;
     HD.params.spatial_propagation = app.spatial_propagation.Value;

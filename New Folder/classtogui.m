@@ -19,7 +19,7 @@ app.frame_position.Value = HD.params.frame_position;
 app.positioninfileSlider.Value = HD.params.frame_position;
 app.positioninfileSlider.Limits = double([1 HD.file.num_frames]);
 app.image_registration.Value = HD.params.image_registration;
-app.num_frames.Text = num2str(HD.file.num_frames);
+app.num_frames.Text = strcat('/ ',num2str(HD.file.num_frames));
 
 
 app.spatial_filter.Value = HD.params.spatial_filter;

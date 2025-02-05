@@ -5,9 +5,9 @@ classdef HoloDopplerClass < handle
         file % stores main file information : path, camera pixel pitches, dimensions, wavelength used, frame rate etc
         drawer_list cell % stores the path of files to be processed
         reader % class obj to read new parts of the file
-        view %RenderingClass
+        view % RenderingClass
         params % rendering parameters
-        video %ImageTypeList2% store all the output images classes rendered at the end of a cycle
+        video % ImageTypeList2% store all the output images classes rendered at the end of a cycle
         registration % store the shifts calculated to register images at the end (so that it can be reversed)
     end
     
@@ -21,12 +21,6 @@ classdef HoloDopplerClass < handle
         
         function LoadFile(obj,file_path)
             %LoadFile
-            % file_path path of the file .holo or .cine
-            [dir,name,ext] = fileparts(file_path);
-            obj.file.path = file_path;
-            obj.file.dir = dir;
-            obj.file.name = name;
-            obj.file.ext = ext;
             
             % 0) Reset the reader and the file
             obj.reader = [];
@@ -34,7 +28,17 @@ classdef HoloDopplerClass < handle
             obj.view = RenderingClass();
             obj.video = [];
             obj.registration = [];
-            obj.params = [];
+            obj.setInitParams();
+            
+            
+            % file_path path of the file .holo or .cine
+            [dir,name,ext] = fileparts(file_path);
+            obj.file.path = file_path;
+            obj.file.dir = dir;
+            obj.file.name = name;
+            obj.file.ext = ext;
+            
+            
             
             %1 ) Metadata extraction
             switch ext
@@ -44,8 +48,7 @@ classdef HoloDopplerClass < handle
                     catch e
                         obj.file = [];
                         obj.reader = [];
-                        disp(e);
-                        error("The file is not a valid holo file")
+                        error("The file is not a valid holo file: %s", e.message)
                     end
                     fields = properties(obj.reader);
                     for i = 1:length(fields)
@@ -64,15 +67,14 @@ classdef HoloDopplerClass < handle
                     catch
                         obj.file.fs = obj.reader.footer.info.input_fps/1000; %conversion in kHz;
                     end
-                    obj.file.num_frames = obj.reader.num_frames;
+                    obj.file.num_frames = double(obj.reader.num_frames);
                 case '.cine'
                     try
                         obj.reader = CineReader(obj.file.path);
                     catch e
                         obj.file = [];
                         obj.reader = [];
-                        disp(e);
-                        error("The file is not a valid cine file")
+                        error("The file is not a valid cine file: %s", e.message)
                     end
                     fields = properties(obj.reader);
                     for i = 1:length(fields)
@@ -82,12 +84,12 @@ classdef HoloDopplerClass < handle
                     end
                     
                     obj.file.lambda = 852e-9;
-                    obj.file.Nx = obj.reader.frame_width;
-                    obj.file.Ny = obj.reader.frame_height;
-                    obj.file.ppx = 1/obj.reader.horizontal_pix_per_meter;
-                    obj.file.ppy = 1/obj.reader.vertical_pix_per_meter;
-                    obj.file.fs = obj.reader.frame_rate;
-                    obj.file.num_frames = obj.reader.num_frames;
+                    obj.file.Nx = double(obj.reader.frame_width);
+                    obj.file.Ny = double(obj.reader.frame_height);
+                    obj.file.ppx = 1/double(obj.reader.horizontal_pix_per_meter);
+                    obj.file.ppy = 1/double(obj.reader.vertical_pix_per_meter);
+                    obj.file.fs = double(obj.reader.frame_rate)/1000;
+                    obj.file.num_frames = double(obj.reader.num_frames);
                     
                     
                 otherwise
@@ -111,11 +113,42 @@ classdef HoloDopplerClass < handle
                     obj.params.spatial_propagation = 0.5; % meters
             end
             
-            obj.params.time_range(1) = obj.view.LastParams.time_range(1);
+            obj.params.time_range(1) = obj.view.LastParams.time_range(1); % the default from init value of rendering class
             obj.params.time_range(2) = obj.params.fs/2;
             
             
-            % 3 or 4) Add last params from the default init
+            % 3) Look for config or last computation params
+            
+            % Define the paths for saved preview, video, and config parameters
+            preview_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD_SavedPreview', '\', obj.file.name, '_RenderingParameters.json'));
+            video_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD', '\', obj.file.name, '_RenderingParameters.json'));
+            config_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_RenderingParameters.json'));
+            
+            % Load saved preview parameters if they exist
+            if exist(preview_params_path, 'file')
+                fprintf('Loading saved preview parameters from %s\n', preview_params_path);
+                fid = fopen(preview_params_path, 'r');
+                obj.params = jsondecode(fread(fid, inf, '*char')');
+                fclose(fid);
+            end
+            
+            % Load saved video parameters if they exist
+            if exist(video_params_path, 'file')
+                fprintf('Loading saved video parameters from %s\n', video_params_path);
+                fid = fopen(video_params_path, 'r');
+                obj.params = jsondecode(fread(fid, inf, '*char')');
+                fclose(fid);
+            end
+            
+            % Load saved config parameters if they exist (prevails over the last computation)
+            if exist(config_params_path, 'file')
+                fprintf('Loading saved config from %s\n', config_params_path);
+                fid = fopen(config_params_path, 'r');
+                obj.params = jsondecode(fread(fid, inf, '*char')');
+                fclose(fid);
+            end
+            
+            % 4) Add last params from the default init
             
             fields = fieldnames(obj.view.LastParams);
             for i = 1:numel(fields)
@@ -128,6 +161,8 @@ classdef HoloDopplerClass < handle
         
         function setInitParams(obj)
             % set the initial parameters for all the parameters used in this class
+
+            obj.params = [];
             
             obj.params.batch_size = 512;
             obj.params.batch_stride = 512;
@@ -205,11 +240,11 @@ classdef HoloDopplerClass < handle
             images = obj.view.getImages(image_types);
             
             for i=1:numel(images)
-                imwrite(images{i},fullfile(result_folder_path,strcat(obj.file.name,'_',image_types{i})));
+                imwrite(toImageSource(images{i}),fullfile(result_folder_path,strcat(obj.file.name,'_',image_types{i},'.png')));
             end
             
             fid = fopen(fullfile(result_folder_path,strcat(obj.file.name,'_','RenderingParameters.json')), 'w');
-            fwrite(fid, jsonencode(obj.params), 'char');
+            fwrite(fid, jsonencode(obj.params,"PrettyPrint",true), 'char');
             fclose(fid);
         end
         
@@ -279,7 +314,7 @@ classdef HoloDopplerClass < handle
             % 2) Loop over the batches
             if obj.params.parfor_arg == 0
                 
-                for i = 1:(num_batches-1)
+                for i = 1:(num_batches)
                     obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, (i-1) * obj.params.batch_stride + 1));
                     obj.view.Render(obj.params,obj.params.image_types);
                     obj.video(i) = obj.view.Output;
@@ -295,7 +330,7 @@ classdef HoloDopplerClass < handle
                 video = obj.video;
                 
                 [dir,name,ext] = fileparts(file_path);
-                parfor (i = 1:(num_batches-1), obj.params.parfor_arg)
+                parfor (i = 1:(num_batches), obj.params.parfor_arg)
                     view = RenderingClass();
                     reader = [];
                     switch ext
@@ -318,7 +353,7 @@ classdef HoloDopplerClass < handle
                 obj.ApplyRegistration();
             end
             
-            fprintf("Video Rendering took : %f s",toc(VideoRenderingTime));
+            fprintf("Video Rendering took : %f s\n",toc(VideoRenderingTime));
         end
         
         function SaveVideo(obj, image_types, params)
@@ -339,17 +374,22 @@ classdef HoloDopplerClass < handle
             
             for i = 1:numel(image_types)
                 tmp = [obj.video.(image_types{i})];
-                mat = rescale((reshape([tmp.image],size(tmp(1).image,1),size(tmp(1).image,2),size(tmp(1).image,3),[])));
-                
-                if strcmp(image_types{i},'moment_0') || strcmp(image_types{i},'moment_1') || strcmp(image_types{i},'moment_2')
-                    generate_video(mat,result_folder_path,strcat(obj.file.name,'_',image_types{i}),export_raw=1,temporal_filter = 2);
+                mat = ((reshape([tmp.image],size(tmp(1).image,1),size(tmp(1).image,2),size(tmp(1).image,3),[])));
+                if ~isempty(mat)
+                    if strcmp(image_types{i},'moment_0') || strcmp(image_types{i},'moment_1') || strcmp(image_types{i},'moment_2')
+                        generate_video(mat,result_folder_path,strcat(obj.file.name,'_',image_types{i}),export_raw=1,temporal_filter = 2);
+                    else
+                        generate_video(mat,result_folder_path,strcat(obj.file.name,'_',image_types{i}),temporal_filter = 2);
+                    end
                 else
-                    generate_video(mat,result_folder_path,strcat(obj.file.name,'_',image_types{i}),temporal_filter = 2);
+                    fprintf("%s was not found so it cannot be saved.\n", image_types{i});
                 end
+                
+                
             end
             
             fid = fopen(fullfile(result_folder_path,strcat(obj.file.name,'_','RenderingParameters.json')), 'w');
-            fwrite(fid, jsonencode(params), 'char');
+            fwrite(fid, jsonencode(params, "PrettyPrint",true), 'char');
             fclose(fid);
         end
         

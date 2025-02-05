@@ -13,7 +13,7 @@ Hi = reshape(H, iwidth*iheight, batch_size);
 
 if ~ thresh
     % thresh parameter does not exist, so default it to something
-    thresh = round(f1 * batch_size / fs)*2 + 1;
+    thresh = ceil(f1 * batch_size / fs *2 );
 end
 if nargin < 5 || isempty(stride_param)
     % stride_param doesnt exist so default to 1 (full H)

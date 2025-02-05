@@ -1,11 +1,17 @@
 
-function H = svd_x_filter(H, f1, fs, NbSubAp, tresh)
+function H = svd_x_filter(H, thresh, f1, fs, NbSubAp)
     % SVD filtering
     %
     % H: an frame batch already propagated to the distance of reconstruction
     % f1: frequency
     % fs: sampling frequency
     % NbSubAp : number N of subapertures to divide SVD filtering over NxN zones
+
+
+    if ~ thresh
+        % thresh parameter does not exist or is zero, so default it to something
+        thresh = ceil(f1 * size(H,3) / fs *2 );
+    end
     
     
     [width, height, batch_size] = size(H);
@@ -13,7 +19,7 @@ function H = svd_x_filter(H, f1, fs, NbSubAp, tresh)
     Ly = linspace(1,height,NbSubAp+1);
     if nargin == 4 
         % third parameter does not exist, so default it to something
-        tresh = round(f1 * batch_size / fs / NbSubAp)*2 + 1;
+        thresh = round(f1 * batch_size / fs / NbSubAp)*2 + 1;
     end
 
     for ii=1:NbSubAp
@@ -26,7 +32,7 @@ function H = svd_x_filter(H, f1, fs, NbSubAp, tresh)
             [V,S] = eig(cov);
             [~, sort_idx] = sort(diag(S), 'descend');
             V = V(:,sort_idx);
-            H_tissue = H1 * V(:,1:tresh) * V(:,1:tresh)';
+            H_tissue = H1 * V(:,1:thresh) * V(:,1:thresh)';
             H1 = reshape(H1 - H_tissue, (round(Lx(ii+1))-round(Lx(ii))), (round(Ly(kk+1))-round(Ly(kk))), batch_size);
             H(round(Lx(ii)):round(Lx(ii+1)-1),round(Ly(kk)):round(Ly(kk+1)-1),:) = reshape(H1, (round(Lx(ii+1))-round(Lx(ii))), (round(Ly(kk+1))-round(Ly(kk))), batch_size);
         end

@@ -28,7 +28,7 @@ end
 output_filename = sprintf('%s_%s.%s', output_dirname, name, 'avi');
 
 
-if size(size(video)) == [1,3]
+if size(size(video)) == [1,3] % if not colored
     video = reshape(video,size(video,1),size(video,2),1,size(video,3));
 end
 

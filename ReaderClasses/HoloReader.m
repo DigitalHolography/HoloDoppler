@@ -108,10 +108,15 @@ methods
         
         for i = 1:batch_size 
             fseek(fd, 64 + uint64(frame_size) * (uint64(frame_offset) + (i-1)), 'bof'); 
-            if obj.bit_depth == 8
-                frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint8=>single', endian), obj.frame_width, obj.frame_height);  
-            elseif obj.bit_depth == 16
-                frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint16=>single', endian), obj.frame_width, obj.frame_height);
+            try
+                if obj.bit_depth == 8
+                    frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint8=>single', endian), obj.frame_width, obj.frame_height);  
+                elseif obj.bit_depth == 16
+                    frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint16=>single', endian), obj.frame_width, obj.frame_height);
+                end
+            catch 
+                frame_batch(width_range, height_range, i) = 0;
+                fprintf("Holo file frame in position %d was not found\n", i);
             end
         end 
         frame_batch = HoloReader.replace_dropped_frames(frame_batch, 0.2);
