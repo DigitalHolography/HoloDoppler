@@ -19,7 +19,15 @@ classdef HoloDopplerClass < handle
             obj.view = RenderingClass();
         end
         
-        function LoadFile(obj,file_path)
+        function LoadFile(obj,file_path,opt)
+
+            arguments
+                obj
+                file_path
+                opt.params = []; % Optional parameters to force in case the default behavior (finding existing in the folder is not ideal)
+            end
+
+
             %LoadFile
             
             % 0) Reset the reader and the file
@@ -120,7 +128,7 @@ classdef HoloDopplerClass < handle
             % 3) Look for config or last computation params
             
             % Define the paths for saved preview, video, and config parameters
-            preview_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD_SavedPreview', '\', obj.file.name, '_RenderingParameters.json'));
+            preview_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HDPreview', '\', obj.file.name, '_RenderingParameters.json'));
             video_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD', '\', obj.file.name, '_RenderingParameters.json'));
             config_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_RenderingParameters.json'));
             
@@ -147,6 +155,11 @@ classdef HoloDopplerClass < handle
                 obj.params = jsondecode(fread(fid, inf, '*char')');
                 fclose(fid);
             end
+
+            if ~isempty(opt.params) % if there is optinonal parameters given
+                obj.setParams(opt.params);
+            end
+
             
             % 4) Add last params from the default init
             
@@ -160,7 +173,7 @@ classdef HoloDopplerClass < handle
         end
         
         function setInitParams(obj)
-            % set the initial parameters for all the parameters used in this class
+            % reset the initial parameters for all the parameters used in this class
 
             obj.params = [];
             
@@ -183,6 +196,19 @@ classdef HoloDopplerClass < handle
                 obj.params.(fields{i}) = params.(fields{i});
             end
         end
+
+        function saveParams(obj, filename)
+            % save the params as a configfile for the file filename in the
+            % current file directory
+            if nargin < 2
+                filename = obj.file.filename;
+            end
+
+            fid = fopen(fullfile(obj.file.dir,strcat(filename,'_','RenderingParameters.json')), 'w');
+            fwrite(fid, jsonencode(obj.params,"PrettyPrint",true), 'char');
+            fclose(fid);
+            
+        end
         
         function getparamsfromGUI(obj,app)
             % HD params and renderer params
@@ -197,8 +223,6 @@ classdef HoloDopplerClass < handle
                     warning("Couldn't set the parameter %s due to error :%s",fields{i},e);
                 end
             end
-            
-            
         end
         
         function images = PreviewRendering(obj)
@@ -230,8 +254,8 @@ classdef HoloDopplerClass < handle
             if nargin<2
                 image_types = obj.params.image_types;
             end
-            
-            result_folder_path = fullfile(obj.file.dir,strcat(obj.file.name,'_HD_SavedPreview'));
+            index = get_highest_number_in_directories(obj.file.dir,strcat(obj.file.name,'_HDPreview'));
+            result_folder_path = fullfile(obj.file.dir,strcat(obj.file.name,'_HDPreview_',num2str(index+1)));
             if not(exist(result_folder_path))
                 mkdir(result_folder_path);
             end
@@ -364,7 +388,8 @@ classdef HoloDopplerClass < handle
                 params = obj.params;
             end
             
-            result_folder_path = fullfile(obj.file.dir,strcat(obj.file.name,'_HD'));
+            index = get_highest_number_in_directories(obj.file.dir,strcat(obj.file.name,'_HD_'));
+            result_folder_path = fullfile(obj.file.dir,strcat(obj.file.name,'_HD_',num2str(index+1)));
             if not(exist(result_folder_path))
                 mkdir(result_folder_path);
                 mkdir(fullfile(result_folder_path,'avi'));
