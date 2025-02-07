@@ -203,8 +203,8 @@ classdef HoloDopplerClass < handle
             if nargin < 2
                 filename = obj.file.filename;
             end
-
-            fid = fopen(fullfile(obj.file.dir,strcat(filename,'_','RenderingParameters.json')), 'w');
+            index = get_highest_number_in_files(obj.file.dir,strcat(filename,'_','RenderingParameters'));
+            fid = fopen(fullfile(obj.file.dir,strcat(filename,'_','RenderingParameters_',num2str(index+1),'.json')), 'w');
             fwrite(fid, jsonencode(obj.params,"PrettyPrint",true), 'char');
             fclose(fid);
             
@@ -267,7 +267,7 @@ classdef HoloDopplerClass < handle
                 imwrite(toImageSource(images{i}),fullfile(result_folder_path,strcat(obj.file.name,'_',image_types{i},'.png')));
             end
             
-            fid = fopen(fullfile(result_folder_path,strcat(obj.file.name,'_','RenderingParameters.json')), 'w');
+            fid = fopen(fullfile(result_folder_path,strcat(obj.file.name,'_HDPreview_',num2str(index+1),'_','RenderingParameters.json')), 'w');
             fwrite(fid, jsonencode(obj.params,"PrettyPrint",true), 'char');
             fclose(fid);
         end
@@ -283,6 +283,10 @@ classdef HoloDopplerClass < handle
             num_batches = floor(obj.file.num_frames/obj.params.batch_stride);
             
             disp(['Rendering ' num2str(num_batches) 'frames.']);
+
+            if num_batches == 0
+                return
+            end
             
             VideoRenderingTime = tic;
             
@@ -330,10 +334,9 @@ classdef HoloDopplerClass < handle
             update_waitbar(-2);
             
             % 1) Initialize the video object
-            if isempty(obj.video)
-                v(1,num_batches) = ImageTypeList2();
-                obj.video= v; clear v;
-            end
+            
+            obj.video = [];
+            obj.video.names = obj.params.image_types;
             
             % 2) Loop over the batches
             if obj.params.parfor_arg == 0
@@ -341,7 +344,7 @@ classdef HoloDopplerClass < handle
                 for i = 1:(num_batches)
                     obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, (i-1) * obj.params.batch_stride + 1));
                     obj.view.Render(obj.params,obj.params.image_types);
-                    obj.video(i) = obj.view.Output;
+                    obj.video.data{i} = obj.view.getImages(obj.params.image_types);
                     update_waitbar(0);
                 end
             else
@@ -351,7 +354,7 @@ classdef HoloDopplerClass < handle
                 
                 file_path = obj.file.path;
                 params = obj.params;
-                video = obj.video;
+                video = obj.video.data;
                 
                 [dir,name,ext] = fileparts(file_path);
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
@@ -365,10 +368,10 @@ classdef HoloDopplerClass < handle
                     end
                     view.setFrames(reader.read_frame_batch(params.batch_size, (i-1) * params.batch_stride + 1));
                     view.Render(params,params.image_types,cache_intermediate_results=false);
-                    video(i) = view.Output;
+                    video(i) = view.getImages(params.image_types);
                     send(D,0);
                 end
-                obj.video = video;
+                obj.video.data = video;
             end
             close(h);
             
@@ -387,6 +390,8 @@ classdef HoloDopplerClass < handle
             if nargin<3
                 params = obj.params;
             end
+
+            VideoSavingTime = tic;
             
             index = get_highest_number_in_directories(obj.file.dir,strcat(obj.file.name,'_HD_'));
             result_folder_path = fullfile(obj.file.dir,strcat(obj.file.name,'_HD_',num2str(index+1)));
@@ -395,16 +400,23 @@ classdef HoloDopplerClass < handle
                 mkdir(fullfile(result_folder_path,'avi'));
                 mkdir(fullfile(result_folder_path,'raw'));
                 mkdir(fullfile(result_folder_path,'png'));
+                mkdir(fullfile(result_folder_path,'mat')); % for previous versions of PW
             end
             
             for i = 1:numel(image_types)
-                tmp = [obj.video.(image_types{i})];
+                tmp = [obj.video{:}.(image_types{i})];
                 mat = ((reshape([tmp.image],size(tmp(1).image,1),size(tmp(1).image,2),size(tmp(1).image,3),[])));
                 if ~isempty(mat)
-                    if strcmp(image_types{i},'moment_0') || strcmp(image_types{i},'moment_1') || strcmp(image_types{i},'moment_2')
-                        generate_video(mat,result_folder_path,strcat(obj.file.name,'_',image_types{i}),export_raw=1,temporal_filter = 2);
+                    if strcmp(image_types{i},'moment_0')  % raw moments are always outputted if they are selected
+                        generate_video(mat,result_folder_path,strcat('moment0'),export_raw=1,temporal_filter = 2); % three cases just to rename each correctly for PW
+                    elseif strcmp(image_types{i},'moment_1')
+                        generate_video(mat,result_folder_path,strcat('moment1'),export_raw=1,temporal_filter = 2);
+                    elseif strcmp(image_types{i},'moment_2')
+                        generate_video(mat,result_folder_path,strcat('moment2'),export_raw=1,temporal_filter = 2);
+                    elseif strcmp(image_types{i},'power_Doppler')
+                        generate_video(mat,result_folder_path,strcat('M0'),temporal_filter = 2);
                     else
-                        generate_video(mat,result_folder_path,strcat(obj.file.name,'_',image_types{i}),temporal_filter = 2);
+                        generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = 2);
                     end
                 else
                     fprintf("%s was not found so it cannot be saved.\n", image_types{i});
@@ -413,9 +425,20 @@ classdef HoloDopplerClass < handle
                 
             end
             
-            fid = fopen(fullfile(result_folder_path,strcat(obj.file.name,'_','RenderingParameters.json')), 'w');
+
+
+            fid = fopen(fullfile(result_folder_path,strcat(obj.file.name,'_HD_',num2str(index+1),'_','RenderingParameters.json')), 'w');
             fwrite(fid, jsonencode(params, "PrettyPrint",true), 'char');
             fclose(fid);
+
+            %saving a small mat for old versions of PW
+            cache.Fs = obj.params.fs*1000;
+            cache.batch_stride = obj.params.batch_stride;
+            cache.time_transform.f1 = obj.params.time_range(1);
+            cache.time_transform.f2 = obj.params.time_range(2);
+            save(fullfile(result_folder_path,'mat',strcat(obj.file.name,'_HD_',num2str(index+1),'.mat')),"cache");
+
+            fprintf("Video Saving took : %f s\n",toc(VideoSavingTime));
         end
         
         function CalculateRegistration(obj)
@@ -433,12 +456,12 @@ classdef HoloDopplerClass < handle
                 end
             end
             
-            numX = size(video_M0, 1);
-            numY = size(video_M0, 2);
+            numY = size(video_M0, 1);
+            numX = size(video_M0, 2);
             
             if obj.params.registration_disc_ratio > 0
                 disk_ratio = obj.params.registration_disc_ratio;
-                disk = diskMask(numY, numX, disk_ratio);
+                disk = diskMask(numX, numY, disk_ratio);
             else
                 disk = ones([numX, numY]);
             end
@@ -482,8 +505,9 @@ classdef HoloDopplerClass < handle
             if nargin<2
                 images_type = obj.params.image_types{1};
             end
-            tmp = [obj.video.(images_type)];
-            implay(rescale(improve_video(reshape([tmp.image],size(tmp(1).image,1),size(tmp(1).image,2),size(tmp(1).image,3),[]),0.0005,2,0)));
+            v = [obj.video{:}];
+            tmp = [v.(images_type)];
+            implay(rescale(reshape([tmp.image],size(tmp(1).image,1),size(tmp(1).image,2),size(tmp(1).image,3),[])));
         end
         
         function SelfTesting(obj)
