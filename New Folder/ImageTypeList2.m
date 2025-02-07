@@ -59,6 +59,13 @@ classdef ImageTypeList2 < handle
             end
             
         end
+
+        function copy_from(obj, o)
+            fields = fieldnames(o);
+            for i=1:length(fields)
+                obj.(fields{i}).copy_from(o.(fields{i}));
+            end
+        end
         
         function select(obj, varargin)
             

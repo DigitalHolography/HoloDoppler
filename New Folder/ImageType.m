@@ -36,6 +36,13 @@ classdef ImageType < handle
             end
             
         end
+
+        function copy_from(obj, o)
+            fields = fieldnames(o);
+            for i=1:length(fields)
+                obj.(fields{i}) = o.(fields{i});
+            end
+        end
         
         function image2png(obj, preview_folder_name, folder_path)
             I = obj.image;

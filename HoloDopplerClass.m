@@ -335,8 +335,10 @@ classdef HoloDopplerClass < handle
             
             % 1) Initialize the video object
             
-            obj.video = [];
-            obj.video.names = obj.params.image_types;
+            if isempty(obj.video)
+                v(1,num_batches) = ImageTypeList2();
+                obj.video= v; clear v;
+            end
             
             % 2) Loop over the batches
             if obj.params.parfor_arg == 0
@@ -344,7 +346,8 @@ classdef HoloDopplerClass < handle
                 for i = 1:(num_batches)
                     obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, (i-1) * obj.params.batch_stride + 1));
                     obj.view.Render(obj.params,obj.params.image_types);
-                    obj.video.data{i} = obj.view.getImages(obj.params.image_types);
+                    obj.video(i) = ImageTypeList2();
+                    obj.video(i).copy_from(obj.view.Output); % work around against handles
                     update_waitbar(0);
                 end
             else
@@ -354,7 +357,7 @@ classdef HoloDopplerClass < handle
                 
                 file_path = obj.file.path;
                 params = obj.params;
-                video = obj.video.data;
+                video = obj.video;
                 
                 [dir,name,ext] = fileparts(file_path);
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
@@ -368,10 +371,11 @@ classdef HoloDopplerClass < handle
                     end
                     view.setFrames(reader.read_frame_batch(params.batch_size, (i-1) * params.batch_stride + 1));
                     view.Render(params,params.image_types,cache_intermediate_results=false);
-                    video(i) = view.getImages(params.image_types);
+                    video(i) = ImageTypeList2();
+                    video(i).copy_from(view.Output);
                     send(D,0);
                 end
-                obj.video.data = video;
+                obj.video = video;
             end
             close(h);
             
@@ -404,7 +408,7 @@ classdef HoloDopplerClass < handle
             end
             
             for i = 1:numel(image_types)
-                tmp = [obj.video{:}.(image_types{i})];
+                tmp = [obj.video.(image_types{i})];
                 mat = ((reshape([tmp.image],size(tmp(1).image,1),size(tmp(1).image,2),size(tmp(1).image,3),[])));
                 if ~isempty(mat)
                     if strcmp(image_types{i},'moment_0')  % raw moments are always outputted if they are selected
@@ -485,7 +489,7 @@ classdef HoloDopplerClass < handle
             
             for i = 1:num_batches
                 for j = 1:length(obj.params.image_types)
-                    obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, floor(obj.registration.shifts(i)));
+                    obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, floor(obj.registration.shifts(:,i)));
                 end
             end
         end
@@ -505,8 +509,7 @@ classdef HoloDopplerClass < handle
             if nargin<2
                 images_type = obj.params.image_types{1};
             end
-            v = [obj.video{:}];
-            tmp = [v.(images_type)];
+            tmp = [obj.video.(images_type)];
             implay(rescale(reshape([tmp.image],size(tmp(1).image,1),size(tmp(1).image,2),size(tmp(1).image,3),[])));
         end
         
