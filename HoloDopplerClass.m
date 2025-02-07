@@ -465,9 +465,9 @@ classdef HoloDopplerClass < handle
             
             if obj.params.registration_disc_ratio > 0
                 disk_ratio = obj.params.registration_disc_ratio;
-                disk = diskMask(numX, numY, disk_ratio);
+                disk = diskMask(numY, numX, disk_ratio);
             else
-                disk = ones([numX, numY]);
+                disk = ones([numY, numX]);
             end
             
             video_M0_reg = video_M0 .* disk - disk .* sum(video_M0 .* disk, [1, 2]) / nnz(disk); % minus the mean in the disc of each frame
