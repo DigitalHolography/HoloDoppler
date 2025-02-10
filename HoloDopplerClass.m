@@ -186,6 +186,8 @@ classdef HoloDopplerClass < handle
             obj.params.parfor_arg = 0;
             obj.params.batch_size_registration_ref = 512;
             obj.params.image_registration = true;
+            obj.params.first_frame = 0;
+            obj.params.end_frame = 0;
             
         end
         
@@ -279,8 +281,20 @@ classdef HoloDopplerClass < handle
             if isempty(obj.reader)
                 error("No file loaded")
             end
-            
-            num_batches = floor(obj.file.num_frames/obj.params.batch_stride);
+
+            if ~obj.params.first_frame
+                first_frame = 1;
+            else
+                first_frame = obj.params.first_frame;
+            end
+
+            if ~obj.params.end_frame
+                end_frame = obj.file.num_frames;
+            else
+                end_frame = obj.params.end_frame;
+            end
+
+            num_batches = floor((end_frame-first_frame)/obj.params.batch_stride);
             
             disp(['Rendering ' num2str(num_batches) 'frames.']);
 
@@ -344,7 +358,7 @@ classdef HoloDopplerClass < handle
             if obj.params.parfor_arg == 0
                 
                 for i = 1:(num_batches)
-                    obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, (i-1) * obj.params.batch_stride + 1));
+                    obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, (i-1) * obj.params.batch_stride + first_frame));
                     obj.view.Render(obj.params,obj.params.image_types);
                     obj.video(i) = ImageTypeList2();
                     obj.video(i).copy_from(obj.view.Output); % work around against handles
@@ -466,6 +480,9 @@ classdef HoloDopplerClass < handle
             if obj.params.registration_disc_ratio > 0
                 disk_ratio = obj.params.registration_disc_ratio;
                 disk = diskMask(numY, numX, disk_ratio);
+                if size(disk,1) ~= size(video_M0,1)
+                    disk = disk';
+                end
             else
                 disk = ones([numY, numX]);
             end
