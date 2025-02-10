@@ -108,10 +108,15 @@ methods
         
         for i = 1:batch_size 
             fseek(fd, 64 + uint64(frame_size) * (uint64(frame_offset) + (i-1)), 'bof'); 
-            if obj.bit_depth == 8
-                frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint8=>single', endian), obj.frame_width, obj.frame_height);  
-            elseif obj.bit_depth == 16
-                frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint16=>single', endian), obj.frame_width, obj.frame_height);
+            try
+                if obj.bit_depth == 8
+                    frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint8=>single', endian), obj.frame_width, obj.frame_height);  
+                elseif obj.bit_depth == 16
+                    frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint16=>single', endian), obj.frame_width, obj.frame_height);
+                end
+            catch 
+                frame_batch(width_range, height_range, i) = 0;
+                fprintf("Holo file frame in position %d was not found\n", i);
             end
         end 
         frame_batch = HoloReader.replace_dropped_frames(frame_batch, 0.2);
@@ -133,6 +138,16 @@ methods
     function height = get_frame_height(obj)
        height = obj.frame_height; 
     end
+
+    function frame_batches = read_all_frames(obj, batch_size, batch_stride)
+
+        num_batches = floor((obj.num_frames - batch_size) / batch_stride);
+        frame_batches = zeros(obj.frame_width, obj.frame_height, batch_size, num_batches);
+        for batchIdx = 1:num_batches
+            frame_batches(:, :, :, batchIdx) = int32(obj.read_frame_batch(batch_size, (batchIdx - 1) * batch_stride));
+        end
+    end
+    
 end
 methods(Static)
     % duplicate method from other readers. TODO dedup into separate file

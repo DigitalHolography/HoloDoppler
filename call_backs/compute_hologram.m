@@ -16,7 +16,6 @@ app.cache = GuiCache(app);
 %FIXME : change function name DopplerAcquisition ->
 %HologramRenderingParameters & Remove Fs ?
 acquisition = DopplerAcquisition(app.Nx,app.Ny,app.Fs/1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value,app.DX,app.DY,app.pix_width,app.pix_height);
-is_low_frequency = app.lowfrequencyCheckBox.Value;
 
 % change the reconstruction type name to a form compatible with
 % structures
@@ -44,7 +43,7 @@ if strcmp((type), 'dark_field_image')
 end
 
 app.var_ImageTypeList.construct_image(app.FH, app.cache.wavelength, acquisition, app.blur, use_gpu, app.SVDCheckBox.Value, app.SVDThresholdCheckBox.Value,app.SVDStrideEditField.Value,...
-    app.SVDxCheckBox.Value, app.SVDThresholdEditField.Value, app.SVDx_SubApEditField.Value, [], app.compositef1EditField.Value, app.compositef2EditField.Value, app.compositef3EditField.Value, is_low_frequency, app.spatialTransformationDropDown.Value, app.time_transform, app.SubAp_PCA, app.xystrideEditField.Value, app.unitcellsinlatticeEditField.Value, app.r1EditField.Value, ...
+    app.SVDxCheckBox.Value, app.SVDThresholdEditField.Value, app.SVDx_SubApEditField.Value, [], app.compositef1EditField.Value, app.compositef2EditField.Value, app.compositef3EditField.Value, app.spatialTransformationDropDown.Value, app.time_transform, app.SubAp_PCA, app.xystrideEditField.Value, app.unitcellsinlatticeEditField.Value, app.r1EditField.Value, ...
     app.temporalCheckBox.Value, app.phi1EditField.Value, app.phi2EditField.Value, app.spatialCheckBox.Value, app.nu1EditField.Value, app.nu2EditField.Value, app.numFreqEditField.Value);
 
 app.FH = [];

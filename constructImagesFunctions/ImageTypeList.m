@@ -100,10 +100,11 @@ classdef ImageTypeList < handle % This class is modified dynamically
             
         end
         
-        function construct_image(obj, FH, wavelength, acquisition, gaussian_width, use_gpu, svd, svd_treshold,svd_stride, svdx, svd_treshold_value, Nb_SubAp, phase_correction, ...
-                color_f1, color_f2, color_f3, is_low_frequency, ...
+        function construct_image(obj, FH, wavelength, acquisition, gaussian_width, use_gpu, svd, ...
+                svd_treshold,svd_stride, svdx, svd_treshold_value, Nb_SubAp, phase_correction, ...
+                color_f1, color_f2, color_f3, ...
                 spatial_transformation, time_transform, SubAp_PCA, xy_stride, num_unit_cells_x, r1, ...
-                local_temporal, phi1, phi2, local_spatial, nu1, nu2, num_F)
+                isTemporal, phi1, phi2, isSpatial, nu1, nu2, num_F)
             
             % [~, phase ] = zernike_phase([ 4 ], 512, 512);
             % phase = 30 * 0.5 * phase;
@@ -172,22 +173,17 @@ classdef ImageTypeList < handle % This class is modified dynamically
                 
             end
             
-            if local_spatial
-                H = local_spatial_PCA(H, nu1, nu2);
+            if isSpatial
+                H = spatial_PCA(H, nu1, nu2);
             end
             
-            if local_temporal
-                H = local_temporal_PCA(H, phi1, phi2);
+            if isTemporal
+                H = temporal_PCA(H, phi1, phi2);
             end
             
             obj.spectrogram.parameters.H = H;
             
             %% Compute moments based on dropdown value
-            if is_low_frequency
-                sign = -1;
-            else
-                sign = 1;
-            end
             
             switch time_transform.type
                 case 'PCA' % if the time transform is PCA
@@ -254,7 +250,7 @@ classdef ImageTypeList < handle % This class is modified dynamically
                 [M0_pos, M0_neg] = directional(SH, f1, f2, ac.fs, j_win, gaussian_width);
                 obj.directional_Doppler.parameters.M0_pos = M0_pos;
                 obj.directional_Doppler.parameters.M0_neg = M0_neg;
-                obj.directional_Doppler.image = construct_directional_image(sign * gather(M0_pos), sign * gather(M0_neg), is_low_frequency);
+                obj.directional_Doppler.image = construct_directional_image(sign * gather(M0_pos), sign * gather(M0_neg));
             end
             
             if obj.M0sM1r.is_selected % M1sM0r has been chosen
@@ -296,11 +292,9 @@ classdef ImageTypeList < handle % This class is modified dynamically
             if obj.choroid.is_selected % Power 1 Doppler has been chosen
                 numX = size(SH, 1);
                 numY = size(SH, 2);
-                L = (numX + numY) / 2;
                 obj.choroid.parameters.intervals_0 = zeros(numX, numY, 1, num_F);
                 obj.choroid.parameters.intervals_1 = zeros(numX, numY, 1, num_F);
-                [X, Y] = meshgrid(1:numX, 1:numY);
-                circleMask = fftshift(sqrt((X-(numX/2)).^2 + (Y-(numY/2)).^2) < 0.15 * L);
+                circleMask = fftshift(diskMask(numX, numY, 0.15));
                 frequencies = linspace(f1, f2, num_F + 1);
                 for freqIdx = 1:num_F
                     img = moment0(SH, frequencies(freqIdx), frequencies(end), ac.fs, j_win, gaussian_width);

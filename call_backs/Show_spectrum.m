@@ -14,8 +14,8 @@ function Show_spectrum(app)
     svd_treshold_value = app.SVDThresholdEditField.Value;
     svdx = app.SVDxCheckBox.Value;
     Nb_SubAp = app.SVDx_SubApEditField.Value;
-    local_spatial = app.spatialCheckBox.Value;
-    local_temporal = app.temporalCheckBox.Value;
+    is_spatial = app.spatialCheckBox.Value;
+    is_temporal = app.temporalCheckBox.Value;
     time_transform = app.time_transform;
     nu1 = app.nu1EditField.Value;
     nu2 = app.nu2EditField.Value;
@@ -71,12 +71,12 @@ function Show_spectrum(app)
 
     end
 
-    if local_spatial
-        H = local_spatial_PCA(H, nu1, nu2);
+    if is_spatial
+        H = spatial_PCA(H, nu1, nu2);
     end
 
-    if local_temporal
-        H = local_temporal_PCA(H, phi1, phi2);
+    if is_temporal
+        H = temporal_PCA(H, phi1, phi2);
     end
 
     switch time_transform.type
@@ -91,10 +91,6 @@ function Show_spectrum(app)
     SH_angle = angle(SH);
     SH = abs(SH) .^ 2;
 
-    % if you want it can be a circle
-    % [X,Y]=meshgrid(((1:app.Nx) - round(app.Nx/2))*2/app.Nx,((1:app.Ny) - round(app.Ny/2))*2/app.Nx);
-    % circle = X.^2+Y.^2<0.5;
-    % imshow(circle);
     if ~isempty(app.mask)
         circle = imrotate(app.mask,90);
     else

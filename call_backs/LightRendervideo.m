@@ -54,24 +54,24 @@ function LightRendervideo(app)
 
     j_win = app.cache.batch_size;
     j_step = app.cache.batch_stride;
-    local_blur = app.cache.blur;
-    local_Nx = app.Nx;
-    local_Ny = app.Ny;
-    local_wavelength = app.cache.wavelength;
-    local_output_video = app.cache.output_videos;
-    local_svd = app.SVDCheckBox.Value;
-    local_spatialTransformation = app.cache.spatialTransformation;
-    local_SVDx = app.SVDxCheckBox.Value;
-    local_SVDx_SubAp_num = app.SVDx_SubApEditField.Value;
-    localSVDThreshold = app.SVDThresholdCheckBox.Value;
-    localSVDThresholdValue = app.SVDThresholdEditField.Value;
-    local_f1 = app.cache.time_transform.f1;
-    local_f2 = app.cache.time_transform.f2;
-    local_fs = app.Fs;
-    local_registration = app.cache.registration;
-    local_registration_disc = app.cache.registration_disc;
-    local_registration_disc_ratio = app.cache.registration_disc_ratio;
-    local_position_in_file = app.cache.position_in_file;
+    blur = app.cache.blur;
+    numX = app.Nx;
+    numY = app.Ny;
+    wavelength = app.cache.wavelength;
+    output_video = app.cache.output_videos;
+    is_svd = app.SVDCheckBox.Value;
+    spatialTransformation = app.cache.spatialTransformation;
+    is_SVDx = app.SVDxCheckBox.Value;
+    SVDx_SubAp_num = app.SVDx_SubApEditField.Value;
+    isSVDThreshold = app.SVDThresholdCheckBox.Value;
+    SVDThresholdValue = app.SVDThresholdEditField.Value;
+    f1 = app.cache.time_transform.f1;
+    f2 = app.cache.time_transform.f2;
+    fs = app.Fs;
+    registration = app.cache.registration;
+    registration_disk = app.cache.registration_disc;
+    registration_disk_ratio = app.cache.registration_disc_ratio;
+    position_in_file = app.cache.position_in_file;
         
     switch app.cache.spatialTransformation
         case 'angular spectrum'
@@ -84,7 +84,7 @@ function LightRendervideo(app)
     local_num_batches = floor((istream.num_frames-j_win) / j_step);
     
     
-    switch local_output_video
+    switch output_video
         case 'power_Doppler'
             return
         case 'moments'
@@ -117,8 +117,8 @@ function LightRendervideo(app)
         poolobj = parpool(parfor_arg);
     end
     
-    if ~localSVDThreshold
-        localSVDThresholdValue = round(local_f1 * j_win / local_fs)*2 + 1; % default value if none specified
+    if ~isSVDThreshold
+        SVDThresholdValue = round(f1 * j_win / fs)*2 + 1; % default value if none specified
     end
     
     send(D,-2); % display 'video construction' on progress bar
@@ -127,14 +127,14 @@ function LightRendervideo(app)
     parfor (batch_idx = 1:local_num_batches, num_workers)
 
         frame_batch = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step);
-        SH = ri(frame_batch,local_spatialTransformation,local_kernel,local_svd,local_SVDx,localSVDThresholdValue,local_SVDx_SubAp_num,0);
+        SH = ri(frame_batch,spatialTransformation,local_kernel,is_svd,is_SVDx,SVDThresholdValue,SVDx_SubAp_num,0);
 
         %% permute related to acquisition optical inversion of the image
         SH = permute(SH, [2 1 3]);
-        M0 = m0(SH, local_f1, local_f2, local_fs, j_win, local_blur); % with flatfield of gaussian_width applied
-        moment0 = m0(SH, local_f1, local_f2, local_fs, j_win, 0); % no flatfield : raw
-        moment1 = m1(SH, local_f1, local_f2, local_fs, j_win, 0);
-        moment2 = m2(SH, local_f1, local_f2, local_fs, j_win, 0);
+        M0 = m0(SH, f1, f2, fs, j_win, blur); % with flatfield of gaussian_width applied
+        moment0 = m0(SH, f1, f2, fs, j_win, 0); % no flatfield : raw
+        moment1 = m1(SH, f1, f2, fs, j_win, 0);
+        moment2 = m2(SH, f1, f2, fs, j_win, 0);
 
 
         video_M0(:,:,:,batch_idx) = M0;
@@ -147,7 +147,7 @@ function LightRendervideo(app)
     tEndParfor = toc(tParfor);
     fprintf("Parfor loop took %f s\n",tEndParfor)
 
-    if local_registration
+    if registration
         % post reconstruction image registration.
         % This registration is performed on the final video,
         % it does not use tilts zernikes to perform the
@@ -155,31 +155,30 @@ function LightRendervideo(app)
         tRegistration = tic;
         fprintf("Registration...\n")
         
-        if local_registration_disc
-            [X,Y] = meshgrid(linspace(-local_Nx/2,local_Nx/2,local_Nx),linspace(-local_Ny/2,local_Ny/2,local_Ny));
-            disc = X.^2+Y.^2 < (local_registration_disc_ratio * min(local_Nx,local_Ny)/2)^2; 
+        if registration_disk
+            disk = diskMask(numX, numY, registration_disk_ratio);
         else
-            disc = ones([local_Ny,local_Nx]);
+            disk = ones(numX, numY);
         end
 
         
-        video_M0_reg = video_M0 .* disc - disc .* sum(video_M0.* disc,[1,2])/nnz(disc); % minus the mean in the disc of each frame
+        video_M0_reg = video_M0 .* disk - disk .* sum(video_M0.* disk,[1,2])/nnz(disk); % minus the mean in the disc of each frame
         video_M0_reg = video_M0_reg ./(max(abs(video_M0_reg),[],[1,2])); % rescaling each frame but keeps mean at zero
         
 
         % % construct reference image
-        ref_batch_idx = min(floor((local_position_in_file) / j_step) + 1,size(video_M0,4)-j_win);
+        ref_batch_idx = min(floor((position_in_file) / j_step) + 1,size(video_M0,4)-j_win);
 
         reg_frame_batch = istream.read_frame_batch(j_win, floor(ref_batch_idx*j_step));
         
-        SH = ri(reg_frame_batch,local_spatialTransformation,local_kernel,local_svd,local_SVDx,localSVDThresholdValue,0);
+        SH = ri(reg_frame_batch,spatialTransformation,local_kernel,is_svd,is_SVDx,SVDThresholdValue,0);
 
 
         %% permute related to acquisition optical invertion
         SH = permute(SH, [2 1 3]);
-        reg_hologram = m0(SH, local_f1, local_f2, local_fs, j_win, local_blur); % with flatfield of gaussian_width applied
+        reg_hologram = m0(SH, f1, f2, fs, j_win, blur); % with flatfield of gaussian_width applied
         
-        reg_hologram = reg_hologram.*disc - disc .* sum(reg_hologram.*disc,[1,2])/nnz(disc); % minus the mean 
+        reg_hologram = reg_hologram.*disk - disk .* sum(reg_hologram.*disk,[1,2])/nnz(disk); % minus the mean 
         reg_hologram = reg_hologram./(max(abs(reg_hologram),[],[1,2])); % rescaling but keeps mean at zero
         
 
@@ -278,8 +277,8 @@ function LightRendervideo(app)
     s.ref_batch_size = cache.ref_batch_size;
     s.batch_stride = cache.batch_stride;
     s.SVD = cache.SVD;
-    s.SVDx = local_SVDx;
-    s.SVDxSubAp = local_SVDx_SubAp_num;
+    s.SVDx = is_SVDx;
+    s.SVDxSubAp = SVDx_SubAp_num;
     JSON_parameters = jsonencode(s,PrettyPrint=true);
     fid = fopen(fullfile(dirpath, 'log', 'RenderingParameters.json'), "wt+");
     fprintf(fid, JSON_parameters);

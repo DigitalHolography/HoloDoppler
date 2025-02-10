@@ -9,7 +9,6 @@ app.cache = GuiCache(app);
 
 % ,''dark_field_image',
 acquisition = DopplerAcquisition(app.Nx,app.Ny,app.Fs/1000, app.z_reconstruction, app.z_retina, app.z_iris, app.wavelengthEditField.Value,app.DX,app.DY,app.pix_width,app.pix_height);
-is_low_frequency = app.lowfrequencyCheckBox.Value;
 
 GPUpreview = check_GPU_for_preview(app);
 compute_FH(app,GPUpreview);
@@ -40,7 +39,7 @@ folder_path_freq = fullfile(output_dirpath, 'freq_shift');
 app.var_ImageTypeList.clear();
 app.var_ImageTypeList.select('power_Doppler','color_Doppler','directional_Doppler','velocity_estimate', 'phase_variation',  'spectrogram');
 app.var_ImageTypeList.construct_image(app.FH, app.cache.wavelength, acquisition, app.blur, false, app.SVDCheckBox.Value, app.SVDThresholdCheckBox.Value,app.SVDStrideEditField.Value,...
-    app.SVDxCheckBox.Value, app.SVDThresholdEditField.Value, app.SVDx_SubApEditField.Value, [], app.compositef1EditField.Value, app.compositef2EditField.Value, app.compositef3EditField.Value, is_low_frequency, app.spatialTransformationDropDown.Value, app.time_transform, app.SubAp_PCA, app.xystrideEditField.Value, app.unitcellsinlatticeEditField.Value, app.r1EditField.Value, ...
+    app.SVDxCheckBox.Value, app.SVDThresholdEditField.Value, app.SVDx_SubApEditField.Value, [], app.compositef1EditField.Value, app.compositef2EditField.Value, app.compositef3EditField.Value, app.spatialTransformationDropDown.Value, app.time_transform, app.SubAp_PCA, app.xystrideEditField.Value, app.unitcellsinlatticeEditField.Value, app.r1EditField.Value, ...
     app.temporalCheckBox.Value, app.phi1EditField.Value, app.phi2EditField.Value, app.spatialCheckBox.Value, app.nu1EditField.Value, app.nu2EditField.Value, app.numFreqEditField.Value);
  app.var_ImageTypeList.images2png(preview_folder_name,folder_path_png,'power_Doppler','color_Doppler','directional_Doppler','velocity_estimate', 'phase_variation',  'spectrogram')
 %% Spectrum
@@ -66,7 +65,7 @@ for i=1:local_num_frame
     app.time_transform.f1 = freq_basse(i);
     app.time_transform.f2 = freq_haute(i);
    app.var_ImageTypeList.construct_image(app.FH, app.cache.wavelength, acquisition, app.blur, false, app.SVDCheckBox.Value, app.SVDThresholdCheckBox.Value,app.SVDStrideEditField.Value,...
-    app.SVDxCheckBox.Value, app.SVDThresholdEditField.Value, app.SVDx_SubApEditField.Value, [], app.compositef1EditField.Value, app.compositef2EditField.Value, app.compositef3EditField.Value, is_low_frequency, app.spatialTransformationDropDown.Value, app.time_transform, app.SubAp_PCA, app.xystrideEditField.Value, app.unitcellsinlatticeEditField.Value, app.r1EditField.Value, ...
+    app.SVDxCheckBox.Value, app.SVDThresholdEditField.Value, app.SVDx_SubApEditField.Value, [], app.compositef1EditField.Value, app.compositef2EditField.Value, app.compositef3EditField.Value, app.spatialTransformationDropDown.Value, app.time_transform, app.SubAp_PCA, app.xystrideEditField.Value, app.unitcellsinlatticeEditField.Value, app.r1EditField.Value, ...
     app.temporalCheckBox.Value, app.phi1EditField.Value, app.phi2EditField.Value, app.spatialCheckBox.Value, app.nu1EditField.Value, app.nu2EditField.Value, app.numFreqEditField.Value);
  
     app.hologram = app.var_ImageTypeList.('power_Doppler').image;
@@ -87,9 +86,6 @@ for i=1:local_num_frame
 
 
 end
-
-%preview_name_temp = sprintf('%s_%s.%s', preview_folder_name, 'video_freq' , 'png');
-%generate_video(video, output_dirpath, 'video_freq', 0.0005, app.cache.temporal_filter, is_low_frequency, 0, true);
 
 app.var_ImageTypeList.clear();
 

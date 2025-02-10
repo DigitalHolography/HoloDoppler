@@ -17,7 +17,8 @@ if use_gpu
         case 'Fresnel'
             FH = gpuArray(frame_batch) .* kernel;
     end
-else 
+else
+    frame_batch = double(frame_batch);
     switch spatialTransformation
         case 'angular spectrum'
             FH = fftshift(fft2(frame_batch)) .* kernel;

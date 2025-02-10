@@ -15,7 +15,6 @@ switch ext
         app.Fs = double(app.interferogram_stream.frame_rate);
         % set f values from Fs
         if app.Fs > 20000
-            app.lowfrequencyCheckBox.Value = false;
             app.f1EditField.Value = 6;
             app.f2EditField.Value = floor(app.Fs / (2*1000));
 
@@ -23,7 +22,6 @@ switch ext
             app.compositef2EditField.Value = 10;
             app.compositef3EditField.Value = floor(app.Fs / (2*1000));
         elseif app.Fs > 2000
-            app.lowfrequencyCheckBox.Value = true;
 
             app.f1EditField.Value = 0.2;
             app.f2EditField.Value = floor(app.Fs / (2*1000));
@@ -32,8 +30,6 @@ switch ext
             app.compositef2EditField.Value = 1;
             app.compositef3EditField.Value = floor(app.Fs / (2*1000));
         else
-            app.lowfrequencyCheckBox.Value = true;
-
             app.f1EditField.Value = floor(app.Fs / (8*1000));
             app.f2EditField.Value = floor(app.Fs / (2*1000));
 
@@ -42,18 +38,14 @@ switch ext
             app.compositef3EditField.Value = floor(app.Fs / (2*1000));
         end
 
-        % update GUI text
+        % % update GUI text
         % color_f1 = app.compositef1EditField.Value;
         % color_f2 = app.compositef2EditField.Value;
         % color_f3 = app.compositef3EditField.Value;
 
-        %                     if ~app.lowfrequencyCheckBox.Value
-        %                         app.LowfrequencyrangeLabel.Text = sprintf('Low frequency range: %d..%d', color_f1, color_f2);
-        %                         app.HighfrequencyrangeLabel.Text = sprintf('High frequency range: %d..%d', color_f2, color_f3);
-        %                     else
-        %                         app.LowfrequencyrangeLabel.Text = sprintf('Low frequency range: %d..%d', color_f2, color_f3);
-        %                         app.HighfrequencyrangeLabel.Text = sprintf('High frequency range: %d..%d', color_f1, color_f2);
-        %                     end
+        % app.LowfrequencyrangeLabel.Text = sprintf('Low frequency range: %d..%d', color_f2, color_f3);
+        % app.HighfrequencyrangeLabel.Text = sprintf('High frequency range: %d..%d', color_f1, color_f2);
+
 
         app.pix_width = 1 / double(app.interferogram_stream.horizontal_pix_per_meter);
         app.pix_height = 1 / double(app.interferogram_stream.vertical_pix_per_meter);
@@ -122,7 +114,6 @@ switch ext
         app.compositef2EditField.Value = 1;
         app.compositef3EditField.Value = floor(app.Fs / (2*1000));
 
-        app.lowfrequencyCheckBox.Value = false;
         if isfield(app.interferogram_stream.footer.compute_settings, 'batchSize')
             reconstructWithPreviousSettings(app, 1)
         end

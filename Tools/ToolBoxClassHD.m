@@ -16,6 +16,7 @@ classdef ToolBoxClassHD
         HD_path_log char
         HD_path_mat char
         HD_path_raw char
+        SpatialTransform
     end
 
     methods
@@ -28,6 +29,7 @@ classdef ToolBoxClassHD
 
             obj.Holo_path = app.filepath;
             obj.Holo_name = app.filename;
+            obj.SpatialTransform = app.spatialTransformationDropDown.Value;
 
             [filepath, filename, file_ext] = fileparts(fullfile(obj.Holo_path, obj.Holo_name));
 

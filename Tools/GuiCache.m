@@ -49,7 +49,6 @@ classdef GuiCache
         color_f1 double
         color_f2 double
         color_f3 double
-        low_frequency logical
 
         % dark field parameters
         xystride double
@@ -101,7 +100,6 @@ classdef GuiCache
             obj.pix_width = app.pix_width;
             obj.pix_height = app.pix_height;
             obj.registration = app.imageregistrationCheckBox.Value;
-            obj.temporal_filter_flag = app.temporalfilterCheckBox.Value;
             obj.temporal_filter = app.temporalfilterEditField.Value;
             obj.parallelism = app.ParallelismDropDown.Value;
             obj.registration_via_phase = app.phaseregistrationCheckBox.Value;
@@ -114,14 +112,12 @@ classdef GuiCache
             obj.position_in_file = app.positioninfileSlider.Value;
             obj.output_videos = (strrep(app.outputvideoDropDown.Value, ' ', '_'));
             obj.rephasing = app.rephasingCheckBox.Value;
-            obj.save_raw = app.saverawvideosCheckBox.Value;
             obj.registration_disc = app.registrationdiscCheckBox.Value;
             obj.registration_disc_ratio = app.regDiscRatioEditField.Value;
 
             obj.color_f1 = app.compositef1EditField.Value;
             obj.color_f2 = app.compositef2EditField.Value;
             obj.color_f3 = app.compositef3EditField.Value;
-            obj.low_frequency = app.lowfrequencyCheckBox.Value;
 
             % dark field parameters
             obj.xystride = app.xystrideEditField.Value;
@@ -200,7 +196,6 @@ classdef GuiCache
             app.compositef1EditField.Value = loadGUIVariable(obj.color_f1);
             app.compositef2EditField.Value = loadGUIVariable(obj.color_f2);
             app.compositef3EditField.Value = loadGUIVariable(obj.color_f3);
-            app.lowfrequencyCheckBox.Value = loadGUIVariable(obj.low_frequency);
             app.saverawvideosCheckBox.Value = loadGUIVariable(obj.save_raw);
             app.numFreqEditField.Value = loadGUIVariable(obj.num_Freq);
             app.SVDStrideEditField.Value = loadGUIVariable(obj.SVD_Stride);
