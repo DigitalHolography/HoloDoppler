@@ -1,7 +1,7 @@
 classdef ShackHartmann
     properties
-        n_SubAp % n_subapertures
-        n_SubAp_inter 
+        n_SubAp % size of subapertures
+        n_SubAp_inter % number of sub_aparetures along a direction
         modes % idx array of zernikes
         calibration_factor
         SubAp_margin
