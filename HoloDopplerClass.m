@@ -302,6 +302,18 @@ classdef HoloDopplerClass < handle
                 return
             end
             
+            % Create parallel pool
+            poolobj = gcp('nocreate'); % check if a pool already exist
+            parfor_arg = obj.params.parfor_arg;
+            if parfor_arg < 1
+                %delete(poolobj);
+            elseif isempty(poolobj) || poolobj.NumWorkers ~= parfor_arg
+                delete(poolobj); %close the current pool to create a new one with correct num of workers
+                parpool(parfor_arg);
+            else
+                %
+            end
+            
             VideoRenderingTime = tic;
             
             
