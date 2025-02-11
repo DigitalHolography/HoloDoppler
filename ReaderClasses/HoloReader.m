@@ -9,6 +9,8 @@ properties
     bit_depth
     endianness
     footer % matlab JSON object
+
+    all_frames % 3D array of all frames in case there is enough memory to load all frames
 end
 methods
     function obj = HoloReader(filename)
@@ -87,9 +89,46 @@ methods
             obj.footer = footer_parsed;
             fclose(fd);
         end
+
+        %% check if all frames can be loaded
+
+        % Check if available memory is above a certain threshold in GB
+        memoryInfo = memory;
+        availableMemoryGB = memoryInfo.MemAvailableAllArrays / 1e9;
+        
+        fileInfo = dir(filename);
+        fileSizeGB = fileInfo.bytes / 1e9;
+        fprintf('File size: %.2f GB\n', fileSizeGB);
+
+        memoryThresholdGB = fileSizeGB * 3 ; % If your devices available memory is more than 3 times bigger than the file, you can load all frames
+
+        if availableMemoryGB > memoryThresholdGB
+            fprintf('Available memory is above the threshold: %.2f GB\n', availableMemoryGB);
+            fprintf('Loading file in memory');
+            obj.all_frames = zeros(obj.frame_width, obj.frame_height, obj.num_frames,'uint8');
+            fd = fopen(obj.filename, 'r');
+            if obj.endianness == 0
+                endian= 'l';
+            elseif obj.endianness == 1
+                endian= 'b';
+            end
+            frame_size = obj.frame_width * obj.frame_height * uint32(obj.bit_depth/8);
+            for i = 1:obj.num_frames
+                fseek(fd, 64 + uint64(frame_size) * (uint64(i) + (i-1)), 'bof'); 
+                obj.all_frames(:, :, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint8=>uint8', endian), obj.frame_width, obj.frame_height);
+            end
+        else
+            fprintf('Available memory is below the threshold: %.2f GB\n', availableMemoryGB);
+        end
     end
 
     function frame_batch = read_frame_batch(obj, batch_size, frame_offset)
+
+        if ~isempty(obj.all_frames) % if all frames are loaded in RAM
+            frame_batch = obj.all_frames(:, :, frame_offset + 1:frame_offset + batch_size);
+            return
+        end
+
         fd = fopen(obj.filename, 'r');
         
         frame_size = obj.frame_width * obj.frame_height * uint32(obj.bit_depth/8);
