@@ -20,14 +20,14 @@ classdef HoloDopplerClass < handle
         end
         
         function LoadFile(obj,file_path,opt)
-
+            
             arguments
                 obj
                 file_path
                 opt.params = []; % Optional parameters to force in case the default behavior (finding existing in the folder is not ideal)
             end
-
-
+            
+            
             %LoadFile
             
             % 0) Reset the reader and the file
@@ -155,11 +155,11 @@ classdef HoloDopplerClass < handle
                 obj.params = jsondecode(fread(fid, inf, '*char')');
                 fclose(fid);
             end
-
+            
             if ~isempty(opt.params) % if there is optinonal parameters given
                 obj.setParams(opt.params);
             end
-
+            
             
             % 4) Add last params from the default init
             
@@ -174,7 +174,7 @@ classdef HoloDopplerClass < handle
         
         function setInitParams(obj)
             % reset the initial parameters for all the parameters used in this class
-
+            
             obj.params = [];
             
             obj.params.batch_size = 512;
@@ -198,7 +198,7 @@ classdef HoloDopplerClass < handle
                 obj.params.(fields{i}) = params.(fields{i});
             end
         end
-
+        
         function saveParams(obj, filename)
             % save the params as a configfile for the file filename in the
             % current file directory
@@ -281,23 +281,23 @@ classdef HoloDopplerClass < handle
             if isempty(obj.reader)
                 error("No file loaded")
             end
-
+            
             if ~obj.params.first_frame
                 first_frame = 1;
             else
                 first_frame = obj.params.first_frame;
             end
-
+            
             if ~obj.params.end_frame
                 end_frame = obj.file.num_frames;
             else
                 end_frame = obj.params.end_frame;
             end
-
+            
             num_batches = floor((end_frame-first_frame)/obj.params.batch_stride);
             
             disp(['Rendering ' num2str(num_batches) 'frames.']);
-
+            
             if num_batches == 0
                 return
             end
@@ -386,15 +386,15 @@ classdef HoloDopplerClass < handle
                 video = obj.video;
                 
                 [dir,name,ext] = fileparts(file_path);
+                reader = []; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
+                switch ext
+                    case '.holo'
+                        reader = HoloReader(file_path);
+                    case '.cine'
+                        reader = CineReader(file_path);
+                end
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
                     view = RenderingClass();
-                    reader = [];
-                    switch ext
-                        case '.holo'
-                            reader = HoloReader(file_path);
-                        case '.cine'
-                            reader = CineReader(file_path);
-                    end
                     view.setFrames(reader.read_frame_batch(params.batch_size, (i-1) * params.batch_stride + 1));
                     view.Render(params,params.image_types,cache_intermediate_results=false);
                     video(i) = ImageTypeList2();
@@ -420,7 +420,7 @@ classdef HoloDopplerClass < handle
             if nargin<3
                 params = obj.params;
             end
-
+            
             VideoSavingTime = tic;
             
             index = get_highest_number_in_directories(obj.file.dir,strcat(obj.file.name,'_HD_'));
@@ -455,19 +455,19 @@ classdef HoloDopplerClass < handle
                 
             end
             
-
-
+            
+            
             fid = fopen(fullfile(result_folder_path,strcat(obj.file.name,'_HD_',num2str(index+1),'_','RenderingParameters.json')), 'w');
             fwrite(fid, jsonencode(params, "PrettyPrint",true), 'char');
             fclose(fid);
-
+            
             %saving a small mat for old versions of PW
             cache.Fs = obj.params.fs*1000;
             cache.batch_stride = obj.params.batch_stride;
             cache.time_transform.f1 = obj.params.time_range(1);
             cache.time_transform.f2 = obj.params.time_range(2);
             save(fullfile(result_folder_path,'mat',strcat(obj.file.name,'_HD_',num2str(index+1),'.mat')),"cache");
-
+            
             fprintf("Video Saving took : %f s\n",toc(VideoSavingTime));
         end
         

@@ -100,7 +100,7 @@ classdef RenderingClass < handle
             
             
             %1) Apply corrections to interferograms
-
+            
             doFrames = ParamChanged.spatial_filter | ParamChanged.hilbert_filter | ParamChanged.spatial_filter_range | obj.FramesChanged;
             
             if doFrames % change or if the frames changed
@@ -125,7 +125,7 @@ classdef RenderingClass < handle
             end
             
             %2) Spatial transformation (from Frames to H)
-
+            
             doFH = doFrames | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | obj.FramesChanged | ~options.cache_intermediate_results ;
             
             if doFH % change or if the frames changed
@@ -146,17 +146,17 @@ classdef RenderingClass < handle
                         obj.FH = [];
                         
                 end
-
+                
                 if ~isempty(Params.ShackHartmannCorrection)
                     if ParamChanged.ShackHartmannCorrection | isempty(obj.ShackHartmannMask)
-                        obj.ShackHartmannMask = calculate_shackhartmannmask(obj.FH,Params.spatial_transformation,Params.spatial_transformation,Params.ShackHartmannCorrection);
+                        obj.ShackHartmannMask = calculate_shackhartmannmask(obj.FH,Params.spatial_transformation,Params.spatial_propagation,Params.ShackHartmannCorrection);
                     end
                     obj.FH = obj.FH .* obj.ShackHartmannMask;
                 end
             end
-
+            
             doH = doFH | ParamChanged.svd_filter | (Params.svd_threshold==0 && ParamChanged.time_range) | ParamChanged.svd_threshold  | obj.FramesChanged | ~options.cache_intermediate_results;
-
+            
             if doH % change or if the frames changed
                 
                 switch Params.spatial_transformation
@@ -188,7 +188,7 @@ classdef RenderingClass < handle
             end
             
             %4) Short-time transformation
-
+            
             doSH = doH | ParamChanged.time_transform | obj.FramesChanged | ~options.cache_intermediate_results;
             
             if doSH
@@ -209,7 +209,7 @@ classdef RenderingClass < handle
             end
             
             if doSH
-
+                
                 obj.SH = permute(obj.SH, [2 1 3]); % x<->y transpose due to the lens imaging
                 
             end
