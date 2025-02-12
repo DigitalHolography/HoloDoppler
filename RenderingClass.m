@@ -155,7 +155,7 @@ classdef RenderingClass < handle
                 end
             end
 
-            doH = doFH | ParamChanged.svd_filter | (~ParamChanged.svd_threshold && ParamChanged.time_range | ParamChanged.svd_threshold)  | obj.FramesChanged | ~options.cache_intermediate_results;
+            doH = doFH | ParamChanged.svd_filter | (Params.svd_threshold==0 && ParamChanged.time_range) | ParamChanged.svd_threshold  | obj.FramesChanged | ~options.cache_intermediate_results;
 
             if doH % change or if the frames changed
                 

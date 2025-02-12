@@ -103,8 +103,9 @@ methods
         memoryThresholdGB = fileSizeGB * 3 ; % If your devices available memory is more than 3 times bigger than the file, you can load all frames
 
         if availableMemoryGB > memoryThresholdGB
-            fprintf('Available memory is above the threshold: %.2f GB\n', availableMemoryGB);
-            fprintf('Loading file in memory');
+            fprintf('Available memory is above the threshold: %.2f GB > 3 * %.2f GB \n', availableMemoryGB, fileSizeGB);
+            fprintf('Loading file in memory... \n');
+            timeLoadinmem = tic;
             obj.all_frames = zeros(obj.frame_width, obj.frame_height, obj.num_frames,'uint8');
             fd = fopen(obj.filename, 'r');
             if obj.endianness == 0
@@ -112,11 +113,13 @@ methods
             elseif obj.endianness == 1
                 endian= 'b';
             end
-            frame_size = obj.frame_width * obj.frame_height * uint32(obj.bit_depth/8);
-            for i = 1:obj.num_frames
-                fseek(fd, 64 + uint64(frame_size) * (uint64(i) + (i-1)), 'bof'); 
+            frame_size = double(obj.frame_width) * double(obj.frame_height) * double(obj.bit_depth/8);
+            for i = 1:double(obj.num_frames)
+                fseek(fd, 64 + (frame_size) * ((i-1)), 'bof'); 
                 obj.all_frames(:, :, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint8=>uint8', endian), obj.frame_width, obj.frame_height);
             end
+            fprintf("Loading in memory time :\n");
+            toc(timeLoadinmem);
         else
             fprintf('Available memory is below the threshold: %.2f GB\n', availableMemoryGB);
         end
