@@ -386,13 +386,8 @@ classdef HoloDopplerClass < handle
                 video = obj.video;
                 
                 [dir,name,ext] = fileparts(file_path);
-                reader = []; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
-                switch ext
-                    case '.holo'
-                        reader = HoloReader(file_path);
-                    case '.cine'
-                        reader = CineReader(file_path);
-                end
+                reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
+                
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
                     view = RenderingClass();
                     view.setFrames(reader.read_frame_batch(params.batch_size, (i-1) * params.batch_stride + 1));
