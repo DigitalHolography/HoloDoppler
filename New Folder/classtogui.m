@@ -33,9 +33,19 @@ app.spatial_propagation.Value = HD.params.spatial_propagation;
 app.svd_filter.Value = HD.params.svd_filter;
 app.svdx_filter.Value = HD.params.svdx_filter;
 app.svd_threshold.Value = HD.params.svd_threshold;
-app.time_transform.Items = ["FFT", "PCA", "ICA", "None"]; 
+app.time_transform.Items = ["FFT", "PCA", "ICA", "None"];
 app.time_transform.Value = HD.params.time_transform;
 app.time_range1.Value = HD.params.time_range(1);
 app.time_range2.Value = HD.params.time_range(2);
 app.flat_field_gw.Value = HD.params.flatfield_gw;
+
+app.ShackHartmannCheckBox.Value = isempty(HD.params.ShackHartmannCorrection);
+if ~isempty(HD.params.ShackHartmannCorrection)
+    app.ZernikeProjectionCheckBox.Value = HD.params.ShackHartmannCorrection.ZernikeProjection;
+    app.shackhartmannzernikeranksEditField.Value = HD.params.ShackHartmannCorrection.zernikeranks;
+    app.subapnumpositionsEditField.Value = HD.params.ShackHartmannCorrection.subapnumpositions;
+    app.imagesubapsizeratioEditField.Value = HD.params.ShackHartmannCorrection.imagesubapsizeratio;
+    app.subaperturemarginEditField.Value = HD.params.ShackHartmannCorrection.subaperturemargin;
+    app.referenceimageDropDown.Value = HD.params.ShackHartmannCorrection.referenceimage;
+end
 end

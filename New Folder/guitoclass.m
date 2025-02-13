@@ -38,5 +38,17 @@ HD.params.time_range = [app.time_range1.Value, app.time_range2.Value];
 % Flatfield correction
 HD.params.flatfield_gw = app.flat_field_gw.Value;
 
+% Shack-Hartmann correction
+if app.ShackHartmannCheckBox.Value
+    HD.params.ShackHartmannCorrection.ZernikeProjection = app.ZernikeProjectionCheckBox.Value;
+    HD.params.ShackHartmannCorrection.zernikeranks = app.shackhartmannzernikeranksEditField.Value;
+    HD.params.ShackHartmannCorrection.subapnumpositions = app.subapnumpositionsEditField.Value;
+    HD.params.ShackHartmannCorrection.imagesubapsizeratio = app.imagesubapsizeratioEditField.Value;
+    HD.params.ShackHartmannCorrection.subaperturemargin = app.subaperturemarginEditField.Value;
+    HD.params.ShackHartmannCorrection.referenceimage = app.referenceimageDropDown.Value;
+else
+    HD.params.ShackHartmannCorrection = [];
+end
+
 
 end

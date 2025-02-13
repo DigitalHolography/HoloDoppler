@@ -13,7 +13,11 @@ classdef HoloReader
         all_frames % 3D array of all frames in case there is enough memory to load all frames
     end
     methods
-        function obj = HoloReader(filename)
+        function obj = HoloReader(filename, LoadAllFile)
+            if nargin < 2
+                LoadAllFile = false;
+            end
+
             obj.filename = filename;
             
             %% parse header
@@ -94,7 +98,7 @@ classdef HoloReader
             
             % Check if available memory is above a certain threshold in GB
             
-            if 1
+            if LoadAllFile
                 memoryInfo = memory;
                 availableMemoryGB = memoryInfo.MemAvailableAllArrays / 1e9;
                 

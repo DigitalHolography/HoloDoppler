@@ -126,7 +126,7 @@ classdef RenderingClass < handle
             
             %2) Spatial transformation (from Frames to H)
             
-            doFH = doFrames | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | obj.FramesChanged | ~options.cache_intermediate_results ;
+            doFH = doFrames | ParamChanged.spatial_transformation | ParamChanged.spatial_propagation | ParamChanged.ShackHartmannCorrection | obj.FramesChanged | ~options.cache_intermediate_results ;
             
             if doFH % change or if the frames changed
                 switch Params.spatial_transformation
@@ -149,7 +149,7 @@ classdef RenderingClass < handle
                 
                 if ~isempty(Params.ShackHartmannCorrection)
                     if ParamChanged.ShackHartmannCorrection | isempty(obj.ShackHartmannMask)
-                        obj.ShackHartmannMask = calculate_shackhartmannmask(obj.FH,Params.spatial_transformation,Params.spatial_propagation,Params.ShackHartmannCorrection);
+                        obj.ShackHartmannMask = calculate_shackhartmannmask(obj.FH,Params.spatial_transformation,Params.spatial_propagation, Params.time_range, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
                     end
                     obj.FH = obj.FH .* obj.ShackHartmannMask;
                 end
