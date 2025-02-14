@@ -74,7 +74,11 @@ classdef HoloDopplerClass < handle
                     try
                         obj.file.fs = obj.reader.footer.info.camera_fps/1000; %conversion in kHz;
                     catch
-                        obj.file.fs = obj.reader.footer.info.input_fps/1000; %conversion in kHz;
+                        try
+                            obj.file.fs = obj.reader.footer.info.input_fps/1000; %conversion in kHz;
+                        catch
+                            obj.file.fs = obj.view.LastParams.fs; % default value if nothing at all found
+                        end
                     end
                     obj.file.num_frames = double(obj.reader.num_frames);
                 case '.cine'
