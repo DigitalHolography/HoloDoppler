@@ -1,6 +1,6 @@
 function highest_number = get_highest_number_in_files(directory, search_str)
     % Initialize the highest number to be -Inf (so it can be updated)
-    highest_number = -Inf;
+    highest_number = 0;
     
     % List all files in the directory
     files = dir(directory);
@@ -29,7 +29,7 @@ function highest_number = get_highest_number_in_files(directory, search_str)
     end
     
     % If no valid number is found, return a message or default value (e.g., -Inf)
-    if highest_number == -Inf
+    if highest_number == 0
         disp('No files with the specified string and a number at the end were found.');
     end
 end
