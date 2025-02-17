@@ -18,6 +18,7 @@ classdef ImageTypeList2 < handle
         moment_2
         choroid
         denoised
+        cluster_projection
     end
     
     methods
@@ -39,6 +40,7 @@ classdef ImageTypeList2 < handle
             obj.moment_2 = ImageType('M2');
             obj.choroid = ImageType('choroid', struct('intervals_0', [], 'intervals_1', []));
             obj.denoised = ImageType('denoised');
+            obj.cluster_projection = ImageType('cluster_projection');
             
         end
         
@@ -221,6 +223,66 @@ classdef ImageTypeList2 < handle
                 SHdenoised = denoiseNGMeet(SH,'Sigma',0.01,'NumIterations',2);
                 img = moment0(SHdenoised, r1, r2 , Params.fs, NT, 0);
                 obj.denoised.image = img;
+                catch ME
+                    % Display error message and line number
+                    fprintf('Error: %s\n', ME.message);
+                    fprintf('Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
+                    obj.denoised.image = [];
+                end
+            end
+
+            if obj.cluster_projection.is_selected
+                try
+                    % Get the size of the 3D array
+
+                    if 0
+                        [xSize, ySize, zSize] = size(SH(1:4:end,1:4:end,1:1:end));
+    
+                        % Generate grid coordinates for each voxel
+                        [x, y, z] = ndgrid(1:xSize, 1:ySize, 1:zSize);
+    
+                        % Flatten the 3D array into a list of points
+                        points = [64*x(:), 64*y(:), z(:)]; % add more weight to the frequency dimension z
+                        values = SH(1:4:end,1:4:end,1:1:end);  % Flatten values as well
+                        values = values(:);
+                        % Combine spatial and intensity information (optional)
+                        features = [points, values]; % [x, y, z, intensity]
+    
+                        % Number of clusters (N)
+                        N = 3;
+    
+                        % Apply K-means clustering
+                        [idx, ~] = kmeans(features, N, 'Distance', 'sqeuclidean');
+    
+                        % Reshape the cluster labels back to 3D
+                        clusters = reshape(idx, xSize, ySize, zSize);
+                        
+                        colors = lines(N);
+    
+                        image = 0;
+    
+                        for i=1:N
+                            image = image + rescale(sum((clusters==i),3).*reshape(colors(i,:),1,1,[]));
+                        end
+                    elseif 1
+                        video = SH(1:4:end,1:4:end,1:1:end);
+                        [numX, numY, zSize] = size(video);
+                        video_flat = reshape(video,[numY*numX,zSize]);
+                        if true
+                            video_flat = normalize(video_flat,2);
+                        end
+                        N=3;
+                        [idx] = kmeans(video_flat,N,'Distance',"cityblock",'MaxIter',100);
+                        idx = reshape(idx,[numX,numY]);
+                        image = ind2rgb(idx,lines(N));
+
+                    elseif ~1
+                        image = max(diff(SH(1:4:end,1:4:end,1:1:end),3),[],3);
+                        
+                    end
+
+                    obj.cluster_projection.image = image;
+
                 catch ME
                     % Display error message and line number
                     fprintf('Error: %s\n', ME.message);

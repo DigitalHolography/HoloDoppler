@@ -16,6 +16,10 @@ if ~exist('size_factor', 'var')
     size_factor = 1;
 end
 
+if ~exist('reg_batch_size', 'var')
+    reg_batch_size = size(FH, 3);
+end
+
 Nx = size(FH, 1);
 Ny = size(FH, 2);
 magic_number = 710; % This is the magic number

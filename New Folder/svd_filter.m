@@ -15,6 +15,7 @@ if ~ thresh
     % thresh parameter does not exist, so default it to something
     thresh = ceil(f1 * batch_size / fs *2 );
 end
+thresh = max(min(thresh,batch_size),1);
 if nargin < 5 || isempty(stride_param)
     % stride_param doesnt exist so default to 1 (full H)
     stride_param = 1;

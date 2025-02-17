@@ -20,14 +20,15 @@ classdef HoloDopplerClass < handle
         end
         
         function LoadFile(obj,file_path,opt)
-
+            
             arguments
                 obj
                 file_path
                 opt.params = []; % Optional parameters to force in case the default behavior (finding existing in the folder is not ideal)
+                opt.LoadAll = false; % Optional parameter to Load All the file in memory if possible
             end
-
-
+            
+            
             %LoadFile
             
             % 0) Reset the reader and the file
@@ -52,7 +53,7 @@ classdef HoloDopplerClass < handle
             switch ext
                 case '.holo'
                     try
-                        obj.reader = HoloReader(obj.file.path);
+                        obj.reader = HoloReader(obj.file.path, opt.LoadAll);
                     catch e
                         obj.file = [];
                         obj.reader = [];
@@ -73,7 +74,11 @@ classdef HoloDopplerClass < handle
                     try
                         obj.file.fs = obj.reader.footer.info.camera_fps/1000; %conversion in kHz;
                     catch
-                        obj.file.fs = obj.reader.footer.info.input_fps/1000; %conversion in kHz;
+                        try
+                            obj.file.fs = obj.reader.footer.info.input_fps/1000; %conversion in kHz;
+                        catch
+                            obj.file.fs = obj.view.LastParams.fs; % default value if nothing at all found
+                        end
                     end
                     obj.file.num_frames = double(obj.reader.num_frames);
                 case '.cine'
@@ -155,11 +160,11 @@ classdef HoloDopplerClass < handle
                 obj.params = jsondecode(fread(fid, inf, '*char')');
                 fclose(fid);
             end
-
+            
             if ~isempty(opt.params) % if there is optinonal parameters given
                 obj.setParams(opt.params);
             end
-
+            
             
             % 4) Add last params from the default init
             
@@ -174,7 +179,7 @@ classdef HoloDopplerClass < handle
         
         function setInitParams(obj)
             % reset the initial parameters for all the parameters used in this class
-
+            
             obj.params = [];
             
             obj.params.batch_size = 512;
@@ -198,15 +203,18 @@ classdef HoloDopplerClass < handle
                 obj.params.(fields{i}) = params.(fields{i});
             end
         end
-
+        
         function saveParams(obj, filename)
             % save the params as a configfile for the file filename in the
             % current file directory
             if nargin < 2
-                filename = obj.file.filename;
+                name = obj.file.filename;
+                dir = obj.file.dir;
+            else
+                [dir,name,~] = fileparts(filename);
             end
-            index = get_highest_number_in_files(obj.file.dir,strcat(filename,'_','RenderingParameters'));
-            fid = fopen(fullfile(obj.file.dir,strcat(filename,'_','RenderingParameters_',num2str(index+1),'.json')), 'w');
+            index = get_highest_number_in_files(obj.file.dir,strcat(name,'_','RenderingParameters'));
+            fid = fopen(fullfile(dir,strcat(name,'_','RenderingParameters_',num2str(index+1),'.json')), 'w');
             fwrite(fid, jsonencode(obj.params,"PrettyPrint",true), 'char');
             fclose(fid);
             
@@ -281,23 +289,23 @@ classdef HoloDopplerClass < handle
             if isempty(obj.reader)
                 error("No file loaded")
             end
-
+            
             if ~obj.params.first_frame
                 first_frame = 1;
             else
                 first_frame = obj.params.first_frame;
             end
-
+            
             if ~obj.params.end_frame
                 end_frame = obj.file.num_frames;
             else
                 end_frame = obj.params.end_frame;
             end
-
+            
             num_batches = floor((end_frame-first_frame)/obj.params.batch_stride);
             
             disp(['Rendering ' num2str(num_batches) 'frames.']);
-
+            
             if num_batches == 0
                 return
             end
@@ -361,7 +369,7 @@ classdef HoloDopplerClass < handle
             
             % 1) Initialize the video object
             
-            if isempty(obj.video)
+            if isempty(obj.video) | numel(obj.video) ~= num_batches
                 v(1,num_batches) = ImageTypeList2();
                 obj.video= v; clear v;
             end
@@ -386,15 +394,10 @@ classdef HoloDopplerClass < handle
                 video = obj.video;
                 
                 [dir,name,ext] = fileparts(file_path);
+                reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
+                
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
                     view = RenderingClass();
-                    reader = [];
-                    switch ext
-                        case '.holo'
-                            reader = HoloReader(file_path);
-                        case '.cine'
-                            reader = CineReader(file_path);
-                    end
                     view.setFrames(reader.read_frame_batch(params.batch_size, (i-1) * params.batch_stride + 1));
                     view.Render(params,params.image_types,cache_intermediate_results=false);
                     video(i) = ImageTypeList2();
@@ -420,7 +423,7 @@ classdef HoloDopplerClass < handle
             if nargin<3
                 params = obj.params;
             end
-
+            
             VideoSavingTime = tic;
             
             index = get_highest_number_in_directories(obj.file.dir,strcat(obj.file.name,'_HD_'));
@@ -435,7 +438,18 @@ classdef HoloDopplerClass < handle
             
             for i = 1:numel(image_types)
                 tmp = [obj.video.(image_types{i})];
+                if strcmp(image_types{i},'spectrogram')
+                    sz = size(tmp(1).parameters.SH);
+                    sz = [sz length(tmp)];
+                    mat = reshape(tmp.parameters.SH,sz);
+                    generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = 2);
+                    continue
+                end
+                
                 mat = ((reshape([tmp.image],size(tmp(1).image,1),size(tmp(1).image,2),size(tmp(1).image,3),[])));
+                if all(size(size(mat)) == [1 3])
+                    mat = repmat(mat,[1 1 1 2]); % double the last frame if only one for tech issues
+                end
                 if ~isempty(mat)
                     if strcmp(image_types{i},'moment_0')  % raw moments are always outputted if they are selected
                         generate_video(mat,result_folder_path,strcat('moment0'),export_raw=1,temporal_filter = 2); % three cases just to rename each correctly for PW
@@ -455,19 +469,19 @@ classdef HoloDopplerClass < handle
                 
             end
             
-
-
+            
+            
             fid = fopen(fullfile(result_folder_path,strcat(obj.file.name,'_HD_',num2str(index+1),'_','RenderingParameters.json')), 'w');
             fwrite(fid, jsonencode(params, "PrettyPrint",true), 'char');
             fclose(fid);
-
+            
             %saving a small mat for old versions of PW
             cache.Fs = obj.params.fs*1000;
             cache.batch_stride = obj.params.batch_stride;
             cache.time_transform.f1 = obj.params.time_range(1);
             cache.time_transform.f2 = obj.params.time_range(2);
             save(fullfile(result_folder_path,'mat',strcat(obj.file.name,'_HD_',num2str(index+1),'.mat')),"cache");
-
+            
             fprintf("Video Saving took : %f s\n",toc(VideoSavingTime));
         end
         
@@ -516,9 +530,14 @@ classdef HoloDopplerClass < handle
         function ApplyRegistration(obj)
             num_batches = numel(obj.video);
             
-            for i = 1:num_batches
-                for j = 1:length(obj.params.image_types)
-                    obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, floor(obj.registration.shifts(:,i)));
+            for j = 1:length(obj.params.image_types)
+                try % in case of not the same image size
+                    ratio = size(obj.video(1).(obj.params.image_types{j}).image) / size(obj.video(1).(obj.params.power_Doppler).image);
+                catch
+                    ratio = [1 1];
+                end
+                for i = 1:num_batches
+                    obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, floor(obj.registration.shifts(:,i).*ratio'));
                 end
             end
         end
