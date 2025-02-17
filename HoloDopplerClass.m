@@ -474,6 +474,9 @@ classdef HoloDopplerClass < handle
             fid = fopen(fullfile(result_folder_path,strcat(obj.file.name,'_HD_',num2str(index+1),'_','RenderingParameters.json')), 'w');
             fwrite(fid, jsonencode(params, "PrettyPrint",true), 'char');
             fclose(fid);
+
+            % copy the HD version file
+            copyfile('version.txt',result_folder_path);
             
             %saving a small mat for old versions of PW
             cache.Fs = obj.params.fs*1000;
@@ -532,7 +535,7 @@ classdef HoloDopplerClass < handle
             
             for j = 1:length(obj.params.image_types)
                 try % in case of not the same image size
-                    ratio = size(obj.video(1).(obj.params.image_types{j}).image) / size(obj.video(1).(obj.params.power_Doppler).image);
+                    ratio = [size(obj.video(1).(obj.params.image_types{j}).image,1) size(obj.video(1).(obj.params.image_types{j}).image,2)] ./ size(obj.video(1).('power_Doppler').image);
                 catch
                     ratio = [1 1];
                 end
