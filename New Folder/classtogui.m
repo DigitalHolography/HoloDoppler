@@ -39,7 +39,7 @@ app.time_range1.Value = HD.params.time_range(1);
 app.time_range2.Value = HD.params.time_range(2);
 app.flat_field_gw.Value = HD.params.flatfield_gw;
 
-app.ShackHartmannCheckBox.Value = isempty(HD.params.ShackHartmannCorrection);
+app.ShackHartmannCheckBox.Value = ~isempty(HD.params.ShackHartmannCorrection);
 if ~isempty(HD.params.ShackHartmannCorrection)
     app.ZernikeProjectionCheckBox.Value = HD.params.ShackHartmannCorrection.ZernikeProjection;
     app.shackhartmannzernikeranksEditField.Value = HD.params.ShackHartmannCorrection.zernikeranks;

@@ -438,6 +438,14 @@ classdef HoloDopplerClass < handle
             
             for i = 1:numel(image_types)
                 tmp = [obj.video.(image_types{i})];
+                if strcmp(image_types{i},'spectrogram')
+                    sz = size(tmp(1).parameters.SH);
+                    sz = [sz length(tmp)];
+                    mat = reshape(tmp.parameters.SH,sz);
+                    generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = 2);
+                    continue
+                end
+                
                 mat = ((reshape([tmp.image],size(tmp(1).image,1),size(tmp(1).image,2),size(tmp(1).image,3),[])));
                 if all(size(size(mat)) == [1 3])
                     mat = repmat(mat,[1 1 1 2]); % double the last frame if only one for tech issues
