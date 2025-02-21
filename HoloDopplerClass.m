@@ -449,6 +449,7 @@ classdef HoloDopplerClass < handle
                     for j = 1:length(tmp)
                         mat(:,:,(j-1)*bs+1:j*bs) = tmp{j}.parameters.SH;
                     end
+                    generate_video(mat,result_folder_path,strcat('SH'),export_raw=1,temporal_filter = 2);
                     continue
                 else % image extraction
                     sz = size(tmp{1}.image);
