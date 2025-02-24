@@ -1,4 +1,4 @@
-classdef HoloReader
+classdef HoloReader < handle
     properties
         filename
         version
@@ -112,18 +112,20 @@ classdef HoloReader
                     fprintf('Available memory is above the threshold: %.2f GB > 3 * %.2f GB \n', availableMemoryGB, fileSizeGB);
                     fprintf('Loading file in memory... \n');
                     timeLoadinmem = tic;
-                    obj.all_frames = zeros(obj.frame_width, obj.frame_height, obj.num_frames,'uint8');
-                    fd = fopen(obj.filename, 'r');
+                    
                     if obj.endianness == 0
                         endian= 'l';
                     elseif obj.endianness == 1
                         endian= 'b';
                     end
-                    frame_size = double(obj.frame_width) * double(obj.frame_height) * double(obj.bit_depth/8);
-                    for i = 1:double(obj.num_frames)
-                        fseek(fd, 64 + (frame_size) * ((i-1)), 'bof');
-                        obj.all_frames(:, :, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint8=>uint8', endian), obj.frame_width, obj.frame_height);
-                    end
+
+                    frame_width = double(obj.frame_width);
+                    frame_height = double(obj.frame_height);
+                    fd = fopen(filename, 'r');
+                    fseek(fd, 64 + 0, 'bof');
+                    
+                    obj.all_frames = reshape(fread(fd, frame_width * frame_height * double(obj.num_frames) , 'uint8=>uint8', endian), frame_width, frame_height, []);
+                    
                     fprintf("Loading in memory time :\n");
                     toc(timeLoadinmem);
                 else

@@ -14,8 +14,8 @@ avg_M0_high = mean(M_freq_high, 3);
 avg_M0_low = mat2gray(avg_M0_low);
 avg_M0_high = mat2gray(avg_M0_high);
 
-img_low = flipud(interp2(avg_M0_low, 1));
-img_high = flipud(interp2(avg_M0_high, 1));
+img_low = (interp2(avg_M0_low, 1));
+img_high = (interp2(avg_M0_high, 1));
 
 % composite generation
 multiband_img = cat(3, img_high, cat(3, img_low, img_low));
