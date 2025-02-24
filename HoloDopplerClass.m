@@ -396,13 +396,28 @@ classdef HoloDopplerClass < handle
                 [dir,name,ext] = fileparts(file_path);
                 reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
                 
-                parfor (i = 1:(num_batches), obj.params.parfor_arg)
-                    view = RenderingClass();
-                    view.setFrames(reader.read_frame_batch(params.batch_size, (i-1) * params.batch_stride + 1));
-                    view.Render(params,params.image_types,cache_intermediate_results=false);
-                    video(i) = ImageTypeList2();
-                    video(i).copy_from(view.Output);
-                    send(D,0);
+                if isprop(reader,"all_frames") && ~isempty(reader.all_frames)
+                    all_frames = reshape(reader.all_frames,size(reader.all_frames,1),size(reader.all_frames,2),params.batch_size,[]);
+                    parfor (i = 1:(num_batches), obj.params.parfor_arg)
+                        view = RenderingClass();
+                        view.setFrames(all_frames(:,:,:,i));
+                        view.Render(params,params.image_types,cache_intermediate_results=false);
+                        video(i) = ImageTypeList2();
+                        video(i).copy_from(view.Output);
+                        send(D,0);
+                    end
+                else
+               
+                
+                    parfor (i = 1:(num_batches), obj.params.parfor_arg)
+                        view = RenderingClass();
+                        view.setFrames(reader.read_frame_batch(params.batch_size, (i-1) * params.batch_stride + 1));
+                        view.Render(params,params.image_types,cache_intermediate_results=false);
+                        video(i) = ImageTypeList2();
+                        video(i).copy_from(view.Output);
+                        send(D,0);
+                    end
+
                 end
                 obj.video = video;
             end
@@ -566,9 +581,14 @@ classdef HoloDopplerClass < handle
             
             num_batches = numel(obj.video);
             
-            for i = 1:num_batches
-                for j = 1:length(obj.params.image_types)
-                    obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, - floor(obj.registration.shifts(i)));
+            for j = 1:length(obj.params.image_types)
+                try % in case of not the same image size
+                    ratio = [size(obj.video(1).(obj.params.image_types{j}).image,1) size(obj.video(1).(obj.params.image_types{j}).image,2)] ./ size(obj.video(1).('power_Doppler').image);
+                catch
+                    ratio = [1 1];
+                end
+                for i = 1:num_batches
+                    obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, - floor(obj.registration.shifts(:,i).*ratio'));
                 end
             end
         end
@@ -577,8 +597,18 @@ classdef HoloDopplerClass < handle
             if nargin<2
                 images_type = obj.params.image_types{1};
             end
-            tmp = [obj.video.(images_type)];
-            implay(rescale(reshape([tmp.image],size(tmp(1).image,1),size(tmp(1).image,2),size(tmp(1).image,3),[])));
+            tmp = {obj.video.(images_type)};
+            % image extraction
+            sz = size(tmp{1}.image);
+            if length(sz)==2
+                sz = [sz 1];
+            end
+            sz = [sz length(tmp)];
+            mat = zeros(sz,'single');
+            for j = 1:length(tmp)
+                mat(:,:,:,j) = tmp{j}.image;
+            end
+            implay(rescale(mat));
         end
         
         function SelfTesting(obj)
