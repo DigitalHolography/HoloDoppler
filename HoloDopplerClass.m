@@ -208,7 +208,7 @@ classdef HoloDopplerClass < handle
             % save the params as a configfile for the file filename in the
             % current file directory
             if nargin < 2
-                name = obj.file.filename;
+                name = obj.file.name;
                 dir = obj.file.dir;
             else
                 [dir,name,~] = fileparts(filename);
