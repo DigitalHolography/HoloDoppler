@@ -1,6 +1,6 @@
-classdef ImageTypeList2 < handle 
-
-    % images output types from the rendering pipeline 
+classdef ImageTypeList2 < handle
+    
+    % images output types from the rendering pipeline
     properties
         power_Doppler
         power_1_Doppler
@@ -61,7 +61,7 @@ classdef ImageTypeList2 < handle
             end
             
         end
-
+        
         function copy_from(obj, o)
             fields = fieldnames(o);
             for i=1:length(fields)
@@ -79,17 +79,17 @@ classdef ImageTypeList2 < handle
                 
             else
                 % Else you only select the requested ones
-
+                
                 if varargin{1} == "all"
                     for field = fieldnames(obj)'
                         obj.(field{:}).select();
                     end
                     return
                 end
-
+                
                 obj.select(); %clear all first
-
-
+                
+                
                 for i = 1:nargin - 1
                     obj.(varargin{i}).select();
                 end
@@ -128,13 +128,13 @@ classdef ImageTypeList2 < handle
             r1 = Params.time_range(1);
             r2 = Params.time_range(2);
             [~,~,NT] = size(SHin);
-
             
-
+            
+            
             
             % clear phase
             SH = abs(SHin) .^ 2;
-
+            
             if obj.pure_PCA.is_selected
                 if ~(r1-floor(r1)==0) && ~(r2-floor(r2)==0) %both not integer
                     r1p = floor(r1*2/Params.fs*NT);
@@ -153,19 +153,24 @@ classdef ImageTypeList2 < handle
                 img = moment0(SH, r1, r2, Params.fs, NT, Params.flatfield_gw);
                 obj.power_Doppler.image = img;
             end
-
+            
             if obj.power_1_Doppler.is_selected % Power Doppler has been chosen
                 img = moment1(SH, r1, r2, Params.fs, NT, Params.flatfield_gw);
                 obj.power_1_Doppler.image = img;
             end
-
+            
             if obj.power_2_Doppler.is_selected % Power Doppler has been chosen
                 img = moment2(SH, r1, r2, Params.fs, NT, Params.flatfield_gw);
                 obj.power_2_Doppler.image = img;
             end
-
+            
             if obj.color_Doppler.is_selected % Color Doppler has been chosen
-                [freq_low, freq_high] = composite(SH, r1, (r1+r2)/2, r2, Params.fs, NT, max(Params.flatfield_gw,20));
+                if Params.time_range_extra <0
+                    r3 = (r1+r2)/2;
+                else
+                    r3 = Params.time_range_extra;
+                end
+                [freq_low, freq_high] = composite(SH, r1, r3, r2, Params.fs, NT, max(Params.flatfield_gw,20));
                 obj.color_Doppler.image = construct_colored_image(gather(freq_low),gather(freq_high));
             end
             
@@ -184,7 +189,7 @@ classdef ImageTypeList2 < handle
             
             if obj.moment_0.is_selected % Moment 0 has been chosen
                 img = moment0(SH, r1, r2 , Params.fs, NT, 0);
-                obj.moment_0.image = img;            
+                obj.moment_0.image = img;
             end
             
             if obj.moment_1.is_selected % Moment 0 has been chosen
@@ -196,7 +201,7 @@ classdef ImageTypeList2 < handle
                 img = moment2(SH, r1, r2, Params.fs, NT, 0);
                 obj.moment_2.image = img;
             end
-
+            
             if obj.choroid.is_selected % choroid has been chosen
                 numX = size(SH, 1);
                 numY = size(SH, 2);
@@ -208,21 +213,21 @@ classdef ImageTypeList2 < handle
                 for freqIdx = 1:num_F
                     img = moment0(SH, frequencies(freqIdx), frequencies(freqIdx+1), Params.fs, NT, Params.flatfield_gw);
                     img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
-
+                    
                     obj.choroid.parameters.intervals_0(:, :, :, freqIdx) = img;
-
+                    
                     img = moment1(SH, frequencies(freqIdx), frequencies(freqIdx+1), Params.fs, NT, Params.flatfield_gw);
                     img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
-
+                    
                     obj.choroid.parameters.intervals_1(:, :, :, freqIdx) = img;
                 end
             end
-
-            if obj.denoised.is_selected 
-                try 
-                SHdenoised = denoiseNGMeet(SH,'Sigma',0.01,'NumIterations',2);
-                img = moment0(SHdenoised, r1, r2 , Params.fs, NT, 0);
-                obj.denoised.image = img;
+            
+            if obj.denoised.is_selected
+                try
+                    SHdenoised = denoiseNGMeet(SH,'Sigma',0.01,'NumIterations',2);
+                    img = moment0(SHdenoised, r1, r2 , Params.fs, NT, 0);
+                    obj.denoised.image = img;
                 catch ME
                     % Display error message and line number
                     fprintf('Error: %s\n', ME.message);
@@ -230,37 +235,37 @@ classdef ImageTypeList2 < handle
                     obj.denoised.image = [];
                 end
             end
-
+            
             if obj.cluster_projection.is_selected
                 try
                     % Get the size of the 3D array
-
+                    
                     if 0
                         [xSize, ySize, zSize] = size(SH(1:4:end,1:4:end,1:1:end));
-    
+                        
                         % Generate grid coordinates for each voxel
                         [x, y, z] = ndgrid(1:xSize, 1:ySize, 1:zSize);
-    
+                        
                         % Flatten the 3D array into a list of points
                         points = [64*x(:), 64*y(:), z(:)]; % add more weight to the frequency dimension z
                         values = SH(1:4:end,1:4:end,1:1:end);  % Flatten values as well
                         values = values(:);
                         % Combine spatial and intensity information (optional)
                         features = [points, values]; % [x, y, z, intensity]
-    
+                        
                         % Number of clusters (N)
                         N = 3;
-    
+                        
                         % Apply K-means clustering
                         [idx, ~] = kmeans(features, N, 'Distance', 'sqeuclidean');
-    
+                        
                         % Reshape the cluster labels back to 3D
                         clusters = reshape(idx, xSize, ySize, zSize);
                         
                         colors = lines(N);
-    
+                        
                         image = 0;
-    
+                        
                         for i=1:N
                             image = image + rescale(sum((clusters==i),3).*reshape(colors(i,:),1,1,[]));
                         end
@@ -275,14 +280,14 @@ classdef ImageTypeList2 < handle
                         [idx] = kmeans(video_flat,N,'Distance',"cityblock",'MaxIter',100);
                         idx = reshape(idx,[numX,numY]);
                         image = ind2rgb(idx,lines(N));
-
+                        
                     elseif ~1
                         image = max(diff(SH(1:4:end,1:4:end,1:1:end),3),[],3);
                         
                     end
-
+                    
                     obj.cluster_projection.image = image;
-
+                    
                 catch ME
                     % Display error message and line number
                     fprintf('Error: %s\n', ME.message);
@@ -290,7 +295,7 @@ classdef ImageTypeList2 < handle
                     obj.denoised.image = [];
                 end
             end
-
+            
         end
         
     end

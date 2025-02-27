@@ -40,7 +40,8 @@ classdef RenderingClass < handle
             Params.svd_threshold = false;
             Params.svd_stride = [];
             Params.time_transform = "FFT";
-            Params.time_range = [1.1,10.5];
+            Params.time_range = [6,10.5];
+            Params.time_range_extra = -1;
             Params.flatfield_gw = 35;
             Params.ShackHartmannCorrection = [];
             obj.LastParams = Params;

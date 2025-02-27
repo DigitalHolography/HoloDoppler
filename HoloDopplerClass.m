@@ -188,7 +188,7 @@ classdef HoloDopplerClass < handle
             obj.params.frame_position = 1;
             obj.params.registration_disc_ratio = 0.8;
             obj.params.image_types = {'power_Doppler','color_Doppler','directional_Doppler','moment_0','moment_1','moment_2'};
-            obj.params.parfor_arg = 0;
+            obj.params.parfor_arg = 10;
             obj.params.batch_size_registration_ref = 512;
             obj.params.image_registration = true;
             obj.params.first_frame = 0;
@@ -407,8 +407,8 @@ classdef HoloDopplerClass < handle
                         send(D,0);
                     end
                 else
-               
-                
+                    
+                    
                     parfor (i = 1:(num_batches), obj.params.parfor_arg)
                         view = RenderingClass();
                         view.setFrames(reader.read_frame_batch(params.batch_size, (i-1) * params.batch_stride + 1));
@@ -417,7 +417,7 @@ classdef HoloDopplerClass < handle
                         video(i).copy_from(view.Output);
                         send(D,0);
                     end
-
+                    
                 end
                 obj.video = video;
             end
@@ -429,6 +429,9 @@ classdef HoloDopplerClass < handle
             end
             
             fprintf("Video Rendering took : %f s\n",toc(VideoRenderingTime));
+            
+            %% Save the video
+            obj.SaveVideo();
         end
         
         function SaveVideo(obj, image_types, params)
@@ -440,6 +443,8 @@ classdef HoloDopplerClass < handle
             end
             
             VideoSavingTime = tic;
+            
+            disp('Saving video...');
             
             index = get_highest_number_in_directories(obj.file.dir,strcat(obj.file.name,'_HD_'));
             result_folder_path = fullfile(obj.file.dir,strcat(obj.file.name,'_HD_',num2str(index+1)));
@@ -453,8 +458,8 @@ classdef HoloDopplerClass < handle
             
             for i = 1:numel(image_types)
                 tmp = {obj.video.(image_types{i})};
-
-
+                
+                
                 if strcmp(image_types{i},'spectrogram') %SH extraction
                     sz = size(tmp{1}.parameters.SH);
                     bs = sz(3); % SH binned batchsize
@@ -506,7 +511,7 @@ classdef HoloDopplerClass < handle
             fid = fopen(fullfile(result_folder_path,strcat(obj.file.name,'_HD_',num2str(index+1),'_','RenderingParameters.json')), 'w');
             fwrite(fid, jsonencode(params, "PrettyPrint",true), 'char');
             fclose(fid);
-
+            
             % copy the HD version file
             copyfile('version.txt',result_folder_path);
             
