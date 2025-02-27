@@ -424,8 +424,12 @@ classdef HoloDopplerClass < handle
             close(h);
             
             if obj.params.image_registration
-                obj.CalculateRegistration();
-                obj.ApplyRegistration();
+                if ismember('power_Doppler',obj.params.image_types)
+                    obj.CalculateRegistration();
+                    obj.ApplyRegistration();
+                else
+                    disp('You need power_Doppler for registration');
+                end
             end
             
             fprintf("Video Rendering took : %f s\n",toc(VideoRenderingTime));
@@ -471,6 +475,8 @@ classdef HoloDopplerClass < handle
                     end
                     generate_video(mat,result_folder_path,strcat('SH'),export_raw=1,temporal_filter = 2);
                     continue
+                elseif strcmp(image_types{i},'buckets')
+
                 else % image extraction
                     sz = size(tmp{1}.image);
                     if length(sz)==2

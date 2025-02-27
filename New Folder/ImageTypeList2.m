@@ -16,7 +16,7 @@ classdef ImageTypeList2 < handle
         moment_0
         moment_1
         moment_2
-        choroid
+        buckets
         denoised
         cluster_projection
     end
@@ -38,7 +38,7 @@ classdef ImageTypeList2 < handle
             obj.moment_0 = ImageType('M0');
             obj.moment_1 = ImageType('M1');
             obj.moment_2 = ImageType('M2');
-            obj.choroid = ImageType('choroid', struct('intervals_0', [], 'intervals_1', []));
+            obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', []));
             obj.denoised = ImageType('denoised');
             obj.cluster_projection = ImageType('cluster_projection');
             
@@ -202,24 +202,24 @@ classdef ImageTypeList2 < handle
                 obj.moment_2.image = img;
             end
             
-            if obj.choroid.is_selected % choroid has been chosen
+            if obj.buckets.is_selected % buckets has been chosen
                 numX = size(SH, 1);
                 numY = size(SH, 2);
                 num_F = 4;
-                obj.choroid.parameters.intervals_0 = zeros(numX, numY, 1, num_F);
-                obj.choroid.parameters.intervals_1 = zeros(numX, numY, 1, num_F);
+                obj.buckets.parameters.intervals_0 = zeros(numX, numY, 1, num_F);
+                obj.buckets.parameters.intervals_1 = zeros(numX, numY, 1, num_F);
                 circleMask = fftshift(diskMask(numY, numX, 0.15));
                 frequencies = linspace(r1, r2, num_F + 1);
                 for freqIdx = 1:num_F
                     img = moment0(SH, frequencies(freqIdx), frequencies(freqIdx+1), Params.fs, NT, Params.flatfield_gw);
                     img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                     
-                    obj.choroid.parameters.intervals_0(:, :, :, freqIdx) = img;
+                    obj.buckets.parameters.intervals_0(:, :, :, freqIdx) = img;
                     
                     img = moment1(SH, frequencies(freqIdx), frequencies(freqIdx+1), Params.fs, NT, Params.flatfield_gw);
                     img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                     
-                    obj.choroid.parameters.intervals_1(:, :, :, freqIdx) = img;
+                    obj.buckets.parameters.intervals_1(:, :, :, freqIdx) = img;
                 end
             end
             
