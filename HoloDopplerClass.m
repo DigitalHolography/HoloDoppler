@@ -216,7 +216,7 @@ classdef HoloDopplerClass < handle
             if nargin < 3
                 save_z = true;
             end
-
+            
             parms = obj.params;
             if ~save_z % if you dont want to save the z and prefer to take the automatic one
                 parms = rmfield(parms,'spatial_propagation');
@@ -491,7 +491,7 @@ classdef HoloDopplerClass < handle
                     for j = 1:length(tmp)
                         mat(:,:,:,j) = tmp{j}.image;
                     end
-                    generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = 1);
+                    generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = 0);
                     continue
                 elseif strcmp(image_types{i},'buckets')
                     sz = size(tmp{1}.parameters.intervals_0);
@@ -505,7 +505,7 @@ classdef HoloDopplerClass < handle
                             mat1(:,:,j,k) = tmp{j}.parameters.intervals_1(:,:,:,k);
                         end
                     end
-
+                    
                     f1 = obj.params.time_range(1);
                     f2 = obj.params.time_range(2);
                     for k=1:numF
@@ -615,7 +615,7 @@ classdef HoloDopplerClass < handle
             for j = 1:length(obj.params.image_types)
                 if strcmp(obj.params.image_types{j},'spectrogram') %SH extraction
                     sz = size(obj.video(1).spectrogram.parameters.SH);
-                    bs = sz(3); 
+                    bs = sz(3);
                     ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
                     for i = 1:num_batches
                         for m = 1:bs
@@ -654,7 +654,7 @@ classdef HoloDopplerClass < handle
             for j = 1:length(obj.params.image_types)
                 if strcmp(obj.params.image_types{j},'spectrogram') %SH extraction
                     sz = size(obj.video(1).spectrogram.parameters.SH);
-                    bs = sz(3); 
+                    bs = sz(3);
                     ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
                     for i = 1:num_batches
                         for m = 1:bs
@@ -700,10 +700,10 @@ classdef HoloDopplerClass < handle
             for j = 1:length(tmp)
                 mat(:,:,:,j) = tmp{j}.image;
             end
-
+            
             mat = rescale(mat);
             videofig(length(tmp),@redrawat);
-
+            
             function redrawat(frame_index)
                 imshow(mat(:,:,frame_index));
                 axis image;

@@ -216,7 +216,7 @@ classdef RenderingClass < handle
             
             if doSH
                 
-                obj.SH = permute(obj.SH, [2 1 3]); % x<->y transpose due to the lens imaging
+                obj.SH = flip(permute(obj.SH, [2 1 3]),2); % x<->-y transpose due to the lens imaging
                 
             end
             
