@@ -9,6 +9,7 @@ classdef ImageTypeList2 < handle
         directional_Doppler
         pure_PCA
         spectrogram
+        autocorrelogram
         moment_0
         moment_1
         moment_2
@@ -27,6 +28,7 @@ classdef ImageTypeList2 < handle
             obj.directional_Doppler = ImageType('directional', struct('M0_pos', [], 'M0_neg', []));
             obj.pure_PCA = ImageType('PCA');
             obj.spectrogram = ImageType('spectrogram', struct('vector', [], 'SH', []));
+            obj.autocorrelogram = ImageType('autocorrelogram');
             obj.moment_0 = ImageType('M0');
             obj.moment_1 = ImageType('M1');
             obj.moment_2 = ImageType('M2');
@@ -188,6 +190,20 @@ classdef ImageTypeList2 < handle
 
                 frame = getframe(fi); % Capture the figure
                 obj.spectrogram.image = frame.cdata; 
+            end
+
+            if obj.autocorrelogram.is_selected
+
+                fi=figure("Visible", "off");
+                indices = ((0:(NT-1))-NT/2).* (1/(Params.fs*1000));
+                spect = abs(squeeze(sum(SHin, [1 2])));
+
+                plot(indices, 10*log10(spect));
+                xlabel('Time (s)');
+                ylabel('(dB)');
+
+                frame = getframe(fi); % Capture the figure
+                obj.autocorrelogram.image = frame.cdata; 
             end
             
             if obj.moment_0.is_selected % Moment 0 has been chosen

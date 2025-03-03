@@ -202,9 +202,9 @@ classdef RenderingClass < handle
                         obj.SH = fft(obj.H, [], 3);
                     case 'autocorrelation'
                         [a,b,c] = size(obj.H);
-                        xcorrResult = arrayfun(@(i, j) xcorr(obj.H(i, j, :)), ...
-                (1:a)', (1:b), 'UniformOutput', false);
-                        obj.SH = cat(3, xcorrResult{:});
+                        tmp = reshape(obj.H, a*b, c);
+                        out = arrayfun(@(lm) xcorr(tmp(lm,:)),(1:a*b), 'UniformOutput', false);
+                        obj.SH = reshape(cell2mat(out),a,b,[]);
                     case 'None'
                         obj.SH = obj.H;
                 end
