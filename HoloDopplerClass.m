@@ -487,9 +487,12 @@ classdef HoloDopplerClass < handle
                             mat1(:,:,j,k) = tmp{j}.parameters.intervals_1(:,:,:,k);
                         end
                     end
+
+                    f1 = obj.params.time_range(1);
+                    f2 = obj.params.time_range(2);
                     for k=1:numF
-                        generate_video(mat0(:,:,:,k),result_folder_path,strcat('buckets_sym'),export_raw=0,temporal_filter = 2);
-                        generate_video(mat1(:,:,:,k),result_folder_path,strcat('buckets_asym'),export_raw=0,temporal_filter = 2);
+                        generate_video(mat0(:,:,:,k),result_folder_path,strcat('buckets_sym_',num2str(f1 +(k-1)/numF * (f2-f1)),'_',num2str(f1 +(k)/numF * (f2-f1)),'kHz'),export_raw=0,temporal_filter = 2);
+                        generate_video(mat1(:,:,:,k),result_folder_path,strcat('buckets_asym',num2str(f1 +(k-1)/numF * (f2-f1)),'_',num2str(f1 +(k)/numF * (f2-f1)),'kHz'),export_raw=0,temporal_filter = 2);
                     end
                 else % image extraction
                     sz = size(tmp{1}.image);
@@ -591,6 +594,28 @@ classdef HoloDopplerClass < handle
             num_batches = numel(obj.video);
             
             for j = 1:length(obj.params.image_types)
+                if strcmp(obj.params.image_types{i},'spectrogram') %SH extraction
+                    sz = size(obj.video(1).spectrogram.parameters.SH);
+                    bs = sz(3); 
+                    ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
+                    for i = 1:num_batches
+                        for m = 1:bs
+                            obj.video(i).('spectrogram').parameters.SH(:,:,m) = circshift(obj.video(i).('spectrogram').parameters.SH(:,:,m), floor(obj.registration.shifts(:,i).*ratio'));
+                        end
+                    end
+                    continue
+                elseif strcmp(obj.params.image_types{i},'buckets')
+                    sz = size(obj.video(1).buckets.parameters.intervals_0);
+                    numF = sz(4);
+                    ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
+                    for i = 1:num_batches
+                        for k=1:numF
+                            obj.video(i).('buckets').parameters.intervals_0(:,:,:,k) = circshift(obj.video(i).('buckets').parameters.intervals_0(:,:,:,k), floor(obj.registration.shifts(:,i).*ratio'));
+                            obj.video(i).('buckets').parameters.intervals_1(:,:,:,k) = circshift(obj.video(i).('buckets').parameters.intervals_1(:,:,:,k), floor(obj.registration.shifts(:,i).*ratio'));
+                        end
+                    end
+                    continue
+                end
                 try % in case of not the same image size
                     ratio = [size(obj.video(1).(obj.params.image_types{j}).image,1) size(obj.video(1).(obj.params.image_types{j}).image,2)] ./ size(obj.video(1).('power_Doppler').image);
                 catch
@@ -599,6 +624,7 @@ classdef HoloDopplerClass < handle
                 for i = 1:num_batches
                     obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, floor(obj.registration.shifts(:,i).*ratio'));
                 end
+                
             end
         end
         
@@ -607,6 +633,28 @@ classdef HoloDopplerClass < handle
             num_batches = numel(obj.video);
             
             for j = 1:length(obj.params.image_types)
+                if strcmp(obj.params.image_types{i},'spectrogram') %SH extraction
+                    sz = size(obj.video(1).spectrogram.parameters.SH);
+                    bs = sz(3); 
+                    ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
+                    for i = 1:num_batches
+                        for m = 1:bs
+                            obj.video(i).('spectrogram').parameters.SH(:,:,m) = circshift(obj.video(i).('spectrogram').parameters.SH(:,:,m), - floor(obj.registration.shifts(:,i).*ratio'));
+                        end
+                    end
+                    continue
+                elseif strcmp(obj.params.image_types{i},'buckets')
+                    sz = size(obj.video(1).buckets.parameters.intervals_0);
+                    numF = sz(4);
+                    ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
+                    for i = 1:num_batches
+                        for k=1:numF
+                            obj.video(i).('buckets').parameters.intervals_0(:,:,:,k) = circshift(obj.video(i).('buckets').parameters.intervals_0(:,:,:,k), - floor(obj.registration.shifts(:,i).*ratio'));
+                            obj.video(i).('buckets').parameters.intervals_1(:,:,:,k) = circshift(obj.video(i).('buckets').parameters.intervals_1(:,:,:,k), - floor(obj.registration.shifts(:,i).*ratio'));
+                        end
+                    end
+                    continue
+                end
                 try % in case of not the same image size
                     ratio = [size(obj.video(1).(obj.params.image_types{j}).image,1) size(obj.video(1).(obj.params.image_types{j}).image,2)] ./ size(obj.video(1).('power_Doppler').image);
                 catch
