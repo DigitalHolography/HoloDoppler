@@ -204,7 +204,7 @@ classdef HoloDopplerClass < handle
             end
         end
         
-        function saveParams(obj, filename)
+        function saveParams(obj, filename, save_z)
             % save the params as a configfile for the file filename in the
             % current file directory
             if nargin < 2
@@ -213,9 +213,17 @@ classdef HoloDopplerClass < handle
             else
                 [dir,name,~] = fileparts(filename);
             end
+            if nargin < 3
+                save_z = true;
+            end
+
+            parms = obj.params;
+            if ~save_z % if you dont want to save the z and prefer to take the automatic one
+                parms = rmfield(parms,'spatial_propagation');
+            end
             index = get_highest_number_in_files(obj.file.dir,strcat(name,'_','RenderingParameters'));
             fid = fopen(fullfile(dir,strcat(name,'_','RenderingParameters_',num2str(index+1),'.json')), 'w');
-            fwrite(fid, jsonencode(obj.params,"PrettyPrint",true), 'char');
+            fwrite(fid, jsonencode(parms,"PrettyPrint",true), 'char');
             fclose(fid);
             
         end
