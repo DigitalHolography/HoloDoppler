@@ -179,31 +179,36 @@ classdef ImageTypeList2 < handle
                 bin_w = 16;
                 obj.spectrogram.parameters.SH = imresize3(gather(SH), [size(SH, 1) / bin_x size(SH, 2) / bin_y size(SH, 3) / bin_w], 'Method', 'linear');
                 obj.spectrogram.parameters.vector = zeros(1, NT);
-
-                fi=figure("Visible", "off");
+                
+                fi=figure(96,"Visible", "off");
                 freqs = ((0:(NT-1))-NT/2).* (Params.fs / NT);
                 spect = fftshift(abs(squeeze(sum(SHin, [1 2])).^2));
-
+                
                 plot(freqs, 10*log10(spect));
+                
+                ylim([15 200]);
                 xlabel('Frequency (kHz)');
                 ylabel('Power Spectrum Density (dB)');
-
+                
                 frame = getframe(fi); % Capture the figure
-                obj.spectrogram.image = frame.cdata; 
+                obj.spectrogram.image = frame.cdata;
             end
-
+            
             if obj.autocorrelogram.is_selected
-
-                fi=figure("Visible", "off");
+                
+                fi=figure(97,"Visible", "off");
                 indices = ((0:(NT-1))-NT/2).* (1/(Params.fs*1000));
                 spect = abs(squeeze(sum(SHin, [1 2])));
-
+                
                 plot(indices, 10*log10(spect));
+                
+                xlim(min(indices), max(indices));
+                ylim([130 180]);
                 xlabel('Time (s)');
                 ylabel('(dB)');
-
+                
                 frame = getframe(fi); % Capture the figure
-                obj.autocorrelogram.image = frame.cdata; 
+                obj.autocorrelogram.image = frame.cdata;
             end
             
             if obj.moment_0.is_selected % Moment 0 has been chosen
