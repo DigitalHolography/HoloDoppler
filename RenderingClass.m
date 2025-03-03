@@ -200,6 +200,11 @@ classdef RenderingClass < handle
                         obj.SH = short_time_ICA(obj.H);
                     case 'FFT'
                         obj.SH = fft(obj.H, [], 3);
+                    case 'autocorrelation'
+                        [a,b,c] = size(obj.H);
+                        xcorrResult = arrayfun(@(i, j) xcorr(obj.H(i, j, :)), ...
+                (1:a)', (1:b), 'UniformOutput', false);
+                        obj.SH = cat(3, xcorrResult{:});
                     case 'None'
                         obj.SH = obj.H;
                 end
