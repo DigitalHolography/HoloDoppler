@@ -3,7 +3,7 @@ function config_list = get_config_files(file_path)
     config_list = {};
     
     % Get the directory from the provided file path
-    [path, ~, ~] = fileparts(file_path);
+    [path, name, ~] = fileparts(file_path);
     
     % List all files in the directory
     files = dir(path);
@@ -14,7 +14,7 @@ function config_list = get_config_files(file_path)
         file_name = files(i).name;
         
         % Check if the file is a JSON file and contains "_RenderingParameters" in its name
-        if contains(file_name, '_RenderingParameters') && endsWith(file_name, '.json')
+        if contains(file_name, strcat(name,'_RenderingParameters')) && endsWith(file_name, '.json')
             % Construct the full file path
             full_file_path = fullfile(path, file_name);
             
