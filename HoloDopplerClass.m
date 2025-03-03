@@ -474,7 +474,6 @@ classdef HoloDopplerClass < handle
                         mat(:,:,(j-1)*bs+1:j*bs) = tmp{j}.parameters.SH;
                     end
                     generate_video(mat,result_folder_path,strcat('SH'),export_raw=1,temporal_filter = 2);
-                    continue
                 elseif strcmp(image_types{i},'buckets')
                     sz = size(tmp{1}.parameters.intervals_0);
                     sz(3) =  length(tmp);
@@ -494,6 +493,7 @@ classdef HoloDopplerClass < handle
                         generate_video(mat0(:,:,:,k),result_folder_path,strcat('buckets_sym_',num2str(f1 +(k-1)/numF * (f2-f1)),'_',num2str(f1 +(k)/numF * (f2-f1)),'kHz'),export_raw=0,temporal_filter = 2);
                         generate_video(mat1(:,:,:,k),result_folder_path,strcat('buckets_asym',num2str(f1 +(k-1)/numF * (f2-f1)),'_',num2str(f1 +(k)/numF * (f2-f1)),'kHz'),export_raw=0,temporal_filter = 2);
                     end
+                    continue
                 else % image extraction
                     sz = size(tmp{1}.image);
                     if length(sz)==2

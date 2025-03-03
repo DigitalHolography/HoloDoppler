@@ -7,10 +7,6 @@ classdef ImageTypeList2 < handle
         power_2_Doppler
         color_Doppler
         directional_Doppler
-        M0sM1r
-        velocity_estimate
-        phase_variation
-        dark_field_image
         pure_PCA
         spectrogram
         moment_0
@@ -29,10 +25,6 @@ classdef ImageTypeList2 < handle
             obj.power_2_Doppler = ImageType('power2');
             obj.color_Doppler = ImageType('color', struct('freq_low', [], 'freq_high', []));
             obj.directional_Doppler = ImageType('directional', struct('M0_pos', [], 'M0_neg', []));
-            obj.M0sM1r = ImageType('ratio');
-            obj.velocity_estimate = ImageType('velocity');
-            obj.phase_variation = ImageType('phase_variation');
-            obj.dark_field_image = ImageType('dark_field', struct('H', []));
             obj.pure_PCA = ImageType('PCA');
             obj.spectrogram = ImageType('spectrogram', struct('vector', [], 'SH', []));
             obj.moment_0 = ImageType('M0');
@@ -185,6 +177,17 @@ classdef ImageTypeList2 < handle
                 bin_w = 16;
                 obj.spectrogram.parameters.SH = imresize3(gather(SH), [size(SH, 1) / bin_x size(SH, 2) / bin_y size(SH, 3) / bin_w], 'Method', 'linear');
                 obj.spectrogram.parameters.vector = zeros(1, NT);
+
+                fi=figure("Visible", "off");
+                freqs = ((0:(NT-1))-NT/2).* (Params.fs / NT);
+                spect = fftshift(abs(squeeze(sum(SHin, [1 2])).^2));
+
+                plot(freqs, 10*log10(spect));
+                xlabel('Frequency (kHz)');
+                ylabel('Power Spectrum Density (dB)');
+
+                frame = getframe(fi); % Capture the figure
+                obj.spectrogram.image = frame.cdata; 
             end
             
             if obj.moment_0.is_selected % Moment 0 has been chosen
