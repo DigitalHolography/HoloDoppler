@@ -203,6 +203,13 @@ classdef HoloDopplerClass < handle
                 obj.params.(fields{i}) = params.(fields{i});
             end
         end
+
+         function loadParams(obj,path) 
+            fprintf('Loading parameters from %s\n', path);
+            fid = fopen(path, 'r');
+            obj.setParams(jsondecode(fread(fid, inf, '*char')'));
+            fclose(fid);
+         end
         
         function saveParams(obj, filename, save_z)
             % save the params as a configfile for the file filename in the

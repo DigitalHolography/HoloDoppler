@@ -12,6 +12,8 @@ function highest_number = get_highest_number_in_files(directory, search_str)
         
         % Check if the file name contains the search string and is a regular file
         if contains(file_name, search_str) && ~files(i).isdir
+
+            [~,file_name,ext] = fileparts(file_name);
             % Use a regular expression to find numbers at the end of the file name
             tokens = regexp(file_name, '(\d+)$', 'tokens');
             
