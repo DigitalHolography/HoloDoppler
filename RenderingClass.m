@@ -40,7 +40,8 @@ classdef RenderingClass < handle
             Params.svd_threshold = false;
             Params.svd_stride = [];
             Params.time_transform = "FFT";
-            Params.time_range = [1.1,10.5];
+            Params.time_range = [6,10.5];
+            Params.time_range_extra = -1;
             Params.flatfield_gw = 35;
             Params.ShackHartmannCorrection = [];
             obj.LastParams = Params;
@@ -199,6 +200,13 @@ classdef RenderingClass < handle
                         obj.SH = short_time_ICA(obj.H);
                     case 'FFT'
                         obj.SH = fft(obj.H, [], 3);
+                    case 'autocorrelation'
+                        [a,b,c] = size(obj.H);
+                        tmp = reshape(obj.H, a*b, c);
+                        out = arrayfun(@(lm) xcorr(tmp(lm,:),'normalized'),(1:a*b), 'UniformOutput', false);
+                        
+                        obj.SH = permute(reshape(cell2mat(out),[],a,b),[2 3 1]);
+                        %obj.SH = obj.SH(:,:,c/2:(c/2+c-1));
                     case 'None'
                         obj.SH = obj.H;
                 end
@@ -210,7 +218,7 @@ classdef RenderingClass < handle
             
             if doSH
                 
-                obj.SH = permute(obj.SH, [2 1 3]); % x<->y transpose due to the lens imaging
+                obj.SH = flip(permute(obj.SH, [2 1 3]),2); % x<->-y transpose due to the lens imaging
                 
             end
             

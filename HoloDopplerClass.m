@@ -188,7 +188,7 @@ classdef HoloDopplerClass < handle
             obj.params.frame_position = 1;
             obj.params.registration_disc_ratio = 0.8;
             obj.params.image_types = {'power_Doppler','color_Doppler','directional_Doppler','moment_0','moment_1','moment_2'};
-            obj.params.parfor_arg = 0;
+            obj.params.parfor_arg = 10;
             obj.params.batch_size_registration_ref = 512;
             obj.params.image_registration = true;
             obj.params.first_frame = 0;
@@ -204,7 +204,7 @@ classdef HoloDopplerClass < handle
             end
         end
         
-        function saveParams(obj, filename)
+        function saveParams(obj, filename, save_z)
             % save the params as a configfile for the file filename in the
             % current file directory
             if nargin < 2
@@ -213,9 +213,17 @@ classdef HoloDopplerClass < handle
             else
                 [dir,name,~] = fileparts(filename);
             end
+            if nargin < 3
+                save_z = true;
+            end
+            
+            parms = obj.params;
+            if ~save_z % if you dont want to save the z and prefer to take the automatic one
+                parms = rmfield(parms,'spatial_propagation');
+            end
             index = get_highest_number_in_files(obj.file.dir,strcat(name,'_','RenderingParameters'));
             fid = fopen(fullfile(dir,strcat(name,'_','RenderingParameters_',num2str(index+1),'.json')), 'w');
-            fwrite(fid, jsonencode(obj.params,"PrettyPrint",true), 'char');
+            fwrite(fid, jsonencode(parms,"PrettyPrint",true), 'char');
             fclose(fid);
             
         end
@@ -407,8 +415,8 @@ classdef HoloDopplerClass < handle
                         send(D,0);
                     end
                 else
-               
-                
+                    
+                    
                     parfor (i = 1:(num_batches), obj.params.parfor_arg)
                         view = RenderingClass();
                         view.setFrames(reader.read_frame_batch(params.batch_size, (i-1) * params.batch_stride + 1));
@@ -417,18 +425,25 @@ classdef HoloDopplerClass < handle
                         video(i).copy_from(view.Output);
                         send(D,0);
                     end
-
+                    
                 end
                 obj.video = video;
             end
             close(h);
             
             if obj.params.image_registration
-                obj.CalculateRegistration();
-                obj.ApplyRegistration();
+                if ismember('power_Doppler',obj.params.image_types)
+                    obj.CalculateRegistration();
+                    obj.ApplyRegistration();
+                else
+                    disp('You need power_Doppler for registration');
+                end
             end
             
             fprintf("Video Rendering took : %f s\n",toc(VideoRenderingTime));
+            
+            %% Save the video
+            obj.SaveVideo();
         end
         
         function SaveVideo(obj, image_types, params)
@@ -440,6 +455,8 @@ classdef HoloDopplerClass < handle
             end
             
             VideoSavingTime = tic;
+            
+            disp('Saving video...');
             
             index = get_highest_number_in_directories(obj.file.dir,strcat(obj.file.name,'_HD_'));
             result_folder_path = fullfile(obj.file.dir,strcat(obj.file.name,'_HD_',num2str(index+1)));
@@ -453,8 +470,8 @@ classdef HoloDopplerClass < handle
             
             for i = 1:numel(image_types)
                 tmp = {obj.video.(image_types{i})};
-
-
+                
+                
                 if strcmp(image_types{i},'spectrogram') %SH extraction
                     sz = size(tmp{1}.parameters.SH);
                     bs = sz(3); % SH binned batchsize
@@ -465,6 +482,36 @@ classdef HoloDopplerClass < handle
                         mat(:,:,(j-1)*bs+1:j*bs) = tmp{j}.parameters.SH;
                     end
                     generate_video(mat,result_folder_path,strcat('SH'),export_raw=1,temporal_filter = 2);
+                    sz = size(tmp{1}.image);
+                    if length(sz)==2
+                        sz = [sz 1];
+                    end
+                    sz = [sz length(tmp)];
+                    mat = zeros(sz,'single');
+                    for j = 1:length(tmp)
+                        mat(:,:,:,j) = tmp{j}.image;
+                    end
+                    generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = 0);
+                    continue
+                elseif strcmp(image_types{i},'buckets')
+                    sz = size(tmp{1}.parameters.intervals_0);
+                    sz(3) =  length(tmp);
+                    numF = sz(4);
+                    mat0 = zeros(sz,'single');
+                    mat1 = zeros(sz,'single');
+                    for j = 1:length(tmp)
+                        for k=1:numF
+                            mat0(:,:,j,k) = tmp{j}.parameters.intervals_0(:,:,:,k);
+                            mat1(:,:,j,k) = tmp{j}.parameters.intervals_1(:,:,:,k);
+                        end
+                    end
+                    
+                    f1 = obj.params.time_range(1);
+                    f2 = obj.params.time_range(2);
+                    for k=1:numF
+                        generate_video(mat0(:,:,:,k),result_folder_path,strcat('buckets_sym_',num2str(f1 +(k-1)/numF * (f2-f1)),'_',num2str(f1 +(k)/numF * (f2-f1)),'kHz'),export_raw=0,temporal_filter = 2);
+                        generate_video(mat1(:,:,:,k),result_folder_path,strcat('buckets_asym',num2str(f1 +(k-1)/numF * (f2-f1)),'_',num2str(f1 +(k)/numF * (f2-f1)),'kHz'),export_raw=0,temporal_filter = 2);
+                    end
                     continue
                 else % image extraction
                     sz = size(tmp{1}.image);
@@ -506,7 +553,7 @@ classdef HoloDopplerClass < handle
             fid = fopen(fullfile(result_folder_path,strcat(obj.file.name,'_HD_',num2str(index+1),'_','RenderingParameters.json')), 'w');
             fwrite(fid, jsonencode(params, "PrettyPrint",true), 'char');
             fclose(fid);
-
+            
             % copy the HD version file
             copyfile('version.txt',result_folder_path);
             
@@ -566,6 +613,28 @@ classdef HoloDopplerClass < handle
             num_batches = numel(obj.video);
             
             for j = 1:length(obj.params.image_types)
+                if strcmp(obj.params.image_types{j},'spectrogram') %SH extraction
+                    sz = size(obj.video(1).spectrogram.parameters.SH);
+                    bs = sz(3);
+                    ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
+                    for i = 1:num_batches
+                        for m = 1:bs
+                            obj.video(i).('spectrogram').parameters.SH(:,:,m) = circshift(obj.video(i).('spectrogram').parameters.SH(:,:,m), floor(obj.registration.shifts(:,i).*ratio'));
+                        end
+                    end
+                    continue
+                elseif strcmp(obj.params.image_types{j},'buckets')
+                    sz = size(obj.video(1).buckets.parameters.intervals_0);
+                    numF = sz(4);
+                    ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
+                    for i = 1:num_batches
+                        for k=1:numF
+                            obj.video(i).('buckets').parameters.intervals_0(:,:,:,k) = circshift(obj.video(i).('buckets').parameters.intervals_0(:,:,:,k), floor(obj.registration.shifts(:,i).*ratio'));
+                            obj.video(i).('buckets').parameters.intervals_1(:,:,:,k) = circshift(obj.video(i).('buckets').parameters.intervals_1(:,:,:,k), floor(obj.registration.shifts(:,i).*ratio'));
+                        end
+                    end
+                    continue
+                end
                 try % in case of not the same image size
                     ratio = [size(obj.video(1).(obj.params.image_types{j}).image,1) size(obj.video(1).(obj.params.image_types{j}).image,2)] ./ size(obj.video(1).('power_Doppler').image);
                 catch
@@ -574,6 +643,7 @@ classdef HoloDopplerClass < handle
                 for i = 1:num_batches
                     obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, floor(obj.registration.shifts(:,i).*ratio'));
                 end
+                
             end
         end
         
@@ -582,6 +652,28 @@ classdef HoloDopplerClass < handle
             num_batches = numel(obj.video);
             
             for j = 1:length(obj.params.image_types)
+                if strcmp(obj.params.image_types{j},'spectrogram') %SH extraction
+                    sz = size(obj.video(1).spectrogram.parameters.SH);
+                    bs = sz(3);
+                    ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
+                    for i = 1:num_batches
+                        for m = 1:bs
+                            obj.video(i).('spectrogram').parameters.SH(:,:,m) = circshift(obj.video(i).('spectrogram').parameters.SH(:,:,m), - floor(obj.registration.shifts(:,i).*ratio'));
+                        end
+                    end
+                    continue
+                elseif strcmp(obj.params.image_types{j},'buckets')
+                    sz = size(obj.video(1).buckets.parameters.intervals_0);
+                    numF = sz(4);
+                    ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
+                    for i = 1:num_batches
+                        for k=1:numF
+                            obj.video(i).('buckets').parameters.intervals_0(:,:,:,k) = circshift(obj.video(i).('buckets').parameters.intervals_0(:,:,:,k), - floor(obj.registration.shifts(:,i).*ratio'));
+                            obj.video(i).('buckets').parameters.intervals_1(:,:,:,k) = circshift(obj.video(i).('buckets').parameters.intervals_1(:,:,:,k), - floor(obj.registration.shifts(:,i).*ratio'));
+                        end
+                    end
+                    continue
+                end
                 try % in case of not the same image size
                     ratio = [size(obj.video(1).(obj.params.image_types{j}).image,1) size(obj.video(1).(obj.params.image_types{j}).image,2)] ./ size(obj.video(1).('power_Doppler').image);
                 catch
@@ -608,7 +700,15 @@ classdef HoloDopplerClass < handle
             for j = 1:length(tmp)
                 mat(:,:,:,j) = tmp{j}.image;
             end
-            implay(rescale(mat));
+            
+            mat = rescale(mat);
+            videofig(length(tmp),@redrawat);
+            
+            function redrawat(frame_index)
+                imshow(mat(:,:,frame_index));
+                axis image;
+                text(10,10,num2str(frame_index));
+            end
         end
         
         function SelfTesting(obj)
