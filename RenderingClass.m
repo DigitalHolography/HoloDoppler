@@ -203,8 +203,10 @@ classdef RenderingClass < handle
                     case 'autocorrelation'
                         [a,b,c] = size(obj.H);
                         tmp = reshape(obj.H, a*b, c);
-                        out = arrayfun(@(lm) xcorr(tmp(lm,:)),(1:a*b), 'UniformOutput', false);
-                        obj.SH = reshape(cell2mat(out),a,b,[]);
+                        out = arrayfun(@(lm) xcorr(tmp(lm,:),'normalized'),(1:a*b), 'UniformOutput', false);
+                        
+                        obj.SH = permute(reshape(cell2mat(out),[],a,b),[2 3 1]);
+                        %obj.SH = obj.SH(:,:,c/2:(c/2+c-1));
                     case 'None'
                         obj.SH = obj.H;
                 end

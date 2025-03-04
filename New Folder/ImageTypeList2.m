@@ -198,12 +198,13 @@ classdef ImageTypeList2 < handle
                 
                 fi=figure("Visible", "off");
                 indices = ((0:(NT-1))-NT/2).* (1/(Params.fs*1000));
-                spect = abs(squeeze(sum(SHin, [1 2])));
+                disc = diskMask(size(SH,1),size(SH,2),0.7)';
+                spect = squeeze(sum(SHin.*disc, [1 2])/nnz(disc));
                 
                 plot(indices, 10*log10(spect));
                 
                 xlim([min(indices), max(indices)]);
-                ylim([130 180]);
+                ylim([-60 180]);
                 xlabel('Time (s)');
                 ylabel('(dB)');
                 
