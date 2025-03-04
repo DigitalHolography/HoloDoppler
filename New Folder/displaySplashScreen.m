@@ -4,7 +4,7 @@ function displaySplashScreen()
 
 
 pause(0.5)
-s = SplashScreen( 'Splashscreen', 'holowaves_logo_temp.png','ProgressBar', 'on','ProgressPosition', 5,'ProgressRatio', 0.4 );
+s = SplashScreen( 'Splashscreen', 'holoDopplerLogo.png','ProgressBar', 'on','ProgressPosition', 5,'ProgressRatio', 0.4 );
 
 t = timer;
 t.StartDelay = 3;
