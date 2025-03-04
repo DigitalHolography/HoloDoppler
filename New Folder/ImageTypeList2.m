@@ -182,11 +182,11 @@ classdef ImageTypeList2 < handle
                 
                 fi=figure("Visible", "off");
                 freqs = ((0:(NT-1))-NT/2).* (Params.fs / NT);
-                spect = fftshift(abs(squeeze(sum(SHin, [1 2])).^2));
+                spect = fftshift(abs(squeeze(sum(SHin, [1 2])/(size(SH,1)*size(SH,2))).^2));
                 
                 plot(freqs, 10*log10(spect));
                 
-                ylim([15 200]);
+                ylim([-60 150]);
                 xlabel('Frequency (kHz)');
                 ylabel('Power Spectrum Density (dB)');
                 
@@ -198,8 +198,9 @@ classdef ImageTypeList2 < handle
                 
                 fi=figure("Visible", "off");
                 indices = ((0:(NT-1))-NT/2).* (1/(Params.fs*1000));
-                disc = diskMask(size(SH,1),size(SH,2),0.7)';
-                spect = squeeze(sum(SHin.*disc, [1 2])/nnz(disc));
+                % disc = diskMask(size(SH,1),size(SH,2),0.7)';
+                disc = ones(size(SH,1),size(SH,2))';
+                spect = squeeze(abs(sum(SHin.*disc, [1 2]))/nnz(disc));
                 
                 plot(indices, 10*log10(spect));
                 

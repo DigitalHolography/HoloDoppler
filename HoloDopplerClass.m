@@ -491,7 +491,7 @@ classdef HoloDopplerClass < handle
                     for j = 1:length(tmp)
                         mat(:,:,:,j) = tmp{j}.image;
                     end
-                    generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = 0);
+                    generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = []);
                     continue
                 elseif strcmp(image_types{i},'buckets')
                     sz = size(tmp{1}.parameters.intervals_0);
