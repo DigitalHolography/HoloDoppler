@@ -203,13 +203,13 @@ classdef HoloDopplerClass < handle
                 obj.params.(fields{i}) = params.(fields{i});
             end
         end
-
-         function loadParams(obj,path) 
+        
+        function loadParams(obj,path)
             fprintf('Loading parameters from %s\n', path);
             fid = fopen(path, 'r');
             obj.setParams(jsondecode(fread(fid, inf, '*char')'));
             fclose(fid);
-         end
+        end
         
         function saveParams(obj, filename, save_z)
             % save the params as a configfile for the file filename in the
@@ -217,15 +217,17 @@ classdef HoloDopplerClass < handle
             if nargin < 2
                 name = obj.file.name;
                 dir = obj.file.dir;
+                ext = obj.file.ext;
             else
-                [dir,name,~] = fileparts(filename);
+                [dir,name,ext] = fileparts(filename);
             end
             if nargin < 3
                 save_z = true;
             end
             
             parms = obj.params;
-            if ~save_z % if you dont want to save the z and prefer to take the automatic one
+            if ~save_z && strcmp(ext,'.holo') % if you dont want to save the z and prefer to take the automatic one
+                % only for holo files because cine dont save the z
                 parms = rmfield(parms,'spatial_propagation');
             end
             index = get_highest_number_in_files(obj.file.dir,strcat(name,'_','RenderingParameters'));
