@@ -231,7 +231,7 @@ classdef ImageTypeList2 < handle
             if obj.buckets.is_selected % buckets has been chosen
                 numX = size(SH, 1);
                 numY = size(SH, 2);
-                num_F = 4;
+                num_F = Params.buckets_number;
                 obj.buckets.parameters.intervals_0 = zeros(numX, numY, 1, num_F);
                 obj.buckets.parameters.intervals_1 = zeros(numX, numY, 1, num_F);
                 circleMask = fftshift(diskMask(numY, numX, 0.15));
