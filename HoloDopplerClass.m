@@ -719,6 +719,15 @@ classdef HoloDopplerClass < handle
                 text(10,10,num2str(frame_index));
             end
         end
+
+        function show_SH(obj)
+            try
+                sha = abs(obj.view.SH);
+                implay(rescale(sha,InputMin=min(sha,[],[1,2]),InputMax=max(sha,[],[1,2])));
+            catch e
+                disp(e)
+            end
+        end
         
         function SelfTesting(obj)
             %SelfTesting Run the self testing of the class

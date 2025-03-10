@@ -16,6 +16,9 @@ classdef ImageTypeList2 < handle
         buckets
         denoised
         cluster_projection
+        intercorrel0
+        intercorrel1
+        intercorrel2
     end
     
     methods
@@ -35,6 +38,9 @@ classdef ImageTypeList2 < handle
             obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', []));
             obj.denoised = ImageType('denoised');
             obj.cluster_projection = ImageType('cluster_projection');
+            obj.intercorrel0 = ImageType('intercorrel0');
+            obj.intercorrel1 = ImageType('intercorrel1');
+            obj.intercorrel2 = ImageType('intercorrel2');
             
         end
         
@@ -218,14 +224,29 @@ classdef ImageTypeList2 < handle
                 obj.moment_0.image = img;
             end
             
-            if obj.moment_1.is_selected % Moment 0 has been chosen
+            if obj.moment_1.is_selected % Moment 1 has been chosen
                 img = moment1(SH, r1, r2, Params.fs, NT, 0);
                 obj.moment_1.image = img;
             end
             
-            if obj.moment_2.is_selected % Moment 0 has been chosen
+            if obj.moment_2.is_selected % Moment 2 has been chosen
                 img = moment2(SH, r1, r2, Params.fs, NT, 0);
                 obj.moment_2.image = img;
+            end
+
+            if obj.intercorrel0.is_selected % 
+                img = moment0(SH, r1, r2, Params.fs, NT, 0);
+                obj.intercorrel0.image = reorder_directions(img,3,1);
+            end
+
+            if obj.intercorrel1.is_selected % 
+                img = moment1(SH, r1, r2, Params.fs, NT, 0);
+                obj.intercorrel1.image = reorder_directions(img,3,1);
+            end
+
+            if obj.intercorrel2.is_selected % 
+                img = moment2(SH, r1, r2, Params.fs, NT, 0);
+                obj.intercorrel2.image = reorder_directions(img,3,1);
             end
             
             if obj.buckets.is_selected % buckets has been chosen

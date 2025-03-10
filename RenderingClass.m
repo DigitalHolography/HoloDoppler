@@ -208,6 +208,10 @@ classdef RenderingClass < handle
                         
                         obj.SH = permute(reshape(cell2mat(out),[],a,b),[2 3 1]);
                         %obj.SH = obj.SH(:,:,c/2:(c/2+c-1));
+
+                    case 'intercorrelation'
+                        [a,b,c] = size(obj.H);
+                        obj.SH = intercorrel(obj.H,3); %TODO Replace template 3
                     case 'None'
                         obj.SH = obj.H;
                 end
