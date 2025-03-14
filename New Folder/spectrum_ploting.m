@@ -43,7 +43,8 @@ pbaspect([1.618 1 1]) ;
 set(gca, 'LineWidth', 1);
 uistack(p_mask,'top');
 uistack(gca, 'top');
-legend('','','','','','S');
+%legend('','','','','','S');
+
 text(10, I_omega, sprintf('f_{RMS} = %.2f kHz',omegaRMS), 'HorizontalAlignment','center', 'VerticalAlignment','bottom')
 end
 

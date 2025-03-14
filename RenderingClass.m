@@ -137,7 +137,7 @@ classdef RenderingClass < handle
                             [NY,NX,~] = size(obj.Frames);
                             obj.SpatialKernel = propagation_kernelAngularSpectrum(NX,NY,Params.spatial_propagation,Params.lambda,Params.ppx,Params.ppy,0);
                         end
-                        obj.FH = single(fft2(obj.Frames)) .* obj.SpatialKernel;
+                        obj.FH = fft2(single(obj.Frames)) .* fftshift(obj.SpatialKernel);
                     case "Fresnel"
                         if ParamChanged.spatial_propagation | ParamChanged.spatial_transformation | isempty(obj.SpatialKernel)
                             [NY,NX,~] = size(obj.Frames);
