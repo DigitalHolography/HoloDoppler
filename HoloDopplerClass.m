@@ -547,6 +547,12 @@ classdef HoloDopplerClass < handle
                         generate_video(mat,result_folder_path,strcat('moment2'),export_raw=1,temporal_filter = 2);
                     elseif strcmp(image_types{i},'power_Doppler')
                         generate_video(mat,result_folder_path,strcat('M0'),temporal_filter = 2);
+                    elseif strcmp(image_types{i},'spectrogram')
+                        generate_video(mat,result_folder_path,strcat('spectrogram'),temporal_filter = []);
+                    elseif strcmp(image_types{i},'autocorrelogram')
+                        generate_video(mat,result_folder_path,strcat('autocorrelogram'),temporal_filter = []);
+                    elseif strcmp(image_types{i},'broadening')
+                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
                     else
                         generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = 2);
                     end
