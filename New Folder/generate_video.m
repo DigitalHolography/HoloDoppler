@@ -34,11 +34,11 @@ end
 
 %% save to raw format
 if opt.export_raw 
-    output_filename = sprintf('%s_%s.%s', output_dirname, name, 'raw');
-    export_raw_video(fullfile(output_path, 'raw', output_filename), (video));
+    output_filename_raw = sprintf('%s_%s.%s', output_dirname, name, 'raw');
+    export_raw_video(fullfile(output_path, 'raw', output_filename_raw), (video));
     
-    output_filename = sprintf('%s_%s.%s', output_dirname, name, 'avi');
-    w = VideoWriter(fullfile(output_path, 'raw', output_filename));
+    output_filename_raw = sprintf('%s_%s_raw.%s', output_dirname, name, 'avi');
+    w = VideoWriter(fullfile(output_path, 'raw', output_filename_raw));
     w.Quality = 50;
     open(w);
     for i = 1:size(video, 4)

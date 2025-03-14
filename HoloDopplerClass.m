@@ -481,7 +481,7 @@ classdef HoloDopplerClass < handle
                 tmp = {obj.video.(image_types{i})};
                 
                 
-                if strcmp(image_types{i},'spectrogram') %SH extraction
+                if strcmp(image_types{i},'SH') %SH extraction
                     sz = size(tmp{1}.parameters.SH);
                     bs = sz(3); % SH binned batchsize
                     sz(3) =  bs * length(tmp);
@@ -491,16 +491,6 @@ classdef HoloDopplerClass < handle
                         mat(:,:,(j-1)*bs+1:j*bs) = tmp{j}.parameters.SH;
                     end
                     generate_video(mat,result_folder_path,strcat('SH'),export_raw=1,temporal_filter = 2);
-                    sz = size(tmp{1}.image);
-                    if length(sz)==2
-                        sz = [sz 1];
-                    end
-                    sz = [sz length(tmp)];
-                    mat = zeros(sz,'single');
-                    for j = 1:length(tmp)
-                        mat(:,:,:,j) = tmp{j}.image;
-                    end
-                    generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = []);
                     continue
                 elseif strcmp(image_types{i},'buckets')
                     sz = size(tmp{1}.parameters.intervals_0);
@@ -622,13 +612,13 @@ classdef HoloDopplerClass < handle
             num_batches = numel(obj.video);
             
             for j = 1:length(obj.params.image_types)
-                if strcmp(obj.params.image_types{j},'spectrogram') %SH extraction
-                    sz = size(obj.video(1).spectrogram.parameters.SH);
+                if strcmp(obj.params.image_types{j},'SH') %SH extraction
+                    sz = size(obj.video(1).SH.parameters.SH);
                     bs = sz(3);
                     ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
                     for i = 1:num_batches
                         for m = 1:bs
-                            obj.video(i).('spectrogram').parameters.SH(:,:,m) = circshift(obj.video(i).('spectrogram').parameters.SH(:,:,m), floor(obj.registration.shifts(:,i).*ratio'));
+                            obj.video(i).('SH').parameters.SH(:,:,m) = circshift(obj.video(i).('SH').parameters.SH(:,:,m), floor(obj.registration.shifts(:,i).*ratio'));
                         end
                     end
                     continue
@@ -661,13 +651,13 @@ classdef HoloDopplerClass < handle
             num_batches = numel(obj.video);
             
             for j = 1:length(obj.params.image_types)
-                if strcmp(obj.params.image_types{j},'spectrogram') %SH extraction
-                    sz = size(obj.video(1).spectrogram.parameters.SH);
+                if strcmp(obj.params.image_types{j},'SH') %SH extraction
+                    sz = size(obj.video(1).SH.parameters.SH);
                     bs = sz(3);
                     ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
                     for i = 1:num_batches
                         for m = 1:bs
-                            obj.video(i).('spectrogram').parameters.SH(:,:,m) = circshift(obj.video(i).('spectrogram').parameters.SH(:,:,m), - floor(obj.registration.shifts(:,i).*ratio'));
+                            obj.video(i).('SH').parameters.SH(:,:,m) = circshift(obj.video(i).('SH').parameters.SH(:,:,m), - floor(obj.registration.shifts(:,i).*ratio'));
                         end
                     end
                     continue

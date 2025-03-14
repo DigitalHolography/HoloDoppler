@@ -9,6 +9,7 @@ classdef ImageTypeList2 < handle
         directional_Doppler
         pure_PCA
         spectrogram
+        SH
         autocorrelogram
         moment_0
         moment_1
@@ -30,7 +31,8 @@ classdef ImageTypeList2 < handle
             obj.color_Doppler = ImageType('color', struct('freq_low', [], 'freq_high', []));
             obj.directional_Doppler = ImageType('directional', struct('M0_pos', [], 'M0_neg', []));
             obj.pure_PCA = ImageType('PCA');
-            obj.spectrogram = ImageType('spectrogram', struct('vector', [], 'SH', []));
+            obj.spectrogram = ImageType('spectrogram');
+            obj.SH = ImageType('SH', struct('vector', [], 'SH', []));
             obj.autocorrelogram = ImageType('autocorrelogram');
             obj.moment_0 = ImageType('M0');
             obj.moment_1 = ImageType('M1');
@@ -180,11 +182,7 @@ classdef ImageTypeList2 < handle
             end
             
             if obj.spectrogram.is_selected
-                bin_x = 4;
-                bin_y = 4;
-                bin_w = 16;
-                obj.spectrogram.parameters.SH = imresize3(gather(SH), [size(SH, 1) / bin_x size(SH, 2) / bin_y size(SH, 3) / bin_w], 'Method', 'linear');
-                obj.spectrogram.parameters.vector = zeros(1, NT);
+                
                 
                 fi=figure("Visible", "off");
                 freqs = ((0:(NT-1))-NT/2).* (Params.fs / NT);
@@ -198,6 +196,14 @@ classdef ImageTypeList2 < handle
                 
                 frame = getframe(fi); % Capture the figure
                 obj.spectrogram.image = frame.cdata;
+            end
+
+            if obj.SH.is_selected
+                bin_x = 4;
+                bin_y = 4;
+                bin_w = 16;
+                obj.SH.parameters.SH = imresize3(gather(SH), [size(SH, 1) / bin_x size(SH, 2) / bin_y size(SH, 3) / bin_w], 'Method', 'linear');
+                obj.SH.parameters.vector = zeros(1, NT);
             end
             
             if obj.autocorrelogram.is_selected
