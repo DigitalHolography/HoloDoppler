@@ -263,6 +263,16 @@ classdef HoloDopplerClass < handle
             end
             obj.view.Render(obj.params,obj.params.image_types);
             images = obj.view.getImages(obj.params.image_types);
+            for i=1:numel(obj.params.image_types)
+                image = images{i};
+
+                if ~ismember(obj.params.image_types{i}, {'spectrogram','autocorrelogram','broadening'})&& size(image,1) ~= size(image,2)
+                    image = imresize(image,[max(size(image,1),size(image,2)),max(size(image,1),size(image,2))]);
+                end
+                
+                images{i} = image;
+            end
+            
         end
         
         function images = showPreviewImages(obj,images_types)
