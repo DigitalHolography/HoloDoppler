@@ -9,6 +9,7 @@ classdef ImageTypeList2 < handle
         directional_Doppler
         pure_PCA
         spectrogram
+        broadening
         SH
         autocorrelogram
         moment_0
@@ -32,6 +33,7 @@ classdef ImageTypeList2 < handle
             obj.directional_Doppler = ImageType('directional', struct('M0_pos', [], 'M0_neg', []));
             obj.pure_PCA = ImageType('PCA');
             obj.spectrogram = ImageType('spectrogram');
+            obj.broadening = ImageType('broadening');
             obj.SH = ImageType('SH', struct('vector', [], 'SH', []));
             obj.autocorrelogram = ImageType('autocorrelogram');
             obj.moment_0 = ImageType('M0');
@@ -182,8 +184,6 @@ classdef ImageTypeList2 < handle
             end
             
             if obj.spectrogram.is_selected
-                
-                
                 fi=figure("Visible", "off");
                 freqs = ((0:(NT-1))-NT/2).* (Params.fs / NT);
                 spect = fftshift(abs(squeeze(sum(SHin, [1 2])/(size(SH,1)*size(SH,2))).^2));
@@ -196,6 +196,15 @@ classdef ImageTypeList2 < handle
                 
                 frame = getframe(fi); % Capture the figure
                 obj.spectrogram.image = frame.cdata;
+            end
+
+            if obj.broadening.is_selected
+                fi=figure("Visible", "off");
+                disc = diskMask(size(SH,1), size(SH,2), Params.registration_disc_ratio)';
+                spectrum_ploting(SH(:,:,:), disc, Params.fs, Params.time_range(1), Params.time_range(2));
+                % ylim([-0 50])
+                frame = getframe(fi); % Capture the figure
+                obj.broadening.image = frame.cdata;
             end
 
             if obj.SH.is_selected
