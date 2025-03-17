@@ -21,9 +21,10 @@ function H = svd_x_t_filter(H, thresh, f1, fs, NbSubAp)
         % third parameter does not exist, so default it to something
         thresh = round(f1 * width * height/NbSubAp^2 / fs )*2 + 1;
     end
-
+    fprintf('Progress: [');
     for ii=1:NbSubAp
         for kk=1:NbSubAp
+            fprintf('=');
             H1 = H(round(Lx(ii)):round(Lx(ii+1)-1),round(Ly(kk)):round(Ly(kk+1)-1),:);
             H1 = reshape(H1, (round(Lx(ii+1))-round(Lx(ii)))*(round(Ly(kk+1))-round(Ly(kk))), batch_size);
 
@@ -37,5 +38,6 @@ function H = svd_x_t_filter(H, thresh, f1, fs, NbSubAp)
             H(round(Lx(ii)):round(Lx(ii+1)-1),round(Ly(kk)):round(Ly(kk+1)-1),:) = reshape(H1, (round(Lx(ii+1))-round(Lx(ii))), (round(Ly(kk+1))-round(Ly(kk))), batch_size);
         end
     end
+    fprintf('] Done!\n');
     
     end

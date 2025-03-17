@@ -15,6 +15,7 @@ classdef ImageTypeList2 < handle
         moment_0
         moment_1
         moment_2
+        arg_0
         buckets
         denoised
         cluster_projection
@@ -22,6 +23,9 @@ classdef ImageTypeList2 < handle
         intercorrel1
         intercorrel2
         FH_modulus_mean
+        FH_arg_mean
+        SVD_cov
+        SVD_U
     end
     
     methods
@@ -40,6 +44,7 @@ classdef ImageTypeList2 < handle
             obj.moment_0 = ImageType('M0');
             obj.moment_1 = ImageType('M1');
             obj.moment_2 = ImageType('M2');
+            obj.arg_0 = ImageType('arg0');
             obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', []));
             obj.denoised = ImageType('denoised');
             obj.cluster_projection = ImageType('cluster_projection');
@@ -47,6 +52,10 @@ classdef ImageTypeList2 < handle
             obj.intercorrel1 = ImageType('intercorrel1');
             obj.intercorrel2 = ImageType('intercorrel2');
             obj.FH_modulus_mean = ImageType('FH_modulus_mean');
+            obj.FH_arg_mean = ImageType('FH_arg_mean');
+            obj.SVD_cov = ImageType('SVD_cov');
+            obj.SVD_U = ImageType('SVD_U');
+            
             
         end
         
@@ -133,7 +142,7 @@ classdef ImageTypeList2 < handle
         function construct_image(obj,Params, SHin)
             f1 = Params.time_range(1);
             f2 = Params.time_range(2);
-
+            
             r1 = Params.index_range(1);
             r2 = Params.index_range(2);
             [~,~,NT] = size(SHin);
@@ -143,6 +152,7 @@ classdef ImageTypeList2 < handle
             
             % clear phase
             SH = abs(SHin) .^ 2;
+            SH_arg = angle(SHin);
             
             if obj.pure_PCA.is_selected
                 if ~(r1-floor(r1)==0) && ~(r2-floor(r2)==0) %both not integer
@@ -202,7 +212,7 @@ classdef ImageTypeList2 < handle
                 frame = getframe(fi); % Capture the figure
                 obj.spectrogram.image = frame.cdata;
             end
-
+            
             if obj.broadening.is_selected
                 fi=figure("Visible", "off");
                 disc = diskMask(size(SH,1), size(SH,2), Params.registration_disc_ratio)';
@@ -211,7 +221,7 @@ classdef ImageTypeList2 < handle
                 frame = getframe(fi); % Capture the figure
                 obj.broadening.image = frame.cdata;
             end
-
+            
             if obj.SH.is_selected
                 bin_x = 4;
                 bin_y = 4;
@@ -244,6 +254,11 @@ classdef ImageTypeList2 < handle
                 obj.moment_0.image = img;
             end
             
+            if obj.arg_0.is_selected % Arg 0 has been chosen
+                img = moment0(SH_arg, f1, f2 , Params.fs, NT, 0);
+                obj.arg_0.image = img;
+            end
+            
             if obj.moment_1.is_selected % Moment 1 has been chosen
                 img = moment1(SH, f1, f2, Params.fs, NT, 0);
                 obj.moment_1.image = img;
@@ -253,18 +268,18 @@ classdef ImageTypeList2 < handle
                 img = moment2(SH, f1, f2, Params.fs, NT, 0);
                 obj.moment_2.image = img;
             end
-
-            if obj.intercorrel0.is_selected % 
+            
+            if obj.intercorrel0.is_selected %
                 img = moment0(SH, f1, f2, Params.fs, NT, 0);
                 obj.intercorrel0.image = reorder_directions(img,3,1);
             end
-
-            if obj.intercorrel1.is_selected % 
+            
+            if obj.intercorrel1.is_selected %
                 img = moment1(SH, f1, f2, Params.fs, NT, 0);
                 obj.intercorrel1.image = reorder_directions(img,3,1);
             end
-
-            if obj.intercorrel2.is_selected % 
+            
+            if obj.intercorrel2.is_selected %
                 img = moment2(SH, f1, f2, Params.fs, NT, 0);
                 obj.intercorrel2.image = reorder_directions(img,3,1);
             end
@@ -364,20 +379,49 @@ classdef ImageTypeList2 < handle
             end
             
         end
-
+        
         function construct_image_from_FH(obj,Params, FHin)
             if obj.FH_modulus_mean.is_selected
                 switch Params.spatial_transformation
                     case 'angular spectrum' % log10
                         obj.FH_modulus_mean.image = squeeze(log10(fftshift(mean(abs(FHin),3))));
                     case 'Fresnel' % no log10
-                        obj.FH_modulus_mean.image = squeeze(fftshift(mean(abs(FHin),3)));
-
+                        obj.FH_modulus_mean.image = squeeze((mean(abs(FHin),3)));
+                        
                 end
             end
-        
+            if obj.FH_arg_mean.is_selected
+                switch Params.spatial_transformation
+                    case 'angular spectrum' %
+                        obj.FH_arg_mean.image = squeeze((fftshift(mean(angle(FHin),3))));
+                    case 'Fresnel'
+                        obj.FH_arg_mean.image = squeeze((mean(angle(FHin),3)));
+                end
+            end
+            
         end
         
+        function construct_image_from_SVD(obj,Params, covin, Uin, szin)
+            % szin is just the size of a batch nx ny nt for reference
+            if obj.SVD_cov.is_selected
+                obj.SVD_cov.image = abs(covin);
+            end
+            if obj.SVD_U.is_selected
+                Uin = reshape(Uin,szin(1),szin(2),[]);
+                fi = figure(Visible="off");
+                Uin = abs(Uin);
+                Uin = rescale(Uin,InputMax=max(Uin,[],[1,2]),InputMin=min(Uin,[],[1,2]));
+                C = cell(1, size(Uin, 3));
+                for i = 1:size(Uin, 3)
+                    C{i} = Uin(:, :, i)';
+                end
+                montage(C, 'BorderSize', [0 0]); 
+
+                set(gca, 'Position', [0 0 1 1]); % Remove extra spaceù=
+                frame = getframe(fi);
+                obj.SVD_U.image = frame.cdata;
+            end
+        end
     end
     
 end

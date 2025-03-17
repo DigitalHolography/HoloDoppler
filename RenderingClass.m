@@ -11,6 +11,8 @@ classdef RenderingClass < handle
         FH single
         H single
         SH single
+        cov single
+        U single
         Output ImageTypeList2
     end
     
@@ -145,7 +147,7 @@ classdef RenderingClass < handle
                             [NY,NX,~] = size(obj.Frames);
                             [obj.SpatialKernel,obj.PhaseFactor] = propagation_kernelFresnel(NX,NY,Params.spatial_propagation,Params.lambda,Params.ppx,Params.ppy,0);
                         end
-                        obj.FH = single(obj.Frames) .* obj.SpatialKernel;
+                        obj.FH = single(obj.Frames) .* obj.SpatialKernel ;
                     case "None"
                         obj.FH = [];
                         
@@ -167,12 +169,12 @@ classdef RenderingClass < handle
                     case "angular spectrum"
                         obj.H = ifft2(obj.FH);
                     case "Fresnel"
-                        obj.H = fftshift(fftshift(fft2(obj.FH),1),2);
+                        obj.H = fftshift(fftshift(fft2(obj.FH),1),2) ;%.*obj.PhaseFactor;
                     case "None"
                         obj.H = single(obj.Frames);
                 end
             end
-
+            
             obj.Output.construct_image_from_FH(obj.LastParams,obj.FH);
             
             if ~ options.cache_intermediate_results
@@ -183,19 +185,21 @@ classdef RenderingClass < handle
             
             if doH
                 if Params.svd_filter
-                    obj.H = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
+                    [obj.H,obj.cov,obj.U] = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
                 end
             end
+            
+            obj.Output.construct_image_from_SVD(obj.LastParams,obj.cov,obj.U,size(obj.H));
             
             if doH
                 if Params.svdx_filter
                     obj.H = svd_x_filter(obj.H,Params.svd_threshold, Params.time_range(1), Params.fs, 5); % forced to 5 Nsubapp
                 end
             end
-
+            
             if doH
                 if Params.svdx_t_filter
-                    obj.H = svd_x_t_filter(obj.H,Params.svd_threshold, Params.time_range(1), Params.fs, 5); % forced to 5 Nsubapp
+                    obj.H = svd_x_t_filter(obj.H,Params.svd_threshold, Params.time_range(1), Params.fs, floor(max(size(obj.H,1),size(obj.H,2))/16) ); % forced to 31 pix by default
                 end
             end
             
@@ -218,7 +222,7 @@ classdef RenderingClass < handle
                         
                         obj.SH = permute(reshape(cell2mat(out),[],a,b),[2 3 1]);
                         %obj.SH = obj.SH(:,:,c/2:(c/2+c-1));
-
+                        
                     case 'intercorrelation'
                         [a,b,c] = size(obj.H);
                         obj.SH = intercorrel(obj.H,3); %TODO Replace template 3
@@ -258,7 +262,7 @@ classdef RenderingClass < handle
                 end
             end
             obj.Output.select(image_types{:});
-
+            
             obj.Output.construct_image_from_FH(obj.LastParams,obj.FH);
             
             obj.Output.construct_image(obj.LastParams,obj.SH);
