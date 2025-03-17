@@ -42,6 +42,7 @@ classdef RenderingClass < handle
             Params.svd_stride = [];
             Params.time_transform = "FFT";
             Params.time_range = [6,10.5];
+            Params.index_range = [3,10];
             Params.time_range_extra = -1;
             Params.buckets_number = 4;
             Params.flatfield_gw = 35;

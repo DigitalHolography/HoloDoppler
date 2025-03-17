@@ -37,6 +37,8 @@ app.time_transform.Items = ["FFT", "PCA", "ICA", "autocorrelation", "intercorrel
 app.time_transform.Value = HD.params.time_transform;
 app.time_range1.Value = HD.params.time_range(1);
 app.time_range2.Value = HD.params.time_range(2);
+app.index_range1.Value = HD.params.index_range(1);
+app.index_range2.Value = HD.params.index_range(2);
 app.flat_field_gw.Value = HD.params.flatfield_gw;
 
 app.ShackHartmannCheckBox.Value = ~isempty(HD.params.ShackHartmannCorrection);

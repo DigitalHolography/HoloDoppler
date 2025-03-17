@@ -35,6 +35,7 @@ HD.params.svd_threshold = app.svd_threshold.Value;
 % Time transformation parameters
 HD.params.time_transform = app.time_transform.Value;
 HD.params.time_range = [app.time_range1.Value, app.time_range2.Value];
+HD.params.index_range = [app.index_range1.Value, app.index_range2.Value];
 
 % Flatfield correction
 HD.params.flatfield_gw = app.flat_field_gw.Value;

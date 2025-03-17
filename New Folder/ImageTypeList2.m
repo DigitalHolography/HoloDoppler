@@ -129,8 +129,11 @@ classdef ImageTypeList2 < handle
         end
         
         function construct_image(obj,Params, SHin)
-            r1 = Params.time_range(1);
-            r2 = Params.time_range(2);
+            f1 = Params.time_range(1);
+            f2 = Params.time_range(2);
+
+            r1 = Params.index_range(1);
+            r2 = Params.index_range(2);
             [~,~,NT] = size(SHin);
             
             
@@ -154,32 +157,32 @@ classdef ImageTypeList2 < handle
             end
             
             if obj.power_Doppler.is_selected % Power Doppler has been chosen
-                img = moment0(SH, r1, r2, Params.fs, NT, Params.flatfield_gw);
+                img = moment0(SH, f1, f2, Params.fs, NT, Params.flatfield_gw);
                 obj.power_Doppler.image = img;
             end
             
             if obj.power_1_Doppler.is_selected % Power Doppler has been chosen
-                img = moment1(SH, r1, r2, Params.fs, NT, Params.flatfield_gw);
+                img = moment1(SH, f1, f2, Params.fs, NT, Params.flatfield_gw);
                 obj.power_1_Doppler.image = img;
             end
             
             if obj.power_2_Doppler.is_selected % Power Doppler has been chosen
-                img = moment2(SH, r1, r2, Params.fs, NT, Params.flatfield_gw);
+                img = moment2(SH, f1, f2, Params.fs, NT, Params.flatfield_gw);
                 obj.power_2_Doppler.image = img;
             end
             
             if obj.color_Doppler.is_selected % Color Doppler has been chosen
                 if Params.time_range_extra <0
-                    r3 = (r1+r2)/2;
+                    f3 = (f1+f2)/2;
                 else
-                    r3 = Params.time_range_extra;
+                    f3 = Params.time_range_extra;
                 end
-                [freq_low, freq_high] = composite(SH, r1, r3, r2, Params.fs, NT, max(Params.flatfield_gw,20));
+                [freq_low, freq_high] = composite(SH, f1, f3, f2, Params.fs, NT, max(Params.flatfield_gw,20));
                 obj.color_Doppler.image = construct_colored_image(gather(freq_low),gather(freq_high));
             end
             
             if obj.directional_Doppler.is_selected % Directional Doppler has been chosen
-                [M0_pos, M0_neg] = directional(SH, r1, r2, Params.fs, NT, max(Params.flatfield_gw,20));
+                [M0_pos, M0_neg] = directional(SH, f1, f2, Params.fs, NT, max(Params.flatfield_gw,20));
                 obj.directional_Doppler.image = construct_directional_image( gather(M0_pos), gather(M0_neg));
             end
             
@@ -235,32 +238,32 @@ classdef ImageTypeList2 < handle
             end
             
             if obj.moment_0.is_selected % Moment 0 has been chosen
-                img = moment0(SH, r1, r2 , Params.fs, NT, 0);
+                img = moment0(SH, f1, f2 , Params.fs, NT, 0);
                 obj.moment_0.image = img;
             end
             
             if obj.moment_1.is_selected % Moment 1 has been chosen
-                img = moment1(SH, r1, r2, Params.fs, NT, 0);
+                img = moment1(SH, f1, f2, Params.fs, NT, 0);
                 obj.moment_1.image = img;
             end
             
             if obj.moment_2.is_selected % Moment 2 has been chosen
-                img = moment2(SH, r1, r2, Params.fs, NT, 0);
+                img = moment2(SH, f1, f2, Params.fs, NT, 0);
                 obj.moment_2.image = img;
             end
 
             if obj.intercorrel0.is_selected % 
-                img = moment0(SH, r1, r2, Params.fs, NT, 0);
+                img = moment0(SH, f1, f2, Params.fs, NT, 0);
                 obj.intercorrel0.image = reorder_directions(img,3,1);
             end
 
             if obj.intercorrel1.is_selected % 
-                img = moment1(SH, r1, r2, Params.fs, NT, 0);
+                img = moment1(SH, f1, f2, Params.fs, NT, 0);
                 obj.intercorrel1.image = reorder_directions(img,3,1);
             end
 
             if obj.intercorrel2.is_selected % 
-                img = moment2(SH, r1, r2, Params.fs, NT, 0);
+                img = moment2(SH, f1, f2, Params.fs, NT, 0);
                 obj.intercorrel2.image = reorder_directions(img,3,1);
             end
             
@@ -271,7 +274,7 @@ classdef ImageTypeList2 < handle
                 obj.buckets.parameters.intervals_0 = zeros(numX, numY, 1, num_F);
                 obj.buckets.parameters.intervals_1 = zeros(numX, numY, 1, num_F);
                 circleMask = fftshift(diskMask(numY, numX, 0.15));
-                frequencies = linspace(r1, r2, num_F + 1);
+                frequencies = linspace(f1, f2, num_F + 1);
                 for freqIdx = 1:num_F
                     img = moment0(SH, frequencies(freqIdx), frequencies(freqIdx+1), Params.fs, NT, Params.flatfield_gw);
                     img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
@@ -288,7 +291,7 @@ classdef ImageTypeList2 < handle
             if obj.denoised.is_selected
                 try
                     SHdenoised = denoiseNGMeet(SH,'Sigma',0.01,'NumIterations',2);
-                    img = moment0(SHdenoised, r1, r2 , Params.fs, NT, 0);
+                    img = moment0(SHdenoised, f1, f2 , Params.fs, NT, 0);
                     obj.denoised.image = img;
                 catch ME
                     % Display error message and line number
