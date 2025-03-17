@@ -21,6 +21,7 @@ classdef ImageTypeList2 < handle
         intercorrel0
         intercorrel1
         intercorrel2
+        FH_modulus_mean
     end
     
     methods
@@ -45,6 +46,7 @@ classdef ImageTypeList2 < handle
             obj.intercorrel0 = ImageType('intercorrel0');
             obj.intercorrel1 = ImageType('intercorrel1');
             obj.intercorrel2 = ImageType('intercorrel2');
+            obj.FH_modulus_mean = ImageType('FH_modulus_mean');
             
         end
         
@@ -361,6 +363,19 @@ classdef ImageTypeList2 < handle
                 end
             end
             
+        end
+
+        function construct_image_from_FH(obj,Params, FHin)
+            if obj.FH_modulus_mean.is_selected
+                switch Params.spatial_transformation
+                    case 'angular spectrum' % log10
+                        obj.FH_modulus_mean.image = squeeze(log10(fftshift(mean(abs(FHin),3))));
+                    case 'Fresnel' % no log10
+                        obj.FH_modulus_mean.image = squeeze(fftshift(mean(abs(FHin),3)));
+
+                end
+            end
+        
         end
         
     end

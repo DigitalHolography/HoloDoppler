@@ -172,6 +172,8 @@ classdef RenderingClass < handle
                         obj.H = single(obj.Frames);
                 end
             end
+
+            obj.Output.construct_image_from_FH(obj.LastParams,obj.FH);
             
             if ~ options.cache_intermediate_results
                 obj.FH = [];
@@ -256,6 +258,8 @@ classdef RenderingClass < handle
                 end
             end
             obj.Output.select(image_types{:});
+
+            obj.Output.construct_image_from_FH(obj.LastParams,obj.FH);
             
             obj.Output.construct_image(obj.LastParams,obj.SH);
             
