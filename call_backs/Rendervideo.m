@@ -30,7 +30,7 @@ function Rendervideo(app)
     app.cache = GuiCache(app);
     numWorkers = app.cache.nb_cpu_cores;
 
-    aberration_correction = AberrationCorrection();
+    aberration_correction = AberrationCorrectionClass();
 
     % select parallelism policy
     switch app.cache.parallelism
@@ -260,7 +260,7 @@ function Rendervideo(app)
         shifts = compute_temporal_registration(istream, app.cache, batch_size, batch_stride, current_batch_idx, blur, ...
             kernel, [], D, use_multithread);
         % tilts zernikes used for translating an image
-        zernikes = evaluate_zernikes([1 1], [1 -1], numX, numY);
+        zernikes = evaluateZernikes([1 1], [1 -1], numX, numY);
     else
         % declare unused variables to make matlab parfor
         % loop parser happy - stupid matlab
@@ -395,7 +395,7 @@ function Rendervideo(app)
         correction_zernikes = zeros(numX, numY, 3, 'single');
     end
 
-    [rephasing_zernikes, shack_zernikes, iterative_zernikes] = aberration_correction.generate_zernikes(numX, numY);
+    [rephasing_zernikes, shack_zernikes, iterative_zernikes] = aberration_correction.generateZernikes(numX, numY);
 
     %% Final pass
     % Here we apply all transformations computed in previous passes
@@ -839,7 +839,7 @@ function Rendervideo(app)
 
     fprintf("Additional data export...\n")
 
-    % export shifts to AberrationCorrection struct as zernikes
+    % export shifts to AberrationCorrectionClass struct as zernikes
     if registration_pass || app.cache.registration
         magic_number = 710;
         aberration_correction.rephasing_zernike_indices = [1 2];
