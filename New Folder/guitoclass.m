@@ -29,6 +29,7 @@ HD.params.spatial_propagation = app.spatial_propagation.Value;
 % SVD parameters
 HD.params.svd_filter = app.svd_filter.Value;
 HD.params.svdx_filter = app.svdx_filter.Value;
+HD.params.svdx_t_filter = app.svdx_t_filter.Value;
 HD.params.svd_threshold = app.svd_threshold.Value;
 
 % Time transformation parameters

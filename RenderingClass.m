@@ -37,6 +37,7 @@ classdef RenderingClass < handle
             Params.spatial_propagation = 0.5;
             Params.svd_filter = 1;
             Params.svdx_filter = false;
+            Params.svdx_t_filter = false;
             Params.svd_threshold = false;
             Params.svd_stride = [];
             Params.time_transform = "FFT";
@@ -157,7 +158,7 @@ classdef RenderingClass < handle
                 end
             end
             
-            doH = doFH | ParamChanged.svd_filter | (Params.svd_threshold==0 && ParamChanged.time_range) | ParamChanged.svd_threshold  | obj.FramesChanged | ~options.cache_intermediate_results;
+            doH = doFH | ParamChanged.svd_filter | ParamChanged.svdx_filter | ParamChanged.svdx_t_filter | (Params.svd_threshold==0 && ParamChanged.time_range) | ParamChanged.svd_threshold  | obj.FramesChanged | ~options.cache_intermediate_results;
             
             if doH % change or if the frames changed
                 
@@ -186,6 +187,12 @@ classdef RenderingClass < handle
             if doH
                 if Params.svdx_filter
                     obj.H = svd_x_filter(obj.H,Params.svd_threshold, Params.time_range(1), Params.fs, 5); % forced to 5 Nsubapp
+                end
+            end
+
+            if doH
+                if Params.svdx_t_filter
+                    obj.H = svd_x_t_filter(obj.H,Params.svd_threshold, Params.time_range(1), Params.fs, 5); % forced to 5 Nsubapp
                 end
             end
             
