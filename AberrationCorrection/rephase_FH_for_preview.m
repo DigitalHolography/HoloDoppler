@@ -5,7 +5,7 @@ function [FH, phasePlane] = rephase_FH_for_preview(FH, coefs, zernike_indices)
     %
     % [frame_width, frame_height, ~] = size(FH);
     % [rephasing_zernikes, shack_zernikes, iterative_opt_zernikes] = ...
-    %     rephasing_data.aberration_correction.generateZernikes(frame_width, frame_height);
+    %     rephasing_data.aberration_correction.generate_zernikes(frame_width, frame_height);
 
     disp(coefs{1})
 

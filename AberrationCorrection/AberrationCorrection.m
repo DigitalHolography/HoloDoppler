@@ -1,4 +1,4 @@
-classdef AberrationCorrectionClass
+classdef AberrationCorrection
     % A structure that contains all useful data
     % about a video phase correction to apply to
     % a interferogram stream in order to generate
@@ -28,15 +28,15 @@ classdef AberrationCorrectionClass
 
     methods
 
-        function obj = AberrationCorrectionClass()
+        function obj = AberrationCorrection()
             % nothing
         end
 
-        function [rephasing_zernikes, shack_zernikes, iterative_opt_zernikes] = generateZernikes(obj, Nx, Ny)
+        function [rephasing_zernikes, shack_zernikes, iterative_opt_zernikes] = generate_zernikes(obj, Nx, Ny)
 
             if ~isempty(obj.rephasing_zernike_indices)
                 %           [~, rephasing_zernikes] = zernikePhase([2 1], Nx, Ny);
-                rephasing_zernikes = evaluateZernikes([1 1], [1 -1], Nx, Ny);
+                rephasing_zernikes = evaluate_zernikes([1 1], [1 -1], Nx, Ny);
             else
                 rephasing_zernikes = [];
             end

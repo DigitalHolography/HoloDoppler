@@ -1,5 +1,5 @@
-function zernike_values = evaluateZernikes(n, m, Nx, Ny)
-    % evaluateZernikes - Evaluates Zernike polynomials over a grid.
+function zernike_values = evaluate_zernikes(n, m, Nx, Ny)
+    % evaluate_zernikes - Evaluates Zernike polynomials over a grid.
     %
     % Inputs:
     %   n - Array of radial orders for Zernike polynomials.
