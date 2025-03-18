@@ -40,6 +40,10 @@ classdef RenderingClass < handle
             Params.svd_filter = 1;
             Params.svdx_filter = false;
             Params.svdx_t_filter = false;
+            Params.svdx_Nsub = 32;
+            Params.svdx_t_Nsub = 32;
+            Params.svdx_threshold = 10;
+            Params.svdx_t_threshold = 100;
             Params.svd_threshold = false;
             Params.svd_stride = [];
             Params.time_transform = "FFT";
@@ -161,7 +165,7 @@ classdef RenderingClass < handle
                 end
             end
             
-            doH = doFH | ParamChanged.svd_filter | ParamChanged.svdx_filter | ParamChanged.svdx_t_filter | (Params.svd_threshold==0 && ParamChanged.time_range) | ParamChanged.svd_threshold  | obj.FramesChanged | ~options.cache_intermediate_results;
+            doH = doFH | ParamChanged.svd_filter | (Params.svdx_filter && (ParamChanged.svdx_threshold||ParamChanged.svdx_Nsub)) | (Params.svdx_t_filter && (ParamChanged.svdx_t_threshold||ParamChanged.svdx_t_Nsub)) | ParamChanged.svdx_filter | ParamChanged.svdx_t_filter | (Params.svd_threshold==0 && ParamChanged.time_range) | ParamChanged.svd_threshold  | obj.FramesChanged | ~options.cache_intermediate_results;
             
             if doH % change or if the frames changed
                 
@@ -186,20 +190,25 @@ classdef RenderingClass < handle
             if doH
                 if Params.svd_filter
                     [obj.H,obj.cov,obj.U] = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
+                else
+                    obj.cov = [];
+                    obj.U=[];
                 end
             end
             
             obj.Output.construct_image_from_SVD(obj.LastParams,obj.cov,obj.U,size(obj.H));
+
+            
             
             if doH
                 if Params.svdx_filter
-                    obj.H = svd_x_filter(obj.H,Params.svd_threshold, Params.time_range(1), Params.fs, 5); % forced to 5 Nsubapp
+                    obj.H = svd_x_filter(obj.H,Params.svdx_threshold, Params.time_range(1), Params.fs, floor(max(size(obj.H,1),size(obj.H,2))/Params.svdx_Nsub)); % forced 
                 end
             end
             
             if doH
                 if Params.svdx_t_filter
-                    obj.H = svd_x_t_filter(obj.H,Params.svd_threshold, Params.time_range(1), Params.fs, floor(max(size(obj.H,1),size(obj.H,2))/16) ); % forced to 31 pix by default
+                    obj.H = svd_x_t_filter(obj.H,Params.svdx_t_threshold, Params.time_range(1), Params.fs, floor(max(size(obj.H,1),size(obj.H,2))/Params.svdx_t_Nsub) ); 
                 end
             end
             

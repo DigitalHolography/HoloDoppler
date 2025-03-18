@@ -31,6 +31,11 @@ HD.params.svd_filter = app.svd_filter.Value;
 HD.params.svdx_filter = app.svdx_filter.Value;
 HD.params.svdx_t_filter = app.svdx_t_filter.Value;
 HD.params.svd_threshold = app.svd_threshold.Value;
+HD.params.svdx_threshold = app.svdx_threshold.Value;
+HD.params.svdx_t_threshold = app.svdx_t_threshold.Value;
+HD.params.svdx_Nsub = app.svdx_Nsub.Value;
+HD.params.svdx_t_Nsub = app.svdx_t_Nsub.Value;
+
 
 % Time transformation parameters
 HD.params.time_transform = app.time_transform.Value;

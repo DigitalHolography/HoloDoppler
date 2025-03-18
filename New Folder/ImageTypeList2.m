@@ -403,6 +403,9 @@ classdef ImageTypeList2 < handle
         
         function construct_image_from_SVD(obj,Params, covin, Uin, szin)
             % szin is just the size of a batch nx ny nt for reference
+            if isempty(covin) 
+                return 
+            end
             if obj.SVD_cov.is_selected
                 obj.SVD_cov.image = abs(covin);
             end
