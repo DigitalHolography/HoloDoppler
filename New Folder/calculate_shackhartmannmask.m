@@ -57,7 +57,7 @@ if ShackHartmannCorrection.ZernikeProjection % if the phase should be a combinat
     fprintf("Zernike coefficients : \n");
     disp(coefs);
     [n_sub_x, n_sub_y, n_sub_z] = size(coefs);
-    [~, zern] = zernikePhase(zernike_indices, Nx, Ny);
+    [~, zern] = zernike_phase(zernike_indices, Nx, Ny);
     phase = 0;
 
     for i = 1:numel(coefs)

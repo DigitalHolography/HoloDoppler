@@ -118,7 +118,7 @@ methods
             otherwise
                 obj.file = [];
                 obj.reader = [];
-                error(sprintf(". %s files are not accepted as correct files", ext))
+                error(". %s files are not accepted as correct files", ext)
         end
 
         % 2) Rendering parameters initialization
@@ -324,7 +324,7 @@ methods
         index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HDPreview'));
         result_folder_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HDPreview_', num2str(index + 1)));
 
-        if not(exist(result_folder_path))
+        if ~isfolder(result_folder_path)
             mkdir(result_folder_path);
         end
 
@@ -340,149 +340,153 @@ methods
     end
 
     function VideoRendering(obj)
-        %VideoRendering Construct the Video according to the current params
+        % VideoRendering Construct the video according to the current parameters
 
+        % Validate if a file is loaded
         if isempty(obj.reader)
-            error("No file loaded")
+            error("No file loaded");
         end
 
-        if ~obj.params.first_frame
+        % Set first and end frames
+        first_frame = obj.params.first_frame;
+
+        if isempty(first_frame)
             first_frame = 1;
-        else
-            first_frame = obj.params.first_frame;
         end
 
-        if ~obj.params.end_frame
+        end_frame = obj.params.end_frame;
+
+        if isempty(end_frame)
             end_frame = obj.file.num_frames;
-        else
-            end_frame = obj.params.end_frame;
         end
 
+        % Calculate number of batches
         num_batches = floor((end_frame - first_frame) / obj.params.batch_stride);
-
-        disp(['Rendering ' num2str(num_batches) 'frames.']);
+        disp(['Rendering ' num2str(num_batches) ' frames.']);
 
         if num_batches == 0
-            return
+            return;
         end
 
-        % Create parallel pool
-        poolobj = gcp('nocreate'); % check if a pool already exist
+        % Handle parallel pool
+        poolobj = gcp('nocreate'); % Check if a pool already exists
         parfor_arg = obj.params.parfor_arg;
 
-        if parfor_arg < 1
-            %delete(poolobj);
-        elseif isempty(poolobj) || poolobj.NumWorkers ~= parfor_arg
-            delete(poolobj); %close the current pool to create a new one with correct num of workers
-            parpool(parfor_arg);
-        else
-            %
+        if parfor_arg > 0
+
+            if isempty(poolobj) || poolobj.NumWorkers ~= parfor_arg
+                delete(poolobj); % Close the current pool to create a new one
+                parpool(parfor_arg);
+            end
+
         end
 
+        % Initialize video rendering timer
         VideoRenderingTime = tic;
 
-        h = waitbar(0, '');
-        N = double(num_batches - 1);
+        % Initialize waitbar
+        h = waitbar(0, 'Initializing...');
+        N = double(num_batches);
         p = 1;
 
-        function update_waitbar(sig)
-            % signal table
-            % 0 => increment value
-            % 1 => reset for stage 1 (registration)
-            % 2 => reset for stage 2 (video_M0 computation)
-            switch sig
+        % Update waitbar function
+        function update_waitbar(stage)
+
+            switch stage
                 case 0
                     waitbar(p / N, h);
                     p = p + 1;
                 case -1
                     waitbar(0, h, 'Registration...');
                     p = 1;
-                    disp('Registration...')
+                    disp('Registration...');
                 case -2
                     waitbar(0, h, 'Image rendering...');
                     p = 1;
-                    disp('Image rendering...')
+                    disp('Image rendering...');
                 case 1
                     waitbar(0, h, 'Optimizing defocus...');
                     p = 1;
-                    disp('Optimizing defocus...')
+                    disp('Optimizing defocus...');
                 case 2
                     waitbar(0, h, 'Optimizing astigmatism...');
                     p = 1;
-                    disp('Optimizing astigmatism...')
+                    disp('Optimizing astigmatism...');
                 case 3
-                    waitbar(0, h, 'Shack-Hartmann...')
+                    waitbar(0, h, 'Shack-Hartmann...');
                     p = 1;
-                    disp('Shack-Hartmann...')
+                    disp('Shack-Hartmann...');
                 otherwise
                     waitbar(0, h, 'Iterative optimization...');
                     p = 1;
-                    disp('Iterative optimization')
+                    disp('Iterative optimization...');
             end
 
         end
 
-        update_waitbar(-2);
+        update_waitbar(-2); % Start image rendering stage
 
-        % 1) Initialize the video object
-
-        if isempty(obj.video) | numel(obj.video) ~= num_batches
-            v(1, num_batches) = ImageTypeList2();
-            obj.video = v; clear v;
+        % Initialize video object
+        if isempty(obj.video) || numel(obj.video) ~= num_batches
+            obj.video = repmat(ImageTypeList2(), 1, num_batches);
         end
 
-        % 2) Loop over the batches
-        if obj.params.parfor_arg == 0
-
-            for i = 1:(num_batches)
-                obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, (i - 1) * obj.params.batch_stride + first_frame));
+        % Loop over batches
+        if parfor_arg == 0
+            % Serial processing
+            for i = 1:num_batches
+                frames = obj.reader.read_frame_batch(obj.params.batch_size, (i - 1) * obj.params.batch_stride + first_frame);
+                obj.view.setFrames(frames);
                 obj.view.Render(obj.params, obj.params.image_types);
                 obj.video(i) = ImageTypeList2();
-                obj.video(i).copy_from(obj.view.Output); % work around against handles
+                obj.video(i).copy_from(obj.view.Output);
                 update_waitbar(0);
             end
 
         else
+            % Parallel processing
             D = parallel.pool.DataQueue;
             afterEach(D, @update_waitbar);
 
-            file_path = obj.file.path;
-            params = obj.params;
-            video = obj.video;
+            % file_path = obj.file.path;
+            video_params = obj.params;
+            output_video = obj.video;
+            file_reader = obj.reader;
+            batch_size = video_params.batch_size;
+            batch_stride = video_params.batch_stride;
 
-            [dir, name, ext] = fileparts(file_path);
-            reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
+            if isprop(file_reader, "all_frames") && ~isempty(file_reader.all_frames)
+                all_frames = reshape(file_reader.all_frames, size(file_reader.all_frames, 1), size(file_reader.all_frames, 2), batch_size, []);
 
-            if isprop(reader, "all_frames") && ~isempty(reader.all_frames)
-                all_frames = reshape(reader.all_frames, size(reader.all_frames, 1), size(reader.all_frames, 2), params.batch_size, []);
-
-                parfor (i = 1:(num_batches), obj.params.parfor_arg)
-                    view = RenderingClass();
-                    view.setFrames(all_frames(:, :, :, i));
-                    view.Render(params, params.image_types, cache_intermediate_results = false);
-                    video(i) = ImageTypeList2();
-                    video(i).copy_from(view.Output);
+                parfor (i = 1:num_batches, parfor_arg)
+                    render_view = RenderingClass();
+                    render_view.setFrames(all_frames(:, :, :, i));
+                    render_view.Render(video_params, video_params.image_types, cache_intermediate_results = false);
+                    output_video(i) = ImageTypeList2();
+                    output_video(i).copy_from(render_view.Output);
                     send(D, 0);
                 end
 
             else
 
-                parfor (i = 1:(num_batches), obj.params.parfor_arg)
-                    view = RenderingClass();
-                    view.setFrames(reader.read_frame_batch(params.batch_size, (i - 1) * params.batch_stride + 1));
-                    view.Render(params, params.image_types, cache_intermediate_results = false);
-                    video(i) = ImageTypeList2();
-                    video(i).copy_from(view.Output);
+                parfor (i = 1:num_batches, parfor_arg)
+                    render_view = RenderingClass();
+                    frames = file_reader.read_frame_batch(batch_size, (i - 1) * batch_stride + first_frame);
+                    render_view.setFrames(frames);
+                    render_view.Render(video_params, video_params.image_types, cache_intermediate_results = false);
+                    output_video(i) = ImageTypeList2();
+                    output_video(i).copy_from(render_view.Output);
                     send(D, 0);
                 end
 
             end
 
-            obj.video = video;
+            obj.video = output_video;
         end
 
-        close(h);
+        close(h); % Close waitbar
 
+        % Perform image registration if required
         if obj.params.image_registration
 
             if ismember('power_Doppler', obj.params.image_types)
@@ -494,9 +498,10 @@ methods
 
         end
 
-        fprintf("Video Rendering took : %f s\n", toc(VideoRenderingTime));
+        % Display rendering time
+        fprintf("Video Rendering took: %f s\n", toc(VideoRenderingTime));
 
-        %% Save the video
+        % Save the video
         obj.SaveVideo();
     end
 
@@ -517,7 +522,7 @@ methods
         index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HD_'));
         result_folder_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD_', num2str(index + 1)));
 
-        if not(exist(result_folder_path))
+        if ~isfolder(result_folder_path)
             mkdir(result_folder_path);
             mkdir(fullfile(result_folder_path, 'avi'));
             mkdir(fullfile(result_folder_path, 'raw'));
@@ -674,7 +679,7 @@ methods
         ref_img = ref_img .* disk - disk .* sum(ref_img .* disk, [1, 2]) / nnz(disk); % minus the mean
         ref_img = ref_img ./ (max(abs(ref_img), [], [1, 2])); % rescaling but keeps mean at zero
 
-        [video_M0_reg, obj.registration.shifts] = register_video_from_reference(video_M0_reg, ref_img);
+        [~, obj.registration.shifts] = register_video_from_reference(video_M0_reg, ref_img);
     end
 
     function ApplyRegistration(obj)
