@@ -1,4 +1,4 @@
-function fhat = intgrad2(fx,fy,dx,dy,f11)
+function fhat = intgrad2(fx, fy, dx, dy, f11)
 % intgrad: generates a 2-d surface, integrating gradient information.
 % usage: fhat = intgrad2(fx,fy)
 % usage: fhat = intgrad2(fx,fy,dx,dy)
@@ -66,143 +66,157 @@ function fhat = intgrad2(fx,fy,dx,dy,f11)
 % Current release: 2
 % Date of release: 1/27/06
 % size
-if (length(size(fx))>2) || (length(size(fy))>2)
+if (length(size(fx)) > 2) || (length(size(fy)) > 2)
     error 'fx and fy must be 2d arrays'
 end
-[ny,nx] = size(fx);
-if (nx~=size(fy,2)) || (ny~=size(fy,1))
+
+[ny, nx] = size(fx);
+
+if (nx ~= size(fy, 2)) || (ny ~= size(fy, 1))
     error 'fx and fy must be the same sizes.'
 end
-if (nx<2) || (ny<2)
+
+if (nx < 2) || (ny < 2)
     error 'fx and fy must be at least 2x2 arrays'
 end
+
 % supply defaults if needed
-if (nargin<3) || isempty(dx)
+if (nargin < 3) || isempty(dx)
     % default x spacing is 1
     dx = 1;
 end
-if (nargin<4) || isempty(dy)
+
+if (nargin < 4) || isempty(dy)
     % default y spacing is 1
     dy = 1;
 end
-if (nargin<5) || isempty(f11)
+
+if (nargin < 5) || isempty(f11)
     % default integration constant is 0
     f11 = 0;
 end
+
 % if scalar spacings, expand them to be vectors
-dx=dx(:);
+dx = dx(:);
+
 if length(dx) == 1
-    dx = repmat(dx,nx-1,1);
-elseif length(dx)==nx
+    dx = repmat(dx, nx - 1, 1);
+elseif length(dx) == nx
     % dx was a vector, use diff to get the spacing
     dx = diff(dx);
 else
     error 'dx is not a scalar or of length == nx'
 end
-dy=dy(:);
+
+dy = dy(:);
+
 if length(dy) == 1
-    dy = repmat(dy,ny-1,1);
-elseif length(dy)==ny
+    dy = repmat(dy, ny - 1, 1);
+elseif length(dy) == ny
     % dy was a vector, use diff to get the spacing
     dy = diff(dy);
 else
     error 'dy is not a scalar or of length == ny'
 end
+
 if (length(f11) > 1) || ~isnumeric(f11) || isnan(f11) || ~isfinite(f11)
     error 'f11 must be a finite scalar numeric variable.'
 end
+
 % build gradient design matrix, sparsely. Use a central difference
 % in the body of the array, and forward/backward differences along
 % the edges.
 % A will be the final design matrix. it will be sparse.
 % The unrolling of F will be with row index running most rapidly.
-rhs = zeros(2*nx*ny,1);
+rhs = zeros(2 * nx * ny, 1);
 % but build the array elements in Af
-Af = zeros(2*nx*ny,6);
+Af = zeros(2 * nx * ny, 6);
 L = 0;
 % do the leading edge in x, forward difference
 indx = 1;
 indy = (1:ny)';
-ind = indy + (indx-1)*ny;
-rind = repmat(L+(1:ny)',1,2);
-cind = [ind,ind+ny];
-dfdx = repmat([-1 1]./dx(1),ny,1);
-Af(L+(1:ny),:) = [rind,cind,dfdx];
-rhs(L+(1:ny)) = fx(:,1);
-L = L+ny;
+ind = indy + (indx - 1) * ny;
+rind = repmat(L + (1:ny)', 1, 2);
+cind = [ind, ind + ny];
+dfdx = repmat([-1 1] ./ dx(1), ny, 1);
+Af(L + (1:ny), :) = [rind, cind, dfdx];
+rhs(L + (1:ny)) = fx(:, 1);
+L = L + ny;
 % interior partials in x, central difference
-if nx>2
-    [indx,indy] = meshgrid(2:(nx-1),1:ny);
+if nx > 2
+    [indx, indy] = meshgrid(2:(nx - 1), 1:ny);
     indx = indx(:);
     indy = indy(:);
-    ind = indy + (indx-1)*ny;
-    m = ny*(nx-2);
+    ind = indy + (indx - 1) * ny;
+    m = ny * (nx - 2);
 
-    rind = repmat(L+(1:m)',1,2);
-    cind = [ind-ny,ind+ny];
+    rind = repmat(L + (1:m)', 1, 2);
+    cind = [ind - ny, ind + ny];
 
-    dfdx = 1./(dx(indx-1)+dx(indx));
-    dfdx = dfdx*[-1 1];
+    dfdx = 1 ./ (dx(indx - 1) + dx(indx));
+    dfdx = dfdx * [-1 1];
 
-    Af(L+(1:m),:) = [rind,cind,dfdx];
-    rhs(L+(1:m)) = fx(ind);
+    Af(L + (1:m), :) = [rind, cind, dfdx];
+    rhs(L + (1:m)) = fx(ind);
 
-    L = L+m;
+    L = L + m;
 end
+
 % do the trailing edge in x, backward difference
 indx = nx;
 indy = (1:ny)';
-ind = indy + (indx-1)*ny;
-rind = repmat(L+(1:ny)',1,2);
-cind = [ind-ny,ind];
-dfdx = repmat([-1 1]./dx(end),ny,1);
-Af(L+(1:ny),:) = [rind,cind,dfdx];
-rhs(L+(1:ny)) = fx(:,end);
-L = L+ny;
+ind = indy + (indx - 1) * ny;
+rind = repmat(L + (1:ny)', 1, 2);
+cind = [ind - ny, ind];
+dfdx = repmat([-1 1] ./ dx(end), ny, 1);
+Af(L + (1:ny), :) = [rind, cind, dfdx];
+rhs(L + (1:ny)) = fx(:, end);
+L = L + ny;
 % do the leading edge in y, forward difference
 indx = (1:nx)';
 indy = 1;
-ind = indy + (indx-1)*ny;
-rind = repmat(L+(1:nx)',1,2);
-cind = [ind,ind+1];
-dfdy = repmat([-1 1]./dy(1),nx,1);
-Af(L+(1:nx),:) = [rind,cind,dfdy];
-rhs(L+(1:nx)) = fy(1,:).';
-L = L+nx;
+ind = indy + (indx - 1) * ny;
+rind = repmat(L + (1:nx)', 1, 2);
+cind = [ind, ind + 1];
+dfdy = repmat([-1 1] ./ dy(1), nx, 1);
+Af(L + (1:nx), :) = [rind, cind, dfdy];
+rhs(L + (1:nx)) = fy(1, :).';
+L = L + nx;
 % interior partials in y, use a central difference
-if ny>2
-    [indx,indy] = meshgrid(1:nx,2:(ny-1));
+if ny > 2
+    [indx, indy] = meshgrid(1:nx, 2:(ny - 1));
     indx = indx(:);
     indy = indy(:);
-    ind = indy + (indx-1)*ny;
-    m = nx*(ny-2);
+    ind = indy + (indx - 1) * ny;
+    m = nx * (ny - 2);
 
-    rind = repmat(L+(1:m)',1,2);
-    cind = [ind-1,ind+1];
+    rind = repmat(L + (1:m)', 1, 2);
+    cind = [ind - 1, ind + 1];
 
-    dfdy = 1./(dy(indy-1)+dy(indy));
-    dfdy = dfdy*[-1 1];
+    dfdy = 1 ./ (dy(indy - 1) + dy(indy));
+    dfdy = dfdy * [-1 1];
 
-    Af(L+(1:m),:) = [rind,cind,dfdy];
-    rhs(L+(1:m)) = fy(ind);
-    L = L+m;
+    Af(L + (1:m), :) = [rind, cind, dfdy];
+    rhs(L + (1:m)) = fy(ind);
+    L = L + m;
 end
+
 % do the trailing edge in y, backward diffeence
 indx = (1:nx)';
 indy = ny;
-ind = indy + (indx-1)*ny;
-rind = repmat(L+(1:nx)',1,2);
-cind = [ind-1,ind];
-dfdy = repmat([-1 1]./dy(end),nx,1);
-Af(L+(1:nx),:) = [rind,cind,dfdy];
-rhs(L+(1:nx)) = fy(end,:).';
+ind = indy + (indx - 1) * ny;
+rind = repmat(L + (1:nx)', 1, 2);
+cind = [ind - 1, ind];
+dfdy = repmat([-1 1] ./ dy(end), nx, 1);
+Af(L + (1:nx), :) = [rind, cind, dfdy];
+rhs(L + (1:nx)) = fy(end, :).';
 % finally, we can build the rest of A itself, in its sparse form.
-A = sparse(Af(:,1:2),Af(:,3:4),Af(:,5:6),2*nx*ny,nx*ny);
+A = sparse(Af(:, 1:2), Af(:, 3:4), Af(:, 5:6), 2 * nx * ny, nx * ny);
 % Finish up with f11, the constant of integration.
 % eliminate the first unknown, as f11 is given.
-rhs = rhs - A(:,1)*f11;
+rhs = rhs - A(:, 1) * f11;
 % Solve the final system of equations. They will be of
 % full rank, due to the explicit integration constant.
 % Just use sparse \
-fhat = A(:,2:end)\rhs;
-fhat = reshape([f11;fhat],ny,nx);
+fhat = A(:, 2:end) \ rhs;
+fhat = reshape([f11; fhat], ny, nx);

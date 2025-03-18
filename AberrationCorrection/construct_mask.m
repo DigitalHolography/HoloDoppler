@@ -10,6 +10,6 @@ x = 1:nx;
 y = 1:ny;
 [X, Y] = meshgrid(x, y);
 mask = ones(nx, ny);
-mask(((X - nx / 2).^2 + (Y - ny / 2).^2) <= r1^2) = 0;
-mask(((X - nx / 2).^2 + (Y - ny / 2).^2) >= r2^2) = 0;
+mask(((X - nx / 2) .^ 2 + (Y - ny / 2) .^ 2) <= r1 ^ 2) = 0;
+mask(((X - nx / 2) .^ 2 + (Y - ny / 2) .^ 2) >= r2 ^ 2) = 0;
 end
