@@ -1,4 +1,4 @@
-function classtogui(HD,app)
+function classtogui(HD, app)
 
 % handles all command transfer from HD to app
 
@@ -21,13 +21,12 @@ app.frame_position.Value = HD.params.frame_position;
 app.positioninfileSlider.Value = HD.params.frame_position;
 app.positioninfileSlider.Limits = double([1 HD.file.num_frames]);
 app.image_registration.Value = HD.params.image_registration;
-app.num_frames.Text = strcat('/ ',num2str(HD.file.num_frames));
-
+app.num_frames.Text = strcat('/ ', num2str(HD.file.num_frames));
 
 app.spatial_filter.Value = HD.params.spatial_filter;
 app.spatial_filter_range1.Value = HD.params.spatial_filter_range(1);
 app.spatial_filter_range2.Value = HD.params.spatial_filter_range(2);
-app.spatial_transformation.Items = ["Fresnel","angular spectrum","None"];
+app.spatial_transformation.Items = ["Fresnel", "angular spectrum", "None"];
 app.spatial_transformation.Value = HD.params.spatial_transformation;
 app.spatial_propagation.Value = HD.params.spatial_propagation;
 app.svd_filter.Value = HD.params.svd_filter;
@@ -46,6 +45,7 @@ app.index_range2.Value = HD.params.index_range(2);
 app.flat_field_gw.Value = HD.params.flatfield_gw;
 
 app.ShackHartmannCheckBox.Value = ~isempty(HD.params.ShackHartmannCorrection);
+
 if ~isempty(HD.params.ShackHartmannCorrection)
     app.ZernikeProjectionCheckBox.Value = HD.params.ShackHartmannCorrection.ZernikeProjection;
     app.shackhartmannzernikeranksEditField.Value = HD.params.ShackHartmannCorrection.zernikeranks;
@@ -54,4 +54,5 @@ if ~isempty(HD.params.ShackHartmannCorrection)
     app.subaperturemarginEditField.Value = HD.params.ShackHartmannCorrection.subaperturemargin;
     app.referenceimageDropDown.Value = HD.params.ShackHartmannCorrection.referenceimage;
 end
+
 end
