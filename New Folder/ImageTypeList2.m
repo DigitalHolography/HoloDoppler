@@ -419,7 +419,7 @@ methods
 
     end
 
-    function construct_image_from_SVD(obj, Params, covin, Uin, szin)
+    function construct_image_from_SVD(obj, covin, Uin, szin)
         % szin is just the size of a batch nx ny nt for reference
         if isempty(covin)
             return

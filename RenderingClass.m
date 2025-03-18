@@ -11,8 +11,6 @@ properties
     FH single
     H single
     SH single
-    cov single
-    U single
     Output ImageTypeList2
 end
 
@@ -186,16 +184,17 @@ methods
                     obj.H = single(obj.Frames);
             end
 
+            obj.Output.construct_image_from_FH(Params, obj.FH);
+
             if Params.svd_filter
-                [obj.H, obj.cov, obj.U] = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
-            else
-                obj.cov = [];
-                obj.U = [];
+                [obj.H, cov, U] = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
+                obj.Output.construct_image_from_SVD(cov, U, size(obj.H));
             end
 
             if Params.svdx_filter
                 obj.H = svd_x_filter(obj.H, Params.svdx_threshold, Params.time_range(1), Params.fs, floor(max(size(obj.H, 1), size(obj.H, 2)) / Params.svdx_Nsub));
             end
+
 
             if Params.svdx_t_filter
                 obj.H = svd_x_t_filter(obj.H, Params.svdx_t_threshold, Params.time_range(1), Params.fs, floor(max(size(obj.H, 1), size(obj.H, 2)) / Params.svdx_t_Nsub));
