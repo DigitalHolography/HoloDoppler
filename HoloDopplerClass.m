@@ -348,21 +348,22 @@ methods
         end
 
         % Set first and end frames
-        first_frame = obj.params.first_frame;
 
-        if isempty(first_frame)
+        if ~obj.params.first_frame
             first_frame = 1;
+        else
+            first_frame = obj.params.first_frame;
         end
 
-        end_frame = obj.params.end_frame;
-
-        if isempty(end_frame)
+        if ~obj.params.end_frame
             end_frame = obj.file.num_frames;
+        else
+            end_frame = obj.params.end_frame;
         end
 
         % Calculate number of batches
         num_batches = floor((end_frame - first_frame) / obj.params.batch_stride);
-        disp(['Rendering ' num2str(num_batches) ' frames.']);
+        fprintf('Rendering %d frames.\n', num_batches);
 
         if num_batches == 0
             return;
@@ -639,11 +640,13 @@ methods
         if isempty(obj.video)
             error("No video rendered")
         end
+        Nx = obj.file.Nx;
+        Ny = obj.file.Ny;
 
         num_batches = numel(obj.video);
         obj.registration = struct('shifts', [], 'rotation', [], 'scale', []);
 
-        video_M0 = zeros(obj.file.Ny, obj.file.Nx, 1, num_batches);
+        video_M0 = zeros(Ny, Nx, 1, num_batches);
 
         for i = 1:num_batches
 
@@ -653,19 +656,16 @@ methods
 
         end
 
-        numY = size(video_M0, 1);
-        numX = size(video_M0, 2);
-
         if obj.params.registration_disc_ratio > 0
             disk_ratio = obj.params.registration_disc_ratio;
-            disk = diskMask(numY, numX, disk_ratio);
+            disk = diskMask(Ny, Nx, disk_ratio);
 
             if size(disk, 1) ~= size(video_M0, 1)
                 disk = disk';
             end
 
         else
-            disk = ones([numY, numX]);
+            disk = ones([Ny, Nx]);
         end
 
         video_M0_reg = video_M0 .* disk - disk .* sum(video_M0 .* disk, [1, 2]) / nnz(disk); % minus the mean in the disc of each frame

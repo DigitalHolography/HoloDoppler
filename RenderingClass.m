@@ -80,67 +80,58 @@ methods
     end
 
     function obj = Render(obj, Params, image_types, options)
+        % Render Apply rendering pipeline to input frames based on parameters
 
         arguments
             obj
-            Params struct % contains all the parameters required for the rendering
-            image_types cell % list of chars containing the name of the outputs
+            Params struct % Contains all the parameters required for rendering
+            image_types cell % List of chars containing the name of the outputs
             options.cache_intermediate_results logical = true
         end
 
+        % Select output image types
         obj.Output.select(image_types{:});
 
-        % Calculate the parameters difference to prevent recalculations
+        % Detect parameter changes
+        ParamChanged = struct();
         fields = fieldnames(Params);
+        [Nx, Ny, batch_size] = size(obj.Frames);
 
         for i = 1:numel(fields)
 
             if isfield(obj.LastParams, fields{i})
                 ParamChanged.(fields{i}) = ~isequal(Params.(fields{i}), obj.LastParams.(fields{i}));
-                % if the parameter was different
-                % there is need to recalculate
             else
-                ParamChanged.(fields{i}) = true; % need to recalculate
+                ParamChanged.(fields{i}) = true; % New parameter, needs recalculation
             end
 
         end
 
-        %Fill with the last output params if none given
+        % Fill missing parameters with last used values
         fields = fieldnames(obj.LastParams);
 
         for i = 1:numel(fields)
 
             if ~isfield(Params, fields{i})
-                ParamChanged.(fields{i}) = false; % by default user should not need to calculate
+                ParamChanged.(fields{i}) = false; % Use last value, no recalculation needed
                 Params.(fields{i}) = obj.LastParams.(fields{i});
             end
 
         end
 
-        %1) Apply corrections to interferograms
-
+        % 1) Apply corrections to interferograms
         doFrames = ParamChanged.spatial_filter || ParamChanged.hilbert_filter || ParamChanged.spatial_filter_range || obj.FramesChanged;
 
-        if doFrames % change or if the frames changed
+        if doFrames
 
             if Params.hilbert_filter
-                tmp = obj.Frames;
-                [width, height, batch_size] = size(tmp);
-                tmp = reshape(tmp, width * height, batch_size);
-                tmp = hilbert(tmp);
-                obj.Frames = reshape(tmp, width, height, batch_size);
-                clear tmp;
+                obj.Frames = reshape(hilbert(reshape(obj.Frames, Nx * Ny, batch_size)), Nx, Ny, batch_size);
             end
-
-        end
-
-        if doFrames % change or if the frames changed
 
             if Params.spatial_filter
 
                 if ParamChanged.spatial_filter_range || obj.FramesChanged || isempty(obj.SpatialFilterMask)
-                    [NY, NX, ~] = size(obj.Frames);
-                    obj.SpatialFilterMask = fftshift(diskMask(NY, NX, Params.spatial_filter_range(1), Params.spatial_filter_range(2)))';
+                    obj.SpatialFilterMask = fftshift(diskMask(Nx, Ny, Params.spatial_filter_range(1), Params.spatial_filter_range(2)))';
                 end
 
                 obj.Frames = ifft2(fft2(obj.Frames) .* obj.SpatialFilterMask);
@@ -148,69 +139,52 @@ methods
 
         end
 
-        %2) Spatial transformation (from Frames to H)
-
+        % 2) Spatial transformation (from Frames to H)
         doFH = doFrames || ParamChanged.spatial_transformation || ParamChanged.spatial_propagation || ParamChanged.ShackHartmannCorrection || obj.FramesChanged || ~options.cache_intermediate_results;
 
-        if doFH % change or if the frames changed
+        if doFH
 
             switch Params.spatial_transformation
                 case "angular spectrum"
 
                     if ParamChanged.spatial_propagation || ParamChanged.spatial_transformation || isempty(obj.SpatialKernel)
-                        [NY, NX, ~] = size(obj.Frames);
-                        obj.SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
+                        obj.SpatialKernel = propagation_kernelAngularSpectrum(Ny, Nx, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
                     end
 
                     obj.FH = fft2(single(obj.Frames)) .* fftshift(obj.SpatialKernel);
+
                 case "Fresnel"
 
                     if ParamChanged.spatial_propagation || ParamChanged.spatial_transformation || isempty(obj.SpatialKernel)
-                        [NY, NX, ~] = size(obj.Frames);
-                        [obj.SpatialKernel, obj.PhaseFactor] = propagation_kernelFresnel(NX, NY, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
+                        [obj.SpatialKernel, obj.PhaseFactor] = propagation_kernelFresnel(Ny, Nx, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
                     end
 
                     obj.FH = single(obj.Frames) .* obj.SpatialKernel;
+
                 case "None"
                     obj.FH = [];
-
             end
 
-            if ~isempty(Params.ShackHartmannCorrection)
-
-                if doFH || ParamChanged.ShackHartmannCorrection || isempty(obj.ShackHartmannMask)
-                    obj.ShackHartmannMask = calculate_shackhartmannmask(obj.FH, Params.spatial_transformation, Params.spatial_propagation, Params.time_range, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
-                end
-
+            if ~isempty(Params.ShackHartmannCorrection) && (doFH || ParamChanged.ShackHartmannCorrection || isempty(obj.ShackHartmannMask))
+                obj.ShackHartmannMask = calculate_shackhartmannmask(obj.FH, Params.spatial_transformation, Params.spatial_propagation, Params.time_range, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
                 obj.FH = obj.FH .* obj.ShackHartmannMask;
             end
 
         end
 
-        doH = doFH || ParamChanged.svd_filter || (Params.svdx_filter && (ParamChanged.svdx_threshold || ParamChanged.svdx_Nsub)) || (Params.svdx_t_filter && (ParamChanged.svdx_t_threshold || ParamChanged.svdx_t_Nsub)) || ParamChanged.svdx_filter || ParamChanged.svdx_t_filter || (Params.svd_threshold == 0 && ParamChanged.time_range) || ParamChanged.svd_threshold || obj.FramesChanged || ~options.cache_intermediate_results;
+        % 3) H fluctuation batch filtering
+        doH = doFH || ParamChanged.svd_filter || (Params.svdx_filter && (ParamChanged.svdx_threshold || ParamChanged.svdx_Nsub)) || (Params.svdx_t_filter && (ParamChanged.svdx_t_threshold || ParamChanged.svdx_t_Nsub)) || ParamChanged.svd_threshold || obj.FramesChanged || ~options.cache_intermediate_results;
 
-        if doH % change or if the frames changed
+        if doH
 
             switch Params.spatial_transformation
                 case "angular spectrum"
                     obj.H = ifft2(obj.FH);
                 case "Fresnel"
-                    obj.H = fftshift(fftshift(fft2(obj.FH), 1), 2); %.*obj.PhaseFactor;
+                    obj.H = fftshift(fftshift(fft2(obj.FH), 1), 2);
                 case "None"
                     obj.H = single(obj.Frames);
             end
-
-        end
-
-        obj.Output.construct_image_from_FH(obj.LastParams, obj.FH);
-
-        if ~options.cache_intermediate_results
-            obj.FH = [];
-        end
-
-        %3) H fluctuation batch filtering
-
-        if doH
 
             if Params.svd_filter
                 [obj.H, obj.cov, obj.U] = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
@@ -219,19 +193,9 @@ methods
                 obj.U = [];
             end
 
-        end
-
-        obj.Output.construct_image_from_SVD(obj.LastParams, obj.cov, obj.U, size(obj.H));
-
-        if doH
-
             if Params.svdx_filter
-                obj.H = svd_x_filter(obj.H, Params.svdx_threshold, Params.time_range(1), Params.fs, floor(max(size(obj.H, 1), size(obj.H, 2)) / Params.svdx_Nsub)); % forced
+                obj.H = svd_x_filter(obj.H, Params.svdx_threshold, Params.time_range(1), Params.fs, floor(max(size(obj.H, 1), size(obj.H, 2)) / Params.svdx_Nsub));
             end
-
-        end
-
-        if doH
 
             if Params.svdx_t_filter
                 obj.H = svd_x_t_filter(obj.H, Params.svdx_t_threshold, Params.time_range(1), Params.fs, floor(max(size(obj.H, 1), size(obj.H, 2)) / Params.svdx_t_Nsub));
@@ -239,8 +203,7 @@ methods
 
         end
 
-        %4) Short-time transformation
-
+        % 4) Short-time transformation
         doSH = doH || ParamChanged.time_transform || obj.FramesChanged || ~options.cache_intermediate_results;
 
         if doSH
@@ -256,33 +219,29 @@ methods
                     [a, b, c] = size(obj.H);
                     tmp = reshape(obj.H, a * b, c);
                     out = arrayfun(@(lm) xcorr(tmp(lm, :), 'normalized'), (1:a * b), 'UniformOutput', false);
-
                     obj.SH = permute(reshape(cell2mat(out), [], a, b), [2 3 1]);
-                    %obj.SH = obj.SH(:,:,c/2:(c/2+c-1));
 
                 case 'intercorrelation'
-                    % [a, b, c] = size(obj.H);
-                    obj.SH = intercorrel(obj.H, 3); %TODO Replace template 3
+                    obj.SH = intercorrel(obj.H, 3); % TODO: Replace template 3
+
                 case 'None'
                     obj.SH = obj.H;
             end
 
+            obj.SH = flip(permute(obj.SH, [2 1 3]), 2); % x<->-y transpose due to lens imaging
         end
 
+        % Construct final output images
+        obj.Output.construct_image(Params, obj.SH);
+
+        % Clear intermediate results if not cached
         if ~options.cache_intermediate_results
+            obj.FH = [];
             obj.H = [];
         end
 
-        if doSH
-
-            obj.SH = flip(permute(obj.SH, [2 1 3]), 2); % x<->-y transpose due to the lens imaging
-
-        end
-
-        obj.Output.construct_image(Params, obj.SH);
-
-        obj.FramesChanged = false; % reset
-
+        % Reset frames changed flag and update last parameters
+        obj.FramesChanged = false;
         obj.LastParams = Params;
     end
 
