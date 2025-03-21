@@ -21,8 +21,6 @@ classdef ImageTypeList2 < handle
         denoised
         cluster_projection
         intercorrel0
-        intercorrel1
-        intercorrel2
         FH_modulus_mean
         FH_arg_mean
         SVD_cov
@@ -53,8 +51,6 @@ classdef ImageTypeList2 < handle
             obj.denoised = ImageType('denoised');
             obj.cluster_projection = ImageType('cluster_projection');
             obj.intercorrel0 = ImageType('intercorrel0');
-            obj.intercorrel1 = ImageType('intercorrel1');
-            obj.intercorrel2 = ImageType('intercorrel2');
             obj.FH_modulus_mean = ImageType('FH_modulus_mean');
             obj.FH_arg_mean = ImageType('FH_arg_mean');
             obj.SVD_cov = ImageType('SVD_cov');
@@ -292,17 +288,6 @@ classdef ImageTypeList2 < handle
                 img = moment0(SH, f1, f2, Params.fs, NT, 0);
                 obj.intercorrel0.image = reorder_directions(img,3,1);
             end
-            
-            if obj.intercorrel1.is_selected %
-                img = moment1(SH, f1, f2, Params.fs, NT, 0);
-                obj.intercorrel1.image = reorder_directions(img,3,1);
-            end
-            
-            if obj.intercorrel2.is_selected %
-                img = moment2(SH, f1, f2, Params.fs, NT, 0);
-                obj.intercorrel2.image = reorder_directions(img,3,1);
-            end
-            
             if obj.buckets.is_selected % buckets has been chosen
                 numX = size(SH, 1);
                 numY = size(SH, 2);

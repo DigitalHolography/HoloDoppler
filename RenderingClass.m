@@ -163,6 +163,8 @@ classdef RenderingClass < handle
                         [obj.ShackHartmannMask,obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH,Params.spatial_transformation,Params.spatial_propagation, Params.time_range, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
                     end
                     obj.FH = obj.FH .* obj.ShackHartmannMask;
+                else
+                    obj.ShackHartmannMask = [];
                 end
             end
             obj.Output.construct_image_from_ShackHartmann(Params,obj.moment_chunks_crop_array, obj.ShackHartmannMask);
