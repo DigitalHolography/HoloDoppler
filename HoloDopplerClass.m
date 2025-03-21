@@ -50,7 +50,7 @@ classdef HoloDopplerClass < handle
             
             
             %1 ) Metadata extraction
-            holo_version_threshold = 6; % current is version 7
+            holo_version_threshold = 5; % current is version 7
 
             switch ext
                 case '.holo'

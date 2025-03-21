@@ -6,6 +6,7 @@ function [obj,subFolderPath] = findGUICache(folderPath)
 
     % Initialize output
     obj = [];
+    subFolderPath = [];
 
     % Validate folder path
     if ~isfolder(folderPath)
