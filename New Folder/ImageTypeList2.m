@@ -16,6 +16,7 @@ classdef ImageTypeList2 < handle
         moment_1
         moment_2
         arg_0
+        f_RMS
         buckets
         denoised
         cluster_projection
@@ -26,6 +27,8 @@ classdef ImageTypeList2 < handle
         FH_arg_mean
         SVD_cov
         SVD_U
+        ShackHartmann_Cropped_Moments
+        ShackHartmann_Phase
     end
     
     methods
@@ -45,6 +48,7 @@ classdef ImageTypeList2 < handle
             obj.moment_1 = ImageType('M1');
             obj.moment_2 = ImageType('M2');
             obj.arg_0 = ImageType('arg0');
+            obj.f_RMS = ImageType('f_RMS');
             obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', []));
             obj.denoised = ImageType('denoised');
             obj.cluster_projection = ImageType('cluster_projection');
@@ -55,6 +59,8 @@ classdef ImageTypeList2 < handle
             obj.FH_arg_mean = ImageType('FH_arg_mean');
             obj.SVD_cov = ImageType('SVD_cov');
             obj.SVD_U = ImageType('SVD_U');
+            obj.ShackHartmann_Cropped_Moments = ImageType('ShackMoments');
+            obj.ShackHartmann_Phase = ImageType('ShackPhase');
             
             
         end
@@ -151,7 +157,7 @@ classdef ImageTypeList2 < handle
             
             
             % clear phase
-            SH = abs(SHin) .^ 2;
+            SH = abs(SHin) .^2;
             SH_arg = angle(SHin);
             
             if obj.pure_PCA.is_selected
@@ -268,7 +274,20 @@ classdef ImageTypeList2 < handle
                 img = moment2(SH, f1, f2, Params.fs, NT, 0);
                 obj.moment_2.image = img;
             end
-            
+
+            if obj.f_RMS.is_selected
+                M0 = moment0(SH, f1, f2, Params.fs, NT, 0);
+                M2 = moment2(SH, f1, f2, Params.fs, NT, 0);
+                fi=figure("Visible", "off");
+                imagesc(sqrt(M2./mean(M0,[1,2])));
+                %imagesc(sqrt(M2./M0));
+                axis off; axis image;
+                title("f_{RMS} (in kHz)")
+                colormap("gray");
+                colorbar;
+                frame = getframe(fi); % Capture the figure
+                obj.f_RMS.image= frame.cdata;
+            end
             if obj.intercorrel0.is_selected %
                 img = moment0(SH, f1, f2, Params.fs, NT, 0);
                 obj.intercorrel0.image = reorder_directions(img,3,1);
@@ -403,7 +422,9 @@ classdef ImageTypeList2 < handle
         
         function construct_image_from_SVD(obj,Params, covin, Uin, szin)
             % szin is just the size of a batch nx ny nt for reference
-            if isempty(covin) 
+            if isempty(covin)
+                obj.SVD_cov.image = [];
+                obj.SVD_U.image = [];
                 return 
             end
             if obj.SVD_cov.is_selected
@@ -423,6 +444,19 @@ classdef ImageTypeList2 < handle
                 set(gca, 'Position', [0 0 1 1]); % Remove extra spaceù=
                 frame = getframe(fi);
                 obj.SVD_U.image = frame.cdata;
+            end
+        end
+        function construct_image_from_ShackHartmann(obj,Params, moment_chunks_crop_array , ShackHartmannMask)
+            if isempty(ShackHartmannMask) 
+                obj.ShackHartmann_Cropped_Moments.image = [];
+                obj.ShackHartmann_Phase.image = [];
+                return 
+            end
+            if obj.ShackHartmann_Cropped_Moments.is_selected
+                obj.ShackHartmann_Cropped_Moments.image = moment_chunks_crop_array;
+            end
+            if obj.ShackHartmann_Phase.is_selected
+                obj.ShackHartmann_Phase.image = angle(ShackHartmannMask);
             end
         end
     end

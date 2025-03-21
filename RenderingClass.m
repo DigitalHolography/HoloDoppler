@@ -8,6 +8,7 @@ classdef RenderingClass < handle
         SpatialKernel single
         PhaseFactor single
         ShackHartmannMask single
+        moment_chunks_crop_array single
         FH single
         H single
         SH single
@@ -159,12 +160,13 @@ classdef RenderingClass < handle
                 
                 if ~isempty(Params.ShackHartmannCorrection)
                     if doFH | ParamChanged.ShackHartmannCorrection | isempty(obj.ShackHartmannMask)
-                        obj.ShackHartmannMask = calculate_shackhartmannmask(obj.FH,Params.spatial_transformation,Params.spatial_propagation, Params.time_range, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
+                        [obj.ShackHartmannMask,obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH,Params.spatial_transformation,Params.spatial_propagation, Params.time_range, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
                     end
                     obj.FH = obj.FH .* obj.ShackHartmannMask;
                 end
             end
-            
+            obj.Output.construct_image_from_ShackHartmann(Params,obj.moment_chunks_crop_array, obj.ShackHartmannMask);
+
             doH = doFH | ParamChanged.svd_filter | (Params.svdx_filter && (ParamChanged.svdx_threshold||ParamChanged.svdx_Nsub)) | (Params.svdx_t_filter && (ParamChanged.svdx_t_threshold||ParamChanged.svdx_t_Nsub)) | ParamChanged.svdx_filter | ParamChanged.svdx_t_filter | (Params.svd_threshold==0 && ParamChanged.time_range) | ParamChanged.svd_threshold  | obj.FramesChanged | ~options.cache_intermediate_results;
             
             if doH % change or if the frames changed
@@ -178,7 +180,7 @@ classdef RenderingClass < handle
                         obj.H = single(obj.Frames);
                 end
             end
-            
+            % obj.H = abs(obj.H); % nothing is in the phase so doing this is ok
             obj.Output.construct_image_from_FH(obj.LastParams,obj.FH);
             
             if ~ options.cache_intermediate_results
@@ -190,13 +192,16 @@ classdef RenderingClass < handle
             if doH
                 if Params.svd_filter
                     [obj.H,obj.cov,obj.U] = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
-                else
-                    obj.cov = [];
-                    obj.U=[];
+
                 end
             end
+
+            if ~Params.svd_filter
+                obj.cov = [];
+                obj.U=[];
+            end
             
-            obj.Output.construct_image_from_SVD(obj.LastParams,obj.cov,obj.U,size(obj.H));
+            obj.Output.construct_image_from_SVD(Params,obj.cov,obj.U,size(obj.H));
 
             
             
@@ -273,6 +278,11 @@ classdef RenderingClass < handle
             obj.Output.select(image_types{:});
             
             obj.Output.construct_image_from_FH(obj.LastParams,obj.FH);
+
+            obj.Output.construct_image_from_SVD(obj.LastParams,obj.cov,obj.U,size(obj.H));
+
+            obj.Output.construct_image_from_ShackHartmann(obj.LastParams,obj.moment_chunks_crop_array, obj.ShackHartmannMask);
+
             
             obj.Output.construct_image(obj.LastParams,obj.SH);
             

@@ -50,6 +50,8 @@ classdef HoloDopplerClass < handle
             
             
             %1 ) Metadata extraction
+            holo_version_threshold = 6; % current is version 7
+
             switch ext
                 case '.holo'
                     try
@@ -57,20 +59,30 @@ classdef HoloDopplerClass < handle
                     catch e
                         obj.file = [];
                         obj.reader = [];
-                        error("The file is not a valid holo file: %s", e.message)
+                        error("Couldn't read the holo file with holo reader: %s", e.message)
                     end
                     fields = properties(obj.reader);
+                    
+
                     for i = 1:length(fields)
                         if ~strcmp(fields{i},'filename')
                             obj.file.info.(fields{i}) = obj.reader.(fields{i});
                         end
                     end
-                    
-                    obj.file.lambda = obj.reader.footer.compute_settings.image_rendering.lambda;
                     obj.file.Nx = obj.reader.frame_width;
                     obj.file.Ny = obj.reader.frame_height;
-                    obj.file.ppx = obj.reader.footer.info.pixel_pitch.x * 1e-6; %given in µm
-                    obj.file.ppy = obj.reader.footer.info.pixel_pitch.y * 1e-6; %given in µm
+                    if obj.reader.version >= holo_version_threshold
+                        obj.file.lambda = obj.reader.footer.compute_settings.image_rendering.lambda;
+                        
+                        obj.file.ppx = obj.reader.footer.info.pixel_pitch.x * 1e-6; %given in µm
+                        obj.file.ppy = obj.reader.footer.info.pixel_pitch.y * 1e-6; %given in µm
+                    else
+                        fprintf("Old version of Holovibes detected, using default parameters.\n")
+                        obj.file.lambda = obj.view.LastParams.lambda;
+                        
+                        obj.file.ppx = obj.view.LastParams.ppx;
+                        obj.file.ppy= obj.view.LastParams.ppy;
+                    end
                     try
                         obj.file.fs = obj.reader.footer.info.camera_fps/1000; %conversion in kHz;
                     catch
@@ -120,7 +132,9 @@ classdef HoloDopplerClass < handle
             switch obj.file.ext
                 case '.holo'
                     obj.params.spatial_transformation = 'Fresnel';
-                    obj.params.spatial_propagation = obj.reader.footer.compute_settings.image_rendering.propagation_distance;
+                    if obj.reader.version >= holo_version_threshold
+                        obj.params.spatial_propagation = obj.reader.footer.compute_settings.image_rendering.propagation_distance;
+                    end
                 case '.cine'
                     obj.params.spatial_transformation = 'angular spectrum';
                     obj.params.spatial_propagation = 0.5; % meters
@@ -133,10 +147,31 @@ classdef HoloDopplerClass < handle
             % 3) Look for config or last computation params
             
             % Define the paths for saved preview, video, and config parameters
-            preview_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HDPreview', '\', obj.file.name, '_RenderingParameters.json'));
-            video_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD', '\', obj.file.name, '_RenderingParameters.json'));
-            config_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_RenderingParameters.json'));
+            last_preview_index = get_highest_number_in_directories(obj.file.dir,strcat(obj.file.name, '_HDPreview'));
+            preview_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HDPreview_',num2str(last_preview_index), '\', obj.file.name, '_HDPreview_',num2str(last_preview_index), '_RenderingParameters.json'));
+            last_video_index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HD_'));
+            video_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD_',num2str(last_video_index), '\', obj.file.name, '_HD_',num2str(last_video_index), '_RenderingParameters.json'));
+            last_config_index = get_highest_number_in_files(obj.file.dir, strcat(obj.file.name, '_RenderingParameters_'));
+            config_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_RenderingParameters_',num2str(last_config_index),'.json'));
             
+            % Look for old .mat config files existing in the current folder
+            [GuiCacheObj,old_mat_path] = findGUICache(obj.file.dir);
+            if ~isempty(GuiCacheObj)
+                if ~isempty(GuiCacheObj.z)
+                    p.spatial_propagation = GuiCacheObj.z;
+                end
+                if ~isempty(GuiCacheObj.z_retina)
+                    p.spatial_propagation = GuiCacheObj.z_retina;
+                end
+                if ~isempty(GuiCacheObj.spatialTransformation)
+                    p.spatial_transformation = GuiCacheObj.spatialTransformation;
+                end
+                if ~isempty(GuiCacheObj.wavelength)
+                    p.lambda = GuiCacheObj.wavelength;
+                end
+                fprintf('Loading z parameter from %s\n', old_mat_path);
+                obj.setParams(p); % overwrites the z propagation params with the one found in the old mat
+            end
             % Load saved preview parameters if they exist
             if exist(preview_params_path, 'file')
                 fprintf('Loading saved preview parameters from %s\n', preview_params_path);
@@ -266,7 +301,7 @@ classdef HoloDopplerClass < handle
             for i=1:numel(obj.params.image_types)
                 image = images{i};
 
-                if ~ismember(obj.params.image_types{i}, {'spectrogram','autocorrelogram','broadening'})&& size(image,1) ~= size(image,2)
+                if ~ismember(obj.params.image_types{i}, {'spectrogram','autocorrelogram','broadening','f_RMS'})&& size(image,1) ~= size(image,2) % do not resize the graphs
                     image = imresize(image,[max(size(image,1),size(image,2)),max(size(image,1),size(image,2))]);
                 end
                 
