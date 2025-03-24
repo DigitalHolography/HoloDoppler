@@ -176,7 +176,7 @@ classdef HoloDopplerClass < handle
             if exist(preview_params_path, 'file')
                 fprintf('Loading saved preview parameters from %s\n', preview_params_path);
                 fid = fopen(preview_params_path, 'r');
-                obj.params = jsondecode(fread(fid, inf, '*char')');
+                obj.setParams(jsondecode(fread(fid, inf, '*char')'));
                 fclose(fid);
             end
             
@@ -184,7 +184,7 @@ classdef HoloDopplerClass < handle
             if exist(video_params_path, 'file')
                 fprintf('Loading saved video parameters from %s\n', video_params_path);
                 fid = fopen(video_params_path, 'r');
-                obj.params = jsondecode(fread(fid, inf, '*char')');
+                obj.setParams(jsondecode(fread(fid, inf, '*char')'));
                 fclose(fid);
             end
             
@@ -192,7 +192,7 @@ classdef HoloDopplerClass < handle
             if exist(config_params_path, 'file')
                 fprintf('Loading saved config from %s\n', config_params_path);
                 fid = fopen(config_params_path, 'r');
-                obj.params = jsondecode(fread(fid, inf, '*char')');
+                obj.setParams(jsondecode(fread(fid, inf, '*char')'));
                 fclose(fid);
             end
             
