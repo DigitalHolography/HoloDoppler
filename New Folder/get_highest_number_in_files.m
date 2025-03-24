@@ -32,6 +32,6 @@ function highest_number = get_highest_number_in_files(directory, search_str)
     
     % If no valid number is found, return a message or default value (e.g., -Inf)
     if highest_number == 0
-        disp('No files with the specified string and a number at the end were found.');
+        %% disp('No files with the specified string and a number at the end were found.');
     end
 end

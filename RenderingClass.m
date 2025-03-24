@@ -8,9 +8,12 @@ classdef RenderingClass < handle
         SpatialKernel single
         PhaseFactor single
         ShackHartmannMask single
+        moment_chunks_crop_array single
         FH single
         H single
         SH single
+        cov single
+        U single
         Output ImageTypeList2
     end
     
@@ -37,10 +40,16 @@ classdef RenderingClass < handle
             Params.spatial_propagation = 0.5;
             Params.svd_filter = 1;
             Params.svdx_filter = false;
+            Params.svdx_t_filter = false;
+            Params.svdx_Nsub = 32;
+            Params.svdx_t_Nsub = 32;
+            Params.svdx_threshold = 10;
+            Params.svdx_t_threshold = 100;
             Params.svd_threshold = false;
             Params.svd_stride = [];
             Params.time_transform = "FFT";
             Params.time_range = [6,10.5];
+            Params.index_range = [3,10];
             Params.time_range_extra = -1;
             Params.buckets_number = 4;
             Params.flatfield_gw = 35;
@@ -137,13 +146,13 @@ classdef RenderingClass < handle
                             [NY,NX,~] = size(obj.Frames);
                             obj.SpatialKernel = propagation_kernelAngularSpectrum(NX,NY,Params.spatial_propagation,Params.lambda,Params.ppx,Params.ppy,0);
                         end
-                        obj.FH = single(fft2(obj.Frames)) .* obj.SpatialKernel;
+                        obj.FH = fft2(single(obj.Frames)) .* fftshift(obj.SpatialKernel);
                     case "Fresnel"
                         if ParamChanged.spatial_propagation | ParamChanged.spatial_transformation | isempty(obj.SpatialKernel)
                             [NY,NX,~] = size(obj.Frames);
                             [obj.SpatialKernel,obj.PhaseFactor] = propagation_kernelFresnel(NX,NY,Params.spatial_propagation,Params.lambda,Params.ppx,Params.ppy,0);
                         end
-                        obj.FH = single(obj.Frames) .* obj.SpatialKernel;
+                        obj.FH = single(obj.Frames) .* obj.SpatialKernel ;
                     case "None"
                         obj.FH = [];
                         
@@ -151,13 +160,16 @@ classdef RenderingClass < handle
                 
                 if ~isempty(Params.ShackHartmannCorrection)
                     if doFH | ParamChanged.ShackHartmannCorrection | isempty(obj.ShackHartmannMask)
-                        obj.ShackHartmannMask = calculate_shackhartmannmask(obj.FH,Params.spatial_transformation,Params.spatial_propagation, Params.time_range, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
+                        [obj.ShackHartmannMask,obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH,Params.spatial_transformation,Params.spatial_propagation, Params.time_range, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
                     end
                     obj.FH = obj.FH .* obj.ShackHartmannMask;
+                else
+                    obj.ShackHartmannMask = [];
                 end
             end
-            
-            doH = doFH | ParamChanged.svd_filter | (Params.svd_threshold==0 && ParamChanged.time_range) | ParamChanged.svd_threshold  | obj.FramesChanged | ~options.cache_intermediate_results;
+            obj.Output.construct_image_from_ShackHartmann(Params,obj.moment_chunks_crop_array, obj.ShackHartmannMask);
+
+            doH = doFH | ParamChanged.svd_filter | (Params.svdx_filter && (ParamChanged.svdx_threshold||ParamChanged.svdx_Nsub)) | (Params.svdx_t_filter && (ParamChanged.svdx_t_threshold||ParamChanged.svdx_t_Nsub)) | ParamChanged.svdx_filter | ParamChanged.svdx_t_filter | (Params.svd_threshold==0 && ParamChanged.time_range) | ParamChanged.svd_threshold  | obj.FramesChanged | ~options.cache_intermediate_results;
             
             if doH % change or if the frames changed
                 
@@ -165,11 +177,13 @@ classdef RenderingClass < handle
                     case "angular spectrum"
                         obj.H = ifft2(obj.FH);
                     case "Fresnel"
-                        obj.H = fftshift(fftshift(fft2(obj.FH),1),2);
+                        obj.H = fftshift(fftshift(fft2(obj.FH),1),2) ;%.*obj.PhaseFactor;
                     case "None"
                         obj.H = single(obj.Frames);
                 end
             end
+            % obj.H = abs(obj.H); % nothing is in the phase so doing this is ok
+            obj.Output.construct_image_from_FH(obj.LastParams,obj.FH);
             
             if ~ options.cache_intermediate_results
                 obj.FH = [];
@@ -179,13 +193,29 @@ classdef RenderingClass < handle
             
             if doH
                 if Params.svd_filter
-                    obj.H = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
+                    [obj.H,obj.cov,obj.U] = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
+
+                end
+            end
+
+            if ~Params.svd_filter
+                obj.cov = [];
+                obj.U=[];
+            end
+            
+            obj.Output.construct_image_from_SVD(Params,obj.cov,obj.U,size(obj.H));
+
+            
+            
+            if doH
+                if Params.svdx_filter
+                    obj.H = svd_x_filter(obj.H,Params.svdx_threshold, Params.time_range(1), Params.fs, floor(max(size(obj.H,1),size(obj.H,2))/Params.svdx_Nsub)); % forced 
                 end
             end
             
             if doH
-                if Params.svdx_filter
-                    obj.H = svd_x_filter(obj.H,Params.svd_threshold, Params.time_range(1), Params.fs, 5); % forced to 5 Nsubapp
+                if Params.svdx_t_filter
+                    obj.H = svd_x_t_filter(obj.H,Params.svdx_t_threshold, Params.time_range(1), Params.fs, floor(max(size(obj.H,1),size(obj.H,2))/Params.svdx_t_Nsub) ); 
                 end
             end
             
@@ -208,6 +238,10 @@ classdef RenderingClass < handle
                         
                         obj.SH = permute(reshape(cell2mat(out),[],a,b),[2 3 1]);
                         %obj.SH = obj.SH(:,:,c/2:(c/2+c-1));
+                        
+                    case 'intercorrelation'
+                        [a,b,c] = size(obj.H);
+                        obj.SH = intercorrel(obj.H,3); %TODO Replace template 3
                     case 'None'
                         obj.SH = obj.H;
                 end
@@ -244,6 +278,13 @@ classdef RenderingClass < handle
                 end
             end
             obj.Output.select(image_types{:});
+            
+            obj.Output.construct_image_from_FH(obj.LastParams,obj.FH);
+
+            obj.Output.construct_image_from_SVD(obj.LastParams,obj.cov,obj.U,size(obj.H));
+
+            obj.Output.construct_image_from_ShackHartmann(obj.LastParams,obj.moment_chunks_crop_array, obj.ShackHartmannMask);
+
             
             obj.Output.construct_image(obj.LastParams,obj.SH);
             

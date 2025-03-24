@@ -1,4 +1,4 @@
-function H = svd_filter(H, thresh, f1, fs, stride_param)
+function [H,cov,U] = svd_filter(H, thresh, f1, fs, stride_param)
 
 % SVD filtering
 %
@@ -38,8 +38,8 @@ cov = H'*H;
 [~, sort_idx] = sort(diag(S), 'descend');
 V = V(:,sort_idx);
 H_tissue = Hi * V(:,1:thresh) * V(:,1:thresh)';
+U = Hi * V(:,1:thresh); % U is also divided by S^2 but normalization of each U image removes this factor
 H = reshape(Hi - H_tissue, iwidth, iheight, batch_size);
 H = reshape(H, iwidth, iheight, batch_size);
-
 
 end

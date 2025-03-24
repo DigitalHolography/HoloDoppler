@@ -50,6 +50,8 @@ classdef HoloDopplerClass < handle
             
             
             %1 ) Metadata extraction
+            holo_version_threshold = 5; % current is version 7
+
             switch ext
                 case '.holo'
                     try
@@ -57,20 +59,30 @@ classdef HoloDopplerClass < handle
                     catch e
                         obj.file = [];
                         obj.reader = [];
-                        error("The file is not a valid holo file: %s", e.message)
+                        error("Couldn't read the holo file with holo reader: %s", e.message)
                     end
                     fields = properties(obj.reader);
+                    
+
                     for i = 1:length(fields)
                         if ~strcmp(fields{i},'filename')
                             obj.file.info.(fields{i}) = obj.reader.(fields{i});
                         end
                     end
-                    
-                    obj.file.lambda = obj.reader.footer.compute_settings.image_rendering.lambda;
                     obj.file.Nx = obj.reader.frame_width;
                     obj.file.Ny = obj.reader.frame_height;
-                    obj.file.ppx = obj.reader.footer.info.pixel_pitch.x * 1e-6; %given in µm
-                    obj.file.ppy = obj.reader.footer.info.pixel_pitch.y * 1e-6; %given in µm
+                    if obj.reader.version >= holo_version_threshold
+                        obj.file.lambda = obj.reader.footer.compute_settings.image_rendering.lambda;
+                        
+                        obj.file.ppx = obj.reader.footer.info.pixel_pitch.x * 1e-6; %given in µm
+                        obj.file.ppy = obj.reader.footer.info.pixel_pitch.y * 1e-6; %given in µm
+                    else
+                        fprintf("Old version of Holovibes detected, using default parameters.\n")
+                        obj.file.lambda = obj.view.LastParams.lambda;
+                        
+                        obj.file.ppx = obj.view.LastParams.ppx;
+                        obj.file.ppy= obj.view.LastParams.ppy;
+                    end
                     try
                         obj.file.fs = obj.reader.footer.info.camera_fps/1000; %conversion in kHz;
                     catch
@@ -120,7 +132,9 @@ classdef HoloDopplerClass < handle
             switch obj.file.ext
                 case '.holo'
                     obj.params.spatial_transformation = 'Fresnel';
-                    obj.params.spatial_propagation = obj.reader.footer.compute_settings.image_rendering.propagation_distance;
+                    if obj.reader.version >= holo_version_threshold
+                        obj.params.spatial_propagation = obj.reader.footer.compute_settings.image_rendering.propagation_distance;
+                    end
                 case '.cine'
                     obj.params.spatial_transformation = 'angular spectrum';
                     obj.params.spatial_propagation = 0.5; % meters
@@ -133,15 +147,36 @@ classdef HoloDopplerClass < handle
             % 3) Look for config or last computation params
             
             % Define the paths for saved preview, video, and config parameters
-            preview_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HDPreview', '\', obj.file.name, '_RenderingParameters.json'));
-            video_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD', '\', obj.file.name, '_RenderingParameters.json'));
-            config_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_RenderingParameters.json'));
+            last_preview_index = get_highest_number_in_directories(obj.file.dir,strcat(obj.file.name, '_HDPreview'));
+            preview_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HDPreview_',num2str(last_preview_index), '\', obj.file.name, '_HDPreview_',num2str(last_preview_index), '_RenderingParameters.json'));
+            last_video_index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HD_'));
+            video_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD_',num2str(last_video_index), '\', obj.file.name, '_HD_',num2str(last_video_index), '_RenderingParameters.json'));
+            last_config_index = get_highest_number_in_files(obj.file.dir, strcat(obj.file.name, '_RenderingParameters_'));
+            config_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_RenderingParameters_',num2str(last_config_index),'.json'));
             
+            % Look for old .mat config files existing in the current folder
+            [GuiCacheObj,old_mat_path] = findGUICache(obj.file.dir);
+            if ~isempty(GuiCacheObj)
+                if ~isempty(GuiCacheObj.z)
+                    p.spatial_propagation = GuiCacheObj.z;
+                end
+                if ~isempty(GuiCacheObj.z_retina)
+                    p.spatial_propagation = GuiCacheObj.z_retina;
+                end
+                if ~isempty(GuiCacheObj.spatialTransformation)
+                    p.spatial_transformation = GuiCacheObj.spatialTransformation;
+                end
+                if ~isempty(GuiCacheObj.wavelength)
+                    p.lambda = GuiCacheObj.wavelength;
+                end
+                fprintf('Loading z parameter from %s\n', old_mat_path);
+                obj.setParams(p); % overwrites the z propagation params with the one found in the old mat
+            end
             % Load saved preview parameters if they exist
             if exist(preview_params_path, 'file')
                 fprintf('Loading saved preview parameters from %s\n', preview_params_path);
                 fid = fopen(preview_params_path, 'r');
-                obj.params = jsondecode(fread(fid, inf, '*char')');
+                obj.setParams(jsondecode(fread(fid, inf, '*char')'));
                 fclose(fid);
             end
             
@@ -149,7 +184,7 @@ classdef HoloDopplerClass < handle
             if exist(video_params_path, 'file')
                 fprintf('Loading saved video parameters from %s\n', video_params_path);
                 fid = fopen(video_params_path, 'r');
-                obj.params = jsondecode(fread(fid, inf, '*char')');
+                obj.setParams(jsondecode(fread(fid, inf, '*char')'));
                 fclose(fid);
             end
             
@@ -157,7 +192,7 @@ classdef HoloDopplerClass < handle
             if exist(config_params_path, 'file')
                 fprintf('Loading saved config from %s\n', config_params_path);
                 fid = fopen(config_params_path, 'r');
-                obj.params = jsondecode(fread(fid, inf, '*char')');
+                obj.setParams(jsondecode(fread(fid, inf, '*char')'));
                 fclose(fid);
             end
             
@@ -263,6 +298,16 @@ classdef HoloDopplerClass < handle
             end
             obj.view.Render(obj.params,obj.params.image_types);
             images = obj.view.getImages(obj.params.image_types);
+            for i=1:numel(obj.params.image_types)
+                image = images{i};
+
+                if ~ismember(obj.params.image_types{i}, {'spectrogram','autocorrelogram','broadening','f_RMS'})&& size(image,1) ~= size(image,2) % do not resize the graphs
+                    image = imresize(image,[max(size(image,1),size(image,2)),max(size(image,1),size(image,2))]);
+                end
+                
+                images{i} = image;
+            end
+            
         end
         
         function images = showPreviewImages(obj,images_types)
@@ -481,7 +526,7 @@ classdef HoloDopplerClass < handle
                 tmp = {obj.video.(image_types{i})};
                 
                 
-                if strcmp(image_types{i},'spectrogram') %SH extraction
+                if strcmp(image_types{i},'SH') %SH extraction
                     sz = size(tmp{1}.parameters.SH);
                     bs = sz(3); % SH binned batchsize
                     sz(3) =  bs * length(tmp);
@@ -491,16 +536,6 @@ classdef HoloDopplerClass < handle
                         mat(:,:,(j-1)*bs+1:j*bs) = tmp{j}.parameters.SH;
                     end
                     generate_video(mat,result_folder_path,strcat('SH'),export_raw=1,temporal_filter = 2);
-                    sz = size(tmp{1}.image);
-                    if length(sz)==2
-                        sz = [sz 1];
-                    end
-                    sz = [sz length(tmp)];
-                    mat = zeros(sz,'single');
-                    for j = 1:length(tmp)
-                        mat(:,:,:,j) = tmp{j}.image;
-                    end
-                    generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = []);
                     continue
                 elseif strcmp(image_types{i},'buckets')
                     sz = size(tmp{1}.parameters.intervals_0);
@@ -547,6 +582,12 @@ classdef HoloDopplerClass < handle
                         generate_video(mat,result_folder_path,strcat('moment2'),export_raw=1,temporal_filter = 2);
                     elseif strcmp(image_types{i},'power_Doppler')
                         generate_video(mat,result_folder_path,strcat('M0'),temporal_filter = 2);
+                    elseif strcmp(image_types{i},'spectrogram')
+                        generate_video(mat,result_folder_path,strcat('spectrogram'),temporal_filter = []);
+                    elseif strcmp(image_types{i},'autocorrelogram')
+                        generate_video(mat,result_folder_path,strcat('autocorrelogram'),temporal_filter = []);
+                    elseif strcmp(image_types{i},'broadening')
+                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
                     else
                         generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = 2);
                     end
@@ -622,13 +663,13 @@ classdef HoloDopplerClass < handle
             num_batches = numel(obj.video);
             
             for j = 1:length(obj.params.image_types)
-                if strcmp(obj.params.image_types{j},'spectrogram') %SH extraction
-                    sz = size(obj.video(1).spectrogram.parameters.SH);
+                if strcmp(obj.params.image_types{j},'SH') %SH extraction
+                    sz = size(obj.video(1).SH.parameters.SH);
                     bs = sz(3);
                     ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
                     for i = 1:num_batches
                         for m = 1:bs
-                            obj.video(i).('spectrogram').parameters.SH(:,:,m) = circshift(obj.video(i).('spectrogram').parameters.SH(:,:,m), floor(obj.registration.shifts(:,i).*ratio'));
+                            obj.video(i).('SH').parameters.SH(:,:,m) = circshift(obj.video(i).('SH').parameters.SH(:,:,m), floor(obj.registration.shifts(:,i).*ratio'));
                         end
                     end
                     continue
@@ -661,13 +702,13 @@ classdef HoloDopplerClass < handle
             num_batches = numel(obj.video);
             
             for j = 1:length(obj.params.image_types)
-                if strcmp(obj.params.image_types{j},'spectrogram') %SH extraction
-                    sz = size(obj.video(1).spectrogram.parameters.SH);
+                if strcmp(obj.params.image_types{j},'SH') %SH extraction
+                    sz = size(obj.video(1).SH.parameters.SH);
                     bs = sz(3);
                     ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
                     for i = 1:num_batches
                         for m = 1:bs
-                            obj.video(i).('spectrogram').parameters.SH(:,:,m) = circshift(obj.video(i).('spectrogram').parameters.SH(:,:,m), - floor(obj.registration.shifts(:,i).*ratio'));
+                            obj.video(i).('SH').parameters.SH(:,:,m) = circshift(obj.video(i).('SH').parameters.SH(:,:,m), - floor(obj.registration.shifts(:,i).*ratio'));
                         end
                     end
                     continue
@@ -717,6 +758,15 @@ classdef HoloDopplerClass < handle
                 imshow(mat(:,:,frame_index));
                 axis image;
                 text(10,10,num2str(frame_index));
+            end
+        end
+
+        function show_SH(obj)
+            try
+                sha = abs(obj.view.SH);
+                implay(rescale(sha,InputMin=min(sha,[],[1,2]),InputMax=max(sha,[],[1,2])));
+            catch e
+                disp(e)
             end
         end
         

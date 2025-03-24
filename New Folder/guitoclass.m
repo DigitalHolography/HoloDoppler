@@ -29,11 +29,18 @@ HD.params.spatial_propagation = app.spatial_propagation.Value;
 % SVD parameters
 HD.params.svd_filter = app.svd_filter.Value;
 HD.params.svdx_filter = app.svdx_filter.Value;
+HD.params.svdx_t_filter = app.svdx_t_filter.Value;
 HD.params.svd_threshold = app.svd_threshold.Value;
+HD.params.svdx_threshold = app.svdx_threshold.Value;
+HD.params.svdx_t_threshold = app.svdx_t_threshold.Value;
+HD.params.svdx_Nsub = app.svdx_Nsub.Value;
+HD.params.svdx_t_Nsub = app.svdx_t_Nsub.Value;
+
 
 % Time transformation parameters
 HD.params.time_transform = app.time_transform.Value;
 HD.params.time_range = [app.time_range1.Value, app.time_range2.Value];
+HD.params.index_range = [app.index_range1.Value, app.index_range2.Value];
 
 % Flatfield correction
 HD.params.flatfield_gw = app.flat_field_gw.Value;
