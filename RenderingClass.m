@@ -242,6 +242,9 @@ classdef RenderingClass < handle
                     case 'intercorrelation'
                         [a,b,c] = size(obj.H);
                         obj.SH = intercorrel(obj.H,3); %TODO Replace template 3
+                    case 'phase difference'
+                         a = angle(obj.H);
+                         obj.SH = a(:,:,1:2:end) -a(:,:,2:2:end);
                     case 'None'
                         obj.SH = obj.H;
                 end
