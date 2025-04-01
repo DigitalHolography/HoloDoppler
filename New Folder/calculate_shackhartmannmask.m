@@ -68,7 +68,7 @@ function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array]
         ShackHartmannMask = exp(1i * phase);
 
     else
-        ShackHartmannMask = stitch_phase(shifts, ones(Nx, Ny), Nx, Ny, shack_hartmann);
+        ShackHartmannMask = exp(1i *-stitch_phase(shifts, ones(Nx, Ny), Nx, Ny, shack_hartmann));
     end
 
 end

@@ -155,7 +155,7 @@ classdef HoloDopplerClass < handle
             config_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_RenderingParameters_',num2str(last_config_index),'.json'));
             
             % Look for old .mat config files existing in the current folder
-            [GuiCacheObj,old_mat_path] = findGUICache(obj.file.dir);
+            [GuiCacheObj,old_mat_path] = findGUICache(obj.file.dir,obj.file.name);
             if ~isempty(GuiCacheObj)
                 if ~isempty(GuiCacheObj.z)
                     p.spatial_propagation = GuiCacheObj.z;
@@ -261,11 +261,11 @@ classdef HoloDopplerClass < handle
             end
             
             parms = obj.params;
-            if ~save_z && strcmp(ext,'.holo') % if you dont want to save the z and prefer to take the automatic one
+            if ~save_z %&& strcmp(ext,'.holo') % if you dont want to save the z and prefer to take the automatic one
                 % only for holo files because cine dont save the z
                 parms = rmfield(parms,'spatial_propagation');
             end
-            index = get_highest_number_in_files(obj.file.dir,strcat(name,'_','RenderingParameters'));
+            index = get_highest_number_in_files(dir,strcat(name,'_','RenderingParameters'));
             fid = fopen(fullfile(dir,strcat(name,'_','RenderingParameters_',num2str(index+1),'.json')), 'w');
             fwrite(fid, jsonencode(parms,"PrettyPrint",true), 'char');
             fclose(fid);
@@ -519,6 +519,7 @@ classdef HoloDopplerClass < handle
                 mkdir(fullfile(result_folder_path,'avi'));
                 mkdir(fullfile(result_folder_path,'raw'));
                 mkdir(fullfile(result_folder_path,'png'));
+                mkdir(fullfile(result_folder_path,'gif'));
                 mkdir(fullfile(result_folder_path,'mat')); % for previous versions of PW
             end
             
@@ -588,6 +589,8 @@ classdef HoloDopplerClass < handle
                         generate_video(mat,result_folder_path,strcat('autocorrelogram'),temporal_filter = []);
                     elseif strcmp(image_types{i},'broadening')
                         generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
+                    elseif strcmp(image_types{i},'color_Doppler')
+                        generate_video(mat,result_folder_path,strcat('color_Doppler'),temporal_filter = [],export_gif=true,gif_nframes=obj.file.num_frames/obj.file.fs/1000/0.06);
                     else
                         generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = 2);
                     end

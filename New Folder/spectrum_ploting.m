@@ -35,7 +35,7 @@ xline(-f1,'--')
 xline(-f2,'--')
 xticks([-f2 -f1 0 f1 f2])
 xticklabels({num2str(round(-f2,1)),num2str(round(-f1,1)),'0',num2str(round(f1,1)),num2str(round(f2,1))})
-title('Average spectrum')
+title(sprintf('f_{RMS} = %.2f kHz',omegaRMS))
 fontsize(gca,12,"points") ;
 xlabel('frequency (kHz)','FontSize',14) ;
 ylabel('log10 S','FontSize',14);
@@ -45,6 +45,6 @@ uistack(p_mask,'top');
 uistack(gca, 'top');
 %legend('','','','','','S');
 
-text(10, I_omega, sprintf('f_{RMS} = %.2f kHz',omegaRMS), 'HorizontalAlignment','center', 'VerticalAlignment','bottom')
+% text(10, I_omega, sprintf('f_{RMS} = %.2f kHz',omegaRMS), 'HorizontalAlignment','center', 'VerticalAlignment','bottom')
 end
 

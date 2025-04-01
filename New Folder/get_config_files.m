@@ -1,6 +1,7 @@
-function config_list = get_config_files(file_path)
+function [config_list,path_list] = get_config_files(file_path)
     % Initialize the config list to store decoded structs
     config_list = {};
+    path_list = {};
     
     % Get the directory from the provided file path
     [path, name, ~] = fileparts(file_path);
@@ -28,6 +29,8 @@ function config_list = get_config_files(file_path)
                 
                 % Add the decoded struct to the config list
                 config_list{end + 1} = decoded_data;
+
+                path_list{end + 1} = full_file_path;
                 
             catch ME
                 % If there's an error in reading or decoding, display a message

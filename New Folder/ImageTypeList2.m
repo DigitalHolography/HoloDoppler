@@ -355,7 +355,7 @@ classdef ImageTypeList2 < handle
                         for i=1:N
                             image = image + rescale(sum((clusters==i),3).*reshape(colors(i,:),1,1,[]));
                         end
-                    elseif 1
+                    elseif ~1
                         video = SH(1:4:end,1:4:end,1:1:end);
                         [numX, numY, zSize] = size(video);
                         video_flat = reshape(video,[numY*numX,zSize]);
@@ -367,8 +367,10 @@ classdef ImageTypeList2 < handle
                         idx = reshape(idx,[numX,numY]);
                         image = ind2rgb(idx,lines(N));
                         
-                    elseif ~1
-                        image = max(diff(SH(1:4:end,1:4:end,1:1:end),3),[],3);
+                    elseif 1
+                        image = max(diff(SH(1:1:end,1:1:end,1:1:end),1,3),[],3);
+                        % image = moment0(diff(SH(1:1:end,1:1:end,1:1:end),1,3), f1, f2 , Params.fs, NT, 0);
+                        image = flat_field_correction(image,Params.flatfield_gw);
                         
                     end
                     

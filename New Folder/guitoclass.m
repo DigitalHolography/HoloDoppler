@@ -45,6 +45,8 @@ HD.params.index_range = [app.index_range1.Value, app.index_range2.Value];
 % Flatfield correction
 HD.params.flatfield_gw = app.flat_field_gw.Value;
 
+HD.params.flip_y = app.flip_y.Value;
+
 % Shack-Hartmann correction
 if app.ShackHartmannCheckBox.Value
     HD.params.ShackHartmannCorrection.ZernikeProjection = app.ZernikeProjectionCheckBox.Value;
