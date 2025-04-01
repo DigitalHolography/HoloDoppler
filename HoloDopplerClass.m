@@ -155,7 +155,7 @@ classdef HoloDopplerClass < handle
             config_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_RenderingParameters_',num2str(last_config_index),'.json'));
             
             % Look for old .mat config files existing in the current folder
-            [GuiCacheObj,old_mat_path] = findGUICache(obj.file.dir);
+            [GuiCacheObj,old_mat_path] = findGUICache(obj.file.dir,obj.file.name);
             if ~isempty(GuiCacheObj)
                 if ~isempty(GuiCacheObj.z)
                     p.spatial_propagation = GuiCacheObj.z;
@@ -261,11 +261,11 @@ classdef HoloDopplerClass < handle
             end
             
             parms = obj.params;
-            if ~save_z && strcmp(ext,'.holo') % if you dont want to save the z and prefer to take the automatic one
+            if ~save_z %&& strcmp(ext,'.holo') % if you dont want to save the z and prefer to take the automatic one
                 % only for holo files because cine dont save the z
                 parms = rmfield(parms,'spatial_propagation');
             end
-            index = get_highest_number_in_files(obj.file.dir,strcat(name,'_','RenderingParameters'));
+            index = get_highest_number_in_files(dir,strcat(name,'_','RenderingParameters'));
             fid = fopen(fullfile(dir,strcat(name,'_','RenderingParameters_',num2str(index+1),'.json')), 'w');
             fwrite(fid, jsonencode(parms,"PrettyPrint",true), 'char');
             fclose(fid);

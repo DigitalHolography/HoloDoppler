@@ -92,7 +92,7 @@ ac.Ny = ac.Nx;
 % parameters
 vx = obj.n_SubAp_inter; % num of SubAp in x direction
 vy = obj.n_SubAp_inter; % num of SubAp in y direction
-Nxx = floor(ac.Nx / obj.n_SubAp); % size of new SubAp in x
+Nxx = floor(ac.Nx / obj.n_SubAp); % size of new SubAp in x Nsub_ap == size ratio n_SubAp_inter == num positions
 Nyy = floor(ac.Ny / obj.n_SubAp); % size of new SubAp in y
 
 %render complete image
