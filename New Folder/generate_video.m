@@ -22,6 +22,8 @@ arguments
     opt.cornerNorm = false
     opt.export_raw = false
     opt.export_avg_img = true
+    opt.export_gif = false
+    opt.gif_nframes = 64
 end
 
 [~, output_dirname] = fileparts(output_path);
@@ -88,6 +90,11 @@ for i = 1:size(video,4)
     writeVideo(w, video(:,:,:,i));   
 end
 close(w)
+
+if opt.export_gif 
+    output_filename_gif = sprintf('%s_%s.%s', output_dirname, name, 'gif');
+    writeGifOnDisc(video,sprintf('%s\\gif\\%s', output_path, output_filename_gif),0.07,floor(opt.gif_nframes));
+end
 
 %% save temporal average to png
 if opt.export_avg_img

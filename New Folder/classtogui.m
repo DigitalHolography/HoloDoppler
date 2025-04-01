@@ -44,6 +44,7 @@ app.time_range2.Value = HD.params.time_range(2);
 app.index_range1.Value = HD.params.index_range(1);
 app.index_range2.Value = HD.params.index_range(2);
 app.flat_field_gw.Value = HD.params.flatfield_gw;
+app.flip_y.Value = HD.params.flip_y;
 
 app.ShackHartmannCheckBox.Value = ~isempty(HD.params.ShackHartmannCorrection);
 if ~isempty(HD.params.ShackHartmannCorrection)

@@ -519,6 +519,7 @@ classdef HoloDopplerClass < handle
                 mkdir(fullfile(result_folder_path,'avi'));
                 mkdir(fullfile(result_folder_path,'raw'));
                 mkdir(fullfile(result_folder_path,'png'));
+                mkdir(fullfile(result_folder_path,'gif'));
                 mkdir(fullfile(result_folder_path,'mat')); % for previous versions of PW
             end
             
@@ -588,6 +589,8 @@ classdef HoloDopplerClass < handle
                         generate_video(mat,result_folder_path,strcat('autocorrelogram'),temporal_filter = []);
                     elseif strcmp(image_types{i},'broadening')
                         generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
+                    elseif strcmp(image_types{i},'color_Doppler')
+                        generate_video(mat,result_folder_path,strcat('color_Doppler'),temporal_filter = [],export_gif=true,gif_nframes=obj.file.num_frames/obj.file.fs/1000/0.06);
                     else
                         generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = 2);
                     end
