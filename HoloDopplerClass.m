@@ -15,7 +15,7 @@ classdef HoloDopplerClass < handle
         function obj = HoloDopplerClass()
             %HoloDopplerClass Construct an instance of this class
             setInitParams(obj);
-            addpath("New Folder\","ReaderClasses\");
+            addpath("AberrationCorrection\","FolderManagement\","Imaging\","Interface\","ReaderClasses\","Rendering\","Saving\","Saving\Registering\","tools\");
             obj.view = RenderingClass();
         end
         
