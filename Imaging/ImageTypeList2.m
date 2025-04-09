@@ -219,6 +219,7 @@ classdef ImageTypeList2 < handle
                 ylabel('Power Spectrum Density (dB)');
                 
                 frame = getframe(fi); % Capture the figure
+                obj.spectrogram.graph = gca;
                 obj.spectrogram.image = frame.cdata;
             end
             
@@ -228,6 +229,7 @@ classdef ImageTypeList2 < handle
                 spectrum_ploting(SH(:,:,:), disc, Params.fs, Params.time_range(1), Params.time_range(2));
                 % ylim([-0 50])
                 frame = getframe(fi); % Capture the figure
+                obj.broadening.graph = gca;
                 obj.broadening.image = frame.cdata;
             end
             
@@ -255,6 +257,7 @@ classdef ImageTypeList2 < handle
                 ylabel('(dB)');
                 
                 frame = getframe(fi); % Capture the figure
+                obj.autocorrelogram.graph = gca;
                 obj.autocorrelogram.image = frame.cdata;
             end
             
@@ -289,6 +292,7 @@ classdef ImageTypeList2 < handle
                 colormap("gray");
                 colorbar;
                 frame = getframe(fi); % Capture the figure
+                obj.f_RMS.graph = gca;
                 obj.f_RMS.image= frame.cdata;
             end
             if obj.intercorrel0.is_selected %
@@ -437,6 +441,7 @@ classdef ImageTypeList2 < handle
 
                 set(gca, 'Position', [0 0 1 1]); % Remove extra spaceù=
                 frame = getframe(fi);
+                obj.SVD_U.graph = gca;
                 obj.SVD_U.image = frame.cdata;
             end
         end

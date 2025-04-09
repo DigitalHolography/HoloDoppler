@@ -6,6 +6,7 @@ classdef ImageType < handle
         short_name
         is_selected
         image
+        graph % figure containing variable
         parameters
     end
     
@@ -15,6 +16,7 @@ classdef ImageType < handle
             obj.short_name = short_name;
             obj.is_selected = false;
             obj.image = [];
+            obj.graph = [];
             
             if nargin > 1
                 obj.parameters = parameters;
@@ -36,7 +38,7 @@ classdef ImageType < handle
             end
             
         end
-
+        
         function copy_from(obj, o)
             fields = fieldnames(o);
             for i=1:length(fields)
