@@ -1,4 +1,4 @@
-classdef GifWriter < handle
+classdef GifWriter2 < handle
 %GifWriter Handles the creation and management of Gifs
 %   Detailed explanation goes here
 
@@ -17,7 +17,7 @@ end
 
 methods
 
-    function obj = GifWriter(filepath, gifLength, timePeriodMin, numFramesFixed)
+    function obj = GifWriter2(filepath, gifLength, timePeriodMin, numFramesFixed)
         %GifWriter Construct an instance of this class
         %   filename: where want your Gif to be built
         %   time_period_min: minimal time between each frame of your GIF
