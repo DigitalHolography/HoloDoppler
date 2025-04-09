@@ -17,6 +17,7 @@ classdef HoloDopplerClass < handle
             setInitParams(obj);
             addpath("AberrationCorrection\","FolderManagement\","Imaging\","Interface\","ReaderClasses\","Rendering\","Saving\","Saving\Registering\","tools\");
             obj.view = RenderingClass();
+            set(0,'defaultfigurecolor',[1 1 1]);
         end
         
         function LoadFile(obj,file_path,opt)

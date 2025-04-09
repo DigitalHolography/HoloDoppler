@@ -8,7 +8,7 @@ if isnumeric(image)
     end
 else
     app.PanelPlot.Visible = true;
-    copyobj(app.UIAxes,image);
+    copyobj(image,app.PanelPlot);
 end
 
 
