@@ -15,7 +15,7 @@ classdef HoloDopplerClass < handle
         function obj = HoloDopplerClass()
             %HoloDopplerClass Construct an instance of this class
             setInitParams(obj);
-            addpath("New Folder\","ReaderClasses\");
+            addpath("AberrationCorrection\","FolderManagement\","Imaging\","Interface\","ReaderClasses\","Rendering\","Saving\","Saving\Registering\","tools\");
             obj.view = RenderingClass();
         end
         
@@ -589,6 +589,16 @@ classdef HoloDopplerClass < handle
                         generate_video(mat,result_folder_path,strcat('autocorrelogram'),temporal_filter = []);
                     elseif strcmp(image_types{i},'broadening')
                         generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
+                    elseif strcmp(image_types{i},'fRMS')
+                        generate_video(mat,result_folder_path,strcat('fRMS'),temporal_filter = []);
+                    elseif strcmp(image_types{i},'FH_modulus_mean')
+                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
+                    elseif strcmp(image_types{i},'FH_arg_mean')
+                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
+                    elseif strcmp(image_types{i},'SVD_cov')
+                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
+                    elseif strcmp(image_types{i},'SVD_U')
+                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
                     elseif strcmp(image_types{i},'color_Doppler')
                         generate_video(mat,result_folder_path,strcat('color_Doppler'),temporal_filter = [],export_gif=true,gif_nframes=obj.file.num_frames/obj.file.fs/1000/0.06);
                     else
@@ -666,6 +676,9 @@ classdef HoloDopplerClass < handle
             num_batches = numel(obj.video);
             
             for j = 1:length(obj.params.image_types)
+                if ismember(obj.params.image_types{j},{'broadening','autocorrelogram','spectrogram','fRMS','FH_modulus_mean','FH_arg_mean','FH_arg_mean','SVD_cov','SVD_U'})
+                    continue
+                end
                 if strcmp(obj.params.image_types{j},'SH') %SH extraction
                     sz = size(obj.video(1).SH.parameters.SH);
                     bs = sz(3);

@@ -54,6 +54,7 @@ classdef RenderingClass < handle
             Params.buckets_number = 4;
             Params.flatfield_gw = 35;
             Params.flip_y = false;
+            Params.flip_x = false;
             Params.ShackHartmannCorrection = [];
             obj.LastParams = Params;
             
@@ -222,7 +223,7 @@ classdef RenderingClass < handle
             
             %4) Short-time transformation
             
-            doSH = doH | ParamChanged.time_transform | obj.FramesChanged | ParamChanged.flip_y | ~options.cache_intermediate_results;
+            doSH = doH | ParamChanged.time_transform | obj.FramesChanged | ParamChanged.flip_y | ParamChanged.flip_x | ~options.cache_intermediate_results;
             
             if doSH
                 switch Params.time_transform
@@ -260,6 +261,9 @@ classdef RenderingClass < handle
                 obj.SH = flip(permute(obj.SH, [2 1 3]),2); % x<->-y transpose due to the lens imaging
                 if Params.flip_y 
                     obj.SH = flip(obj.SH,1);
+                end
+                if Params.flip_x 
+                    obj.SH = flip(obj.SH,2);
                 end
                 
             end

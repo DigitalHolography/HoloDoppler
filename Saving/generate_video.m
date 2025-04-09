@@ -93,7 +93,7 @@ close(w)
 
 if opt.export_gif 
     output_filename_gif = sprintf('%s_%s.%s', output_dirname, name, 'gif');
-    writeGifOnDisc(video,sprintf('%s\\gif\\%s', output_path, output_filename_gif),0.07,floor(opt.gif_nframes));
+    writeGifOnDisc2(video,sprintf('%s\\gif\\%s', output_path, output_filename_gif),0.07,floor(opt.gif_nframes));
 end
 
 %% save temporal average to png

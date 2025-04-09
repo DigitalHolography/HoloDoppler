@@ -27,6 +27,7 @@ classdef ImageTypeList2 < handle
         SVD_U
         ShackHartmann_Cropped_Moments
         ShackHartmann_Phase
+        power_Doppler_wiener
     end
     
     methods
@@ -57,6 +58,7 @@ classdef ImageTypeList2 < handle
             obj.SVD_U = ImageType('SVD_U');
             obj.ShackHartmann_Cropped_Moments = ImageType('ShackMoments');
             obj.ShackHartmann_Phase = ImageType('ShackPhase');
+            obj.power_Doppler_wiener = ImageType('power_wiener');
             
             
         end
@@ -173,6 +175,11 @@ classdef ImageTypeList2 < handle
             if obj.power_Doppler.is_selected % Power Doppler has been chosen
                 img = moment0(SH, f1, f2, Params.fs, NT, Params.flatfield_gw);
                 obj.power_Doppler.image = img;
+            end
+
+            if obj.power_Doppler_wiener.is_selected % Power Doppler has been chosen
+                img = moment0(SH, f1, f2, Params.fs, NT, Params.flatfield_gw);
+                obj.power_Doppler_wiener.image = wiener2(img,[2 2],10);
             end
             
             if obj.power_1_Doppler.is_selected % Power Doppler has been chosen
@@ -368,9 +375,9 @@ classdef ImageTypeList2 < handle
                         image = ind2rgb(idx,lines(N));
                         
                     elseif 1
-                        image = max(diff(SH(1:1:end,1:1:end,1:1:end),1,3),[],3);
+                        [~,image] = max(diff(SH(1:1:end,1:1:end,1:1:end),1,3),[],3);
                         % image = moment0(diff(SH(1:1:end,1:1:end,1:1:end),1,3), f1, f2 , Params.fs, NT, 0);
-                        image = flat_field_correction(image,Params.flatfield_gw);
+                        %image = flat_field_correction(image,Params.flatfield_gw);
                         
                     end
                     

@@ -1,4 +1,4 @@
-function writeGifOnDisc(data, filepath, timePeriodMin, numFramesFixed)
+function writeGifOnDisc2(data, filepath, timePeriodMin, numFramesFixed)
 % Writing function for gif to make use of parallel capacities
 % with parfeval
 %  filename - - path to file and file name with '.gif' extension
@@ -16,7 +16,7 @@ end
 
 numFrames = size(data, 4);
 
-gifWriter = GifWriter(filepath, numFrames, ...
+gifWriter = GifWriter2(filepath, numFrames, ...
     timePeriodMin, numFramesFixed);
 
 for frameIdx = 1:numFrames
