@@ -318,7 +318,11 @@ classdef HoloDopplerClass < handle
             images = obj.view.getImages(images_types);
             images_res = cell(1, length(images));
             for i =1:length(images)
-                images_res{i} = rescale(images{i});
+                if isnumeric(images{i})
+                    images_res{i} = rescale(images{i});
+                else
+                    images_res{i} = rescale(obj.view.Output.(images_types{i}).image);
+                end
             end
             figure(18);montage(images_res);
         end
