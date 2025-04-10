@@ -210,7 +210,7 @@ classdef ImageTypeList2 < handle
             if obj.spectrogram.is_selected
                 fi=figure("Visible", "off");
                 freqs = ((0:(NT-1))-NT/2).* (Params.fs / NT);
-                spect = fftshift(abs(squeeze(sum(SHin, [1 2])/(size(SH,1)*size(SH,2))).^2));
+                spect = fftshift(abs(squeeze(sum(SH, [1 2])/(size(SH,1)*size(SH,2))).^2));
                 
                 plot(freqs, 10*log10(spect));
                 
@@ -247,7 +247,7 @@ classdef ImageTypeList2 < handle
                 indices = ((0:(NT-1))-NT/2).* (1/(Params.fs*1000));
                 % disc = diskMask(size(SH,1),size(SH,2),0.7)';
                 disc = ones(size(SH,1),size(SH,2));
-                spect = squeeze(abs(sum(SHin.*disc, [1 2]))/nnz(disc));
+                spect = squeeze(abs(sum(SH.*disc, [1 2]))/nnz(disc));
                 
                 plot(indices, 10*log10(spect));
                 
