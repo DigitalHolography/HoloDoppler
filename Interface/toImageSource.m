@@ -6,6 +6,7 @@ if isnumeric(image)
     if size(size(image)) == [1,2] % if no color channel
         image = repmat(image,[1 1 3]);
     end
+    
 else
     app.PanelPlot.Visible = true;
     copyobj(image,app.PanelPlot);
