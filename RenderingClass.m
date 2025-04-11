@@ -324,18 +324,8 @@ classdef RenderingClass < handle
                     fprintf("unfortunately %s wasnt outputed \n",image_types{i})
                     r{i} = [];
                 else
-                    if ~isempty(obj.Output.(image_types{i}).graph)
-                        im = obj.Output.(image_types{i}).graph;
-                    else
-                        im = obj.Output.(image_types{i}).image;
-                    end
-                    if isnumeric(im)
-                        r{i} = mat2gray(im);
-                    else
-                        if strcmp(class(im),'matlab.graphics.axis.Axes')
-                            r{i} = im;
-                        end
-                    end
+                    im = obj.Output.(image_types{i}).image;
+                    r{i} = mat2gray(im);
                 end
             end
         end
