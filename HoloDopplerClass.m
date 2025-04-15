@@ -605,7 +605,7 @@ classdef HoloDopplerClass < handle
                     elseif strcmp(image_types{i},'SVD_U')
                         generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
                     elseif strcmp(image_types{i},'color_Doppler')
-                        generate_video(mat,result_folder_path,strcat('color_Doppler'),temporal_filter = [],export_gif=true,gif_nframes=obj.file.num_frames/obj.file.fs/1000/0.06);
+                        generate_video(mat,result_folder_path,strcat('color_Doppler'),temporal_filter = [],enhance_contrast=true,export_gif=true,gif_freq=16,gif_Duration=size(mat,4)*params.batch_stride/(obj.params.fs*1000));
                     else
                         generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = 2);
                     end
