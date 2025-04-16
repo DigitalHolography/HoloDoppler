@@ -137,8 +137,8 @@ classdef HoloDopplerClass < handle
                         obj.params.spatial_propagation = obj.reader.footer.compute_settings.image_rendering.propagation_distance;
                     end
                 case '.cine'
-                    obj.params.spatial_transformation = 'angular spectrum';
-                    obj.params.spatial_propagation = 0.5; % meters
+                    obj.params.spatial_transformation = 'Fresnel';
+                    obj.params.spatial_propagation = 1.13; % meters
             end
             
             obj.params.time_range(1) = obj.view.LastParams.time_range(1); % the default from init value of rendering class
