@@ -31,11 +31,7 @@ classdef GifWriter2 < handle
             
             obj.filepath = filepath;
             
-            if isnan(timePeriodMin)
-                obj.timePeriodMin = params.timePeriodMin;
-            else
-                obj.timePeriodMin = timePeriodMin;
-            end
+            obj.timePeriodMin = timePeriodMin;
             
             obj.numFramesFixed = numFramesFixed;
             
@@ -90,7 +86,7 @@ classdef GifWriter2 < handle
                 num_T = obj.numFramesFixed;
             end
 
-            stride = floor(size(obj.images,4)/num_T);
+            stride = ceil(size(obj.images,4)/num_T);
             
             if obj.isRGB
                 sz = size(obj.images);

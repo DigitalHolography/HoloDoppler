@@ -17,6 +17,7 @@ classdef HoloDopplerClass < handle
             setInitParams(obj);
             addpath("AberrationCorrection\","FolderManagement\","Imaging\","Interface\","ReaderClasses\","Rendering\","Saving\","Saving\Registering\","tools\");
             obj.view = RenderingClass();
+            set(0,'defaultfigurecolor',[1 1 1]);
         end
         
         function LoadFile(obj,file_path,opt)
@@ -136,8 +137,8 @@ classdef HoloDopplerClass < handle
                         obj.params.spatial_propagation = obj.reader.footer.compute_settings.image_rendering.propagation_distance;
                     end
                 case '.cine'
-                    obj.params.spatial_transformation = 'angular spectrum';
-                    obj.params.spatial_propagation = 0.5; % meters
+                    obj.params.spatial_transformation = 'Fresnel';
+                    obj.params.spatial_propagation = 1.13; % meters
             end
             
             obj.params.time_range(1) = obj.view.LastParams.time_range(1); % the default from init value of rendering class
@@ -317,7 +318,11 @@ classdef HoloDopplerClass < handle
             images = obj.view.getImages(images_types);
             images_res = cell(1, length(images));
             for i =1:length(images)
-                images_res{i} = rescale(images{i});
+                if isnumeric(images{i})
+                    images_res{i} = rescale(images{i});
+                else
+                    images_res{i} = rescale(obj.view.Output.(images_types{i}).image);
+                end
             end
             figure(18);montage(images_res);
         end
@@ -600,7 +605,7 @@ classdef HoloDopplerClass < handle
                     elseif strcmp(image_types{i},'SVD_U')
                         generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
                     elseif strcmp(image_types{i},'color_Doppler')
-                        generate_video(mat,result_folder_path,strcat('color_Doppler'),temporal_filter = [],export_gif=true,gif_nframes=obj.file.num_frames/obj.file.fs/1000/0.06);
+                        generate_video(mat,result_folder_path,strcat('color_Doppler'),temporal_filter = [],enhance_contrast=true,export_gif=true,gif_freq=16,gif_Duration=size(mat,4)*params.batch_stride/(obj.params.fs*1000));
                     else
                         generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = 2);
                     end

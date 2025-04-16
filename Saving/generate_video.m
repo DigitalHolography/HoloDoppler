@@ -23,7 +23,9 @@ arguments
     opt.export_raw = false
     opt.export_avg_img = true
     opt.export_gif = false
-    opt.gif_nframes = 64
+    opt.gif_freq = 16
+    opt.gif_Duration = 3.5
+    opt.enhance_contrast = false
 end
 
 [~, output_dirname] = fileparts(output_path);
@@ -79,6 +81,7 @@ if opt.contrast_inversion
    video = -1.0 * video; 
 end
 
+
 %% prepare for writing
 video = mat2gray(video);
 
@@ -91,9 +94,17 @@ for i = 1:size(video,4)
 end
 close(w)
 
+%% contrast enhancement for the gif
+
+if opt.enhance_contrast
+    Max = max(video,[],'all');
+    Min = min(video,[],'all');
+    video = rescale(video,Min+0.03*Min,Max-0.03*Max);
+end
+
 if opt.export_gif 
     output_filename_gif = sprintf('%s_%s.%s', output_dirname, name, 'gif');
-    writeGifOnDisc2(video,sprintf('%s\\gif\\%s', output_path, output_filename_gif),0.07,floor(opt.gif_nframes));
+    writeGifOnDisc2(video,sprintf('%s\\gif\\%s', output_path, output_filename_gif),opt.gif_freq,opt.gif_Duration);
 end
 
 %% save temporal average to png

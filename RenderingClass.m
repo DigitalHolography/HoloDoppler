@@ -324,7 +324,8 @@ classdef RenderingClass < handle
                     fprintf("unfortunately %s wasnt outputed \n",image_types{i})
                     r{i} = [];
                 else
-                    r{i} = mat2gray(obj.Output.(image_types{i}).image);
+                    im = obj.Output.(image_types{i}).image;
+                    r{i} = mat2gray(im);
                 end
             end
         end
