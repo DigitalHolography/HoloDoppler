@@ -55,6 +55,7 @@ classdef RenderingClass < handle
             Params.flatfield_gw = 35;
             Params.flip_y = false;
             Params.flip_x = false;
+            Params.square = true;
             Params.ShackHartmannCorrection = [];
             obj.LastParams = Params;
             
@@ -264,6 +265,11 @@ classdef RenderingClass < handle
                 end
                 if Params.flip_x 
                     obj.SH = flip(obj.SH,2);
+                end
+
+                if Params.square 
+                    sdim = max(size(obj.SH,1),size(obj.SH,2));
+                    obj.SH = imresize3(obj.SH,[sdim, sdim, size(obj.SH,3)]);
                 end
                 
             end

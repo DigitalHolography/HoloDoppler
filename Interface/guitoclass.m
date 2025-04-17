@@ -47,6 +47,7 @@ HD.params.flatfield_gw = app.flat_field_gw.Value;
 
 HD.params.flip_y = app.flip_y.Value;
 HD.params.flip_x = app.flip_x.Value;
+HD.params.square = app.square.Value;
 
 % Shack-Hartmann correction
 if app.ShackHartmannCheckBox.Value
