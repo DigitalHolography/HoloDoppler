@@ -606,19 +606,19 @@ classdef HoloDopplerClass < handle
                     elseif strcmp(image_types{i},'f_RMS')
                         generate_video(mat,result_folder_path,strcat('f_RMS'),temporal_filter = []);
                     elseif strcmp(image_types{i},'FH_modulus_mean')
-                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
+                        generate_video(mat,result_folder_path,strcat('FH_modulus_mean'),temporal_filter = []);
                     elseif strcmp(image_types{i},'FH_arg_mean')
-                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
+                        generate_video(mat,result_folder_path,strcat('FH_arg_mean'),temporal_filter = []);
                     elseif strcmp(image_types{i},'arg_0')
-                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = [], square = params.square);
+                        generate_video(mat,result_folder_path,strcat('arg_0'),temporal_filter = [], square = params.square);
                     elseif strcmp(image_types{i},'SVD_cov')
-                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
+                        generate_video(mat,result_folder_path,strcat('SVD_cov'),temporal_filter = []);
                     elseif strcmp(image_types{i},'SVD_U')
-                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
+                        generate_video(mat,result_folder_path,strcat('SVD_U'),temporal_filter = []);
                     elseif strcmp(image_types{i},'ShackHartmann_Cropped_Moments')
-                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
+                        generate_video(mat,result_folder_path,strcat('ShackHartmann_Cropped_Moments'),temporal_filter = []);
                     elseif strcmp(image_types{i},'ShackHartmann_Phase')
-                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
+                        generate_video(mat,result_folder_path,strcat('ShackHartmann_Phase'),temporal_filter = []);
                     elseif strcmp(image_types{i},'color_Doppler')
                         generate_video(mat,result_folder_path,strcat('color_Doppler'), square = params.square, temporal_filter = [],enhance_contrast=true,export_gif=true,gif_freq=16,gif_Duration=size(mat,4)*params.batch_stride/(obj.params.fs*1000));
                     else
