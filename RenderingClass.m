@@ -267,10 +267,7 @@ classdef RenderingClass < handle
                     obj.SH = flip(obj.SH,2);
                 end
 
-                if Params.square 
-                    sdim = max(size(obj.SH,1),size(obj.SH,2));
-                    obj.SH = imresize3(obj.SH,[sdim, sdim, size(obj.SH,3)]);
-                end
+                
                 
             end
             
