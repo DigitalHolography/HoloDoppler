@@ -55,6 +55,7 @@ classdef RenderingClass < handle
             Params.flatfield_gw = 35;
             Params.flip_y = false;
             Params.flip_x = false;
+            Params.square = true;
             Params.ShackHartmannCorrection = [];
             obj.LastParams = Params;
             
@@ -265,6 +266,8 @@ classdef RenderingClass < handle
                 if Params.flip_x 
                     obj.SH = flip(obj.SH,2);
                 end
+
+                
                 
             end
             

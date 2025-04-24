@@ -341,7 +341,16 @@ classdef HoloDopplerClass < handle
             images = obj.view.getImages(image_types);
             
             for i=1:numel(images)
-                imwrite(toImageSource(images{i}),fullfile(result_folder_path,strcat(obj.file.name,'_',image_types{i},'.png')));
+                if isempty(images{i})
+                    continue
+                end
+                if ~ismember(image_types{i}, {'moment_0', 'moment_1', 'moment_2','SVD_cov','SVD_U','FH_modulus_mean','FH_arg_mean','ShackHartmann_Cropped_Moments', 'spectrogram', 'broadening', 'f_RMS', 'autocorrelogram'})
+                    max_dim = max(size(images{i}, 1), size(images{i}, 2));
+                    imwrite(toImageSource(imresize(images{i}, [max_dim, max_dim])),fullfile(result_folder_path,strcat(obj.file.name,'_',image_types{i},'.png'))); 
+                else
+                    imwrite(toImageSource(images{i}),fullfile(result_folder_path,strcat(obj.file.name,'_',image_types{i},'.png'))); 
+                end
+                
             end
             
             fid = fopen(fullfile(result_folder_path,strcat(obj.file.name,'_HDPreview_',num2str(index+1),'_','RenderingParameters.json')), 'w');
@@ -559,8 +568,8 @@ classdef HoloDopplerClass < handle
                     f1 = obj.params.time_range(1);
                     f2 = obj.params.time_range(2);
                     for k=1:numF
-                        generate_video(mat0(:,:,:,k),result_folder_path,strcat('buckets_sym_',num2str(f1 +(k-1)/numF * (f2-f1)),'_',num2str(f1 +(k)/numF * (f2-f1)),'kHz'),export_raw=0,temporal_filter = 2);
-                        generate_video(mat1(:,:,:,k),result_folder_path,strcat('buckets_asym',num2str(f1 +(k-1)/numF * (f2-f1)),'_',num2str(f1 +(k)/numF * (f2-f1)),'kHz'),export_raw=0,temporal_filter = 2);
+                        generate_video(mat0(:,:,:,k),result_folder_path,strcat('buckets_sym_',num2str(f1 +(k-1)/numF * (f2-f1)),'_',num2str(f1 +(k)/numF * (f2-f1)),'kHz'),export_raw=0,temporal_filter = 2, square = params.square);
+                        generate_video(mat1(:,:,:,k),result_folder_path,strcat('buckets_asym',num2str(f1 +(k-1)/numF * (f2-f1)),'_',num2str(f1 +(k)/numF * (f2-f1)),'kHz'),export_raw=0,temporal_filter = 2, square = params.square);
                     end
                     continue
                 else % image extraction
@@ -587,27 +596,33 @@ classdef HoloDopplerClass < handle
                     elseif strcmp(image_types{i},'moment_2')
                         generate_video(mat,result_folder_path,strcat('moment2'),export_raw=1,temporal_filter = 2);
                     elseif strcmp(image_types{i},'power_Doppler')
-                        generate_video(mat,result_folder_path,strcat('M0'),temporal_filter = 2);
+                        generate_video(mat,result_folder_path,strcat('M0'),temporal_filter = 2, square = params.square);
                     elseif strcmp(image_types{i},'spectrogram')
                         generate_video(mat,result_folder_path,strcat('spectrogram'),temporal_filter = []);
                     elseif strcmp(image_types{i},'autocorrelogram')
                         generate_video(mat,result_folder_path,strcat('autocorrelogram'),temporal_filter = []);
                     elseif strcmp(image_types{i},'broadening')
                         generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
-                    elseif strcmp(image_types{i},'fRMS')
-                        generate_video(mat,result_folder_path,strcat('fRMS'),temporal_filter = []);
+                    elseif strcmp(image_types{i},'f_RMS')
+                        generate_video(mat,result_folder_path,strcat('f_RMS'),temporal_filter = []);
                     elseif strcmp(image_types{i},'FH_modulus_mean')
                         generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
                     elseif strcmp(image_types{i},'FH_arg_mean')
                         generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
+                    elseif strcmp(image_types{i},'arg_0')
+                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = [], square = params.square);
                     elseif strcmp(image_types{i},'SVD_cov')
                         generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
                     elseif strcmp(image_types{i},'SVD_U')
                         generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
+                    elseif strcmp(image_types{i},'ShackHartmann_Cropped_Moments')
+                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
+                    elseif strcmp(image_types{i},'ShackHartmann_Phase')
+                        generate_video(mat,result_folder_path,strcat('broadening'),temporal_filter = []);
                     elseif strcmp(image_types{i},'color_Doppler')
-                        generate_video(mat,result_folder_path,strcat('color_Doppler'),temporal_filter = [],enhance_contrast=true,export_gif=true,gif_freq=16,gif_Duration=size(mat,4)*params.batch_stride/(obj.params.fs*1000));
+                        generate_video(mat,result_folder_path,strcat('color_Doppler'), square = params.square, temporal_filter = [],enhance_contrast=true,export_gif=true,gif_freq=16,gif_Duration=size(mat,4)*params.batch_stride/(obj.params.fs*1000));
                     else
-                        generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = 2);
+                        generate_video(mat,result_folder_path,strcat(image_types{i}),temporal_filter = 2, square = params.square);
                     end
                 else
                     fprintf("%s was not found so it cannot be saved.\n", image_types{i});

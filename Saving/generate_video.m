@@ -26,6 +26,7 @@ arguments
     opt.gif_freq = 16
     opt.gif_Duration = 3.5
     opt.enhance_contrast = false
+    opt.square = false
 end
 
 [~, output_dirname] = fileparts(output_path);
@@ -36,6 +37,10 @@ if size(size(video)) == [1,3] % if not colored
     video = reshape(video,size(video,1),size(video,2),1,size(video,3));
 end
 
+if opt.square 
+    sdim = max(size(video,1),size(video,2));
+    video = imresize(video,[sdim, sdim]);
+end
 %% save to raw format
 if opt.export_raw 
     output_filename_raw = sprintf('%s_%s.%s', output_dirname, name, 'raw');
