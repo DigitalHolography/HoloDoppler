@@ -15,6 +15,22 @@ omegaRMS_index=omegaRMS*size(SH_mask,3)/fs;
 I_omega=log10(spectrumAVG_mask(round(omegaRMS_index)));
 axis_x=linspace(-fs/2,fs/2,size(SH_mask,3));
 p_mask = plot(axis_x,fftshift(log10(spectrumAVG_mask)),'red', 'LineWidth',1,'DisplayName','Arteries');
+% hold on;
+% Noise_Freq = 1.16; %kHz
+% NT = size(SH,3);
+
+% Nbonus = floor(NT * Noise_Freq/fs /4);
+% t = linspace(0,NT/fs,NT);
+% tmps = fft(rectpuls(t,4/Noise_Freq));
+% tmps = cat(2,tmps(1:2*Nbonus),tmps(end-2*Nbonus+1:end));
+% %tmps = circshift(tmps,floor(length(tmps)/2));
+
+
+% % make first lobesize divide by two by cropping
+% s = repmat(tmps,1,NT);
+% s = s(1:NT).^1.5/max(abs(s.^1.5));
+% s_mask = plot(axis_x,fftshift(log10(abs(s))),'Color', [0 0 1], 'LineWidth',1);
+% f_mask = plot(axis_x,fftshift(log10(abs(spectrumAVG_mask'./(s+0.001)))),'Color', [1 0 1], 'LineWidth',1);
 xlim([-fs/2 fs/2])
 sclingrange = abs(fftshift(axis_x))>f1;
 yrange = [.99*log10(min(spectrumAVG_mask(sclingrange))) 1.01*log10(max(spectrumAVG_mask(sclingrange)))];

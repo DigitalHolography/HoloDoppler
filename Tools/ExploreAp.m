@@ -1,9 +1,8 @@
-classdef ExploreSH < handle
+classdef ExploreAp< handle
 
 properties
     fig % Main figure handle
-    SH % Original 3D matrix (can be complex)
-    SH_processed % Processed version of SH (based on display option)
+    I % Original 3D matrix
     avgImage % Average image (first 2 dimensions)
     axImage % Axis for the image display
     axPlot % Axis for the spectrum plot
@@ -11,14 +10,16 @@ properties
     mask % Current mask from ROI
     panel
     btnGroup % Button group for display options
+    Params % from parent contains rendering params used for propag
 end
 
 methods
 
-    function obj = ExploreSH(SH)
+    function obj = ExploreAp(I,Params)
         % Constructor - initialize the application
-        obj.SH = SH;
-        obj.SH_processed = SH; % Start with original data
+        obj.I = I;
+
+        obj.Params = Params;
 
         % Calculate initial average image
         obj.updateAverageImage();
@@ -30,7 +31,7 @@ methods
 
     function createUI(obj)
         % Create the main figure with fixed size
-        obj.fig = figure('Name', 'Explore SH', 'NumberTitle', 'off', ...
+        obj.fig = figure('Name', 'Explore Ap', 'NumberTitle', 'off', ...
             'Position', [100, 100, 1000, 600], ...
             'CloseRequestFcn', @(src, evt)obj.closeFigure(), ...
             'Color', [1, 1, 1]);
@@ -67,17 +68,11 @@ methods
         % Create button group for display options
         obj.btnGroup = uibuttongroup('Parent', obj.panel, ...
             'Position', [0.02, 0.45, 0.43, 0.5], ...
-            'BackgroundColor', [1, 1, 1], ...
-            'SelectionChangedFcn', @(src, evt)obj.changeDisplayOption());
+            'BackgroundColor', [1, 1, 1]);
 
         % Add radio buttons and checkboxes dynamically
         options = {
                    'abs', 'Magnitude';
-                   'abs2', 'Magnitude Squared';
-                   'real', 'Real Part';
-                   'imag', 'Imaginary Part';
-                   'angle', 'angle';
-                   'rmi', 'R Part - I Part';
                    };
 
         % Create radio buttons for display options
@@ -98,7 +93,7 @@ methods
             'Tag', 'mag', ...
             'Units', 'normalized', ...
             'Position', [0.05, 0.2, 0.9, 0.15], ...
-            'Callback', @(src, evt)obj.spectrum_plotting(), ...
+            'Callback', @(src, evt)obj.plotting(), ...
             'BackgroundColor', [1, 1, 1], 'Value', 1);
 
         uicontrol('Parent', obj.panel, ...
@@ -107,7 +102,7 @@ methods
             'Tag', 'phase', ...
             'Units', 'normalized', ...
             'Position', [0.05, 0.05, 0.9, 0.15], ...
-            'Callback', @(src, evt)obj.spectrum_plotting(), ...
+            'Callback', @(src, evt)obj.plotting(), ...
             'BackgroundColor', [1, 1, 1]);
 
         % Add pushbutton for creating a new ROI
@@ -122,37 +117,12 @@ methods
         set(obj.btnGroup, 'SelectedObject', findobj(obj.btnGroup, 'Tag', 'abs'));
 
         % Initial plot
-        obj.spectrum_plotting();
-    end
-
-    function changeDisplayOption(obj)
-        % Handle display option change
-        selectedOption = get(obj.btnGroup, 'SelectedObject').Tag;
-
-        switch selectedOption
-            case 'abs'
-                obj.SH_processed = abs(obj.SH);
-            case 'abs2'
-                obj.SH_processed = abs(obj.SH) .^ 2;
-            case 'real'
-                obj.SH_processed = real(obj.SH);
-            case 'imag'
-                obj.SH_processed = imag(obj.SH);
-            case 'angle'
-                obj.SH_processed = angle(obj.SH);
-            case 'rmi'
-                obj.SH_processed = real(obj.SH)-imag(obj.SH);
-        end
-
-        % Update display
-        obj.updateAverageImage();
-        obj.updateImageDisplay();
-        obj.spectrum_plotting();
+        obj.plotting();
     end
 
     function updateAverageImage(obj)
         % Calculate average image based on current processing
-        obj.avgImage = mean(abs(obj.SH_processed), 3);
+        obj.avgImage = mean(abs(obj.I), 3);
     end
 
     function updateImageDisplay(obj)
@@ -188,9 +158,9 @@ methods
         end
 
         % Add listener to ROI for position changes
-        addlistener(obj.roi, 'MovingROI', @(src, evt)obj.spectrum_plotting());
+        addlistener(obj.roi, 'MovingROI', @(src, evt)obj.plotting());
         % Callback for when ROI is moved
-        obj.spectrum_plotting();
+        obj.plotting();
     end
 
     function updateMask(obj)
@@ -202,14 +172,14 @@ methods
         roiPos = obj.roi.Position; % [x, y, width, height]
 
         % Create a binary mask
-        [ny, nx, ~] = size(obj.SH_processed);
+        [ny, nx, ~] = size(obj.I);
         [X, Y] = meshgrid(1:nx, 1:ny);
 
         obj.mask = (X >= roiPos(1)) & (X <= roiPos(1) + roiPos(3)) & ...
             (Y >= roiPos(2)) & (Y <= roiPos(2) + roiPos(4));
     end
 
-    function spectrum_plotting(obj)
+    function plotting(obj)
         % Plot the spectrum for the selected region
         obj.updateMask();
 
@@ -217,41 +187,65 @@ methods
             return;
         end
 
-        % Extract signals from masked region using original SH for spectrum
-        maskedSH = obj.SH(repmat(obj.mask, [1, 1, size(obj.SH, 3)]));
-        maskedSH = reshape(maskedSH, [sum(obj.mask(:)), size(obj.SH, 3)]);
 
-        % Calculate mean spectrum (magnitude)
-        meanSpectrum = mean(abs(maskedSH), 1);
+        hei = size(obj.I,1);
+        wid = size(obj.I,2);
+
+        pos = obj.roi.Position;
+        pos = arrayfun(@floor,pos);
+        x1 = pos(1);
+        y1 = pos(2);
+        w1 = pos(3);
+        h1 = pos(4);
+        
+        y2 = max(min((y1+h1),hei),1);
+        x2 = max(min((x1+w1),wid),1);
+        y1 = max(min((y1),hei),1);
+        x1 = max(min((x1),wid),1); % matlab....
+
+        SubapI = obj.I(y1:y2,x1:x2,:);
+        switch obj.Params.spatial_transformation
+            case "angular spectrum"
+                [NY,NX,~] = size(SubapI);
+                SpatialKernel = propagation_kernelAngularSpectrum(NX,NY,obj.Params.spatial_propagation,obj.Params.lambda,obj.Params.ppx,obj.Params.ppy,0);
+                FH = fft2(single(SubapI)) .* fftshift(SpatialKernel);
+            case "Fresnel"
+                [NY,NX,~] = size(SubapI);
+                [SpatialKernel] = propagation_kernelFresnel(NX,NY,obj.Params.spatial_propagation,obj.Params.lambda,obj.Params.ppx,obj.Params.ppy,0);
+                FH = single(SubapI) .* SpatialKernel ;
+            case "None"
+                FH = [];
+        end
+
+        switch obj.Params.spatial_transformation
+            case "angular spectrum"
+                H = ifft2(FH);
+            case "Fresnel"
+                H = fftshift(fftshift(fft2(FH),1),2) ;%.*obj.PhaseFactor;
+            case "None"
+                H = single(SubapI);
+        end
+
+        if obj.Params.svd_filter
+            [H] = svd_filter(H, obj.Params.svd_threshold, obj.Params.time_range(1), obj.Params.fs, obj.Params.svd_stride);
+        end
+        switch obj.Params.time_transform
+            case 'FFT'
+                SH = fft(H, [], 3);
+            case 'None'
+                SH = H;
+        end
+        img = moment0(SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.I,3), obj.Params.flatfield_gw);
 
         % Plot
         axes(obj.axPlot);
         cla(obj.axPlot);
 
-        % Plot mag if checkbox button mag is checked
-        absCheckbox = findobj(obj.panel, 'Tag', 'mag');
+        imagesc(img);
+        colormap(obj.axPlot, 'gray');
+        colorbar;
 
-        if ~isempty(absCheckbox) && absCheckbox.Value
-            yyaxis left;
-            cla
-            plot(1:size(obj.SH, 3), meanSpectrum, 'b', 'LineWidth', 2);
-            title('Signal Spectrum in Selected Region');
-            xlabel('Dimension 3 Index');
-            ylabel('Magnitude');
-            grid on;
-            hold on
-        end
-
-        % Plot phase if checkbox button phase is checked
-        phaseCheckbox = findobj(obj.panel, 'Tag', 'phase');
-
-        if ~isempty(phaseCheckbox) && phaseCheckbox.Value
-            yyaxis right;
-            phaseSpectrum = mean(angle(maskedSH), 1);
-            plot(1:size(obj.SH, 3), phaseSpectrum, 'r--', 'LineWidth', 1.5);
-            xlabel('Dimension 3 Index');
-            ylabel('Phase (rad)');
-        end
+        
 
     end
 

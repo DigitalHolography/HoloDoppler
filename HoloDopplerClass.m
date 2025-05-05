@@ -361,6 +361,7 @@ classdef HoloDopplerClass < handle
         
         function VideoRendering(obj)
             %VideoRendering Construct the Video according to the current params
+            close all;% make sure to close  all figs
             
             if isempty(obj.reader)
                 error("No file loaded")

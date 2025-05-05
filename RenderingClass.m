@@ -110,6 +110,8 @@ classdef RenderingClass < handle
                     Params.(fields{i}) = obj.LastParams.(fields{i});
                 end
             end
+
+            
             
             
             
@@ -136,6 +138,21 @@ classdef RenderingClass < handle
                     end
                     obj.Frames = ifft2(fft2(obj.Frames).*obj.SpatialFilterMask);
                 end
+            end
+
+            if doFrames
+                if 0
+                    % filter to correct 1 frame on two swich from camera
+                    % technical noise
+                    Noise_Freq = 1.16; %kHz
+
+                    NT = size(obj.Frames,3);
+                    t = linspace(0,NT/Params.fs,NT);
+                    s = fft(rectpuls(t,2/Noise_Freq));
+                    ft = ifft(fft(obj.Frames,[],3)./abs(reshape(s+1,1,1,[])),[],3);
+                    obj.Frames = abs(ft);
+                end
+
             end
             
             %2) Spatial transformation (from Frames to H)
@@ -221,7 +238,7 @@ classdef RenderingClass < handle
                     obj.H = svd_x_t_filter(obj.H,Params.svdx_t_threshold, Params.time_range(1), Params.fs, floor(max(size(obj.H,1),size(obj.H,2))/Params.svdx_t_Nsub) ); 
                 end
             end
-            
+                        
             %4) Short-time transformation
             
             doSH = doH | ParamChanged.time_transform | obj.FramesChanged | ParamChanged.flip_y | ParamChanged.flip_x | ~options.cache_intermediate_results;
