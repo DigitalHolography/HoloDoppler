@@ -243,7 +243,7 @@ methods
         obj.params.frame_stride = 1;
         obj.params.frame_position = 1;
         obj.params.registration_disc_ratio = 0.8;
-        obj.params.image_types = {'power_Doppler', 'color_Doppler', 'directional_Doppler', 'moment_0', 'moment_1', 'moment_2'};
+        obj.params.image_types = {'power_Doppler', 'color_Doppler', 'directional_Doppler', 'moment_0', 'moment_1', 'moment_2','FH_modulus_mean'};
         obj.params.parfor_arg = 10;
         obj.params.batch_size_registration_ref = 512;
         obj.params.image_registration = true;
