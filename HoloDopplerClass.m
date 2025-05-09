@@ -608,25 +608,23 @@ methods
             elseif strcmp(image_types{i}, 'buckets')
                 sz = size(tmp{1}.parameters.intervals_0);
                 sz(3) = length(tmp);
-                numF = sz(4);
+                buckranges = params.buckets_ranges;
+                numranges = size(buckranges,1);
                 mat0 = zeros(sz, 'single');
                 mat1 = zeros(sz, 'single');
 
                 for j = 1:length(tmp)
 
-                    for k = 1:numF
+                    for k = 1:numranges
                         mat0(:, :, j, k) = tmp{j}.parameters.intervals_0(:, :, :, k);
                         mat1(:, :, j, k) = tmp{j}.parameters.intervals_1(:, :, :, k);
                     end
 
                 end
 
-                f1 = obj.params.time_range(1);
-                f2 = obj.params.time_range(2);
-
-                for k = 1:numF
-                    generate_video(mat0(:, :, :, k), result_folder_path, strcat('buckets_sym_', num2str(f1 + (k - 1) / numF * (f2 - f1)), '_', num2str(f1 + (k) / numF * (f2 - f1)), 'kHz'), export_raw = 0, temporal_filter = 2, square = params.square);
-                    generate_video(mat1(:, :, :, k), result_folder_path, strcat('buckets_asym', num2str(f1 + (k - 1) / numF * (f2 - f1)), '_', num2str(f1 + (k) / numF * (f2 - f1)), 'kHz'), export_raw = 0, temporal_filter = 2, square = params.square);
+                for k = 1:numranges
+                    generate_video(mat0(:, :, :, k), result_folder_path, strcat('buckets_sym_', num2str(buckranges(k,1)), '_', num2str(buckranges(k,2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
+                    generate_video(mat1(:, :, :, k), result_folder_path, strcat('buckets_asym', num2str(buckranges(k,1)), '_', num2str(buckranges(k,2)), 'kHz'), export_raw = 0, temporal_filter = 2, square = params.square);
                 end
 
                 continue

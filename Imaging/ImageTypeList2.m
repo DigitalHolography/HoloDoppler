@@ -332,21 +332,20 @@ methods
         if obj.buckets.is_selected % buckets has been chosen
             numX = size(SH_mod, 1);
             numY = size(SH_mod, 2);
-            num_F = Params.buckets_number;
-            obj.buckets.parameters.intervals_0 = zeros(numX, numY, 1, num_F);
-            obj.buckets.parameters.intervals_1 = zeros(numX, numY, 1, num_F);
-            circleMask = fftshift(diskMask(numY, numX, 0.15));
-            frequencies = linspace(f1, f2, num_F + 1);
+            buckranges = Params.buckets_ranges;
+            numranges = size(buckranges,1);
+            obj.buckets.parameters.intervals_0 = zeros(numX, numY, 1, numranges);
+            obj.buckets.parameters.intervals_1 = zeros(numX, numY, 1, numranges);
+            % why this here ? flatfield should be enough , circleMask = fftshift(diskMask(numY, numX, 0.15));
 
-            for freqIdx = 1:num_F
-                img = moment0(SH_mod, frequencies(freqIdx), frequencies(freqIdx + 1), Params.fs, NT, Params.flatfield_gw);
-                img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
+            for freqIdx = 1:numranges
+                img = moment0(SH_mod, buckranges(freqIdx,1), buckranges(freqIdx,2), Params.fs, NT, Params.flatfield_gw);
+                %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
 
                 obj.buckets.parameters.intervals_0(:, :, :, freqIdx) = img;
 
-                img = moment1(SH_mod, frequencies(freqIdx), frequencies(freqIdx + 1), Params.fs, NT, Params.flatfield_gw);
-                img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
-
+                img = moment1(SH_mod, buckranges(freqIdx,1), buckranges(freqIdx,2), Params.fs, NT, Params.flatfield_gw);
+                %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                 obj.buckets.parameters.intervals_1(:, :, :, freqIdx) = img;
             end
 
