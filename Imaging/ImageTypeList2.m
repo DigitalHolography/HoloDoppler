@@ -29,6 +29,14 @@ properties
     ShackHartmann_Phase
     power_Doppler_wiener
     power_adapt
+    pure_phase
+    doppler_variance_mod
+    doppler_variance_mod_pha
+    amplitude_decorrelation
+    diff_mod
+    diff_mod_pha
+    phase_diff
+    phase_variance
 end
 
 methods
@@ -61,6 +69,14 @@ methods
         obj.ShackHartmann_Phase = ImageType('ShackPhase');
         obj.power_Doppler_wiener = ImageType('power_wiener');
         obj.power_adapt = ImageType('power_adapt');
+        obj.pure_phase = ImageType('pure_phase');
+        obj.doppler_variance_mod = ImageType('doppler_variance_mod');
+        obj.doppler_variance_mod_pha = ImageType('doppler_variance_mod_pha');
+        obj.amplitude_decorrelation = ImageType('amplitude_decorrelation');
+        obj.diff_mod = ImageType('diff_mod');
+        obj.diff_mod_pha = ImageType('diff_mod_pha');
+        obj.phase_diff = ImageType('phase_diff');
+        obj.phase_variance = ImageType('phase_variance');
 
     end
 
@@ -324,9 +340,59 @@ methods
 
         end
 
-        if obj.intercorrel0.is_selected %
-            img = moment0(SH_mod, f1, f2, Params.fs, NT, 0);
-            obj.intercorrel0.image = reorder_directions(img, 3, 1);
+        if obj.pure_phase.is_selected 
+                %
+            if ~(r1 - floor(r1) == 0) && ~(r2 - floor(r2) == 0) %both not integer
+                r1p = floor(r1 * 2 / Params.fs * NT);
+                r2p = floor(r2 * 2 / Params.fs * NT);
+            else
+                r1p = r1;
+                r2p = r2;
+            end
+
+            r1p = min(max(r1p, 1), NT);
+            r2p = min(max(r2p, 1), NT);
+            obj.pure_phase.image = cumulant(SH_arg, r1p, r2p);
+            obj.pure_phase.image = flat_field_correction(obj.pure_phase.image, Params.flatfield_gw);
+        end
+
+        
+
+        if obj.doppler_variance_mod.is_selected %
+            img = 1 - (2*sum(SH_mod(:,:,1:end-1).*SH_mod(:,:,2:end),3))./(sum(SH_mod(:,:,1:end-1).^2,3)+sum(SH_mod(:,:,2:end).^2,3));
+            obj.doppler_variance_mod.image = img;
+        end
+        if obj.doppler_variance_mod_pha.is_selected %
+            img = 1 - (2*abs(sum(SHin(:,:,1:end-1).*SHin(:,:,2:end),3)))./(sum(SH_mod(:,:,1:end-1).^2,3)+sum(SH_mod(:,:,2:end).^2,3));
+            obj.doppler_variance_mod_pha.image = img;
+        end
+        if obj.amplitude_decorrelation.is_selected %
+            S = 0;
+            M = size(SH_mod,3);
+            for ii = 1:(M-1)
+                S = S + SH_mod(:,:,ii).*SH_mod(:,:,ii+1)./(SH_mod(:,:,ii).^2+SH_mod(:,:,ii+1).^2);
+            end
+            img = 1 - 1/(M-1) * S;
+            obj.amplitude_decorrelation.image = img;
+        end
+        if obj.diff_mod.is_selected %
+            M = size(SH_mod,3);
+            img = 1 - 1/(M-1) * sum(diff(SH_mod,1,3),3);
+            obj.diff_mod.image = img;
+        end
+        if obj.diff_mod_pha.is_selected %
+            M = size(SH_mod,3);
+            img = 1 - 1/(M-1) * sum(abs(diff(SHin,1,3)),3);
+            obj.diff_mod_pha.image = img;
+        end
+        if obj.phase_diff.is_selected %
+            img = mean(diff(SH_arg,1,3),3);
+            obj.phase_diff.image = img;
+        end
+        if obj.phase_variance.is_selected %
+            M = size(SH_mod,3);
+            img = 1/(M-1) * std(diff(SH_arg,1,3),[],3);
+            obj.phase_variance.image = img;
         end
 
         if obj.buckets.is_selected % buckets has been chosen

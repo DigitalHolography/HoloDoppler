@@ -294,7 +294,7 @@ methods
                     obj.SH = intercorrel(obj.H, 3); %TODO Replace template 3
                 case 'phase difference'
                     a = angle(obj.H);
-                    obj.SH = a(:, :, 1:2:end) -a(:, :, 2:2:end);
+                    obj.SH = a;%(:, :, 1:2:end) -a(:, :, 2:2:end);
                 case 'None'
                     obj.SH = obj.H;
             end
