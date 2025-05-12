@@ -103,7 +103,7 @@ methods
         function bkgmaskup(src)
             num = str2double(get(src, 'String'));
             SE=strel("disk",num);
-            obj.bkgmask = imdilate(obj.vesselmask,SE);
+            obj.bkgmask = imdilate(obj.vesselmask,SE)-obj.vesselmask;
             obj.updateImageDisplay();
         end
         uicontrol('Parent', obj.panel, ...
@@ -111,6 +111,12 @@ methods
             'Units', 'normalized', ...
             'Position', [.4, 0.6, 0.1, 0.1], ...
             'Callback', @(src, evt) bkgmaskup(src));
+        uicontrol('Parent', obj.panel, ...
+            'Style', 'pushbutton', ...
+            'String', 'analyse patch', ...
+            'Units', 'normalized', ...
+            'Position', [0.5, 0.8, 0.45, 0.2], ...
+            'Callback', @(src, evt) obj.cross_section_analysis());
         obj.updateImageDisplay();
 
         % Initial plot
@@ -188,16 +194,23 @@ methods
 
     function calc_velocity(obj)
         pos = obj.roi.Position;
-        obj.velocity = zeros([pos(3:4)],"single");
-        M0 = moment0(abs(obj.SH(pos(1):pos(1)+pos(3)-1,pos(2):pos(2)+pos(4)-1,:)), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH,3), 0);
-        M2 = moment2(abs(obj.SH(pos(1):pos(1)+pos(3)-1,pos(2):pos(2)+pos(4)-1,:)), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH,3), 0);
-        f_ = sqrt(M2./M0);
-        M0_bkg = moment0(abs(obj.SH.*obj.bkgmask), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH,3), 0);
-        M2_bkg = moment2(abs(obj.SH.*obj.bkgmask), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH,3), 0);
-        f_bkg = sqrt(M2_bkg/M0_bkg);
+        obj.velocity = zeros([floor(pos(3:4))],"single");
+        miniSH = obj.SH(floor(pos(2)):floor(pos(2)+pos(4)-1),floor(pos(1)):floor(pos(1)+pos(3)-1),:);
+        minibkg = obj.bkgmask(floor(pos(2)):floor(pos(2)+pos(4)-1),floor(pos(1)):floor(pos(1)+pos(3)-1));
+        minivess = obj.vesselmask(floor(pos(2)):floor(pos(2)+pos(4)-1),floor(pos(1)):floor(pos(1)+pos(3)-1));
+        M0 = moment0(abs(miniSH), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH,3), 0);
+        M2 = moment2(abs(miniSH), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH,3), 0);
+        %f_ = sqrt(M2./M0);
+        f_ = sqrt(M2./mean(M0,[1,2]));
+        M0_bkg = moment0(abs(miniSH.*minibkg), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH,3), 0);
+        M2_bkg = moment2(abs(miniSH.*minibkg), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH,3), 0);
+        f_bkg = sqrt(M2_bkg./M0_bkg);
+        d = max(size(miniSH,1),size(miniSH,2));
+        f_bkg = maskedAverage(f_bkg,d,minibkg,minivess);
         A = (f_.^2 - f_bkg.^2);
         f_Doppler = sign(A) .* sqrt(abs(A));
-        obj.velocity = f_Doppler * 2 * 852e-9 / sin(0.25);
+        obj.velocity = f_Doppler * 2 * 852e-9 / sin(0.25) * 1000 * 1000 ; 
+        figure(3); imagesc(obj.velocity);colormap("gray");colorbar;title('Velocity mm/s');
     end
 
     function cross_section_analysis(obj)
@@ -205,6 +218,8 @@ methods
         pos = obj.roi.Position;
         cropped_img = cropCircle(obj.velocity);
         [rotated_img, tilt_angle] = rotateSubImage(cropped_img);
+        figure(4); imagesc(rescale(rotated_img));axis image;colormap("gray");title('rotated patch');
+
     end
 
     function spectrum_plotting(obj, rescale)
@@ -291,31 +306,6 @@ methods
     function closeFigure(obj)
         % Clean up when figure is closed
         delete(obj.fig);
-    end
-
-    function img = cropCircle(subImg)
-        subImgHW = min([size(subImg, 1) size(subImg, 2)]);
-        radius = round(subImgHW / 2);
-        %FIXME anamorph.
-        center = [round((size(subImg, 1) + 1) / 2) round((size(subImg, 2) + 1) / 2)];
-        [xx, yy] = meshgrid(1:size(subImg, 1), 1:size(subImg, 2));
-        circular_mask = false(size(subImg, 1), size(subImg, 2));
-        circular_mask = circular_mask | hypot(xx - center(1), yy - center(2)) <= radius;
-        img = double(circular_mask) .* subImg;
-    end
-
-    function [rotatedImg, orientation] = rotateSubImage(subImg)
-        angles = linspace(0, 180, 181);
-        projx = zeros(size(subImg, 1), length(angles)); % Horizontal projections
-        for theta = 1:length(angles)
-            tmpImg = imrotate(subImg, angles(theta), 'bilinear', 'crop');
-            projx(:, theta) = squeeze(sum(tmpImg, 1));
-        end
-        projx_bin = (projx == 0);
-        list_x = squeeze(sum(projx_bin, 1));
-        [~, idc] = max(list_x);
-        orientation = idc(1);
-        rotatedImg = imrotate(subImg, orientation, 'bilinear', 'crop');
     end
 
 end
