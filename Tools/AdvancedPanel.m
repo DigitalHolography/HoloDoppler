@@ -72,12 +72,21 @@ function AdvancedPanel(app)
         label4.Layout.Row = 3;
         label4.Layout.Column = 2;
         
-        bucketsEdit = uieditfield(gl, 'numeric');
-        bucketsEdit.Value = app.HD.view.LastParams.buckets_number;
+        bucketsEdit = uieditfield(gl);
+        buckranges = app.HD.params.buckets_ranges;
+        buckranges(:,2) = round(app.HD.params.fs/2,2); % set to half fs the max range by def
+        bucketsEdit.Value = mat2str(buckranges);
         bucketsEdit.BackgroundColor = bgColor;
         bucketsEdit.FontColor = textColor;
         bucketsEdit.Layout.Row = 4;
         bucketsEdit.Layout.Column = 2;
+        buckEditCallBack(bucketsEdit);
+
+        bucketsraw = uicheckbox(gl,...
+               'Text', 'save raw', ...
+               'ValueChangedFcn', @(src,event) updateParam(app, src, 'buckets_raw'));
+        bucketsraw.Layout.Row = 3;
+        bucketsraw.Layout.Column = 3;
         
         % Show SH button - Row 5
         showSHbtn = uibutton(gl, 'push');
@@ -119,7 +128,16 @@ function AdvancedPanel(app)
         firstFrameEdit.ValueChangedFcn = @(src,event) updateFrameParams(app, src, lastFrameEdit, 'first');
         lastFrameEdit.ValueChangedFcn = @(src,event) updateFrameParams(app, firstFrameEdit, src, 'last');
         colorThreshEdit.ValueChangedFcn = @(src,event) updateParam(app, src, 'time_range_extra');
-        bucketsEdit.ValueChangedFcn = @(src,event) updateParam(app, src, 'buckets_number');
+        function    buckEditCallBack(src)
+            try
+                app.HD.params.buckets_ranges = eval(src.Value);
+                assert(size(app.HD.params.buckets_ranges,2)==2);
+            catch E
+                disp("Couldn't get the ranges try to write input frequency ranges like '[[6,18]; [6,25]]' in kHz.")
+                disp(E)
+            end
+        end
+        bucketsEdit.ValueChangedFcn = @(src,event) buckEditCallBack(src);
         
         % Add validation for frame values
         firstFrameEdit.Limits = [1 Inf];

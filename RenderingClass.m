@@ -51,7 +51,8 @@ methods
         Params.time_range = [6, 10.5];
         Params.index_range = [3, 10];
         Params.time_range_extra = -1;
-        Params.buckets_number = 4;
+        Params.buckets_ranges = [[4,18.3];[6,18.3]];
+        Params.buckets_raw = false;
         Params.flatfield_gw = 35;
         Params.flip_y = false;
         Params.flip_x = false;
@@ -293,7 +294,7 @@ methods
                     obj.SH = intercorrel(obj.H, 3); %TODO Replace template 3
                 case 'phase difference'
                     a = angle(obj.H);
-                    obj.SH = a(:, :, 1:2:end) -a(:, :, 2:2:end);
+                    obj.SH = a;%(:, :, 1:2:end) -a(:, :, 2:2:end);
                 case 'None'
                     obj.SH = obj.H;
             end

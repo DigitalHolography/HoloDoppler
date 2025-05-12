@@ -18,13 +18,13 @@ p_mask = plot(axis_x, fftshift(log10(spectrumAVG_mask)), 'red', 'LineWidth', 1, 
 % hold on;
 % Noise_Freq = 1.16; %kHz
 % NT = size(SH,3);
-
+% 
 % Nbonus = floor(NT * Noise_Freq/fs /4);
 % t = linspace(0,NT/fs,NT);
 % tmps = fft(rectpuls(t,4/Noise_Freq));
 % tmps = cat(2,tmps(1:2*Nbonus),tmps(end-2*Nbonus+1:end));
 % %tmps = circshift(tmps,floor(length(tmps)/2));
-
+% 
 % % make first lobesize divide by two by cropping
 % s = repmat(tmps,1,NT);
 % s = s(1:NT).^1.5/max(abs(s.^1.5));
