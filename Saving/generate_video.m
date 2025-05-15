@@ -99,18 +99,24 @@ for i = 1:size(video,4)
 end
 close(w)
 
-%% contrast enhancement for the gif
-
-if opt.enhance_contrast
-    Max = max(video,[],'all');
-    Min = min(video,[],'all');
-    video = rescale(video,Min+0.03*Min,Max-0.03*Max);
-end
-
 if opt.export_gif 
     output_filename_gif = sprintf('%s_%s.%s', output_dirname, name, 'gif');
     writeGifOnDisc2(video,sprintf('%s\\gif\\%s', output_path, output_filename_gif),opt.gif_freq,opt.gif_Duration);
 end
+
+%% contrast enhancement for the gif
+
+if opt.enhance_contrast
+    for f = 1:numFrames
+        video(:,:,:,f) = imadjust(video(:,:,:,f),stretchlim(video(:,:,:,f)));
+    end
+    if opt.export_gif 
+        output_filename_gif_enhanced = sprintf('%s_%s_enhanced.%s', output_dirname, name, 'gif');
+        writeGifOnDisc2(video,sprintf('%s\\gif\\%s', output_path, output_filename_gif_enhanced),opt.gif_freq,opt.gif_Duration);
+    end
+end
+
+
 
 %% save temporal average to png
 if opt.export_avg_img
