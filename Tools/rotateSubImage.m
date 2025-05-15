@@ -1,4 +1,4 @@
-function [rotatedImg, orientation] = rotateSubImage(subImg)
+function [rotatedImg, orientation, projx] = rotateSubImage(subImg)
 % Rotate the sub-image to align the blood vessel vertically.
 % The orientation is determined by maximizing the number of zero pixels in the horizontal projection.
 %
@@ -8,17 +8,19 @@ function [rotatedImg, orientation] = rotateSubImage(subImg)
 % Output:
 %   rotatedImg - 2D array, the rotated image.
 %   orientation - Scalar, the orientation angle used for rotation.
+tmp_subImg = subImg;
+tmp_subImg(isnan(tmp_subImg)) = 0;
 
 % Define a range of angles to test (0 to 180 degrees in 1-degree increments)
 angles = linspace(0, 180, 181);
 
 % Initialize arrays to store horizontal and vertical projections for each angle
-projx = zeros(size(subImg, 2), length(angles)); % Horizontal projections
+projx = zeros(size(tmp_subImg, 2), length(angles)); % Horizontal projections
 
 % Loop over each angle and compute projections
 for theta = 1:length(angles)
     % Rotate the image by the current angle
-    tmpImg = imrotate(subImg, angles(theta), 'bilinear', 'crop');
+    tmpImg = imrotate(tmp_subImg, angles(theta), 'bilinear', 'crop');
 
     % Compute the projection
     projx(:, theta) = squeeze(sum(tmpImg, 1));

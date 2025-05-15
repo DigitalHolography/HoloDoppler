@@ -84,6 +84,7 @@ function AdvancedPanel(app)
 
         bucketsraw = uicheckbox(gl,...
                'Text', 'save raw', ...
+               'FontColor', 'white', ...
                'ValueChangedFcn', @(src,event) updateParam(app, src, 'buckets_raw'));
         bucketsraw.Layout.Row = 3;
         bucketsraw.Layout.Column = 3;
@@ -123,6 +124,15 @@ function AdvancedPanel(app)
         showSHbtn.Layout.Row = 6;
         showSHbtn.Layout.Column = 1;
         showSHbtn.ButtonPushedFcn = @(btn,event) ExploreAp(app.HD.view.Frames,app.HD.params);
+
+        % Explore Ap button  - Row 6
+        showSHbtn = uibutton(gl, 'push');
+        showSHbtn.Text = 'Explore Quant';
+        showSHbtn.BackgroundColor = btnColor;
+        showSHbtn.FontColor = textColor;
+        showSHbtn.Layout.Row = 6;
+        showSHbtn.Layout.Column = 2;
+        showSHbtn.ButtonPushedFcn = @(btn,event) ExploreQuant(app.HD);
         
         % Set up value change callbacks
         firstFrameEdit.ValueChangedFcn = @(src,event) updateFrameParams(app, src, lastFrameEdit, 'first');

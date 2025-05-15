@@ -210,16 +210,24 @@ methods
         A = (f_.^2 - f_bkg.^2);
         f_Doppler = sign(A) .* sqrt(abs(A));
         obj.velocity = f_Doppler * 2 * 852e-9 / sin(0.25) * 1000 * 1000 ; 
-        figure(3); imagesc(obj.velocity);colormap("gray");colorbar;title('Velocity mm/s');
+        figure(33); imagesc(obj.velocity);colormap("gray");colorbar;title('Velocity mm/s');
     end
 
     function cross_section_analysis(obj)
         calc_velocity(obj);
         pos = obj.roi.Position;
         cropped_img = cropCircle(obj.velocity);
-        [rotated_img, tilt_angle] = rotateSubImage(cropped_img);
-        figure(4); imagesc(rescale(rotated_img));axis image;colormap("gray");title('rotated patch');
-
+        [rotated_img, tilt_angle, projx] = rotateSubImage(cropped_img);
+        fi = figure(6);fi.Position = [600, 200, 1000, 600];clf;
+        tiledlayout(2,2, 'Padding', 'none', 'TileSpacing', 'compact');
+        nexttile   ; imagesc((projx));axis image;colormap("gray");title('vertical projection versus rotation angle');
+        nexttile   ; imagesc((rotated_img));axis image;colormap("gray");title('rotated patch');
+        nexttile   ; [~, ~, A, ~, c1, c2] = computeVesselCrossSection(rotated_img, 0.0191);
+        v_profile = mean(rotated_img, 1,'omitnan');
+        v = mean(v_profile(c1:c2),'omitnan');
+        Q = v * A * 60; % microL/min
+        nexttile   ; title([' Blood Volume Rate Estimate : ', num2str(round(Q,2)),' µL/min']);
+        
     end
 
     function spectrum_plotting(obj, rescale)

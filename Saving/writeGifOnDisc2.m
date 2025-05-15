@@ -10,7 +10,7 @@ numY=size(data,2);
 numT=size(data,4);
 numC=size(data,3);
 
-NewNumFrames = floor(Hertz * Duration);
+NewNumFrames = max(floor(Hertz * Duration),1);
 
 for col = 1:numC
     images_interp(:, :, col, :) = imresize3(squeeze(data(:, :, col, :)),[numX,numY,NewNumFrames]);
