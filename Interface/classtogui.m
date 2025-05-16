@@ -10,7 +10,7 @@ app.Nx.Value = double(HD.file.Nx);
 app.Ny.Value = double(HD.file.Ny);
 app.parfor_arg.Value = HD.params.parfor_arg;
 app.batch_size.Value = HD.params.batch_size;
-app.batch_size_registration.Value = HD.params.batch_size_registration_ref;
+app.batch_size_registration.Value = HD.params.batch_size_registration;
 
 app.batch_stride.Value = HD.params.batch_stride;
 app.frame_position.Value = HD.params.frame_position;

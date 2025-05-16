@@ -16,7 +16,7 @@ methods
     function obj = HoloDopplerClass()
         %HoloDopplerClass Construct an instance of this class
         setInitParams(obj);
-        addpath("AberrationCorrection\", "FolderManagement\", "Imaging\", "Interface\", "ReaderClasses\", "Rendering\", "Saving\", "Saving\Registering\", "tools\");
+        addpath("AberrationCorrection\", "FolderManagement\", "Imaging\", "Interface\", "ReaderClasses\", "Rendering\", "Saving\", "Saving\Registering\", "Tools\", "StandardConfigs\");
         obj.view = RenderingClass();
         set(0, 'defaultfigurecolor', [1 1 1]);
     end
@@ -156,6 +156,20 @@ methods
         obj.params.time_range(1) = obj.view.LastParams.time_range(1); % the default from init value of rendering class
         obj.params.time_range(2) = obj.params.fs / 2;
 
+        %2)bis) Set Defaults from the StandardConfig
+
+        if isfile(fullfile("StandardConfigs","CurrentDefault.txt"))
+            DefConfName = readlines(fullfile("StandardConfigs","CurrentDefault.txt"));
+            if ~isempty(DefConfName)
+                DefConfName = DefConfName(1);
+                paramspath = fullfile("StandardConfigs",sprintf("%s.json",DefConfName));
+                if isfile(paramspath)
+                    obj.loadParams(paramspath);
+                end
+            end
+        end
+
+
         % 3) Look for config or last computation params
 
         % Define the paths for saved preview, video, and config parameters
@@ -245,7 +259,7 @@ methods
         obj.params.registration_disc_ratio = 0.8;
         obj.params.image_types = {'power_Doppler', 'color_Doppler', 'directional_Doppler', 'moment_0', 'moment_1', 'moment_2','FH_modulus_mean'};
         obj.params.parfor_arg = 10;
-        obj.params.batch_size_registration_ref = 512;
+        obj.params.batch_size_registration = 512;
         obj.params.image_registration = true;
         obj.params.first_frame = 0;
         obj.params.end_frame = 0;
@@ -746,7 +760,7 @@ methods
         video_M0_reg = video_M0 .* disk - disk .* sum(video_M0 .* disk, [1, 2]) / nnz(disk); % minus the mean in the disc of each frame
         video_M0_reg = video_M0_reg ./ (max(abs(video_M0_reg), [], [1, 2])); % rescaling each frame but keeps mean at zero
 
-        obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size_registration_ref, obj.params.frame_position));
+        obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size_registration, obj.params.frame_position));
         obj.view.Render(obj.params, obj.params.image_types);
 
         ref_img = obj.view.Output.power_Doppler.image;

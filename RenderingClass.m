@@ -380,7 +380,9 @@ methods
             end
 
             if isempty(obj.Output.(image_types{i}).image)
-                fprintf("unfortunately %s wasnt outputed \n", image_types{i})
+                if  ~ismember(image_types{i}, {'buckets','SH'}) % these dont have explicit out images so it is normal for them not to output an image
+                    fprintf("unfortunately %s wasnt outputed \n", image_types{i});
+                end
                 r{i} = [];
             else
                 im = obj.Output.(image_types{i}).image;
