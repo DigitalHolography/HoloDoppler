@@ -626,19 +626,24 @@ methods
                 numranges = size(buckranges,1);
                 mat0 = zeros(sz, 'single');
                 mat1 = zeros(sz, 'single');
+                mat2 = zeros(sz, 'single');
 
                 for j = 1:length(tmp)
 
                     for k = 1:numranges
                         mat0(:, :, j, k) = tmp{j}.parameters.intervals_0(:, :, :, k);
                         mat1(:, :, j, k) = tmp{j}.parameters.intervals_1(:, :, :, k);
+                        mat2(:, :, j, k) = tmp{j}.parameters.intervals_2(:, :, :, k);
                     end
 
                 end
 
                 for k = 1:numranges
-                    generate_video(mat0(:, :, :, k), result_folder_path, strcat('buckets_sym_', num2str(buckranges(k,1)), '_', num2str(buckranges(k,2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
-                    generate_video(mat1(:, :, :, k), result_folder_path, strcat('buckets_asym', num2str(buckranges(k,1)), '_', num2str(buckranges(k,2)), 'kHz'), export_raw = 0, temporal_filter = 2, square = params.square);
+                    generate_video(mat0(:, :, :, k), result_folder_path, strcat('moment0_', num2str(buckranges(k,1)), '_', num2str(buckranges(k,2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
+                    generate_video(mat1(:, :, :, k), result_folder_path, strcat('moment1_', num2str(buckranges(k,1)), '_', num2str(buckranges(k,2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
+                    generate_video(mat2(:, :, :, k), result_folder_path, strcat('moment2_', num2str(buckranges(k,1)), '_', num2str(buckranges(k,2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
+                    
+                
                 end
 
                 continue
@@ -796,14 +801,18 @@ methods
                 continue
             elseif strcmp(obj.params.image_types{j}, 'buckets')
                 sz = size(obj.video(1).buckets.parameters.intervals_0);
-                numF = sz(4);
+                if length(sz)>3
+                    numF = sz(4);
+                else
+                    numF = 1;
+                end
                 ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
-
                 for i = 1:num_batches
 
                     for k = 1:numF
                         obj.video(i).('buckets').parameters.intervals_0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_0(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
                         obj.video(i).('buckets').parameters.intervals_1(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_1(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
+                        obj.video(i).('buckets').parameters.intervals_2(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_2(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
                     end
 
                 end
@@ -855,6 +864,7 @@ methods
                     for k = 1:numF
                         obj.video(i).('buckets').parameters.intervals_0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_0(:, :, :, k), - floor(obj.registration.shifts(:, i) .* ratio'));
                         obj.video(i).('buckets').parameters.intervals_1(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_1(:, :, :, k), - floor(obj.registration.shifts(:, i) .* ratio'));
+                        obj.video(i).('buckets').parameters.intervals_2(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_2(:, :, :, k), - floor(obj.registration.shifts(:, i) .* ratio'));
                     end
 
                 end
