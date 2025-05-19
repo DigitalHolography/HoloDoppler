@@ -398,7 +398,7 @@ methods
         if obj.buckets.is_selected % buckets has been chosen
             numX = size(SH_mod, 1);
             numY = size(SH_mod, 2);
-            buckranges = Params.buckets_ranges;
+            buckranges = reshape(Params.buckets_ranges,[],2);
             numranges = size(buckranges,1);
             obj.buckets.parameters.intervals_0 = zeros(numX, numY, 1, numranges,'single');
             obj.buckets.parameters.intervals_1 = zeros(numX, numY, 1, numranges,'single');
