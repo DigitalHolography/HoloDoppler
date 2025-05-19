@@ -622,7 +622,7 @@ methods
             elseif strcmp(image_types{i}, 'buckets')
                 sz = size(tmp{1}.parameters.intervals_0);
                 sz(3) = length(tmp);
-                buckranges = params.buckets_ranges;
+                buckranges = reshape(params.buckets_ranges,[],2);
                 numranges = size(buckranges,1);
                 mat0 = zeros(sz, 'single');
                 mat1 = zeros(sz, 'single');
