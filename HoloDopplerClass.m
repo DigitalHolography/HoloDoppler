@@ -647,6 +647,40 @@ methods
                 end
 
                 continue
+            elseif strcmp(image_types{i}, 'Quadrants')
+                fields = fieldnames(tmp{1}.parameters);
+                nn = length(fields);
+                for j = 1:length(tmp)
+                    for k = 1:nn
+                        if ~isempty(tmp{j}.parameters) && ~ismember(fields{k},{'QuadrantsM1','QuadrantsM0'})
+                            Q(:,:,j,k) = tmp{j}.parameters.(fields{k});
+                        end
+                    end
+                    QM1(:,:,:,j) = tmp{j}.parameters.QuadrantsM1;
+                    QM0(:,:,:,j) = tmp{j}.parameters.QuadrantsM0;
+                end
+                for k = 1:(nn-2)
+                    generate_video(Q(:,:,:,k),result_folder_path, fields{k}, export_raw = 1, temporal_filter = [], square = params.square)
+                end
+                generate_video(QM1,result_folder_path, 'QuadrantsM1Composite', export_raw = 0, temporal_filter = 2, square = params.square)
+                generate_video(QM0,result_folder_path, 'QuadrantsM0Composite', export_raw = 0, temporal_filter = 2, square = params.square)
+
+
+                sz = size(tmp{1}.image);
+
+                if length(sz) == 2
+                    sz = [sz 1];
+                end
+
+                sz = [sz length(tmp)];
+                mat = zeros(sz, 'single');
+
+                for j = 1:length(tmp)
+                    if ~isempty(tmp{j}.image)
+                        mat(:, :, :, j) = tmp{j}.image;
+                    end
+                end
+
             else % image extraction
                 sz = size(tmp{1}.image);
 
@@ -658,7 +692,9 @@ methods
                 mat = zeros(sz, 'single');
 
                 for j = 1:length(tmp)
-                    mat(:, :, :, j) = tmp{j}.image;
+                    if ~isempty(tmp{j}.image)
+                        mat(:, :, :, j) = tmp{j}.image;
+                    end
                 end
 
             end
@@ -817,6 +853,9 @@ methods
 
                 end
 
+                continue
+
+            elseif strcmp(obj.params.image_types{j}, 'Quadrants')
                 continue
             end
 
