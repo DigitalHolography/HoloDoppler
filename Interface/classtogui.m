@@ -49,6 +49,8 @@ app.flip_x.Value = HD.params.flip_x;
 app.square.Value = HD.params.square;
 
 app.ShackHartmannCheckBox.Value = ~isempty(HD.params.ShackHartmannCorrection);
+app.applyshackhartmannfromref.Value = HD.params.applyshackhartmannfromref;
+
 if ~isempty(HD.params.ShackHartmannCorrection)
     app.ZernikeProjectionCheckBox.Value = HD.params.ShackHartmannCorrection.ZernikeProjection;
     app.shackhartmannzernikeranksEditField.Value = HD.params.ShackHartmannCorrection.zernikeranks;

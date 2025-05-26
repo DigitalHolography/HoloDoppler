@@ -198,12 +198,14 @@ methods
             end
 
             if ~isempty(Params.ShackHartmannCorrection)
-
-                if doFH | ParamChanged.ShackHartmannCorrection | isempty(obj.ShackHartmannMask)
-                    [obj.ShackHartmannMask, obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH, Params.spatial_transformation, Params.spatial_propagation, Params.time_range, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
+                if ~Params.applyshackhartmannfromref || isempty(obj.ShackHartmannMask) % in case we apply ShackHartmann from precalculated Mask
+                    if doFH | ParamChanged.ShackHartmannCorrection | isempty(obj.ShackHartmannMask)
+                        [obj.ShackHartmannMask, obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH, Params.spatial_transformation, Params.spatial_propagation, Params.time_range, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
+                    end
                 end
-
-                obj.FH = obj.FH .* obj.ShackHartmannMask;
+                if ~isempty(obj.ShackHartmannMask)
+                    obj.FH = obj.FH .* obj.ShackHartmannMask;
+                end
             else
                 obj.ShackHartmannMask = [];
             end

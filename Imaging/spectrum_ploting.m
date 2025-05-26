@@ -4,16 +4,15 @@ function spectrum_ploting(SH, mask, fs, f1, f2)
 
 SH_mask = SH .* mask;
 
-spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(SH_mask(:, :, 1));
-momentM2 = moment2(SH, f1, f2, fs, size(SH_mask, 3), 0);
-momentM1 = moment1(SH, f1, f2, fs, size(SH_mask, 3), 0);
+spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(mask);
 momentM0 = moment0(SH, f1, f2, fs, size(SH_mask, 3), 0);
-momentM2M0 = sqrt(momentM2 ./ mean(momentM0,[1 2]));
-momentM2M0_mask = momentM2M0 .* mask;
-momentM1M0 = (momentM1 ./ mean(momentM0,[1 2]));
-momentM1M0_mask = momentM1M0 .* mask;
-omegaRMS = sum(momentM2M0_mask, [1 2]) / nnz(SH_mask(:, :, 1));
-omegaAVG = sum(momentM1M0_mask, [1 2]) / nnz(SH_mask(:, :, 1));
+momentM1 = moment1(SH, f1, f2, fs, size(SH_mask, 3), 0);
+momentM2 = moment2(SH, f1, f2, fs, size(SH_mask, 3), 0);
+M0 = mean(momentM0(mask)); % versus mean(momentM0,[1,2])
+M1 = mean(momentM1(mask));
+M2 = mean(momentM2(mask));
+omegaAVG = M1/M0;
+omegaRMS = sqrt(M2/M0);
 omegaRMS_index = omegaRMS * size(SH_mask, 3) / fs;
 I_omega = log10(spectrumAVG_mask(round(omegaRMS_index)));
 axis_x = linspace(-fs / 2, fs / 2, size(SH_mask, 3));

@@ -261,7 +261,9 @@ methods
         obj.params.parfor_arg = 10;
         obj.params.batch_size_registration = 512;
         obj.params.image_registration = true;
+        obj.params.applyshackhartmannfromref = false;
         obj.params.first_frame = 0;
+        obj.params.end_frame = 0;
         obj.params.end_frame = 0;
 
     end
@@ -510,9 +512,17 @@ methods
 
         % 2) Loop over the batches
         if obj.params.parfor_arg == 0
-
+            obj.view = RenderingClass();
+            obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size_registration, obj.params.frame_position));
+            obj.view.Render(obj.params, obj.params.image_types, cache_intermediate_results = false);
+            if obj.params.applyshackhartmannfromref
+                ShackHartmannMask = obj.view.ShackHartmannMask; % get the mask to apply to each frame here
+            else 
+                ShackHartmannMask = [];
+            end
             for i = 1:(num_batches)
                 obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, (i - 1) * obj.params.batch_stride + first_frame));
+                obj.view.ShackHartmannMask = ShackHartmannMask;
                 obj.view.Render(obj.params, obj.params.image_types);
                 obj.video(i) = ImageTypeList2();
                 obj.video(i).copy_from(obj.view.Output); % work around against handles
@@ -529,13 +539,21 @@ methods
 
             [dir, name, ext] = fileparts(file_path);
             reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
-
+            view = RenderingClass();
+            view.setFrames(reader.read_frame_batch(params.batch_size_registration, params.frame_position));
+            view.Render(params, params.image_types, cache_intermediate_results = false);
+            if params.applyshackhartmannfromref
+                ShackHartmannMask = view.ShackHartmannMask; % get the mask to apply to each frame here
+            else 
+                ShackHartmannMask = [];
+            end
             if isprop(reader, "all_frames") && ~isempty(reader.all_frames)
                 all_frames = reshape(reader.all_frames, size(reader.all_frames, 1), size(reader.all_frames, 2), params.batch_size, []);
 
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
                     view = RenderingClass();
                     view.setFrames(all_frames(:, :, :, i));
+                    view.ShackHartmannMask = ShackHartmannMask;
                     view.Render(params, params.image_types, cache_intermediate_results = false);
                     video(i) = ImageTypeList2();
                     video(i).copy_from(view.Output);
@@ -547,6 +565,7 @@ methods
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
                     view = RenderingClass();
                     view.setFrames(reader.read_frame_batch(params.batch_size, (i - 1) * params.batch_stride + 1));
+                    view.ShackHartmannMask = ShackHartmannMask;
                     view.Render(params, params.image_types, cache_intermediate_results = false);
                     video(i) = ImageTypeList2();
                     video(i).copy_from(view.Output);

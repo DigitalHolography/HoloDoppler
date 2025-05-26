@@ -50,6 +50,7 @@ HD.params.flip_x = app.flip_x.Value;
 HD.params.square = app.square.Value;
 
 % Shack-Hartmann correction
+HD.params.applyshackhartmannfromref = app.applyshackhartmannfromref.Value;
 if app.ShackHartmannCheckBox.Value
     HD.params.ShackHartmannCorrection.ZernikeProjection = app.ZernikeProjectionCheckBox.Value;
     HD.params.ShackHartmannCorrection.zernikeranks = app.shackhartmannzernikeranksEditField.Value;
