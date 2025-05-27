@@ -725,11 +725,11 @@ methods
             if ~isempty(mat)
 
                 if strcmp(image_types{i}, 'moment_0') % raw moments are always outputted if they are selected
-                    generate_video(mat, result_folder_path, strcat('moment0'), export_raw = 1, temporal_filter = 2); % three cases just to rename each correctly for PW
+                    generate_video(mat, result_folder_path, strcat('moment0'), export_raw = 1, temporal_filter = 2, square = params.square); % three cases just to rename each correctly for PW
                 elseif strcmp(image_types{i}, 'moment_1')
-                    generate_video(mat, result_folder_path, strcat('moment1'), export_raw = 1, temporal_filter = 2);
+                    generate_video(mat, result_folder_path, strcat('moment1'), export_raw = 1, temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'moment_2')
-                    generate_video(mat, result_folder_path, strcat('moment2'), export_raw = 1, temporal_filter = 2);
+                    generate_video(mat, result_folder_path, strcat('moment2'), export_raw = 1, temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'power_Doppler')
                     generate_video(mat, result_folder_path, strcat('M0'), temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'spectrogram')

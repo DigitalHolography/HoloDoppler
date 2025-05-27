@@ -47,20 +47,20 @@ ylim(yrange)
 % rectangle('Position', [-f1 yrange(1) 2 * f1 (yrange(2) - yrange(1))], 'FaceColor', [0.9 0.9 0.9], 'EdgeColor', 'none');
 % rectangle('Position', [-fs / 2 yrange(1) (fs / 2 - f2) (yrange(2) - yrange(1))], 'FaceColor', [0.9 0.9 0.9], 'EdgeColor', 'none');
 % rectangle('Position', [f2 yrange(1) (fs / 2 - f2) (yrange(2) - yrange(1))], 'FaceColor', [0.9 0.9 0.9], 'EdgeColor', 'none');
-% om_RMS_line = line([-omegaRMS omegaRMS], [I_omega I_omega]);
-% om_RMS_line.Color = 'black';
-% om_RMS_line.LineStyle = '-';
-% om_RMS_line.Marker = '|';
-% om_RMS_line.MarkerSize = 12;
-% om_RMS_line.LineWidth = 1;
-% om_RMS_line.Tag = 'f RMS';
-om_AVG_line = line([min(omegaAVG,0) max(omegaAVG,0)], [I_omega I_omega]);
-om_AVG_line.Color = 'black';
-om_AVG_line.LineStyle = '-';
-om_AVG_line.Marker = '|';
-om_AVG_line.MarkerSize = 12;
-om_AVG_line.LineWidth = 1;
-om_AVG_line.Tag = 'f AVG';
+om_RMS_line = line([-omegaRMS omegaRMS], [I_omega I_omega]);
+om_RMS_line.Color = 'black';
+om_RMS_line.LineStyle = '-';
+om_RMS_line.Marker = '|';
+om_RMS_line.MarkerSize = 12;
+om_RMS_line.LineWidth = 1;
+om_RMS_line.Tag = 'f RMS';
+% om_AVG_line = line([min(omegaAVG,0) max(omegaAVG,0)], [I_omega I_omega]);
+% om_AVG_line.Color = 'black';
+% om_AVG_line.LineStyle = '-';
+% om_AVG_line.Marker = '|';
+% om_AVG_line.MarkerSize = 12;
+% om_AVG_line.LineWidth = 1;
+% om_AVG_line.Tag = 'f AVG';
 xline(f1, '--')
 xline(f2, '--')
 xline(-f1, '--')
