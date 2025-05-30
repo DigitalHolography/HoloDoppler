@@ -153,7 +153,10 @@ methods
 
         % Update the image display with real values
         axes(obj.axImage);
-        imagesc(obj.avgImage);
+        [Nx,Ny] = size(obj.avgImage);
+        Nd = max(Nx,Ny);
+        imagesc(imresize(obj.avgImage,[Nd Nd]));
+        axis image;
         colormap(obj.axImage, 'gray');
         title('Moment order 0 f1 f2 Image');
         colorbar;
@@ -273,15 +276,24 @@ methods
 
             SH_mask = obj.SH_processed .* mask;
 
-            spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(SH_mask(:, :, 1));
-            [n1,n2,n3,n4,f_range,f_range_sym] = moment_range(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(obj.SH_processed,3));
+            spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(mask);
+            momentM0 = moment0(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(SH_mask, 3), 0);
+            momentM1 = moment1(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(SH_mask, 3), 0);
+            momentM2 = moment2(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(SH_mask, 3), 0);
+            % [n1,n2,n3,n4,f_range,f_range_sym] = moment_range(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(obj.SH_processed,3));
             % noramlized spectrum but not relevant spectrumAVG_mask = spectrumAVG_mask*2/(spectrumAVG_mask(n1)+spectrumAVG_mask(n4));
             
-            M0 = squeeze(sum(spectrumAVG_mask(n1:n2))' + sum(spectrumAVG_mask(n3:n4))'); 
-            M1 = squeeze(sum(spectrumAVG_mask(n1:n2)'.*f_range) + sum(spectrumAVG_mask(n3:n4)'.*f_range_sym)); 
-            M2 = squeeze(sum(spectrumAVG_mask(n1:n2)'.*f_range.^2) + sum(spectrumAVG_mask(n3:n4)'.*f_range_sym.^2)); 
-            omegaAVG = M1/M0;
-            omegaRMS = sqrt(M2/M0);
+            % M0 = squeeze(sum(spectrumAVG_mask(n1:n2))' + sum(spectrumAVG_mask(n3:n4))'); 
+            % M1 = squeeze(sum(spectrumAVG_mask(n1:n2)'.*f_range) + sum(spectrumAVG_mask(n3:n4)'.*f_range_sym)); 
+            % M2 = squeeze(sum(spectrumAVG_mask(n1:n2)'.*f_range.^2) + sum(spectrumAVG_mask(n3:n4)'.*f_range_sym.^2)); 
+            % omegaAVG = M1/M0;
+            % omegaRMS = sqrt(M2/M0);
+            M0 = mean(momentM0(mask)); % versus mean(momentM0,[1,2])
+            M0_full = mean(momentM0,[1,2]);
+            M1 = mean(momentM1(mask));
+            M2 = mean(momentM2(mask));
+            omegaAVG = M1/M0_full; % M1/M0;
+            omegaRMS = sqrt(M2/M0_full); % sqrt(M2/M0);
             omegaRMS_index = omegaRMS * size(SH_mask, 3) / obj.fs;
             I_omega = scalingfn(spectrumAVG_mask(round(omegaRMS_index)));
             axis_x = linspace(-obj.fs / 2, obj.fs / 2, size(SH_mask, 3));

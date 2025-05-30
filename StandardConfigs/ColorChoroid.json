@@ -1,0 +1,48 @@
+{
+  "batch_size": 512,
+  "batch_stride": 512,
+  "frame_stride": 1,
+  "frame_position": 1,
+  "registration_disc_ratio": 0.8,
+  "image_types": [
+    "power_Doppler",
+    "power_1_Doppler",
+    "power_2_Doppler",
+    "color_Doppler",
+    "directional_Doppler",
+    "broadening",
+    "buckets",
+    "power_Doppler_wiener",
+    "power_adapt"
+  ],
+  "parfor_arg": 18,
+  "batch_size_registration": 512,
+  "image_registration": true
+  "lambda": 8.52E-7,
+  "fs": 78,
+  "ppx": 1.9400147441120552E-5,
+  "ppy": 1.9400147441120552E-5,
+  "spatial_transformation": "Fresnel",
+  "spatial_propagation": 1.13,
+  "time_range": [
+    6,
+    18
+  ],
+  "svd_filter": true,
+  "svd_threshold": 10,
+  "time_transform": "FFT",
+  "flatfield_gw": 35,
+  "buckets_ranges": [
+    3,
+    39
+  ],
+  "buckets_raw": false,
+  "flip_y": true,
+  "flip_x": true,
+  "square": true,
+  "spatial_filter_range": [
+    0,
+    1
+  ],
+  "time_range_extra": -1
+}

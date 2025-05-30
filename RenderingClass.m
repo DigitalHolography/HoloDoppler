@@ -153,21 +153,6 @@ methods
 
         end
 
-        if doFrames
-
-            if 0
-                % filter to correct 1 frame on two swich from camera
-                % technical noise
-                Noise_Freq = 1.16; %kHz
-
-                NT = size(obj.Frames, 3);
-                t = linspace(0, NT / Params.fs, NT);
-                s = fft(rectpuls(t, 2 / Noise_Freq));
-                ft = ifft(fft(obj.Frames, [], 3) ./ abs(reshape(s + 1, 1, 1, [])), [], 3);
-                obj.Frames = abs(ft);
-            end
-
-        end
 
         %2) Spatial transformation (from Frames to H)
 
@@ -180,10 +165,11 @@ methods
 
                     if ParamChanged.spatial_propagation | ParamChanged.spatial_transformation | isempty(obj.SpatialKernel)
                         [NY, NX, ~] = size(obj.Frames);
-                        obj.SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
+                        ND = max(NX,NY);
+                        obj.SpatialKernel = propagation_kernelAngularSpectrum(ND, ND, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
                     end
-
-                    obj.FH = fft2(single(obj.Frames)) .* fftshift(obj.SpatialKernel);
+                    obj.FH = fft2(single(pad3DToSquare(obj.Frames))); % zero pading in a square of max(Nx NY) size
+                    obj.FH = obj.FH .* fftshift(obj.SpatialKernel);
                 case "Fresnel"
 
                     if ParamChanged.spatial_propagation | ParamChanged.spatial_transformation | isempty(obj.SpatialKernel)
@@ -302,6 +288,8 @@ methods
             end
 
         end
+
+        %%% obj.SH = svd_filter(obj.SH, 10);
 
         if ~options.cache_intermediate_results
             obj.H = [];
