@@ -1,4 +1,4 @@
-function [H,cov,U] = svd_filter(H, thresh, f1, fs, stride_param)
+function [H,cov,U] = svd_filter(H, thresh, f1, fs, stride_param, true_mean_correction)
 
 % SVD filtering
 %
@@ -19,6 +19,17 @@ thresh = max(min(thresh,batch_size),1);
 if nargin < 5 || isempty(stride_param)
     % stride_param doesnt exist so default to 1 (full H)
     stride_param = 1;
+end
+if nargin < 6 || isempty(true_mean_correction)
+    % default to 0 i.e. no mean filtering because the mean is the almost exactly the first eigen vector so no need to sort it separatly 
+    true_mean_correction = false;
+end
+
+if true_mean_correction
+    % remove the mean value to compute a real covariance matrix slightly
+    % slower and not much difference so deactivated by default
+    meanH = mean(H,3);
+    H = (H-meanH);
 end
 
 
@@ -41,5 +52,10 @@ H_tissue = Hi * V(:,1:thresh) * V(:,1:thresh)';
 U = Hi * V(:,1:thresh); % U is also divided by S^2 but normalization of each U image removes this factor
 H = reshape(Hi - H_tissue, iwidth, iheight, batch_size);
 H = reshape(H, iwidth, iheight, batch_size);
+
+if true_mean_correction
+    % re add the mean of H
+    H = (H+meanH);
+end
 
 end

@@ -46,6 +46,7 @@ methods
         Params.svdx_threshold = 10;
         Params.svdx_t_threshold = 100;
         Params.svd_threshold = false;
+        Params.svd_mean = false;
         Params.svd_stride = [];
         Params.time_transform = "FFT";
         Params.time_range = [6, 10.5];
@@ -227,7 +228,7 @@ methods
         if doH
 
             if Params.svd_filter
-                [obj.H, obj.cov, obj.U] = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
+                [obj.H, obj.cov, obj.U] = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride, Params.svd_mean);
 
             end
 
