@@ -343,9 +343,10 @@ methods
         omegaAVG = M1/M0_full; % M1/M0;
         omegaRMS = sqrt(M2/M0_full); % vs the local version : sqrt(M2/M0);
         omegaRMS_index = omegaRMS * size(SH_mask, 3) / obj.Params.fs;
+        I_omega_old = I_omega;
         I_omega = scalingfn(spectrumAVG_mask(round(omegaRMS_index)));
         axis_x = linspace(-obj.Params.fs / 2, obj.Params.fs / 2, size(SH_mask, 3));
-        p_mask = plot(axis_x, fftshift(scalingfn(spectrumAVG_mask)), ':','Color', 'black', 'LineWidth', 1, 'DisplayName', 'Arteries');
+        p_mask = plot(axis_x, fftshift(scalingfn(spectrumAVG_mask)), '--','Color', 'black', 'LineWidth', 1, 'DisplayName', 'Arteries');
         xlim([-obj.Params.fs / 2 obj.Params.fs / 2])
         sclingrange = abs(fftshift(axis_x)) > obj.Params.time_range(1);
 
@@ -364,7 +365,7 @@ methods
         om_RMS_line.LineWidth = 1;
         om_RMS_line.Tag = sprintf('f_{RMS} = %.2f kHz', omegaRMS);
         % fprintf('f_{RMS %d} = %.2f kHz\n', i, omegaRMS);
-        t2 = text(0, I_omega, sprintf('\x27E8\x03C3_{f}\x27E9 = %.2f kHz', round(omegaRMS,1)), 'HorizontalAlignment','center', 'VerticalAlignment','bottom', 'BackgroundColor','white');
+        t2 = text(0, I_omega-0.08, sprintf('\x27E8\x03C3_{f}\x27E9 = %.2f kHz', round(omegaRMS,1)), 'HorizontalAlignment','center', 'VerticalAlignment','bottom', 'BackgroundColor','white');
         set(gca, 'LineWidth', 1);
         uistack(p_mask, 'top');
         uistack(t1, 'top');
@@ -372,6 +373,8 @@ methods
         uistack(om_RMS_line1, 'top');
         uistack(om_RMS_line, 'top');
         uistack(gca, 'top');
+
+        legend({'','','','','Arteries','Background','',''})
 
 
         

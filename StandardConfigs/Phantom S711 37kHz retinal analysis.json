@@ -15,7 +15,7 @@
   "spatial_transformation": "Fresnel",
   "time_range": [
     6,
-    18
+    18.3
   ],
   "spatial_filter": false,
   "hilbert_filter": false,
@@ -30,7 +30,7 @@
   "buckets_ranges": [
     [
       2,
-      18
+      18.3
     ]
   ],
   "buckets_raw": true,
