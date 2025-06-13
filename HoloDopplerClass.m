@@ -16,7 +16,7 @@ methods
     function obj = HoloDopplerClass()
         %HoloDopplerClass Construct an instance of this class
         setInitParams(obj);
-        addpath("AberrationCorrection\", "FolderManagement\", "Imaging\", "Interface\", "ReaderClasses\", "Rendering\", "Saving\", "Saving\Registering\", "tools\");
+        addpath("AberrationCorrection\", "FolderManagement\", "Imaging\", "Interface\", "ReaderClasses\", "Rendering\", "Saving\", "Saving\Registering\", "Tools\", "StandardConfigs\");
         obj.view = RenderingClass();
         set(0, 'defaultfigurecolor', [1 1 1]);
     end
@@ -156,6 +156,20 @@ methods
         obj.params.time_range(1) = obj.view.LastParams.time_range(1); % the default from init value of rendering class
         obj.params.time_range(2) = obj.params.fs / 2;
 
+        %2)bis) Set Defaults from the StandardConfig
+
+        if isfile(fullfile("StandardConfigs","CurrentDefault.txt"))
+            DefConfName = readlines(fullfile("StandardConfigs","CurrentDefault.txt"));
+            if ~isempty(DefConfName)
+                DefConfName = DefConfName(1);
+                paramspath = fullfile("StandardConfigs",sprintf("%s.json",DefConfName));
+                if isfile(paramspath)
+                    obj.loadParams(paramspath);
+                end
+            end
+        end
+
+
         % 3) Look for config or last computation params
 
         % Define the paths for saved preview, video, and config parameters
@@ -245,9 +259,11 @@ methods
         obj.params.registration_disc_ratio = 0.8;
         obj.params.image_types = {'power_Doppler', 'color_Doppler', 'directional_Doppler', 'moment_0', 'moment_1', 'moment_2','FH_modulus_mean'};
         obj.params.parfor_arg = 10;
-        obj.params.batch_size_registration_ref = 512;
+        obj.params.batch_size_registration = 512;
         obj.params.image_registration = true;
+        obj.params.applyshackhartmannfromref = false;
         obj.params.first_frame = 0;
+        obj.params.end_frame = 0;
         obj.params.end_frame = 0;
 
     end
@@ -496,9 +512,17 @@ methods
 
         % 2) Loop over the batches
         if obj.params.parfor_arg == 0
-
+            obj.view = RenderingClass();
+            obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size_registration, obj.params.frame_position));
+            obj.view.Render(obj.params, obj.params.image_types, cache_intermediate_results = false);
+            if obj.params.applyshackhartmannfromref
+                ShackHartmannMask = obj.view.ShackHartmannMask; % get the mask to apply to each frame here
+            else 
+                ShackHartmannMask = [];
+            end
             for i = 1:(num_batches)
                 obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, (i - 1) * obj.params.batch_stride + first_frame));
+                obj.view.ShackHartmannMask = ShackHartmannMask;
                 obj.view.Render(obj.params, obj.params.image_types);
                 obj.video(i) = ImageTypeList2();
                 obj.video(i).copy_from(obj.view.Output); % work around against handles
@@ -515,13 +539,21 @@ methods
 
             [dir, name, ext] = fileparts(file_path);
             reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
-
+            view = RenderingClass();
+            view.setFrames(reader.read_frame_batch(params.batch_size_registration, params.frame_position));
+            view.Render(params, params.image_types, cache_intermediate_results = false);
+            if params.applyshackhartmannfromref
+                ShackHartmannMask = view.ShackHartmannMask; % get the mask to apply to each frame here
+            else 
+                ShackHartmannMask = [];
+            end
             if isprop(reader, "all_frames") && ~isempty(reader.all_frames)
                 all_frames = reshape(reader.all_frames, size(reader.all_frames, 1), size(reader.all_frames, 2), params.batch_size, []);
 
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
                     view = RenderingClass();
                     view.setFrames(all_frames(:, :, :, i));
+                    view.ShackHartmannMask = ShackHartmannMask;
                     view.Render(params, params.image_types, cache_intermediate_results = false);
                     video(i) = ImageTypeList2();
                     video(i).copy_from(view.Output);
@@ -533,6 +565,7 @@ methods
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
                     view = RenderingClass();
                     view.setFrames(reader.read_frame_batch(params.batch_size, (i - 1) * params.batch_stride + 1));
+                    view.ShackHartmannMask = ShackHartmannMask;
                     view.Render(params, params.image_types, cache_intermediate_results = false);
                     video(i) = ImageTypeList2();
                     video(i).copy_from(view.Output);
@@ -608,26 +641,65 @@ methods
             elseif strcmp(image_types{i}, 'buckets')
                 sz = size(tmp{1}.parameters.intervals_0);
                 sz(3) = length(tmp);
-                buckranges = params.buckets_ranges;
+                buckranges = reshape(params.buckets_ranges,[],2);
                 numranges = size(buckranges,1);
                 mat0 = zeros(sz, 'single');
                 mat1 = zeros(sz, 'single');
+                mat2 = zeros(sz, 'single');
 
                 for j = 1:length(tmp)
 
                     for k = 1:numranges
                         mat0(:, :, j, k) = tmp{j}.parameters.intervals_0(:, :, :, k);
                         mat1(:, :, j, k) = tmp{j}.parameters.intervals_1(:, :, :, k);
+                        mat2(:, :, j, k) = tmp{j}.parameters.intervals_2(:, :, :, k);
                     end
 
                 end
 
                 for k = 1:numranges
-                    generate_video(mat0(:, :, :, k), result_folder_path, strcat('buckets_sym_', num2str(buckranges(k,1)), '_', num2str(buckranges(k,2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
-                    generate_video(mat1(:, :, :, k), result_folder_path, strcat('buckets_asym', num2str(buckranges(k,1)), '_', num2str(buckranges(k,2)), 'kHz'), export_raw = 0, temporal_filter = 2, square = params.square);
+                    generate_video(mat0(:, :, :, k), result_folder_path, strcat('moment0_', num2str(buckranges(k,1)), '_', num2str(buckranges(k,2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
+                    generate_video(mat1(:, :, :, k), result_folder_path, strcat('moment1_', num2str(buckranges(k,1)), '_', num2str(buckranges(k,2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
+                    generate_video(mat2(:, :, :, k), result_folder_path, strcat('moment2_', num2str(buckranges(k,1)), '_', num2str(buckranges(k,2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
+                    
+                
                 end
 
                 continue
+            elseif strcmp(image_types{i}, 'Quadrants')
+                fields = fieldnames(tmp{1}.parameters);
+                nn = length(fields);
+                for j = 1:length(tmp)
+                    for k = 1:nn
+                        if ~isempty(tmp{j}.parameters) && ~ismember(fields{k},{'QuadrantsM1','QuadrantsM0'})
+                            Q(:,:,j,k) = tmp{j}.parameters.(fields{k});
+                        end
+                    end
+                    QM1(:,:,:,j) = tmp{j}.parameters.QuadrantsM1;
+                    QM0(:,:,:,j) = tmp{j}.parameters.QuadrantsM0;
+                end
+                for k = 1:(nn-2)
+                    generate_video(Q(:,:,:,k),result_folder_path, fields{k}, export_raw = 1, temporal_filter = [], square = params.square)
+                end
+                generate_video(QM1,result_folder_path, 'QuadrantsM1Composite', export_raw = 0, temporal_filter = 2, square = params.square)
+                generate_video(QM0,result_folder_path, 'QuadrantsM0Composite', export_raw = 0, temporal_filter = 2, square = params.square)
+
+
+                sz = size(tmp{1}.image);
+
+                if length(sz) == 2
+                    sz = [sz 1];
+                end
+
+                sz = [sz length(tmp)];
+                mat = zeros(sz, 'single');
+
+                for j = 1:length(tmp)
+                    if ~isempty(tmp{j}.image)
+                        mat(:, :, :, j) = tmp{j}.image;
+                    end
+                end
+
             else % image extraction
                 sz = size(tmp{1}.image);
 
@@ -639,7 +711,9 @@ methods
                 mat = zeros(sz, 'single');
 
                 for j = 1:length(tmp)
-                    mat(:, :, :, j) = tmp{j}.image;
+                    if ~isempty(tmp{j}.image)
+                        mat(:, :, :, j) = tmp{j}.image;
+                    end
                 end
 
             end
@@ -651,11 +725,11 @@ methods
             if ~isempty(mat)
 
                 if strcmp(image_types{i}, 'moment_0') % raw moments are always outputted if they are selected
-                    generate_video(mat, result_folder_path, strcat('moment0'), export_raw = 1, temporal_filter = 2); % three cases just to rename each correctly for PW
+                    generate_video(mat, result_folder_path, strcat('moment0'), export_raw = 1, temporal_filter = 2, square = params.square); % three cases just to rename each correctly for PW
                 elseif strcmp(image_types{i}, 'moment_1')
-                    generate_video(mat, result_folder_path, strcat('moment1'), export_raw = 1, temporal_filter = 2);
+                    generate_video(mat, result_folder_path, strcat('moment1'), export_raw = 1, temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'moment_2')
-                    generate_video(mat, result_folder_path, strcat('moment2'), export_raw = 1, temporal_filter = 2);
+                    generate_video(mat, result_folder_path, strcat('moment2'), export_raw = 1, temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'power_Doppler')
                     generate_video(mat, result_folder_path, strcat('M0'), temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'spectrogram')
@@ -746,7 +820,7 @@ methods
         video_M0_reg = video_M0 .* disk - disk .* sum(video_M0 .* disk, [1, 2]) / nnz(disk); % minus the mean in the disc of each frame
         video_M0_reg = video_M0_reg ./ (max(abs(video_M0_reg), [], [1, 2])); % rescaling each frame but keeps mean at zero
 
-        obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size_registration_ref, obj.params.frame_position));
+        obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size_registration, obj.params.frame_position));
         obj.view.Render(obj.params, obj.params.image_types);
 
         ref_img = obj.view.Output.power_Doppler.image;
@@ -782,18 +856,25 @@ methods
                 continue
             elseif strcmp(obj.params.image_types{j}, 'buckets')
                 sz = size(obj.video(1).buckets.parameters.intervals_0);
-                numF = sz(4);
+                if length(sz)>3
+                    numF = sz(4);
+                else
+                    numF = 1;
+                end
                 ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
-
                 for i = 1:num_batches
 
                     for k = 1:numF
                         obj.video(i).('buckets').parameters.intervals_0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_0(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
                         obj.video(i).('buckets').parameters.intervals_1(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_1(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
+                        obj.video(i).('buckets').parameters.intervals_2(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_2(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
                     end
 
                 end
 
+                continue
+
+            elseif strcmp(obj.params.image_types{j}, 'Quadrants')
                 continue
             end
 
@@ -841,6 +922,7 @@ methods
                     for k = 1:numF
                         obj.video(i).('buckets').parameters.intervals_0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_0(:, :, :, k), - floor(obj.registration.shifts(:, i) .* ratio'));
                         obj.video(i).('buckets').parameters.intervals_1(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_1(:, :, :, k), - floor(obj.registration.shifts(:, i) .* ratio'));
+                        obj.video(i).('buckets').parameters.intervals_2(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_2(:, :, :, k), - floor(obj.registration.shifts(:, i) .* ratio'));
                     end
 
                 end

@@ -519,6 +519,7 @@ function Rendervideo(app)
                 video_moment2(:, :, :, batch_idx) = gather(image_type_list_par.moment_2.image);
                 images_choroid_0(:, :, :, batch_idx, :) = gather(image_type_list_par.choroid.parameters.intervals_0);
                 images_choroid_1(:, :, :, batch_idx, :) = gather(image_type_list_par.choroid.parameters.intervals_1);
+                images_choroid_2(:, :, :, batch_idx, :) = gather(image_type_list_par.choroid.parameters.intervals_2);
                 tmp = images_choroid_0(:, :, :, batch_idx, :);
                 video_M_freq_low(:, :, :, batch_idx) = tmp(:, :, :, 1);
                 video_M_freq_high(:, :, :, batch_idx) = tmp(:, :, :, end);

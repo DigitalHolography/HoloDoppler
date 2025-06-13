@@ -74,7 +74,7 @@ function AdvancedPanel(app)
         
         bucketsEdit = uieditfield(gl);
         buckranges = app.HD.params.buckets_ranges;
-        buckranges(:,2) = round(app.HD.params.fs/2,2); % set to half fs the max range by def
+        % buckranges(:,2) = round(app.HD.params.fs/2,2); % set to half fs the max range by def
         bucketsEdit.Value = mat2str(buckranges);
         bucketsEdit.BackgroundColor = bgColor;
         bucketsEdit.FontColor = textColor;
@@ -85,6 +85,7 @@ function AdvancedPanel(app)
         bucketsraw = uicheckbox(gl,...
                'Text', 'save raw', ...
                'FontColor', 'white', ...
+               'Value', app.HD.params.buckets_raw, ...
                'ValueChangedFcn', @(src,event) updateParam(app, src, 'buckets_raw'));
         bucketsraw.Layout.Row = 3;
         bucketsraw.Layout.Column = 3;

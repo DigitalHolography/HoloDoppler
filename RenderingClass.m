@@ -46,6 +46,7 @@ methods
         Params.svdx_threshold = 10;
         Params.svdx_t_threshold = 100;
         Params.svd_threshold = false;
+        Params.svd_mean = false;
         Params.svd_stride = [];
         Params.time_transform = "FFT";
         Params.time_range = [6, 10.5];
@@ -153,21 +154,6 @@ methods
 
         end
 
-        if doFrames
-
-            if 0
-                % filter to correct 1 frame on two swich from camera
-                % technical noise
-                Noise_Freq = 1.16; %kHz
-
-                NT = size(obj.Frames, 3);
-                t = linspace(0, NT / Params.fs, NT);
-                s = fft(rectpuls(t, 2 / Noise_Freq));
-                ft = ifft(fft(obj.Frames, [], 3) ./ abs(reshape(s + 1, 1, 1, [])), [], 3);
-                obj.Frames = abs(ft);
-            end
-
-        end
 
         %2) Spatial transformation (from Frames to H)
 
@@ -180,10 +166,11 @@ methods
 
                     if ParamChanged.spatial_propagation | ParamChanged.spatial_transformation | isempty(obj.SpatialKernel)
                         [NY, NX, ~] = size(obj.Frames);
-                        obj.SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
+                        ND = max(NX,NY);
+                        obj.SpatialKernel = propagation_kernelAngularSpectrum(ND, ND, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
                     end
-
-                    obj.FH = fft2(single(obj.Frames)) .* fftshift(obj.SpatialKernel);
+                    obj.FH = fft2(single(pad3DToSquare(obj.Frames))); % zero pading in a square of max(Nx NY) size
+                    obj.FH = obj.FH .* fftshift(obj.SpatialKernel);
                 case "Fresnel"
 
                     if ParamChanged.spatial_propagation | ParamChanged.spatial_transformation | isempty(obj.SpatialKernel)
@@ -198,12 +185,14 @@ methods
             end
 
             if ~isempty(Params.ShackHartmannCorrection)
-
-                if doFH | ParamChanged.ShackHartmannCorrection | isempty(obj.ShackHartmannMask)
-                    [obj.ShackHartmannMask, obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH, Params.spatial_transformation, Params.spatial_propagation, Params.time_range, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
+                if ~Params.applyshackhartmannfromref || isempty(obj.ShackHartmannMask) % in case we apply ShackHartmann from precalculated Mask
+                    if doFH | ParamChanged.ShackHartmannCorrection | isempty(obj.ShackHartmannMask)
+                        [obj.ShackHartmannMask, obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH, Params.spatial_transformation, Params.spatial_propagation, Params.time_range, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
+                    end
                 end
-
-                obj.FH = obj.FH .* obj.ShackHartmannMask;
+                if ~isempty(obj.ShackHartmannMask)
+                    obj.FH = obj.FH .* obj.ShackHartmannMask;
+                end
             else
                 obj.ShackHartmannMask = [];
             end
@@ -239,7 +228,7 @@ methods
         if doH
 
             if Params.svd_filter
-                [obj.H, obj.cov, obj.U] = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
+                [obj.H, obj.cov, obj.U] = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride, Params.svd_mean);
 
             end
 
@@ -300,6 +289,8 @@ methods
             end
 
         end
+
+        %%% obj.SH = svd_filter(obj.SH, 10);
 
         if ~options.cache_intermediate_results
             obj.H = [];
@@ -380,7 +371,9 @@ methods
             end
 
             if isempty(obj.Output.(image_types{i}).image)
-                fprintf("unfortunately %s wasnt outputed \n", image_types{i})
+                if  ~ismember(image_types{i}, {'buckets','SH'}) % these dont have explicit out images so it is normal for them not to output an image
+                    fprintf("unfortunately %s wasnt outputed \n", image_types{i});
+                end
                 r{i} = [];
             else
                 im = obj.Output.(image_types{i}).image;

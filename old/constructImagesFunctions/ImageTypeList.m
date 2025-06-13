@@ -35,7 +35,7 @@ classdef ImageTypeList < handle % This class is modified dynamically
             obj.moment_0 = ImageType('M0');
             obj.moment_1 = ImageType('M1');
             obj.moment_2 = ImageType('M2');
-            obj.choroid = ImageType('choroid', struct('intervals_0', [], 'intervals_1', []));
+            obj.choroid = ImageType('choroid', struct('intervals_0', [], 'intervals_1', [], 'intervals_2', []));
         end
 
         function clear(obj, varargin)
@@ -294,6 +294,7 @@ classdef ImageTypeList < handle % This class is modified dynamically
                 numY = size(SH, 2);
                 obj.choroid.parameters.intervals_0 = zeros(numX, numY, 1, num_F);
                 obj.choroid.parameters.intervals_1 = zeros(numX, numY, 1, num_F);
+                obj.choroid.parameters.intervals_2 = zeros(numX, numY, 1, num_F);
                 circleMask = fftshift(diskMask(numX, numY, 0.15));
                 frequencies = linspace(f1, f2, num_F + 1);
 

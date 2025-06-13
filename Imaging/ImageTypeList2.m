@@ -37,6 +37,7 @@ properties
     diff_mod_pha
     phase_diff
     phase_variance
+    Quadrants
 end
 
 methods
@@ -57,7 +58,7 @@ methods
         obj.moment_2 = ImageType('M2');
         obj.arg_0 = ImageType('arg0');
         obj.f_RMS = ImageType('f_RMS');
-        obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', []));
+        obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', [], 'intervals_2', []));
         obj.denoised = ImageType('denoised');
         obj.cluster_projection = ImageType('cluster_projection');
         obj.intercorrel0 = ImageType('intercorrel0');
@@ -77,7 +78,7 @@ methods
         obj.diff_mod_pha = ImageType('diff_mod_pha');
         obj.phase_diff = ImageType('phase_diff');
         obj.phase_variance = ImageType('phase_variance');
-
+        obj.Quadrants = ImageType('Quadrants');
     end
 
     function clear(obj, varargin)
@@ -398,21 +399,26 @@ methods
         if obj.buckets.is_selected % buckets has been chosen
             numX = size(SH_mod, 1);
             numY = size(SH_mod, 2);
-            buckranges = Params.buckets_ranges;
+            buckranges = reshape(Params.buckets_ranges,[],2);
             numranges = size(buckranges,1);
-            obj.buckets.parameters.intervals_0 = zeros(numX, numY, 1, numranges);
-            obj.buckets.parameters.intervals_1 = zeros(numX, numY, 1, numranges);
+            obj.buckets.parameters.intervals_0 = zeros(numX, numY, 1, numranges,'single');
+            obj.buckets.parameters.intervals_1 = zeros(numX, numY, 1, numranges,'single');
+            obj.buckets.parameters.intervals_2 = zeros(numX, numY, 1, numranges,'single');
             % why this here ? flatfield should be enough , circleMask = fftshift(diskMask(numY, numX, 0.15));
 
             for freqIdx = 1:numranges
-                img = moment0(SH_mod, buckranges(freqIdx,1), buckranges(freqIdx,2), Params.fs, NT, Params.flatfield_gw);
+                img = moment0(SH_mod, buckranges(freqIdx,1), buckranges(freqIdx,2), Params.fs, NT, 0);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
 
                 obj.buckets.parameters.intervals_0(:, :, :, freqIdx) = img;
 
-                img = moment1(SH_mod, buckranges(freqIdx,1), buckranges(freqIdx,2), Params.fs, NT, Params.flatfield_gw);
+                img = moment1(SH_mod, buckranges(freqIdx,1), buckranges(freqIdx,2), Params.fs, NT, 0);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                 obj.buckets.parameters.intervals_1(:, :, :, freqIdx) = img;
+
+                img = moment2(SH_mod, buckranges(freqIdx,1), buckranges(freqIdx,2), Params.fs, NT, 0);
+                %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
+                obj.buckets.parameters.intervals_2(:, :, :, freqIdx) = img;
             end
 
         end
@@ -523,6 +529,23 @@ methods
                 case 'Fresnel'
                     obj.FH_arg_mean.image = squeeze((mean(angle(FHin), 3)));
             end
+
+        end
+
+        if obj.Quadrants.is_selected
+
+            Q = RenderQuadrant(FHin, Params);
+            obj.Quadrants.parameters = Q;
+            obj.Quadrants.image = imresize(cat(2,cat(1,Q.Q1_m0,Q.Q2_m0),cat(1,Q.Q4_m0,Q.Q3_m0)),[size(FHin,1),size(FHin,2)]);
+            for i = 1:int16(floor(numel(fieldnames(Q))/2))
+                fAVG{i} = Q.(sprintf("Q%d_m1",i))./mean(Q.(sprintf("Q%d_m0",i)),[1 2]);
+            end
+            for i = 1:int16(floor(numel(fieldnames(Q))/2))
+                f0{i} = Q.(sprintf("Q%d_m0",i))./mean(Q.(sprintf("Q%d_m0",i)),[1 2]);
+            end
+            obj.Quadrants.parameters.QuadrantsM1 = mergeColorChannels(fAVG);
+            obj.Quadrants.parameters.QuadrantsM0 = mergeColorChannels(f0);
+            %obj.Quadrants.parameters.QuadrantsM1 = imresize(cat(2,cat(1,Q.Q1_m1,Q.Q2_m1),cat(1,Q.Q4_m1,Q.Q3_m1)),[size(FHin,1),size(FHin,2)]);
 
         end
 
