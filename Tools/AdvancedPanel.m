@@ -126,7 +126,7 @@ function AdvancedPanel(app)
         showSHbtn.Layout.Column = 1;
         showSHbtn.ButtonPushedFcn = @(btn,event) ExploreAp(app.HD.view.Frames,app.HD.params);
 
-        % Explore Ap button  - Row 6
+        % Explore Quant - Row 6
         showSHbtn = uibutton(gl, 'push');
         showSHbtn.Text = 'Explore Quant';
         showSHbtn.BackgroundColor = btnColor;
@@ -134,6 +134,15 @@ function AdvancedPanel(app)
         showSHbtn.Layout.Row = 6;
         showSHbtn.Layout.Column = 2;
         showSHbtn.ButtonPushedFcn = @(btn,event) ExploreQuant(app.HD);
+
+        % Explore  - Row 6
+        showSHbtn = uibutton(gl, 'push');
+        showSHbtn.Text = 'Explore Z';
+        showSHbtn.BackgroundColor = btnColor;
+        showSHbtn.FontColor = textColor;
+        showSHbtn.Layout.Row = 6;
+        showSHbtn.Layout.Column = 3;
+        showSHbtn.ButtonPushedFcn = @(btn,event) ExploreZ(app.HD.view, app.HD.params);
         
         % Set up value change callbacks
         firstFrameEdit.ValueChangedFcn = @(src,event) updateFrameParams(app, src, lastFrameEdit, 'first');
