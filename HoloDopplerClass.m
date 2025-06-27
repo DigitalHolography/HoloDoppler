@@ -8,6 +8,7 @@ properties
     view % RenderingClass
     params % rendering parameters
     video % ImageTypeList2 % store all the output images classes rendered at the end of a cycle
+    running_averages % ImageTypeList2 output images classes cumulative average over time 
     registration % store the shifts calculated to register images at the end (so that it can be reversed)
 end
 
@@ -526,6 +527,7 @@ methods
                 obj.view.Render(obj.params, obj.params.image_types);
                 obj.video(i) = ImageTypeList2();
                 obj.video(i).copy_from(obj.view.Output); % work around against handles
+                update_running_averages(obj.running_averages,obj.view.Output,obj.params);
                 update_waitbar(0);
             end
 
@@ -536,6 +538,7 @@ methods
             file_path = obj.file.path;
             params = obj.params;
             video = obj.video;
+            running_averages = obj.running_averages;
 
             [dir, name, ext] = fileparts(file_path);
             reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
@@ -557,6 +560,7 @@ methods
                     view.Render(params, params.image_types, cache_intermediate_results = false);
                     video(i) = ImageTypeList2();
                     video(i).copy_from(view.Output);
+                    update_running_averages(running_averages,view.Output,params);
                     send(D, 0);
                 end
 
@@ -569,12 +573,14 @@ methods
                     view.Render(params, params.image_types, cache_intermediate_results = false);
                     video(i) = ImageTypeList2();
                     video(i).copy_from(view.Output);
+                    update_running_averages(running_averages,view.Output,params);
                     send(D, 0);
                 end
 
             end
 
             obj.video = video;
+            obj.running_averages = running_averages;
         end
 
         close(h);

@@ -22,7 +22,7 @@
   "svd_filter": true,
   "svdx_filter": false,
   "svdx_t_filter": false,
-  "svd_threshold": 8,
+  "svd_threshold": 12,
   "svd_stride": [],
   "time_transform": "FFT",
   "flatfield_gw": 35,
