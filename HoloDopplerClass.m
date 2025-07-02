@@ -8,7 +8,7 @@ properties
     view % RenderingClass
     params % rendering parameters
     video % ImageTypeList2 % store all the output images classes rendered at the end of a cycle
-    running_averages % ImageTypeList2 output images classes cumulative average over time 
+    running_averages %  cumulative average over time 
     registration % store the shifts calculated to register images at the end (so that it can be reversed)
 end
 
@@ -38,6 +38,7 @@ methods
         obj.file = [];
         obj.view = RenderingClass();
         obj.video = [];
+        obj.running_averages = RunningAveragesHolder();
         obj.registration = [];
         obj.setInitParams();
 
@@ -499,7 +500,6 @@ methods
                     p = 1;
                     disp('Iterative optimization')
             end
-
         end
 
         update_waitbar(-2);
@@ -510,6 +510,7 @@ methods
             v(1, num_batches) = ImageTypeList2();
             obj.video = v; clear v;
         end
+        obj.running_averages = RunningAveragesHolder(); %reset this here
 
         % 2) Loop over the batches
         if obj.params.parfor_arg == 0
@@ -527,18 +528,21 @@ methods
                 obj.view.Render(obj.params, obj.params.image_types);
                 obj.video(i) = ImageTypeList2();
                 obj.video(i).copy_from(obj.view.Output); % work around against handles
-                update_running_averages(obj.running_averages,obj.view.Output,obj.params);
+                obj.running_averages.update(obj.view,obj.params);
                 update_waitbar(0);
+                fprintf("%d/%d\n",i,num_batches);
             end
 
         else
             D = parallel.pool.DataQueue;
             afterEach(D, @update_waitbar);
+            dq = parallel.pool.DataQueue;
+            
 
             file_path = obj.file.path;
             params = obj.params;
             video = obj.video;
-            running_averages = obj.running_averages;
+            afterEach(dq, @(data) obj.running_averages.update(data{1},params));
 
             [dir, name, ext] = fileparts(file_path);
             reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
@@ -550,6 +554,8 @@ methods
             else 
                 ShackHartmannMask = [];
             end
+            send(dq,{view}); % send the ref for registration
+
             if isprop(reader, "all_frames") && ~isempty(reader.all_frames)
                 all_frames = reshape(reader.all_frames, size(reader.all_frames, 1), size(reader.all_frames, 2), params.batch_size, []);
 
@@ -560,12 +566,11 @@ methods
                     view.Render(params, params.image_types, cache_intermediate_results = false);
                     video(i) = ImageTypeList2();
                     video(i).copy_from(view.Output);
-                    update_running_averages(running_averages,view.Output,params);
                     send(D, 0);
+                    send(dq,{view});
                 end
 
             else
-
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
                     view = RenderingClass();
                     view.setFrames(reader.read_frame_batch(params.batch_size, (i - 1) * params.batch_stride + 1));
@@ -573,14 +578,13 @@ methods
                     view.Render(params, params.image_types, cache_intermediate_results = false);
                     video(i) = ImageTypeList2();
                     video(i).copy_from(view.Output);
-                    update_running_averages(running_averages,view.Output,params);
                     send(D, 0);
+                    send(dq,{view});
                 end
 
             end
 
             obj.video = video;
-            obj.running_averages = running_averages;
         end
 
         close(h);
@@ -705,6 +709,11 @@ methods
                         mat(:, :, :, j) = tmp{j}.image;
                     end
                 end
+            elseif strcmp(image_types{i}, 'SH_avg')
+                if ~isempty(obj.running_averages.running_averages)
+                    generate_video(fftshift(obj.running_averages.running_averages.SH,3), result_folder_path, strcat(image_types{i}), export_raw = 1, temporal_filter = [], square = params.square);
+                end
+                mat =[];
 
             else % image extraction
                 sz = size(tmp{1}.image);
@@ -771,6 +780,8 @@ methods
             end
 
         end
+
+        
 
         fid = fopen(fullfile(result_folder_path, strcat(obj.file.name, '_HD_', num2str(index + 1), '_', 'RenderingParameters.json')), 'w');
         fwrite(fid, jsonencode(params, "PrettyPrint", true), 'char');
