@@ -511,24 +511,26 @@ methods
             obj.video = v; clear v;
         end
         obj.running_averages = RunningAveragesHolder(); %reset this here
+        
+        view_ref = RenderingClass();
+        view_ref.setFrames(obj.reader.read_frame_batch(obj.params.batch_size_registration, obj.params.frame_position));
+        view_ref.Render(obj.params, obj.params.image_types, cache_intermediate_results = false);
+        if obj.params.applyshackhartmannfromref
+            ShackHartmannMask = view_ref.ShackHartmannMask; % get the mask to apply to each frame here
+        else 
+            ShackHartmannMask = [];
+        end
 
         % 2) Loop over the batches
         if obj.params.parfor_arg == 0
-            obj.view = RenderingClass();
-            obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size_registration, obj.params.frame_position));
-            obj.view.Render(obj.params, obj.params.image_types, cache_intermediate_results = false);
-            if obj.params.applyshackhartmannfromref
-                ShackHartmannMask = obj.view.ShackHartmannMask; % get the mask to apply to each frame here
-            else 
-                ShackHartmannMask = [];
-            end
             for i = 1:(num_batches)
                 obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, (i - 1) * obj.params.batch_stride + first_frame));
                 obj.view.ShackHartmannMask = ShackHartmannMask;
                 obj.view.Render(obj.params, obj.params.image_types);
                 obj.video(i) = ImageTypeList2();
                 obj.video(i).copy_from(obj.view.Output); % work around against handles
-                obj.running_averages.update(obj.view,obj.params);
+                SH_PSD = calc_registration_from_views(obj.view,view_ref,obj.params);
+                obj.running_averages.update(SH_PSD,i,obj.params);
                 update_waitbar(0);
                 fprintf("%d/%d\n",i,num_batches);
             end
@@ -542,20 +544,11 @@ methods
             file_path = obj.file.path;
             params = obj.params;
             video = obj.video;
-            afterEach(dq, @(data) obj.running_averages.update(data{1},params));
+            afterEach(dq, @(data) obj.running_averages.update(data{1},data{2},params));
 
             [dir, name, ext] = fileparts(file_path);
             reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
-            view = RenderingClass();
-            view.setFrames(reader.read_frame_batch(params.batch_size_registration, params.frame_position));
-            view.Render(params, params.image_types, cache_intermediate_results = false);
-            if params.applyshackhartmannfromref
-                ShackHartmannMask = view.ShackHartmannMask; % get the mask to apply to each frame here
-            else 
-                ShackHartmannMask = [];
-            end
-            send(dq,{view}); % send the ref for registration
-
+            
             if isprop(reader, "all_frames") && ~isempty(reader.all_frames)
                 all_frames = reshape(reader.all_frames, size(reader.all_frames, 1), size(reader.all_frames, 2), params.batch_size, []);
 
@@ -567,7 +560,8 @@ methods
                     video(i) = ImageTypeList2();
                     video(i).copy_from(view.Output);
                     send(D, 0);
-                    send(dq,{view});
+                    SH_PSD = calc_registration_from_views(view,view_ref,params);
+                    send(dq,{SH_PSD,i});
                 end
 
             else
@@ -579,7 +573,8 @@ methods
                     video(i) = ImageTypeList2();
                     video(i).copy_from(view.Output);
                     send(D, 0);
-                    send(dq,{view});
+                    SH_PSD = calc_registration_from_views(view,view_ref,params);
+                    send(dq,{SH_PSD,i});
                 end
 
             end
