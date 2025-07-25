@@ -11,6 +11,7 @@ properties
     spectrogram
     broadening
     SH
+    SH_avg
     autocorrelogram
     moment_0
     moment_1
@@ -52,6 +53,7 @@ methods
         obj.spectrogram = ImageType('spectrogram');
         obj.broadening = ImageType('broadening');
         obj.SH = ImageType('SH', struct('vector', [], 'SH', []));
+        obj.SH_avg = ImageType('SH_avg', struct('SH', []));
         obj.autocorrelogram = ImageType('autocorrelogram');
         obj.moment_0 = ImageType('M0');
         obj.moment_1 = ImageType('M1');
