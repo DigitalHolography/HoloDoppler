@@ -8,7 +8,7 @@ function [reg_image,shift] = registerImagesCrossCorrelation(MOVING,FIXED)
 MOVING = imgaussfilt(MOVING,1.5); % blurring to avoid sharp mouvements
 FIXED = imgaussfilt(FIXED,1.5); % blurring to avoid sharp mouvements
 
-corr = xcorr2(MOVING,FIXED); % calculate the cross correlation matrix
+corr = xcorr2(MOVING,FIXED); % calculate the cross correlation matrix % todo  version corr = conv2(MOVING, rot90(conj(FIXED),2),'same');
 [~,index] = max(corr,[],'all'); % find the argmax
 [i,j] = ind2sub(size(corr),index);
 
