@@ -801,6 +801,24 @@ methods
 
         % copy the HD version file
         copyfile('version.txt', result_folder_path);
+        % Try to get git commit hash and branch, and log to git.txt
+        try
+            % Get current commit hash
+            [status_hash, git_hash] = system('git rev-parse HEAD');
+            % Get current branch name
+            [status_branch, git_branch] = system('git rev-parse --abbrev-ref HEAD');
+            % Get last commit log
+            [status_log, git_log] = system('git log -1 --pretty=oneline');
+            % Prepare content
+            git_info = sprintf('Commit hash: %s\nBranch: %s\nLast commit: %s', ...
+                strtrim(git_hash), strtrim(git_branch), strtrim(git_log));
+            % Write to file
+            fid_git = fopen(fullfile(result_folder_path, 'git.txt'), 'w');
+            fwrite(fid_git, git_info);
+            fclose(fid_git);
+        catch err
+            disp('No git git info.');
+        end
 
         %saving a small mat for old versions of PW
         cache.Fs = obj.params.fs * 1000;
