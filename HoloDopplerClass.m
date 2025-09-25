@@ -148,6 +148,11 @@ methods
 
                 if obj.reader.version >= holo_version_threshold
                     obj.params.spatial_propagation = obj.reader.footer.compute_settings.image_rendering.propagation_distance;
+                    try 
+                        tmp.first = obj.reader.footer.info.timestamps_us.unix_first;
+                        tmp.last = obj.reader.footer.info.timestamps_us.unix_last;
+                        obj.params.record_time_stamps_us = tmp;
+                    end
                 end
 
             case '.cine'
