@@ -11,14 +11,16 @@ properties
     mask % Current mask from ROI
     panel
     btnGroup % Button group for display options
+    params
 end
 
 methods
 
-    function obj = ExploreSH(SH)
+    function obj = ExploreSH(app)
         % Constructor - initialize the application
-        obj.SH = SH;
-        obj.SH_processed = SH; % Start with original data
+        obj.SH = app.HD.view.SH;
+        obj.SH_processed = app.HD.view.SH; % Start with original data
+        obj.params = app.HD.params;
 
         % Calculate initial average image
         obj.updateAverageImage();
@@ -118,6 +120,16 @@ methods
             'Position', [0.5, 0.2, 0.45, 0.2], ...
             'Callback', @(src, evt)obj.roiNew());
 
+        % Add fftshift checkbox next to the magnitude/phase checkboxes
+        uicontrol('Parent', obj.panel, ...
+            'Style', 'checkbox', ...
+            'String', 'Apply FFT Shift', ...
+            'Tag', 'fftshift', ...
+            'Units', 'normalized', ...
+            'Position', [0.5, 0.05, 0.45, 0.15], ...
+            'Callback', @(src, evt)obj.spectrum_plotting(), ...
+            'BackgroundColor', [1, 1, 1], 'Value', 1);
+
         % Set default selection
         set(obj.btnGroup, 'SelectedObject', findobj(obj.btnGroup, 'Tag', 'abs'));
 
@@ -141,7 +153,7 @@ methods
             case 'angle'
                 obj.SH_processed = angle(obj.SH);
             case 'rmi'
-                obj.SH_processed = real(obj.SH)-imag(obj.SH);
+                obj.SH_processed = real(obj.SH) - imag(obj.SH);
         end
 
         % Update display
@@ -160,6 +172,7 @@ methods
         axes(obj.axImage);
         imagesc(obj.avgImage);
         colormap(obj.axImage, 'gray');
+        axis square
         title('Average Image');
         colorbar;
     end
@@ -224,6 +237,20 @@ methods
         % Calculate mean spectrum (magnitude)
         meanSpectrum = mean(abs(maskedSH), 1);
 
+        Fs = obj.params.fs;
+        batch_size = obj.params.batch_size;
+
+        freqs = linspace(-Fs / 2, Fs / 2, size(obj.SH, 3));
+
+        % Check if fftshift is enabled
+        fftshiftCheckbox = findobj(obj.panel, 'Tag', 'fftshift');
+        applyFFTShift = ~isempty(fftshiftCheckbox) && fftshiftCheckbox.Value;
+
+        if applyFFTShift
+            meanSpectrum = fftshift(meanSpectrum);
+            freqs = linspace(0, Fs, size(obj.SH, 3));
+        end
+
         % Plot
         axes(obj.axPlot);
         cla(obj.axPlot);
@@ -234,11 +261,13 @@ methods
         if ~isempty(absCheckbox) && absCheckbox.Value
             yyaxis left;
             cla
-            plot(1:size(obj.SH, 3), meanSpectrum, 'b', 'LineWidth', 2);
+            loglog(freqs, fftshift(meanSpectrum), 'b', 'LineWidth', 2);
             title('Signal Spectrum in Selected Region');
-            xlabel('Dimension 3 Index');
+            xlabel('Frequency (kHz)');
             ylabel('Magnitude');
             grid on;
+            set(gca, 'LineWidth', 2)
+            axis padded
             hold on
         end
 
@@ -252,6 +281,67 @@ methods
             xlabel('Dimension 3 Index');
             ylabel('Phase (rad)');
         end
+
+        normalizedSpectrum = double(meanSpectrum(257:512) / meanSpectrum(258));
+        [peaks, peaks_idx] = findpeaks(normalizedSpectrum);
+
+        % Plot the spectrum and peaks
+        figure, loglog(freqs(1:256), normalizedSpectrum, 'b', 'LineWidth', 2);
+        hold on
+        scatter(freqs(peaks_idx), peaks, 'r', 'filled');
+
+        % Select a peak to fit (for example, the highest one)
+        [~, main_peak_idx] = max(peaks);
+        main_peak_freq = freqs(peaks_idx(main_peak_idx));
+        main_peak_val = peaks(main_peak_idx);
+
+        % Define the Lorentzian function
+        lorentzian = @(p, x) p(1) ./ ((x - 0) .^ 2 + p(3)) + p(4);
+
+        % Initial guesses for parameters [amplitude, center, width, offset]
+        initial_guess = [1, 0, 1, 0];
+
+        % Select data around the peak for fitting (e.g., ±10 frequency points)
+        fit_range = peaks_idx;
+        x_fit = freqs(fit_range);
+        y_fit = normalizedSpectrum(fit_range);
+
+        % Perform the fit
+        fit_params = lsqcurvefit(lorentzian, initial_guess, x_fit, y_fit);
+
+        % Generate fitted curve
+        x_fine = linspace(min(x_fit), max(x_fit), 1000);
+        y_fitted = lorentzian(fit_params, x_fine);
+
+        % Plot the fit
+        loglog(x_fine, y_fitted, 'g--', 'LineWidth', 2);
+
+        % Define the Lorentzian function
+        voigt = @(p, x) p(1) * (p(4) * exp(- (x - p(2)) .^ 2 / (2 * p(3) ^ 2)) + (1 - p(4)) * (p(3) ^ 2 ./ ((x - p(2)) .^ 2 + p(3) ^ 2))) + p(5);
+
+        % Initial guesses for parameters [amplitude, center, width, gauss lorentz,  offset]
+        initial_guess = [1, 0, 1, 0.5, 0];
+
+        % Select data around the peak for fitting (e.g., ±10 frequency points)
+        fit_range = peaks_idx;
+        x_fit = freqs(fit_range);
+        y_fit = normalizedSpectrum(fit_range);
+
+        % Perform the fit
+        fit_params = lsqcurvefit(voigt, initial_guess, x_fit, y_fit);
+
+        % Generate fitted curve
+        x_fine = linspace(min(x_fit), max(x_fit), 1000);
+        y_fitted = voigt(fit_params, x_fine);
+
+        % Plot the fit
+        loglog(x_fine, y_fitted, 'r--', 'LineWidth', 2);
+
+        % Add legend and labels
+        legend('Spectrum', 'Peaks', 'Lorentzian Fit', 'Voigt Fit');
+        xlabel('Frequency');
+        ylabel('Normalized Amplitude');
+        title('Spectrum with Lorentzian Fit');
 
     end
 
