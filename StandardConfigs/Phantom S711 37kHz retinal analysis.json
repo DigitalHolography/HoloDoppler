@@ -7,8 +7,7 @@
     "power_Doppler",
     "moment_0",
     "moment_1",
-    "moment_2",
-    "buckets"
+    "moment_2"
   ],
   "parfor_arg": 18,
   "image_registration": true,
