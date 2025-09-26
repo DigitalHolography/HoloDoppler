@@ -29,7 +29,7 @@
   "batch_size_registration": 512,
   "buckets_ranges": [
     [
-      2,
+      3,
       18.3
     ]
   ],

@@ -304,7 +304,7 @@ function LightRendervideoGPU(app)
     s.SVDx = is_SVDx;
     s.SVDxSubAp = SVDx_SubAp_num;
     JSON_parameters = jsonencode(s,PrettyPrint=true);
-    fid = fopen(fullfile(dirpath, 'log', 'RenderingParameters.json'), "wt+");
+    fid = fopen(fullfile(dirpath, 'log', 'input_HD_params.json'), "wt+");
     fprintf(fid, JSON_parameters);
     fclose(fid);
 

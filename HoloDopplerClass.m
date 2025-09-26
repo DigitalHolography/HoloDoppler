@@ -8,7 +8,7 @@ properties
     view % RenderingClass
     params % rendering parameters
     video % ImageTypeList2 % store all the output images classes rendered at the end of a cycle
-    running_averages %  cumulative average over time 
+    running_averages %  cumulative average over time
     registration % store the shifts calculated to register images at the end (so that it can be reversed)
 end
 
@@ -17,7 +17,7 @@ methods
     function obj = HoloDopplerClass()
         %HoloDopplerClass Construct an instance of this class
         setInitParams(obj);
-        addpath("AberrationCorrection\", "FolderManagement\", "Imaging\", "Interface\", "ReaderClasses\", "Rendering\", "Saving\", "Saving\Registering\", "Tools\", "StandardConfigs\");
+        addpath("AberrationCorrection\", "FolderManagement\", "Imaging\", "Interface\", "ReaderClasses\", "Rendering\", "Saving\", "Scripts\", "Saving\Registering\", "Tools\", "StandardConfigs\");
         obj.view = RenderingClass();
         set(0, 'defaultfigurecolor', [1 1 1]);
     end
@@ -148,6 +148,11 @@ methods
 
                 if obj.reader.version >= holo_version_threshold
                     obj.params.spatial_propagation = obj.reader.footer.compute_settings.image_rendering.propagation_distance;
+                    try 
+                        tmp.first = obj.reader.footer.info.timestamps_us.unix_first;
+                        tmp.last = obj.reader.footer.info.timestamps_us.unix_last;
+                        obj.params.record_time_stamps_us = tmp;
+                    end
                 end
 
             case '.cine'
@@ -160,27 +165,30 @@ methods
 
         %2)bis) Set Defaults from the StandardConfig
 
-        if isfile(fullfile("StandardConfigs","CurrentDefault.txt"))
-            DefConfName = readlines(fullfile("StandardConfigs","CurrentDefault.txt"));
+        if isfile(fullfile("StandardConfigs", "CurrentDefault.txt"))
+            DefConfName = readlines(fullfile("StandardConfigs", "CurrentDefault.txt"));
+
             if ~isempty(DefConfName)
                 DefConfName = DefConfName(1);
-                paramspath = fullfile("StandardConfigs",sprintf("%s.json",DefConfName));
+                paramspath = fullfile("StandardConfigs", sprintf("%s.json", DefConfName));
+
                 if isfile(paramspath)
                     obj.loadParams(paramspath);
                 end
-            end
-        end
 
+            end
+
+        end
 
         % 3) Look for config or last computation params
 
         % Define the paths for saved preview, video, and config parameters
         last_preview_index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HDPreview'));
-        preview_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HDPreview_', num2str(last_preview_index), '\', obj.file.name, '_HDPreview_', num2str(last_preview_index), '_RenderingParameters.json'));
+        preview_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HDPreview_', num2str(last_preview_index), '\', obj.file.name, '_HDPreview_', num2str(last_preview_index), '_input_HD_params.json'));
         last_video_index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HD_'));
-        video_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD_', num2str(last_video_index), '\', obj.file.name, '_HD_', num2str(last_video_index), '_RenderingParameters.json'));
-        last_config_index = get_highest_number_in_files(obj.file.dir, strcat(obj.file.name, '_RenderingParameters_'));
-        config_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_RenderingParameters_', num2str(last_config_index), '.json'));
+        video_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD_', num2str(last_video_index), '\', obj.file.name, '_HD_', num2str(last_video_index), '_input_HD_params.json'));
+        last_config_index = get_highest_number_in_files(obj.file.dir, strcat(obj.file.name, '_input_HD_params_'));
+        config_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_input_HD_params_', num2str(last_config_index), '.json'));
 
         % Look for old .mat config files existing in the current folder
         [GuiCacheObj, old_mat_path] = findGUICache(obj.file.dir, obj.file.name);
@@ -259,7 +267,7 @@ methods
         obj.params.frame_stride = 1;
         obj.params.frame_position = 1;
         obj.params.registration_disc_ratio = 0.8;
-        obj.params.image_types = {'power_Doppler', 'color_Doppler', 'directional_Doppler', 'moment_0', 'moment_1', 'moment_2','FH_modulus_mean'};
+        obj.params.image_types = {'power_Doppler', 'color_Doppler', 'directional_Doppler', 'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
         obj.params.parfor_arg = 10;
         obj.params.batch_size_registration = 512;
         obj.params.image_registration = true;
@@ -309,8 +317,8 @@ methods
             parms = rmfield(parms, 'spatial_propagation');
         end
 
-        index = get_highest_number_in_files(dir, strcat(name, '_', 'RenderingParameters'));
-        fid = fopen(fullfile(dir, strcat(name, '_', 'RenderingParameters_', num2str(index + 1), '.json')), 'w');
+        index = get_highest_number_in_files(dir, strcat(name, '_', 'input_HD_params'));
+        fid = fopen(fullfile(dir, strcat(name, '_', 'input_HD_params_', num2str(index + 1), '.json')), 'w');
         fwrite(fid, jsonencode(parms, "PrettyPrint", true), 'char');
         fclose(fid);
 
@@ -414,7 +422,7 @@ methods
 
         end
 
-        fid = fopen(fullfile(result_folder_path, strcat(obj.file.name, '_HDPreview_', num2str(index + 1), '_', 'RenderingParameters.json')), 'w');
+        fid = fopen(fullfile(result_folder_path, strcat(obj.file.name, '_HDPreview_', num2str(index + 1), '_', 'input_HD_params.json')), 'w');
         fwrite(fid, jsonencode(obj.params, "PrettyPrint", true), 'char');
         fclose(fid);
     end
@@ -500,6 +508,7 @@ methods
                     p = 1;
                     disp('Iterative optimization')
             end
+
         end
 
         update_waitbar(-2);
@@ -510,45 +519,47 @@ methods
             v(1, num_batches) = ImageTypeList2();
             obj.video = v; clear v;
         end
+
         obj.running_averages = RunningAveragesHolder(); %reset this here
-        
+
         view_ref = RenderingClass();
         view_ref.setFrames(obj.reader.read_frame_batch(obj.params.batch_size_registration, obj.params.frame_position));
         view_ref.Render(obj.params, obj.params.image_types, cache_intermediate_results = false);
+
         if obj.params.applyshackhartmannfromref
             ShackHartmannMask = view_ref.ShackHartmannMask; % get the mask to apply to each frame here
-        else 
+        else
             ShackHartmannMask = [];
         end
 
         % 2) Loop over the batches
         if obj.params.parfor_arg == 0
+
             for i = 1:(num_batches)
                 obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, (i - 1) * obj.params.batch_stride + first_frame));
                 obj.view.ShackHartmannMask = ShackHartmannMask;
                 obj.view.Render(obj.params, obj.params.image_types);
                 obj.video(i) = ImageTypeList2();
                 obj.video(i).copy_from(obj.view.Output); % work around against handles
-                SH_PSD = calc_registration_from_views(obj.view,view_ref,obj.params);
-                obj.running_averages.update(SH_PSD,i,obj.params);
+                SH_PSD = calc_registration_from_views(obj.view, view_ref, obj.params);
+                obj.running_averages.update(SH_PSD, i, obj.params);
                 update_waitbar(0);
-                fprintf("%d/%d\n",i,num_batches);
+                fprintf("%d/%d\n", i, num_batches);
             end
 
         else
             D = parallel.pool.DataQueue;
             afterEach(D, @update_waitbar);
             dq = parallel.pool.DataQueue;
-            
 
             file_path = obj.file.path;
             params = obj.params;
             video = obj.video;
-            afterEach(dq, @(data) obj.running_averages.update(data{1},data{2},params));
+            afterEach(dq, @(data) obj.running_averages.update(data{1}, data{2}, params));
 
             [dir, name, ext] = fileparts(file_path);
             reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
-            
+
             if isprop(reader, "all_frames") && ~isempty(reader.all_frames)
                 all_frames = reshape(reader.all_frames, size(reader.all_frames, 1), size(reader.all_frames, 2), params.batch_size, []);
 
@@ -560,11 +571,12 @@ methods
                     video(i) = ImageTypeList2();
                     video(i).copy_from(view.Output);
                     send(D, 0);
-                    SH_PSD = calc_registration_from_views(view,view_ref,params);
-                    send(dq,{SH_PSD,i});
+                    SH_PSD = calc_registration_from_views(view, view_ref, params);
+                    send(dq, {SH_PSD, i});
                 end
 
             else
+
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
                     view = RenderingClass();
                     view.setFrames(reader.read_frame_batch(params.batch_size, (i - 1) * params.batch_stride + 1));
@@ -573,8 +585,8 @@ methods
                     video(i) = ImageTypeList2();
                     video(i).copy_from(view.Output);
                     send(D, 0);
-                    SH_PSD = calc_registration_from_views(view,view_ref,params);
-                    send(dq,{SH_PSD,i});
+                    SH_PSD = calc_registration_from_views(view, view_ref, params);
+                    send(dq, {SH_PSD, i});
                 end
 
             end
@@ -646,8 +658,8 @@ methods
             elseif strcmp(image_types{i}, 'buckets')
                 sz = size(tmp{1}.parameters.intervals_0);
                 sz(3) = length(tmp);
-                buckranges = reshape(params.buckets_ranges,[],2);
-                numranges = size(buckranges,1);
+                buckranges = reshape(params.buckets_ranges, [], 2);
+                numranges = size(buckranges, 1);
                 mat0 = zeros(sz, 'single');
                 mat1 = zeros(sz, 'single');
                 mat2 = zeros(sz, 'single');
@@ -663,32 +675,37 @@ methods
                 end
 
                 for k = 1:numranges
-                    generate_video(mat0(:, :, :, k), result_folder_path, strcat('moment0_', num2str(buckranges(k,1)), '_', num2str(buckranges(k,2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
-                    generate_video(mat1(:, :, :, k), result_folder_path, strcat('moment1_', num2str(buckranges(k,1)), '_', num2str(buckranges(k,2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
-                    generate_video(mat2(:, :, :, k), result_folder_path, strcat('moment2_', num2str(buckranges(k,1)), '_', num2str(buckranges(k,2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
-                    
-                
+                    generate_video(mat0(:, :, :, k), result_folder_path, strcat('moment0_', num2str(buckranges(k, 1)), '_', num2str(buckranges(k, 2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
+                    generate_video(mat1(:, :, :, k), result_folder_path, strcat('moment1_', num2str(buckranges(k, 1)), '_', num2str(buckranges(k, 2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
+                    generate_video(mat2(:, :, :, k), result_folder_path, strcat('moment2_', num2str(buckranges(k, 1)), '_', num2str(buckranges(k, 2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
+
                 end
 
                 continue
             elseif strcmp(image_types{i}, 'Quadrants')
                 fields = fieldnames(tmp{1}.parameters);
                 nn = length(fields);
-                for j = 1:length(tmp)
-                    for k = 1:nn
-                        if ~isempty(tmp{j}.parameters) && ~ismember(fields{k},{'QuadrantsM1','QuadrantsM0'})
-                            Q(:,:,j,k) = tmp{j}.parameters.(fields{k});
-                        end
-                    end
-                    QM1(:,:,:,j) = tmp{j}.parameters.QuadrantsM1;
-                    QM0(:,:,:,j) = tmp{j}.parameters.QuadrantsM0;
-                end
-                for k = 1:(nn-2)
-                    generate_video(Q(:,:,:,k),result_folder_path, fields{k}, export_raw = 1, temporal_filter = [], square = params.square)
-                end
-                generate_video(QM1,result_folder_path, 'QuadrantsM1Composite', export_raw = 0, temporal_filter = 2, square = params.square)
-                generate_video(QM0,result_folder_path, 'QuadrantsM0Composite', export_raw = 0, temporal_filter = 2, square = params.square)
 
+                for j = 1:length(tmp)
+
+                    for k = 1:nn
+
+                        if ~isempty(tmp{j}.parameters) && ~ismember(fields{k}, {'QuadrantsM1', 'QuadrantsM0'})
+                            Q(:, :, j, k) = tmp{j}.parameters.(fields{k});
+                        end
+
+                    end
+
+                    QM1(:, :, :, j) = tmp{j}.parameters.QuadrantsM1;
+                    QM0(:, :, :, j) = tmp{j}.parameters.QuadrantsM0;
+                end
+
+                for k = 1:(nn - 2)
+                    generate_video(Q(:, :, :, k), result_folder_path, fields{k}, export_raw = 1, temporal_filter = [], square = params.square)
+                end
+
+                generate_video(QM1, result_folder_path, 'QuadrantsM1Composite', export_raw = 0, temporal_filter = 2, square = params.square)
+                generate_video(QM0, result_folder_path, 'QuadrantsM0Composite', export_raw = 0, temporal_filter = 2, square = params.square)
 
                 sz = size(tmp{1}.image);
 
@@ -700,15 +717,20 @@ methods
                 mat = zeros(sz, 'single');
 
                 for j = 1:length(tmp)
+
                     if ~isempty(tmp{j}.image)
                         mat(:, :, :, j) = tmp{j}.image;
                     end
+
                 end
+
             elseif strcmp(image_types{i}, 'SH_avg')
+
                 if ~isempty(obj.running_averages.running_averages)
-                    generate_video(fftshift(obj.running_averages.running_averages.SH,3), result_folder_path, strcat(image_types{i}), export_raw = 1, temporal_filter = [], square = params.square);
+                    generate_video(fftshift(obj.running_averages.running_averages.SH, 3), result_folder_path, strcat(image_types{i}), export_raw = 1, temporal_filter = [], square = params.square);
                 end
-                mat =[];
+
+                mat = [];
 
             else % image extraction
                 sz = size(tmp{1}.image);
@@ -721,9 +743,11 @@ methods
                 mat = zeros(sz, 'single');
 
                 for j = 1:length(tmp)
+
                     if ~isempty(tmp{j}.image)
                         mat(:, :, :, j) = tmp{j}.image;
                     end
+
                 end
 
             end
@@ -776,9 +800,7 @@ methods
 
         end
 
-        
-
-        fid = fopen(fullfile(result_folder_path, strcat(obj.file.name, '_HD_', num2str(index + 1), '_', 'RenderingParameters.json')), 'w');
+        fid = fopen(fullfile(result_folder_path, strcat(obj.file.name, '_HD_', num2str(index + 1), '_', 'input_HD_params.json')), 'w');
         fwrite(fid, jsonencode(params, "PrettyPrint", true), 'char');
         fclose(fid);
 
@@ -886,12 +908,15 @@ methods
                 continue
             elseif strcmp(obj.params.image_types{j}, 'buckets')
                 sz = size(obj.video(1).buckets.parameters.intervals_0);
-                if length(sz)>3
+
+                if length(sz) > 3
                     numF = sz(4);
                 else
                     numF = 1;
                 end
+
                 ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
+
                 for i = 1:num_batches
 
                     for k = 1:numF
