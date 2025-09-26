@@ -7,7 +7,8 @@
     "power_Doppler",
     "moment_0",
     "moment_1",
-    "moment_2"
+    "moment_2",
+    "buckets"
   ],
   "parfor_arg": 18,
   "image_registration": true,
@@ -28,7 +29,7 @@
   "batch_size_registration": 512,
   "buckets_ranges": [
     [
-      2,
+      3,
       18.3
     ]
   ],
