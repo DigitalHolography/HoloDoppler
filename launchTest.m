@@ -1,4 +1,5 @@
-paths = readlines("Scripts\input.txt");
+ [txt_name,txt_path] = uigetfile();
+readlines(fullfile(txt_path,txt_name));
 
 %% launch
 HD = HoloDopplerClass;
