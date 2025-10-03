@@ -1,4 +1,4 @@
- [txt_name,txt_path] = uigetfile();
+ [txt_name,txt_path] = uigetfile('*.txt');
 readlines(fullfile(txt_path,txt_name));
 
 %% launch
