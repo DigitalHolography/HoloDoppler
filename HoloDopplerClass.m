@@ -544,7 +544,6 @@ methods
                 SH_PSD = calc_registration_from_views(obj.view, view_ref, obj.params);
                 obj.running_averages.update(SH_PSD, i, obj.params);
                 update_waitbar(0);
-                fprintf("%d/%d\n", i, num_batches);
             end
 
         else

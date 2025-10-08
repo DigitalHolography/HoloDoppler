@@ -165,8 +165,9 @@ classdef HoloReader < handle
                     elseif obj.bit_depth == 16
                         frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint16=>single', endian), obj.frame_width, obj.frame_height);
                     end
-                catch
-                    frame_batch(width_range, height_range, i) = 0;
+                catch ME
+                    MEdisp(ME);
+                    frame_batch(width_range, height_range, i) = NaN;
                     fprintf("Holo file frame in position %d was not found\n", i);
                 end
             end
