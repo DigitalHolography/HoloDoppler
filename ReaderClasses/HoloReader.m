@@ -156,21 +156,32 @@ classdef HoloReader < handle
             elseif obj.endianness == 1
                 endian= 'b';
             end
+
+            retrycnt = 0;
+            retry = false;
             
-            for i = 1:batch_size
-                fseek(fd, 64 + uint64(frame_size) * (uint64(frame_offset) + (i-1)), 'bof');
-                try
-                    if obj.bit_depth == 8
-                        frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint8=>single', endian), obj.frame_width, obj.frame_height);
-                    elseif obj.bit_depth == 16
-                        frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint16=>single', endian), obj.frame_width, obj.frame_height);
+            while retry && retrycnt < 3
+                retry = false;
+                t = timer('StartDelay', 100, 'TimerFcn', @(~,~) error('Timeout!')); % set a timout on the reading of a frame batch 100 s should be largely sufficient
+                start(t);
+                for i = 1:batch_size
+                    fseek(fd, 64 + uint64(frame_size) * (uint64(frame_offset) + (i-1)), 'bof');
+                    try
+                        if obj.bit_depth == 8
+                            frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint8=>single', endian), obj.frame_width, obj.frame_height);
+                        elseif obj.bit_depth == 16
+                            frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint16=>single', endian), obj.frame_width, obj.frame_height);
+                        end
+                    catch ME
+                        retry = true;
+                        retrycnt = retrycnt + 1;
+                        MEdisp(ME);
+                        frame_batch(width_range, height_range, i) = NaN;
+                        fprintf("Holo file frame in position %d was not found\n", i);
                     end
-                catch ME
-                    MEdisp(ME);
-                    frame_batch(width_range, height_range, i) = NaN;
-                    fprintf("Holo file frame in position %d was not found\n", i);
                 end
             end
+            
             frame_batch = HoloReader.replace_dropped_frames(frame_batch, 0.2);
             %         if not(obj.frame_width == obj.frame_height)
             %             frame_batch = HoloReader.replace_dropped_frames((imresize(frame_batch, [obj.frame_width, obj.frame_width])), 0.2);
