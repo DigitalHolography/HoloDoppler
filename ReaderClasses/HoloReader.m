@@ -158,12 +158,10 @@ classdef HoloReader < handle
             end
 
             retrycnt = 0;
-            retry = false;
+            retry = true;
             
             while retry && retrycnt < 3
                 retry = false;
-                t = timer('StartDelay', 100, 'TimerFcn', @(~,~) error('Timeout!')); % set a timout on the reading of a frame batch 100 s should be largely sufficient
-                start(t);
                 for i = 1:batch_size
                     fseek(fd, 64 + uint64(frame_size) * (uint64(frame_offset) + (i-1)), 'bof');
                     try
