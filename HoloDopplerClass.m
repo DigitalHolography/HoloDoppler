@@ -136,7 +136,6 @@ methods
                 error(sprintf(". %s files are not accepted as correct files", ext))
         end
 
-
         % 2) Rendering parameters initialization
         obj.params.lambda = obj.file.lambda; % wavelength
         obj.params.fs = obj.file.fs; % camera frame rate
@@ -153,11 +152,13 @@ methods
 
                 if obj.reader.version >= holo_version_threshold
                     obj.params.spatial_propagation = obj.reader.footer.compute_settings.image_rendering.propagation_distance;
-                    try 
+
+                    try
                         tmp.first = obj.reader.footer.info.timestamps_us.unix_first;
                         tmp.last = obj.reader.footer.info.timestamps_us.unix_last;
                         obj.params.record_time_stamps_us = tmp;
                     end
+
                 end
 
             case '.cine'
@@ -288,6 +289,11 @@ methods
         fields = fieldnames(params);
 
         for i = 1:length(fields)
+
+            if ismember(string(fields{i}), ["record_time_stamps_us", "num_frames", "Nx", "Ny", "info"])
+                continue % do not set info fields
+            end
+
             obj.params.(fields{i}) = params.(fields{i});
         end
 
@@ -320,6 +326,26 @@ methods
         if ~save_z %&& strcmp(ext,'.holo') % if you dont want to save the z and prefer to take the automatic one
             % only for holo files because cine dont save the z
             parms = rmfield(parms, 'spatial_propagation');
+        end
+
+        if isfield(parms, 'record_time_stamps_us')
+            parms = rmfield(parms, 'record_time_stamps_us'); % remove the info fields if they exist as they should be automatically found when loading the file
+        end
+
+        if isfield(parms, 'num_frames')
+            parms = rmfield(parms, 'num_frames'); %
+        end
+
+        if isfield(parms, 'Nx')
+            parms = rmfield(parms, 'Nx'); % s
+        end
+
+        if isfield(parms, 'Ny')
+            parms = rmfield(parms, 'Ny'); %
+        end
+
+        if isfield(parms, 'info')
+            parms = rmfield(parms, 'info'); %
         end
 
         index = get_highest_number_in_files(dir, strcat(name, '_', 'input_HD_params'));
