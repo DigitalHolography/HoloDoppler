@@ -136,11 +136,16 @@ methods
                 error(sprintf(". %s files are not accepted as correct files", ext))
         end
 
+
         % 2) Rendering parameters initialization
         obj.params.lambda = obj.file.lambda; % wavelength
         obj.params.fs = obj.file.fs; % camera frame rate
         obj.params.ppx = obj.file.ppx; % pixel pitch of the camera
         obj.params.ppy = obj.file.ppy;
+
+        obj.params.num_frames = obj.file.num_frames;
+        obj.params.Nx = obj.file.Nx;
+        obj.params.Ny = obj.file.Ny;
 
         switch obj.file.ext
             case '.holo'
