@@ -134,7 +134,9 @@ classdef HoloReader < handle
             end
         end
         
-        function frame_batch = read_frame_batch(obj, batch_size, frame_offset)
+        function frame_batch = read_frame_batch(obj, batch_size, frame_position)
+
+            frame_offset = frame_position - 1;
             
             if ~isempty(obj.all_frames) % if all frames are loaded in RAM
                 frame_batch = obj.all_frames(:, :, frame_offset + 1:frame_offset + batch_size);

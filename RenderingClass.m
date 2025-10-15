@@ -52,7 +52,7 @@ methods
         Params.time_range = [6, 10.5];
         Params.index_range = [3, 10];
         Params.time_range_extra = -1;
-        Params.buckets_ranges = [[4, 18.3]; [6, 18.3]];
+        Params.buckets_ranges = [[4; 18.3], [6; 18.3]];
         Params.buckets_raw = false;
         Params.flatfield_gw = 35;
         Params.flip_y = false;
