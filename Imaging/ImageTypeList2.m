@@ -60,7 +60,7 @@ methods
         obj.moment_2 = ImageType('M2');
         obj.arg_0 = ImageType('arg0');
         obj.f_RMS = ImageType('f_RMS');
-        obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', [], 'intervals_2', []));
+        obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', [], 'intervals_2', [],'M0',[]));
         obj.denoised = ImageType('denoised');
         obj.cluster_projection = ImageType('cluster_projection');
         obj.intercorrel0 = ImageType('intercorrel0');
@@ -406,14 +406,17 @@ methods
             obj.buckets.parameters.intervals_0 = zeros(numX, numY, 1, numranges,'single');
             obj.buckets.parameters.intervals_1 = zeros(numX, numY, 1, numranges,'single');
             obj.buckets.parameters.intervals_2 = zeros(numX, numY, 1, numranges,'single');
+            obj.buckets.parameters.M0 = zeros(numX, numY, 1, numranges,'single');
             % why this here ? flatfield should be enough , circleMask = fftshift(diskMask(numY, numX, 0.15));
 
             for freqIdx = 1:numranges
                 img = moment0(SH_mod, buckranges(freqIdx,1), buckranges(freqIdx,2), Params.fs, NT, 0);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
-
                 obj.buckets.parameters.intervals_0(:, :, :, freqIdx) = img;
 
+                img = moment0(SH_mod, buckranges(freqIdx,1), buckranges(freqIdx,2), Params.fs, NT, Params.flatfield_gw);
+                obj.buckets.parameters.M0(:, :, :, freqIdx) = img;
+            
                 img = moment1(SH_mod, buckranges(freqIdx,1), buckranges(freqIdx,2), Params.fs, NT, 0);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                 obj.buckets.parameters.intervals_1(:, :, :, freqIdx) = img;

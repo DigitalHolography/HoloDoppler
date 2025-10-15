@@ -693,6 +693,7 @@ methods
                 mat0 = zeros(sz, 'single');
                 mat1 = zeros(sz, 'single');
                 mat2 = zeros(sz, 'single');
+                mat_0 = zeros(sz, 'single');
 
                 for j = 1:length(tmp)
 
@@ -700,6 +701,7 @@ methods
                         mat0(:, :, j, k) = tmp{j}.parameters.intervals_0(:, :, :, k);
                         mat1(:, :, j, k) = tmp{j}.parameters.intervals_1(:, :, :, k);
                         mat2(:, :, j, k) = tmp{j}.parameters.intervals_2(:, :, :, k);
+                        mat_0(:, :, j, k) = tmp{j}.parameters.M0(:, :, :, k);
                     end
 
                 end
@@ -708,7 +710,7 @@ methods
                     generate_video(mat0(:, :, :, k), result_folder_path, strcat('moment0_', num2str(buckranges(k, 1)), '_', num2str(buckranges(k, 2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
                     generate_video(mat1(:, :, :, k), result_folder_path, strcat('moment1_', num2str(buckranges(k, 1)), '_', num2str(buckranges(k, 2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
                     generate_video(mat2(:, :, :, k), result_folder_path, strcat('moment2_', num2str(buckranges(k, 1)), '_', num2str(buckranges(k, 2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
-
+                    generate_video(mat_0(:, :, :, k), result_folder_path, strcat('M0_', num2str(buckranges(k, 1)), '_', num2str(buckranges(k, 2)), 'kHz'), export_raw = 0, temporal_filter = 2, square = params.square);
                 end
 
                 continue
@@ -953,6 +955,7 @@ methods
                         obj.video(i).('buckets').parameters.intervals_0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_0(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
                         obj.video(i).('buckets').parameters.intervals_1(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_1(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
                         obj.video(i).('buckets').parameters.intervals_2(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_2(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
+                        obj.video(i).('buckets').parameters.M0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.M0(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
                     end
 
                 end
@@ -1008,6 +1011,7 @@ methods
                         obj.video(i).('buckets').parameters.intervals_0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_0(:, :, :, k), - floor(obj.registration.shifts(:, i) .* ratio'));
                         obj.video(i).('buckets').parameters.intervals_1(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_1(:, :, :, k), - floor(obj.registration.shifts(:, i) .* ratio'));
                         obj.video(i).('buckets').parameters.intervals_2(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_2(:, :, :, k), - floor(obj.registration.shifts(:, i) .* ratio'));
+                        obj.video(i).('buckets').parameters.M0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.M0(:, :, :, k), - floor(obj.registration.shifts(:, i) .* ratio'));
                     end
 
                 end
