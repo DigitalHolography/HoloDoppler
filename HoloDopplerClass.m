@@ -478,7 +478,7 @@ methods
             end_frame = obj.params.end_frame;
         end
 
-        num_batches = floor((end_frame - first_frame) / obj.params.batch_stride);
+        num_batches = floor((end_frame - first_frame + 1) / obj.params.batch_stride);
 
         disp(['Rendering ' num2str(num_batches) 'frames.']);
 
