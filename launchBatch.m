@@ -1,6 +1,10 @@
 %% Get the list of holofiles to be processed from user
 fprintf("=== HOLOPROCESS START ===\n");
 
+version_tag = readlines("version.txt");
+
+fprintf("HoloDoppler version : %s\n", version_tag);
+
 fprintf('Select input list (.txt) containing file paths\n');
 [txt_name, txt_path] = uigetfile('*.txt', 'Select input list (.txt) containing file paths');
 

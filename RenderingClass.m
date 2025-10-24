@@ -275,6 +275,8 @@ methods
                     obj.SH = short_time_ICA(obj.H);
                 case 'FFT'
                     obj.SH = fft(obj.H, [], 3);
+                case 'Wavelet_Morlet'
+                    obj.SH = morlet1D_transform_3rdDim(obj.H, [], 3);
                 case 'autocorrelation'
                     [a, b, c] = size(obj.H);
                     tmp = reshape(obj.H, a * b, c);
