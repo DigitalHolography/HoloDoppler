@@ -12,8 +12,8 @@ above_thresh = find(profile > 0.1 * max(profile));
 labeled_regions = bwlabel(profile > 0.1 * max(profile));
 
 % Find central peak (closest to L/2)
-[~, locs] = findpeaks(profile, 'MinPeakHeight', max(profile)/2);
-[~, central_peak_idx] = min(abs(locs - L/2));
+[~, locs] = findpeaks(profile, 'MinPeakHeight', max(profile) / 2);
+[~, central_peak_idx] = min(abs(locs - L / 2));
 central_peak_loc = locs(central_peak_idx);
 
 % Find which region contains the central peak
@@ -28,6 +28,7 @@ else
     central_range = find(above_thresh);
     warning('Central peak not in thresholded region - using all above-threshold points');
 end
+
 centt = mean(central_range);
 
 r_range = (central_range - centt) * px_size;
@@ -58,7 +59,6 @@ dprofile = std(subImg, [], 1, 'omitnan');
 dprofile(isnan(dprofile)) = 0;
 curve1 = profile + dprofile;
 curve2 = profile - dprofile;
-
 
 % Plot confidence interval
 Color_std = [0.7, 0.7, 0.7]; % Gray color for confidence interval
@@ -94,7 +94,7 @@ set(gca, 'PlotBoxAspectRatio', [1.618 1 1])
 % Add labels and title
 xlabel('Position (µm)');
 ylabel('Velocity (mm/s)');
-title(['velocity profile and laminar flow model fit D = ' , num2str(round(D*px_size*1000,2)),'µm']);
+title(['velocity profile and laminar flow model fit D = ', num2str(round(D * px_size * 1000, 2)), 'µm']);
 hold off;
 
 end

@@ -13,13 +13,17 @@ end
 
 % Check dimensions
 [H, W, N] = size(videoVars{1});
+
 for i = 1:4
-    videoVars{i}=squeeze(videoVars{i});
+    videoVars{i} = squeeze(videoVars{i});
 end
+
 for i = 2:4
+
     if ~isequal(size(videoVars{i}), [H, W, N])
         error('All videos must have the same dimensions (HxWxFrames).');
     end
+
 end
 
 % Optional color map
@@ -31,14 +35,16 @@ mergedVideo = zeros(H, W, 3, N);
 for f = 1:N
     % Extract the f-th frame from each video
     channels = cell(1, 4);
+
     for i = 1:4
-        channels{i} = videoVars{i}(:,:,f);
+        channels{i} = videoVars{i}(:, :, f);
     end
 
     % Merge the frame
     mergedFrame = mergeColorChannels(channels, colorMap);
 
     % Store it
-    mergedVideo(:,:,:,f) = mergedFrame;
+    mergedVideo(:, :, :, f) = mergedFrame;
 end
+
 end

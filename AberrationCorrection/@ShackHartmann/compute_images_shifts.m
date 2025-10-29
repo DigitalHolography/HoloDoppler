@@ -97,17 +97,18 @@ Nyy = floor(ac.Ny / obj.n_SubAp); % size of new SubAp in y
 
 %render complete image
 if ~calibration
+
     switch obj.spatialTransformType
         case 'angular spectrum'
             H = abs(fftshift(fftshift(ifft2(FH), 1), 2)) .^ 2;
         case 'Fresnel'
             H = abs(fft2(FH)) .^ 2;
     end
-    
+
     if enable_svd
         H = svd_filter(H, f1, ac.fs);
     end
-    
+
     SH = fft(H, [], 3);
     SH = abs(SH) .^ 2;
     %     SH = permute(SH, [2 1 3]);
@@ -265,15 +266,15 @@ offset_x = floor((ac.Nx - (stride_x * (vx - 1) + Nxx)) / 2);
 offset_y = floor((ac.Ny - (stride_y * (vy - 1) + Nyy)) / 2);
 
 for inter_SubAp_idy = inter_SubAp_id_range
-    
+
     for inter_SubAp_idx = inter_SubAp_id_range
-        
+
         stride_x = floor((ac.Nx - Nxx) / (vx - 1));
         stride_y = floor((ac.Ny - Nyy) / (vy - 1));
-        
+
         %% Construction of subapertures
         % get the current index range and reference index ranges
-        
+
         idx_range = offset_x + stride_x * (inter_SubAp_idx - 1) + 1:offset_x + stride_x * (inter_SubAp_idx - 1) + Nxx;
         idy_range = offset_y + stride_y * (inter_SubAp_idy - 1) + 1:offset_y + stride_y * (inter_SubAp_idy - 1) + Nyy;
         idx_range_ref = offset_x + stride_x * (inter_SubAp_idx_ref - 1) + 1:offset_x + stride_x * (inter_SubAp_idx_ref - 1) + Nxx;
@@ -284,7 +285,7 @@ for inter_SubAp_idy = inter_SubAp_id_range
         %                     disp([idx_offset]);
         image(idy_range, idx_range, 1) = inter_SubAp_idx;
         image(idy_range, idx_range, 2) = inter_SubAp_idy;
-        
+
         FH_inter_chunk = FH(idy_range, idx_range, :);
         % propagate wave
         if calibration
@@ -298,35 +299,35 @@ for inter_SubAp_idy = inter_SubAp_id_range
                 case 'Fresnel'
                     moment_inter_chunk = abs(fft2(FH_inter_chunk)) .^ 2;
             end
-            
+
             %             moment_inter_chunk = moment_inter_chunk((length(idy_range)+1)/2 + 1 : (length(idy_range)+1)/2 + length(idy_range), (length(idy_range)+1)/2 + 1 : (length(idy_range)+1)/2 + length(idy_range), :);
         else
             %             FH_inter_chunk = FH(idy_range,idx_range,:);
             moment_inter_chunk = obj.reconstruct_moment_chunk(FH_inter_chunk, enable_svd, f1, f2, ac.fs, gw);
         end % calibration
-        
+
         if sum(moment_inter_chunk(:)) ~= 0
             moment_inter_chunk = moment_inter_chunk - mean(moment_inter_chunk(:)); %centering
             moment_inter_chunk = moment_inter_chunk / max(moment_inter_chunk(:)); %normalisation
         end
-        
+
         %
-        
+
         moment_inter_chunks_array((inter_SubAp_idy - 1) * Nyy + 1:(inter_SubAp_idy) * Nyy, (inter_SubAp_idx - 1) * Nxx + 1:(inter_SubAp_idx) * Nxx) = moment_inter_chunk;
-        
+
         %         figure(12)
         %         imagesc(moment_inter_chunks_array)
         %         axis off
         %         axis square
         %         colormap gray
-        
+
         %             original_size_moment_chunk = moment_chunk;
         moment_inter_chunk = imresize(moment_inter_chunk, resize_ratio);
         %             moment_chunk = imgaussfilt(moment_chunk,2);
         moment_inter_chunk = mat2gray(moment_inter_chunk);
         %             moment_chunk = logical(imbinarize(moment_chunk, 'adaptive', 'ForegroundPolarity', 'bright', 'Sensitivity', 0.5));
         %             moment_chunk = logical(imbinarize(moment_chunk));
-        
+
         %% Computation of the correlations between subapertures
         % get the reference image chunk
         if sum(moment_inter_chunk(:)) ~= 0
@@ -337,23 +338,23 @@ for inter_SubAp_idy = inter_SubAp_id_range
             % didn't change
             % compute auxilliary correlation between current and reference image chunk
             if calibration
-                
+
                 if strcmp(obj.ref_image, 'central subaperture')
                     moment_chunk_ref = moment_inter_chunks_array((inter_SubAp_idy_ref - 1) * Nyy + 1:(inter_SubAp_idy_ref) * Nyy, (inter_SubAp_idx_ref - 1) * Nxx + 1:(inter_SubAp_idx_ref) * Nxx);
                 else
                     moment_chunk_ref = G;
                 end
-                
+
             else
-                
+
                 if strcmp(obj.ref_image, 'central subaperture')
                     moment_chunk_ref = moment_inter_chunks_array((inter_SubAp_idy_ref - 1) * Nyy + 1:(inter_SubAp_idy_ref) * Nyy, (inter_SubAp_idx_ref - 1) * Nxx + 1:(inter_SubAp_idx_ref) * Nxx);
                 else
                     moment_chunk_ref = M0;
                 end
-                
+
             end
-            
+
             % FIXME
             moment_chunk_ref = imresize(moment_chunk_ref, resize_ratio);
             % compute auxilliary correlation between current and reference image chunk
@@ -361,7 +362,7 @@ for inter_SubAp_idy = inter_SubAp_id_range
             %                 moment_chunk_ref = imgaussfilt(moment_chunk_ref,2);
             moment_chunk_ref = mat2gray(moment_chunk_ref);
             moment_inter_chunk_cropped = moment_inter_chunk(SubAp_init:SubAp_end, SubAp_init:SubAp_end);
-            
+
             %                 moment_chunk_cropped_original = original_size_moment_chunk(SubAp_init:SubAp_end,SubAp_init:SubAp_end) .* moment_chunk_mask;
             c_aux = normxcorr2(moment_inter_chunk_cropped, moment_chunk_ref);
             %                 c_aux = normxcorr2(moment_chunk_cropped, M0);
@@ -374,17 +375,17 @@ for inter_SubAp_idy = inter_SubAp_id_range
             % sub pixel assesment of max of correlation peak
             aa = length((inter_SubAp_idx - 1) * size(correlation_chunks_array, 1) / vx + 1:inter_SubAp_idx * size(correlation_chunks_array, 1) / vx);
             bb = length((inter_SubAp_idy - 1) * size(correlation_chunks_array, 2) / vy + 1:inter_SubAp_idy * size(correlation_chunks_array, 2) / vy);
-            
+
             correlation_chunks_array((inter_SubAp_idx - 1) * size(correlation_chunks_array, 1) / vx + 1:inter_SubAp_idx * size(correlation_chunks_array, 1) / vx, (inter_SubAp_idy - 1) * size(correlation_chunks_array, 2) / vy + 1:inter_SubAp_idy * size(correlation_chunks_array, 2) / vy) = c(1:aa, 1:bb);
             %                 % find correlation peak
             [xpeak_aux, ypeak_aux] = find(c == max(c(:)));
             xpeak_aux = xpeak_aux(end);
             ypeak_aux = ypeak_aux(end);
-            
+
             if ~calibration
                 correlation_coef_inter(inter_SubAp_idx, inter_SubAp_idy) = c(xpeak_aux, ypeak_aux);
             end
-            
+
             xpeak = xpeak_aux + 0.5 * (c(xpeak_aux - 1, ypeak_aux) - c(xpeak_aux + 1, ypeak_aux)) / (c(xpeak_aux - 1, ypeak_aux) + c(xpeak_aux + 1, ypeak_aux) - 2 .* c(xpeak_aux, ypeak_aux));
             ypeak = ypeak_aux + 0.5 * (c(xpeak_aux, ypeak_aux - 1) - c(xpeak_aux, ypeak_aux + 1)) / (c(xpeak_aux, ypeak_aux - 1) + c(xpeak_aux, ypeak_aux + 1) - 2 .* c(xpeak_aux, ypeak_aux));
             %             xoffSet = ceil(size(c, 1)/2) - xpeak;
@@ -396,37 +397,37 @@ for inter_SubAp_idy = inter_SubAp_id_range
                 xoffSet = ceil(size(c, 1) / 2) - xpeak;
                 yoffSet = ceil(size(c, 2) / 2) - ypeak;
             end
-            
+
             % compute shift between images
             shift_curr = (xoffSet + 1i * yoffSet) / resize_ratio;
             shifts_inter(inter_SubAp_idx, inter_SubAp_idy) = shift_curr(1);
             pos_inter(inter_SubAp_idx, inter_SubAp_idy, 1) = floor(idx_range(1) + (idx_range(end) - idx_range(1)) / 2);
             pos_inter(inter_SubAp_idx, inter_SubAp_idy, 2) = floor(idy_range(1) + (idy_range(end) - idy_range(1)) / 2);
-            
+
         else
             moment_inter_chunk_cropped = moment_inter_chunk(SubAp_init:SubAp_end, SubAp_init:SubAp_end);
             shifts_inter(inter_SubAp_idx, inter_SubAp_idy) = 0 + 1i * 0;
             pos_inter(inter_SubAp_idx, inter_SubAp_idy, 1) = floor(idx_range(1) + (idx_range(end) - idx_range(1)) / 2);
             pos_inter(inter_SubAp_idx, inter_SubAp_idy, 2) = floor(idy_range(1) + (idy_range(end) - idy_range(1)) / 2);
         end
-        
+
         %disp(pos_inter(crt,:))
-        
+
         % to show sub-apertures used in correlation
-        
+
         stride_x = resize_ratio * floor((ac.Nx - Nxx) / (vx - 1));
         stride_y = resize_ratio * floor((ac.Ny - Nyy) / (vy - 1));
-        
+
         %         idx_range_out = stride_x * (inter_SubAp_idx-1) + 1 + SubAp_init : stride_x * (inter_SubAp_idx-1) + SubAp_init + numel(SubAp_init:SubAp_end);
         %         idy_range_out = stride_y * (inter_SubAp_idy-1) + 1 + SubAp_init : stride_y * (inter_SubAp_idy-1) + SubAp_init + numel(SubAp_init:SubAp_end);
-        
+
         idx_range_out = stride_x * (inter_SubAp_idx - 1) + SubAp_init:stride_x * (inter_SubAp_idx - 1) + SubAp_init + numel(SubAp_init:SubAp_end) - 1;
         idy_range_out = stride_y * (inter_SubAp_idy - 1) + SubAp_init:stride_y * (inter_SubAp_idy - 1) + SubAp_init + numel(SubAp_init:SubAp_end) - 1;
-        
+
         moment_inter_chunks_crop_array(idy_range_out, idx_range_out) = moment_inter_chunk_cropped;
-        
+
     end %inter_SubAp_idy
-    
+
 end %inter_SubAp_idx
 
 img_centers = zeros(ac.Nx, ac.Ny);
@@ -434,11 +435,11 @@ img_centers = zeros(ac.Nx, ac.Ny);
 pos_inter_tmp = reshape(pos_inter, (vx) * (vy), 2);
 
 for i = 1:size(pos_inter_tmp, 1)
-    
+
     if pos_inter_tmp(i, 1) ~= 0
         img_centers(pos_inter_tmp(i, 1) - 2:pos_inter_tmp(i, 1) + 2, pos_inter_tmp(i, 2) - 2:pos_inter_tmp(i, 2) + 2) = ones(5, 5);
     end
-    
+
 end
 
 %
@@ -469,11 +470,11 @@ if ~calibration
     %             fprintf("\n");
     %         end
     %     correlation_threshold = mean(correlation_coef, "all") - std(correlation_coef, 1, "all");
-    
+
     %     central_shift = shifts(ceil(length(shifts)/2));
     %     shifts = shifts - central_shift;
     %     shifts(correlation_coef < correlation_threshold) = NaN ;
-    
+
     %         figure(1);
     %         imagesc(moment_chunks_array);
     %         axis square;
