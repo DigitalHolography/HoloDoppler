@@ -125,7 +125,10 @@ methods
 
         %1) Apply corrections to interferograms
 
-        doFrames = ParamChanged.spatial_filter || ParamChanged.hilbert_filter || ParamChanged.spatial_filter_range || obj.FramesChanged;
+        doFrames = ParamChanged.spatial_filter ...
+            || ParamChanged.hilbert_filter ...
+            || ParamChanged.spatial_filter_range ...
+            || obj.FramesChanged;
 
         if doFrames % change or if the frames changed
 
@@ -144,7 +147,9 @@ methods
 
             if Params.spatial_filter
 
-                if ParamChanged.spatial_filter_range || obj.FramesChanged || isempty(obj.SpatialFilterMask)
+                if ParamChanged.spatial_filter_range ...
+                        || obj.FramesChanged ...
+                        || isempty(obj.SpatialFilterMask)
                     [NY, NX, ~] = size(obj.Frames);
                     obj.SpatialFilterMask = fftshift(diskMask(NY, NX, Params.spatial_filter_range(1), Params.spatial_filter_range(2)))';
                 end
@@ -156,14 +161,21 @@ methods
 
         %2) Spatial transformation (from Frames to H)
 
-        doFH = doFrames || ParamChanged.spatial_transformation || ParamChanged.spatial_propagation || ParamChanged.ShackHartmannCorrection || obj.FramesChanged || ~options.cache_intermediate_results;
+        doFH = doFrames ...
+            || ParamChanged.spatial_transformation ...
+            || ParamChanged.spatial_propagation ...
+            || ParamChanged.ShackHartmannCorrection ...
+            || obj.FramesChanged ...
+            || ~options.cache_intermediate_results;
 
         if doFH % change or if the frames changed
 
             switch Params.spatial_transformation
                 case "angular spectrum"
 
-                    if ParamChanged.spatial_propagation || ParamChanged.spatial_transformation || isempty(obj.SpatialKernel)
+                    if ParamChanged.spatial_propagation ...
+                            || ParamChanged.spatial_transformation ...
+                            || isempty(obj.SpatialKernel)
                         [NY, NX, ~] = size(obj.Frames);
                         ND = max(NX, NY);
                         obj.SpatialKernel = propagation_kernelAngularSpectrum(ND, ND, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
@@ -173,7 +185,9 @@ methods
                     obj.FH = obj.FH .* fftshift(obj.SpatialKernel);
                 case "Fresnel"
 
-                    if ParamChanged.spatial_propagation || ParamChanged.spatial_transformation || isempty(obj.SpatialKernel)
+                    if ParamChanged.spatial_propagation ...
+                            || ParamChanged.spatial_transformation ...
+                            || isempty(obj.SpatialKernel)
                         [NY, NX, ~] = size(obj.Frames);
                         [obj.SpatialKernel, obj.PhaseFactor] = propagation_kernelFresnel(NX, NY, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
                     end
@@ -186,9 +200,12 @@ methods
 
             if ~isempty(Params.ShackHartmannCorrection)
 
-                if ~Params.applyshackhartmannfromref || isempty(obj.ShackHartmannMask) % in case we apply ShackHartmann from precalculated Mask
+                if ~Params.applyshackhartmannfromref ...
+                        || isempty(obj.ShackHartmannMask) % in case we apply ShackHartmann from precalculated Mask
 
-                    if doFH || ParamChanged.ShackHartmannCorrection || isempty(obj.ShackHartmannMask)
+                    if doFH ...
+                            || ParamChanged.ShackHartmannCorrection ...
+                            || isempty(obj.ShackHartmannMask)
                         [obj.ShackHartmannMask, obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH, Params.spatial_transformation, Params.spatial_propagation, Params.time_range, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
                     end
 
@@ -206,7 +223,16 @@ methods
 
         obj.Output.construct_image_from_ShackHartmann(Params, obj.moment_chunks_crop_array, obj.ShackHartmannMask);
 
-        doH = doFH || ParamChanged.svd_filter || (Params.svdx_filter && (ParamChanged.svdx_threshold || ParamChanged.svdx_Nsub)) || (Params.svdx_t_filter && (ParamChanged.svdx_t_threshold || ParamChanged.svdx_t_Nsub)) || ParamChanged.svdx_filter || ParamChanged.svdx_t_filter || (Params.svd_threshold == 0 && ParamChanged.time_range) || ParamChanged.svd_threshold || obj.FramesChanged || ~options.cache_intermediate_results;
+        doH = doFH ...
+            || ParamChanged.svd_filter ...
+            || (Params.svdx_filter && (ParamChanged.svdx_threshold || ParamChanged.svdx_Nsub)) ...
+            || (Params.svdx_t_filter && (ParamChanged.svdx_t_threshold || ParamChanged.svdx_t_Nsub)) ...
+            || ParamChanged.svdx_filter ...
+            || ParamChanged.svdx_t_filter ...
+            || (Params.svd_threshold == 0 && ParamChanged.time_range) ...
+            || ParamChanged.svd_threshold ...
+            || obj.FramesChanged ...
+            || ~options.cache_intermediate_results;
 
         if doH % change or if the frames changed
 
@@ -264,7 +290,12 @@ methods
 
         %4) Short-time transformation
 
-        doSH = doH || ParamChanged.time_transform || obj.FramesChanged || ParamChanged.flip_y || ParamChanged.flip_x || ~options.cache_intermediate_results;
+        doSH = doH ...
+            || ParamChanged.time_transform ...
+            || obj.FramesChanged ...
+            || ParamChanged.flip_y ...
+            || ParamChanged.flip_x ...
+            || ~options.cache_intermediate_results;
 
         if doSH
 

@@ -1,4 +1,4 @@
-classdef HD < matlab.apps.AppBase
+classdef HDapp < matlab.apps.AppBase
 
 % Properties that correspond to app components
 properties (Access = public)
@@ -212,7 +212,7 @@ methods (Access = private)
     end
 
     % Button pushed function: LoadfileButton
-    function LoadfileButtonPushed(app, event)
+    function LoadfileButtonPushed(app, ~)
         %% open file and manage file extension
         f = figure('Renderer', 'painters', 'Position', [-100 -100 0 0]); %create a dummy figure so that uigetfile doesn't minimize our GUI
 
@@ -250,33 +250,8 @@ methods (Access = private)
 
     end
 
-    % Callback function
-    function spatial_propagationValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function f1EditFieldValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function f2EditFieldValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function wavelengthEditFieldValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function batchsizeEditFieldValueChanged(app, event)
-
-    end
-
     % Button pushed function: VideoRenderingButton
-    function VideoRenderingButtonPushed(app, event)
+    function VideoRenderingButtonPushed(app, ~)
         app.VideoRenderingLamp.Color = [0.75 0.15 0.1]; drawnow; % red in process
 
         try
@@ -296,74 +271,14 @@ methods (Access = private)
 
     end
 
-    % Callback function
-    function AutofocusButtonPushed(app, event)
-
-    end
-
     % Close request function: HoloDopplerUIFigure
-    function HoloDopplerUIFigureCloseRequest(app, event)
+    function HoloDopplerUIFigureCloseRequest(app, ~)
         diary off;
         delete(app.HoloDopplerUIFigure);
     end
 
-    % Callback function
-    function positioninfileSliderValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function compositef1EditFieldValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function compositef2EditFieldValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function compositef3EditFieldValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function showSpatialFilterCheckBoxValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function frame_positionValueChanged(app, event)
-
-    end
-
-    % Value changed function: rephasingCheckBox
-    function rephasingCheckBoxValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function ImageChoiceDropDownValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function blurEditFieldValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function spatialTransformationChanged(app, event)
-
-    end
-
-    % Callback function
-    function setUpChanged(app, event)
-
-    end
-
     % Button pushed function: LoadconfigButton
-    function LoadconfigButtonPushed(app, event)
+    function LoadconfigButtonPushed(app, ~)
         [selected_file, path] = uigetfile('*.json', 'Select File');
 
         if (selected_file)
@@ -371,67 +286,17 @@ methods (Access = private)
 
             if ismember(ext, {'.json'})
                 app.HD.loadParams(fullfile(path, selected_file));
-                try classtogui(app.HD, app); end
+
+                try
+                    classtogui(app.HD, app);
+                catch
+                end
+
             else
                 fprintf("Couldn't load config");
             end
 
         end
-
-    end
-
-    % Callback function
-    function PCACheckBoxValueChanged(app, event)
-
-    end
-
-    % Value changed function: SubAp_PCACheckBox
-    function SubAp_PCACheckBoxValueChanged(app, event)
-
-    end
-
-    % Value changed function: minSubAp_PCAEditField
-    function minSubApPCAEditField_2ValueChanged(app, event)
-
-    end
-
-    % Value changed function: maxSubAp_PCAEditField
-    function maxSubAp_PCAEditField_2_2ValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function min_PCAEditFieldValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function max_PCAEditFieldValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function TimeTransform(app, event)
-
-    end
-
-    % Callback function
-    function ZSwitchValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function zirisEditFieldValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function outputVideo(app, event)
-
-    end
-
-    % Callback function
-    function RenderpreviewButtonPushed(app, event)
 
     end
 
@@ -448,7 +313,7 @@ methods (Access = private)
     end
 
     % Button pushed function: FoldermanagementButton
-    function FoldermanagementButtonPushed(app, event)
+    function FoldermanagementButtonPushed(app, ~)
         d = dialog('Position', [300, 300, 750, 130 + length(app.HD.drawer_list) * 14], ...
             'Color', [0.2, 0.2, 0.2], ...
             'Name', 'Folder management', ...
@@ -737,14 +602,15 @@ methods (Access = private)
         end
 
         function render(~, ~)
-            file_list = {};
+            L = length(app.HD.drawer_list);
+            file_list = cell(L, 1);
 
             for i = 1:length(app.HD.drawer_list) % Circles through the files added by the user
                 % Get config files
                 config_list = get_config_files(app.HD.drawer_list{i});
 
                 if (~isempty(config_list))
-                    file_list{end + 1} = {app.HD.drawer_list{i}, config_list};
+                    file_list{i} = {app.HD.drawer_list{i}, config_list};
                 end
 
             end
@@ -794,79 +660,9 @@ methods (Access = private)
 
     end
 
-    % Callback function
-    function SavePreview(app, event)
-        %Savepreview(app);
-    end
-
-    % Value changed function: SVDThresholdCheckBox
-    function SVDThresholdCheckBoxValueChanged(app, event)
-
-    end
-
-    % Value changed function: rangeZEditField
-    function rangeZEditFieldValueChanged(app, event)
-
-    end
-
-    % Value changed function: rangeYEditField
-    function rangeYEditFieldValueChanged(app, event)
-
-    end
-
-    % Image clicked function: ImageLeft
-    function ImageLeftClicked(app, event)
-
-    end
-
-    % Image clicked function: ImageRight
-    function ImageRightClicked(app, event)
-
-    end
-
-    % Callback function
-    function image_registrationValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function ShowSpectrumButtonPushed(app, event)
-
-    end
-
-    % Value changed function: SVDThresholdEditField
-    function SVDThresholdEditFieldValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function scan3DButtonPushed(app, event)
-
-    end
-
-    % Callback function
-    function registrationdiscCheckBoxValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function spatialfilterratioValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function ppxValueChanged(app, event)
-
-    end
-
-    % Callback function
-    function fsValueChanged(app, event)
-
-    end
-
     % Callback function: Image_typesListBox, ShackHartmannCheckBox,
     % ...and 40 other components
-    function refreshClass(app, event)
+    function refreshClass(app, ~)
         guitoclass(app.HD, app);
 
         switch app.time_transform.Value
@@ -901,13 +697,8 @@ methods (Access = private)
 
     end
 
-    % Callback function
-    function re(app, event)
-
-    end
-
     % Button pushed function: RenderPreviewButton
-    function RenderPreviewButtonPushed(app, event)
+    function RenderPreviewButtonPushed(app, ~)
         app.RenderPreviewLamp.Color = [0.75 0.15 0.1]; drawnow; % red in process
 
         try
@@ -947,7 +738,7 @@ methods (Access = private)
     end
 
     % Menu selected function: NextMenu
-    function NextMenuSelected(app, event)
+    function NextMenuSelected(app, ~)
         imgs = app.HD.view.getImages(app.HD.params.image_types);
 
         if ~isempty(imgs)
@@ -979,22 +770,22 @@ methods (Access = private)
     end
 
     % Menu selected function: ViewAllMenu
-    function ViewAllMenuSelected(app, event)
+    function ViewAllMenuSelected(app, ~)
         app.HD.showPreviewImages();
     end
 
     % Button pushed function: SaveVideoButton
-    function SaveVideoButtonPushed(app, event)
+    function SaveVideoButtonPushed(app, ~)
         app.HD.SaveVideo();
     end
 
     % Button pushed function: SavePreviewButton
-    function SavePreviewButtonPushed(app, event)
+    function SavePreviewButtonPushed(app, ~)
         app.HD.savePreview();
     end
 
     % Button pushed function: svd_threshold_reset_button
-    function svd_threshold_reset_buttonPushed(app, event)
+    function svd_threshold_reset_buttonPushed(app, ~)
 
         if app.svd_threshold.Value == 0
             val = ceil(app.time_range1.Value * 2 * app.batch_size.Value / app.fs.Value);
@@ -1010,12 +801,12 @@ methods (Access = private)
     end
 
     % Button pushed function: ShowHistogramButton
-    function ShowHistogramButtonPushed(app, event)
+    function ShowHistogramButtonPushed(app, ~)
         app.HD.view.showFramesHistogram();
     end
 
     % Value changed function: time_range2
-    function time_range2ValueChanged(app, event)
+    function time_range2ValueChanged(app, ~)
 
         if strcmp(app.time_transform, 'FFT') && app.time_range2.Value > app.fs.Value / 2
             app.time_range2.Value = app.fs.Value / 2;
@@ -1025,7 +816,7 @@ methods (Access = private)
     end
 
     % Button pushed function: PlayButton
-    function PlayButtonPushed(app, event)
+    function PlayButtonPushed(app, ~)
 
         try
             app.HD.showVideo();
@@ -1036,14 +827,14 @@ methods (Access = private)
     end
 
     % Button pushed function: RefreshAppButton
-    function RefreshAppButtonPushed(app, event)
+    function RefreshAppButtonPushed(app, ~)
         classtogui(app.HD, app);
 
         if isempty(app.HD.params.image_types)
             return
         end
 
-        imgs = app.HD.view.getImages({app.HD.params.image_types{1}});
+        imgs = app.HD.view.getImages(app.HD.params.image_types(1));
 
         if ~isempty(imgs)
             app.ImageLeft.ImageSource = toImageSource(imgs{randsample(numel(imgs), 1)});
@@ -1054,18 +845,18 @@ methods (Access = private)
     end
 
     % Button pushed function: AdvancedButton
-    function AdvancedButtonPushed(app, event)
+    function AdvancedButtonPushed(app, ~)
         AdvancedPanel(app);
     end
 
     % Value changed function: registration_disc_ratio
-    function registration_disc_ratioValueChanged(app, event)
+    function registration_disc_ratioValueChanged(app, ~)
         app.refreshClass();
         show_ref_disc(app, app.image_registration.Value);
     end
 
     % Button pushed function: SaveconfigButton
-    function SaveconfigButtonPushed(app, event)
+    function SaveconfigButtonPushed(app, ~)
         app.HD.saveParams();
     end
 
@@ -2370,7 +2161,7 @@ end
 methods (Access = public)
 
     % Construct app
-    function app = HD
+    function app = HDapp
 
         % Create UIFigure and components
         createComponents(app)
