@@ -213,8 +213,8 @@ methods (Access = private)
 
     % Button pushed function: LoadfileButton
     function LoadfileButtonPushed(app, ~)
-        %% open file and manage file extension
-        f = figure('Renderer', 'painters', 'Position', [-100 -100 0 0]); %create a dummy figure so that uigetfile doesn't minimize our GUI
+        % open file and manage file extension
+        f = figure('Position', [-100 -100 0 0]); %create a dummy figure so that uigetfile doesn't minimize our GUI
 
         if (isempty(app.HD.file))
             [fname, fpath] = uigetfile('*.raw;*.cine;*.holo');

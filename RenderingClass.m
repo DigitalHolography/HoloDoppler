@@ -221,7 +221,7 @@ methods
 
         end
 
-        obj.Output.construct_image_from_ShackHartmann(Params, obj.moment_chunks_crop_array, obj.ShackHartmannMask);
+        obj.Output.construct_image_from_ShackHartmann(obj.moment_chunks_crop_array, obj.ShackHartmannMask);
 
         doH = doFH ...
             || ParamChanged.svd_filter ...
@@ -270,7 +270,7 @@ methods
             obj.U = [];
         end
 
-        obj.Output.construct_image_from_SVD(Params, obj.cov, obj.U, size(obj.H));
+        obj.Output.construct_image_from_SVD(obj.cov, obj.U, size(obj.H));
 
         if doH
 
@@ -372,9 +372,9 @@ methods
 
         obj.Output.construct_image_from_FH(obj.LastParams, obj.FH);
 
-        obj.Output.construct_image_from_SVD(obj.LastParams, obj.cov, obj.U, size(obj.H));
+        obj.Output.construct_image_from_SVD(obj.cov, obj.U, size(obj.H));
 
-        obj.Output.construct_image_from_ShackHartmann(obj.LastParams, obj.moment_chunks_crop_array, obj.ShackHartmannMask);
+        obj.Output.construct_image_from_ShackHartmann(obj.moment_chunks_crop_array, obj.ShackHartmannMask);
 
         obj.Output.construct_image(obj.LastParams, obj.SH);
 

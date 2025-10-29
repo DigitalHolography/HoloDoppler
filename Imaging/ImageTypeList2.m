@@ -253,6 +253,8 @@ methods
                 frame = getframe(fi); % Capture the figure
                 % obj.spectrogram.graph = gca;
                 obj.spectrogram.image = frame.cdata;
+            catch
+
             end
 
         end
@@ -300,6 +302,8 @@ methods
                 frame = getframe(fi); % Capture the figure
                 % obj.autocorrelogram.graph = gca;
                 obj.autocorrelogram.image = frame.cdata;
+            catch
+
             end
 
         end
@@ -339,6 +343,7 @@ methods
                 frame = getframe(fi); % Capture the figure
                 % obj.f_RMS.graph = gca;
                 obj.f_RMS.image = frame.cdata;
+            catch
             end
 
         end
@@ -453,58 +458,9 @@ methods
 
             try
                 % Get the size of the 3D array
+                [~, image] = max(diff(SH_mod(1:1:end, 1:1:end, 1:1:end), 1, 3), [], 3);
 
-                if 0
-                    [xSize, ySize, zSize] = size(SH_mod(1:4:end, 1:4:end, 1:1:end));
-
-                    % Generate grid coordinates for each voxel
-                    [x, y, z] = ndgrid(1:xSize, 1:ySize, 1:zSize);
-
-                    % Flatten the 3D array into a list of points
-                    points = [64 * x(:), 64 * y(:), z(:)]; % add more weight to the frequency dimension z
-                    values = SH_mod(1:4:end, 1:4:end, 1:1:end); % Flatten values as well
-                    values = values(:);
-                    % Combine spatial and intensity information (optional)
-                    features = [points, values]; % [x, y, z, intensity]
-
-                    % Number of clusters (N)
-                    N = 3;
-
-                    % Apply K-means clustering
-                    [idx, ~] = kmeans(features, N, 'Distance', 'sqeuclidean');
-
-                    % Reshape the cluster labels back to 3D
-                    clusters = reshape(idx, xSize, ySize, zSize);
-
-                    colors = lines(N);
-
-                    image = 0;
-
-                    for i = 1:N
-                        image = image + rescale(sum((clusters == i), 3) .* reshape(colors(i, :), 1, 1, []));
-                    end
-
-                elseif ~1
-                    video = SH_mod(1:4:end, 1:4:end, 1:1:end);
-                    [numX, numY, zSize] = size(video);
-                    video_flat = reshape(video, [numY * numX, zSize]);
-
-                    if true
-                        video_flat = normalize(video_flat, 2);
-                    end
-
-                    N = 3;
-                    [idx] = kmeans(video_flat, N, 'Distance', "cityblock", 'MaxIter', 100);
-                    idx = reshape(idx, [numX, numY]);
-                    image = ind2rgb(idx, lines(N));
-
-                elseif 1
-                    [~, image] = max(diff(SH_mod(1:1:end, 1:1:end, 1:1:end), 1, 3), [], 3);
-                    % image = moment0(diff(SH_mod(1:1:end,1:1:end,1:1:end),1,3), f1, f2 , Params.fs, NT, 0);
-                    %image = flat_field_correction(image,Params.flatfield_gw);
-
-                end
-
+                c
                 obj.cluster_projection.image = image;
 
             catch ME
@@ -565,7 +521,7 @@ methods
 
     end
 
-    function construct_image_from_SVD(obj, Params, covin, Uin, szin)
+    function construct_image_from_SVD(obj, covin, Uin, szin)
         % szin is just the size of a batch nx ny nt for reference
         if isempty(covin)
             obj.SVD_cov.image = [];
@@ -596,13 +552,15 @@ methods
                 frame = getframe(fi);
                 % obj.SVD_U.graph = gca;
                 obj.SVD_U.image = frame.cdata;
+            catch
+
             end
 
         end
 
     end
 
-    function construct_image_from_ShackHartmann(obj, Params, moment_chunks_crop_array, ShackHartmannMask)
+    function construct_image_from_ShackHartmann(obj, moment_chunks_crop_array, ShackHartmannMask)
 
         if isempty(ShackHartmannMask)
             obj.ShackHartmann_Cropped_Moments.image = [];
