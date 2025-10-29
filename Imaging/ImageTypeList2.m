@@ -38,7 +38,6 @@ properties
     diff_mod_pha
     phase_diff
     phase_variance
-    Quadrants
 end
 
 methods
@@ -60,7 +59,7 @@ methods
         obj.moment_2 = ImageType('M2');
         obj.arg_0 = ImageType('arg0');
         obj.f_RMS = ImageType('f_RMS');
-        obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', [], 'intervals_2', [],'M0',[]));
+        obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', [], 'intervals_2', [], 'M0', []));
         obj.denoised = ImageType('denoised');
         obj.cluster_projection = ImageType('cluster_projection');
         obj.intercorrel0 = ImageType('intercorrel0');
@@ -80,7 +79,6 @@ methods
         obj.diff_mod_pha = ImageType('diff_mod_pha');
         obj.phase_diff = ImageType('phase_diff');
         obj.phase_variance = ImageType('phase_variance');
-        obj.Quadrants = ImageType('Quadrants');
     end
 
     function clear(obj, varargin)
@@ -253,6 +251,8 @@ methods
                 frame = getframe(fi); % Capture the figure
                 % obj.spectrogram.graph = gca;
                 obj.spectrogram.image = frame.cdata;
+            catch
+
             end
 
         end
@@ -300,6 +300,8 @@ methods
                 frame = getframe(fi); % Capture the figure
                 % obj.autocorrelogram.graph = gca;
                 obj.autocorrelogram.image = frame.cdata;
+            catch
+
             end
 
         end
@@ -339,12 +341,13 @@ methods
                 frame = getframe(fi); % Capture the figure
                 % obj.f_RMS.graph = gca;
                 obj.f_RMS.image = frame.cdata;
+            catch
             end
 
         end
 
-        if obj.pure_phase.is_selected 
-                %
+        if obj.pure_phase.is_selected
+            %
             if ~(r1 - floor(r1) == 0) && ~(r2 - floor(r2) == 0) %both not integer
                 r1p = floor(r1 * 2 / Params.fs * NT);
                 r2p = floor(r2 * 2 / Params.fs * NT);
@@ -359,69 +362,75 @@ methods
             obj.pure_phase.image = flat_field_correction(obj.pure_phase.image, Params.flatfield_gw);
         end
 
-        
-
         if obj.doppler_variance_mod.is_selected %
-            img = 1 - (2*sum(SH_mod(:,:,1:end-1).*SH_mod(:,:,2:end),3))./(sum(SH_mod(:,:,1:end-1).^2,3)+sum(SH_mod(:,:,2:end).^2,3));
+            img = 1 - (2 * sum(SH_mod(:, :, 1:end - 1) .* SH_mod(:, :, 2:end), 3)) ./ (sum(SH_mod(:, :, 1:end - 1) .^ 2, 3) + sum(SH_mod(:, :, 2:end) .^ 2, 3));
             obj.doppler_variance_mod.image = img;
         end
+
         if obj.doppler_variance_mod_pha.is_selected %
-            img = 1 - (2*abs(sum(SHin(:,:,1:end-1).*SHin(:,:,2:end),3)))./(sum(SH_mod(:,:,1:end-1).^2,3)+sum(SH_mod(:,:,2:end).^2,3));
+            img = 1 - (2 * abs(sum(SHin(:, :, 1:end - 1) .* SHin(:, :, 2:end), 3))) ./ (sum(SH_mod(:, :, 1:end - 1) .^ 2, 3) + sum(SH_mod(:, :, 2:end) .^ 2, 3));
             obj.doppler_variance_mod_pha.image = img;
         end
+
         if obj.amplitude_decorrelation.is_selected %
             S = 0;
-            M = size(SH_mod,3);
-            for ii = 1:(M-1)
-                S = S + SH_mod(:,:,ii).*SH_mod(:,:,ii+1)./(SH_mod(:,:,ii).^2+SH_mod(:,:,ii+1).^2);
+            M = size(SH_mod, 3);
+
+            for ii = 1:(M - 1)
+                S = S + SH_mod(:, :, ii) .* SH_mod(:, :, ii + 1) ./ (SH_mod(:, :, ii) .^ 2 + SH_mod(:, :, ii + 1) .^ 2);
             end
-            img = 1 - 1/(M-1) * S;
+
+            img = 1 - 1 / (M - 1) * S;
             obj.amplitude_decorrelation.image = img;
         end
+
         if obj.diff_mod.is_selected %
-            M = size(SH_mod,3);
-            img = 1 - 1/(M-1) * sum(diff(SH_mod,1,3),3);
+            M = size(SH_mod, 3);
+            img = 1 - 1 / (M - 1) * sum(diff(SH_mod, 1, 3), 3);
             obj.diff_mod.image = img;
         end
+
         if obj.diff_mod_pha.is_selected %
-            M = size(SH_mod,3);
-            img = 1 - 1/(M-1) * sum(abs(diff(SHin,1,3)),3);
+            M = size(SH_mod, 3);
+            img = 1 - 1 / (M - 1) * sum(abs(diff(SHin, 1, 3)), 3);
             obj.diff_mod_pha.image = img;
         end
+
         if obj.phase_diff.is_selected %
-            img = mean(diff(SH_arg,1,3),3);
+            img = mean(diff(SH_arg, 1, 3), 3);
             obj.phase_diff.image = img;
         end
+
         if obj.phase_variance.is_selected %
-            M = size(SH_mod,3);
-            img = 1/(M-1) * std(diff(SH_arg,1,3),[],3);
+            M = size(SH_mod, 3);
+            img = 1 / (M - 1) * std(diff(SH_arg, 1, 3), [], 3);
             obj.phase_variance.image = img;
         end
 
         if obj.buckets.is_selected % buckets has been chosen
             numX = size(SH_mod, 1);
             numY = size(SH_mod, 2);
-            buckranges = reshape(Params.buckets_ranges,[],2);
-            numranges = size(buckranges,1);
-            obj.buckets.parameters.intervals_0 = zeros(numX, numY, 1, numranges,'single');
-            obj.buckets.parameters.intervals_1 = zeros(numX, numY, 1, numranges,'single');
-            obj.buckets.parameters.intervals_2 = zeros(numX, numY, 1, numranges,'single');
-            obj.buckets.parameters.M0 = zeros(numX, numY, 1, numranges,'single');
+            buckranges = reshape(Params.buckets_ranges, [], 2);
+            numranges = size(buckranges, 1);
+            obj.buckets.parameters.intervals_0 = zeros(numX, numY, 1, numranges, 'single');
+            obj.buckets.parameters.intervals_1 = zeros(numX, numY, 1, numranges, 'single');
+            obj.buckets.parameters.intervals_2 = zeros(numX, numY, 1, numranges, 'single');
+            obj.buckets.parameters.M0 = zeros(numX, numY, 1, numranges, 'single');
             % why this here ? flatfield should be enough , circleMask = fftshift(diskMask(numY, numX, 0.15));
 
             for freqIdx = 1:numranges
-                img = moment0(SH_mod, buckranges(freqIdx,1), buckranges(freqIdx,2), Params.fs, NT, 0);
+                img = moment0(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), Params.fs, NT, 0);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                 obj.buckets.parameters.intervals_0(:, :, :, freqIdx) = img;
 
-                img = moment0(SH_mod, buckranges(freqIdx,1), buckranges(freqIdx,2), Params.fs, NT, Params.flatfield_gw);
+                img = moment0(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), Params.fs, NT, Params.flatfield_gw);
                 obj.buckets.parameters.M0(:, :, :, freqIdx) = img;
-            
-                img = moment1(SH_mod, buckranges(freqIdx,1), buckranges(freqIdx,2), Params.fs, NT, 0);
+
+                img = moment1(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), Params.fs, NT, 0);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                 obj.buckets.parameters.intervals_1(:, :, :, freqIdx) = img;
 
-                img = moment2(SH_mod, buckranges(freqIdx,1), buckranges(freqIdx,2), Params.fs, NT, 0);
+                img = moment2(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), Params.fs, NT, 0);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                 obj.buckets.parameters.intervals_2(:, :, :, freqIdx) = img;
             end
@@ -436,8 +445,8 @@ methods
                 obj.denoised.image = img;
             catch ME
                 % Display error message and line number
-                fprintf('Error: %s\n', ME.message);
-                fprintf('Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
+                fprintf(2, 'Error: %s\n', ME.message);
+                fprintf(2, 'Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
                 obj.denoised.image = [];
             end
 
@@ -447,64 +456,14 @@ methods
 
             try
                 % Get the size of the 3D array
-
-                if 0
-                    [xSize, ySize, zSize] = size(SH_mod(1:4:end, 1:4:end, 1:1:end));
-
-                    % Generate grid coordinates for each voxel
-                    [x, y, z] = ndgrid(1:xSize, 1:ySize, 1:zSize);
-
-                    % Flatten the 3D array into a list of points
-                    points = [64 * x(:), 64 * y(:), z(:)]; % add more weight to the frequency dimension z
-                    values = SH_mod(1:4:end, 1:4:end, 1:1:end); % Flatten values as well
-                    values = values(:);
-                    % Combine spatial and intensity information (optional)
-                    features = [points, values]; % [x, y, z, intensity]
-
-                    % Number of clusters (N)
-                    N = 3;
-
-                    % Apply K-means clustering
-                    [idx, ~] = kmeans(features, N, 'Distance', 'sqeuclidean');
-
-                    % Reshape the cluster labels back to 3D
-                    clusters = reshape(idx, xSize, ySize, zSize);
-
-                    colors = lines(N);
-
-                    image = 0;
-
-                    for i = 1:N
-                        image = image + rescale(sum((clusters == i), 3) .* reshape(colors(i, :), 1, 1, []));
-                    end
-
-                elseif ~1
-                    video = SH_mod(1:4:end, 1:4:end, 1:1:end);
-                    [numX, numY, zSize] = size(video);
-                    video_flat = reshape(video, [numY * numX, zSize]);
-
-                    if true
-                        video_flat = normalize(video_flat, 2);
-                    end
-
-                    N = 3;
-                    [idx] = kmeans(video_flat, N, 'Distance', "cityblock", 'MaxIter', 100);
-                    idx = reshape(idx, [numX, numY]);
-                    image = ind2rgb(idx, lines(N));
-
-                elseif 1
-                    [~, image] = max(diff(SH_mod(1:1:end, 1:1:end, 1:1:end), 1, 3), [], 3);
-                    % image = moment0(diff(SH_mod(1:1:end,1:1:end,1:1:end),1,3), f1, f2 , Params.fs, NT, 0);
-                    %image = flat_field_correction(image,Params.flatfield_gw);
-
-                end
+                [~, image] = max(diff(SH_mod(1:1:end, 1:1:end, 1:1:end), 1, 3), [], 3);
 
                 obj.cluster_projection.image = image;
 
             catch ME
                 % Display error message and line number
-                fprintf('Error: %s\n', ME.message);
-                fprintf('Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
+                fprintf(2, 'Error: %s\n', ME.message);
+                fprintf(2, 'Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
                 obj.denoised.image = [];
             end
 
@@ -537,26 +496,9 @@ methods
 
         end
 
-        if obj.Quadrants.is_selected
-
-            Q = RenderQuadrant(FHin, Params);
-            obj.Quadrants.parameters = Q;
-            obj.Quadrants.image = imresize(cat(2,cat(1,Q.Q1_m0,Q.Q2_m0),cat(1,Q.Q4_m0,Q.Q3_m0)),[size(FHin,1),size(FHin,2)]);
-            for i = 1:int16(floor(numel(fieldnames(Q))/2))
-                fAVG{i} = Q.(sprintf("Q%d_m1",i))./mean(Q.(sprintf("Q%d_m0",i)),[1 2]);
-            end
-            for i = 1:int16(floor(numel(fieldnames(Q))/2))
-                f0{i} = Q.(sprintf("Q%d_m0",i))./mean(Q.(sprintf("Q%d_m0",i)),[1 2]);
-            end
-            obj.Quadrants.parameters.QuadrantsM1 = mergeColorChannels(fAVG);
-            obj.Quadrants.parameters.QuadrantsM0 = mergeColorChannels(f0);
-            %obj.Quadrants.parameters.QuadrantsM1 = imresize(cat(2,cat(1,Q.Q1_m1,Q.Q2_m1),cat(1,Q.Q4_m1,Q.Q3_m1)),[size(FHin,1),size(FHin,2)]);
-
-        end
-
     end
 
-    function construct_image_from_SVD(obj, Params, covin, Uin, szin)
+    function construct_image_from_SVD(obj, covin, Uin, szin)
         % szin is just the size of a batch nx ny nt for reference
         if isempty(covin)
             obj.SVD_cov.image = [];
@@ -587,13 +529,15 @@ methods
                 frame = getframe(fi);
                 % obj.SVD_U.graph = gca;
                 obj.SVD_U.image = frame.cdata;
+            catch
+
             end
 
         end
 
     end
 
-    function construct_image_from_ShackHartmann(obj, Params, moment_chunks_crop_array, ShackHartmannMask)
+    function construct_image_from_ShackHartmann(obj, moment_chunks_crop_array, ShackHartmannMask)
 
         if isempty(ShackHartmannMask)
             obj.ShackHartmann_Cropped_Moments.image = [];

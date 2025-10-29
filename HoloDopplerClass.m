@@ -133,7 +133,7 @@ methods
             otherwise
                 obj.file = [];
                 obj.reader = [];
-                error(sprintf(". %s files are not accepted as correct files", ext))
+                error(". %s files are not accepted as correct files", ext)
         end
 
         % 2) Rendering parameters initialization
@@ -157,6 +157,8 @@ methods
                         tmp.first = obj.reader.footer.info.timestamps_us.unix_first;
                         tmp.last = obj.reader.footer.info.timestamps_us.unix_last;
                         obj.params.record_time_stamps_us = tmp;
+                    catch
+                        % do nothing
                     end
 
                 end
@@ -270,7 +272,6 @@ methods
 
         obj.params.batch_size = 512;
         obj.params.batch_stride = 512;
-        obj.params.frame_stride = 1;
         obj.params.frame_position = 1;
         obj.params.registration_disc_ratio = 0.8;
         obj.params.image_types = {'power_Doppler', 'color_Doppler', 'directional_Doppler', 'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
@@ -312,9 +313,8 @@ methods
         if nargin < 2
             name = obj.file.name;
             dir = obj.file.dir;
-            ext = obj.file.ext;
         else
-            [dir, name, ext] = fileparts(filename);
+            [dir, name, ~] = fileparts(filename);
         end
 
         if nargin < 3
@@ -386,7 +386,7 @@ methods
             obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, obj.params.frame_position));
         end
 
-        obj.view.Render(obj.params, obj.params.image_types);
+        obj.view.Render(obj.params, obj.params.image_types, 'cache_intermediate_results', true);
         images = obj.view.getImages(obj.params.image_types);
 
         for i = 1:numel(obj.params.image_types)
@@ -432,7 +432,7 @@ methods
         index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HDPreview'));
         result_folder_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HDPreview_', num2str(index + 1)));
 
-        if not(exist(result_folder_path))
+        if ~isfolder(result_folder_path)
             mkdir(result_folder_path);
         end
 
@@ -480,7 +480,7 @@ methods
 
         num_batches = floor((end_frame - first_frame + 1) / obj.params.batch_stride);
 
-        disp(['Rendering ' num2str(num_batches) 'frames.']);
+        fprintf('Rendering %d frames.\n', num_batches);
 
         if num_batches == 0
             return
@@ -578,50 +578,56 @@ methods
             end
 
         else
+            % Parallel processing
             D = parallel.pool.DataQueue;
             afterEach(D, @update_waitbar);
             dq = parallel.pool.DataQueue;
 
-            file_path = obj.file.path;
-            params = obj.params;
-            video = obj.video;
-            afterEach(dq, @(data) obj.running_averages.update(data{1}, data{2}, params));
+            local_params = obj.params;
+            local_video = obj.video;
+            afterEach(dq, @(data) obj.running_averages.update(data{1}, data{2}, local_params));
+            local_reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
 
-            [dir, name, ext] = fileparts(file_path);
-            reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
+            % preload variables if possible
+            batch_size = local_params.batch_size;
+            batch_stride = local_params.batch_stride;
 
-            if isprop(reader, "all_frames") && ~isempty(reader.all_frames)
-                all_frames = reshape(reader.all_frames, size(reader.all_frames, 1), size(reader.all_frames, 2), params.batch_size, []);
+            if isprop(local_reader, "all_frames") && ~isempty(local_reader.all_frames)
+                % all frames are preloaded in RAM
+                all_frames = reshape(local_reader.all_frames, ...
+                    size(local_reader.all_frames, 1), ...
+                    size(local_reader.all_frames, 2), ...
+                    batch_size, []);
 
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
-                    view = RenderingClass();
-                    view.setFrames(all_frames(:, :, :, i));
-                    view.ShackHartmannMask = ShackHartmannMask;
-                    view.Render(params, params.image_types, cache_intermediate_results = false);
-                    video(i) = ImageTypeList2();
-                    video(i).copy_from(view.Output);
+                    local_view = RenderingClass();
+                    local_view.setFrames(all_frames(:, :, :, i));
+                    local_view.ShackHartmannMask = ShackHartmannMask;
+                    local_view.Render(local_params, local_params.image_types);
+                    local_video(i) = ImageTypeList2();
+                    local_video(i).copy_from(local_view.Output);
                     send(D, 0);
-                    SH_PSD = calc_registration_from_views(view, view_ref, params);
+                    SH_PSD = calc_registration_from_views(local_view, view_ref, local_params);
                     send(dq, {SH_PSD, i});
                 end
 
             else
 
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
-                    view = RenderingClass();
-                    view.setFrames(reader.read_frame_batch(params.batch_size, (i - 1) * params.batch_stride + 1));
-                    view.ShackHartmannMask = ShackHartmannMask;
-                    view.Render(params, params.image_types, cache_intermediate_results = false);
-                    video(i) = ImageTypeList2();
-                    video(i).copy_from(view.Output);
+                    local_view = RenderingClass();
+                    local_view.setFrames(local_reader.read_frame_batch(batch_size, (i - 1) * batch_stride + 1));
+                    local_view.ShackHartmannMask = ShackHartmannMask;
+                    local_view.Render(local_params, local_params.image_types);
+                    local_video(i) = ImageTypeList2();
+                    local_video(i).copy_from(local_view.Output);
                     send(D, 0);
-                    SH_PSD = calc_registration_from_views(view, view_ref, params);
+                    SH_PSD = calc_registration_from_views(local_view, view_ref, local_params);
                     send(dq, {SH_PSD, i});
                 end
 
             end
 
-            obj.video = video;
+            obj.video = local_video;
         end
 
         close(h);
@@ -637,9 +643,9 @@ methods
 
         end
 
-        fprintf("Video Rendering took : %f s\n", toc(VideoRenderingTime));
+        fprintf("Video Rendering took : %0.1f s\n", toc(VideoRenderingTime));
 
-        %% Save the video
+        % Save the video
         obj.SaveVideo();
     end
 
@@ -660,7 +666,7 @@ methods
         index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HD_'));
         result_folder_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD_', num2str(index + 1)));
 
-        if not(exist(result_folder_path))
+        if ~isfolder(result_folder_path)
             mkdir(result_folder_path);
             mkdir(fullfile(result_folder_path, 'avi'));
             mkdir(fullfile(result_folder_path, 'raw'));
@@ -684,7 +690,9 @@ methods
                 end
 
                 generate_video(mat, result_folder_path, strcat('SH'), export_raw = 1, temporal_filter = 2);
+
                 continue
+
             elseif strcmp(image_types{i}, 'buckets')
                 sz = size(tmp{1}.parameters.intervals_0);
                 sz(3) = length(tmp);
@@ -714,47 +722,6 @@ methods
                 end
 
                 continue
-            elseif strcmp(image_types{i}, 'Quadrants')
-                fields = fieldnames(tmp{1}.parameters);
-                nn = length(fields);
-
-                for j = 1:length(tmp)
-
-                    for k = 1:nn
-
-                        if ~isempty(tmp{j}.parameters) && ~ismember(fields{k}, {'QuadrantsM1', 'QuadrantsM0'})
-                            Q(:, :, j, k) = tmp{j}.parameters.(fields{k});
-                        end
-
-                    end
-
-                    QM1(:, :, :, j) = tmp{j}.parameters.QuadrantsM1;
-                    QM0(:, :, :, j) = tmp{j}.parameters.QuadrantsM0;
-                end
-
-                for k = 1:(nn - 2)
-                    generate_video(Q(:, :, :, k), result_folder_path, fields{k}, export_raw = 1, temporal_filter = [], square = params.square)
-                end
-
-                generate_video(QM1, result_folder_path, 'QuadrantsM1Composite', export_raw = 0, temporal_filter = 2, square = params.square)
-                generate_video(QM0, result_folder_path, 'QuadrantsM0Composite', export_raw = 0, temporal_filter = 2, square = params.square)
-
-                sz = size(tmp{1}.image);
-
-                if length(sz) == 2
-                    sz = [sz 1];
-                end
-
-                sz = [sz length(tmp)];
-                mat = zeros(sz, 'single');
-
-                for j = 1:length(tmp)
-
-                    if ~isempty(tmp{j}.image)
-                        mat(:, :, :, j) = tmp{j}.image;
-                    end
-
-                end
 
             elseif strcmp(image_types{i}, 'SH_avg')
 
@@ -791,39 +758,56 @@ methods
             if ~isempty(mat)
 
                 if strcmp(image_types{i}, 'moment_0') % raw moments are always outputted if they are selected
-                    generate_video(mat, result_folder_path, strcat('moment0'), export_raw = 1, temporal_filter = 2, square = params.square); % three cases just to rename each correctly for PW
+                    generate_video(mat, result_folder_path, ...
+                        strcat('moment0'), export_raw = 1, temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'moment_1')
-                    generate_video(mat, result_folder_path, strcat('moment1'), export_raw = 1, temporal_filter = 2, square = params.square);
+                    generate_video(mat, result_folder_path, ...
+                        strcat('moment1'), export_raw = 1, temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'moment_2')
-                    generate_video(mat, result_folder_path, strcat('moment2'), export_raw = 1, temporal_filter = 2, square = params.square);
+                    generate_video(mat, result_folder_path, ...
+                        strcat('moment2'), export_raw = 1, temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'power_Doppler')
-                    generate_video(mat, result_folder_path, strcat('M0'), temporal_filter = 2, square = params.square);
+                    generate_video(mat, result_folder_path, ...
+                        strcat('M0'), temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'spectrogram')
-                    generate_video(mat, result_folder_path, strcat('spectrogram'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, ...
+                        strcat('spectrogram'), temporal_filter = []);
                 elseif strcmp(image_types{i}, 'autocorrelogram')
-                    generate_video(mat, result_folder_path, strcat('autocorrelogram'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, ...
+                        strcat('autocorrelogram'), temporal_filter = []);
                 elseif strcmp(image_types{i}, 'broadening')
-                    generate_video(mat, result_folder_path, strcat('broadening'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, ...
+                        strcat('broadening'), temporal_filter = []);
                 elseif strcmp(image_types{i}, 'f_RMS')
-                    generate_video(mat, result_folder_path, strcat('f_RMS'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, ...
+                        strcat('f_RMS'), temporal_filter = []);
                 elseif strcmp(image_types{i}, 'FH_modulus_mean')
-                    generate_video(mat, result_folder_path, strcat('FH_modulus_mean'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, ...
+                        strcat('FH_modulus_mean'), temporal_filter = []);
                 elseif strcmp(image_types{i}, 'FH_arg_mean')
-                    generate_video(mat, result_folder_path, strcat('FH_arg_mean'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, ...
+                        strcat('FH_arg_mean'), temporal_filter = []);
                 elseif strcmp(image_types{i}, 'arg_0')
-                    generate_video(mat, result_folder_path, strcat('arg_0'), temporal_filter = [], square = params.square);
+                    generate_video(mat, result_folder_path, ...
+                        strcat('arg_0'), temporal_filter = [], square = params.square);
                 elseif strcmp(image_types{i}, 'SVD_cov')
-                    generate_video(mat, result_folder_path, strcat('SVD_cov'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, ...
+                        strcat('SVD_cov'), temporal_filter = []);
                 elseif strcmp(image_types{i}, 'SVD_U')
-                    generate_video(mat, result_folder_path, strcat('SVD_U'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, ...
+                        strcat('SVD_U'), temporal_filter = []);
                 elseif strcmp(image_types{i}, 'ShackHartmann_Cropped_Moments')
-                    generate_video(mat, result_folder_path, strcat('ShackHartmann_Cropped_Moments'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, ...
+                        strcat('ShackHartmann_Cropped_Moments'), temporal_filter = []);
                 elseif strcmp(image_types{i}, 'ShackHartmann_Phase')
-                    generate_video(mat, result_folder_path, strcat('ShackHartmann_Phase'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, ...
+                        strcat('ShackHartmann_Phase'), temporal_filter = []);
                 elseif strcmp(image_types{i}, 'color_Doppler')
-                    generate_video(mat, result_folder_path, strcat('color_Doppler'), square = params.square, temporal_filter = [], enhance_contrast = true, export_gif = true, gif_freq = 16, gif_Duration = size(mat, 4) * params.batch_stride / (obj.params.fs * 1000));
+                    generate_video(mat, result_folder_path, ...
+                        strcat('color_Doppler'), square = params.square, temporal_filter = [], enhance_contrast = true, export_gif = true, gif_freq = 16, gif_Duration = size(mat, 4) * params.batch_stride / (obj.params.fs * 1000));
                 else
-                    generate_video(mat, result_folder_path, strcat(image_types{i}), temporal_filter = 2, square = params.square);
+                    generate_video(mat, result_folder_path, ...
+                        strcat(image_types{i}), temporal_filter = 2, square = params.square);
                 end
 
             else
@@ -841,11 +825,11 @@ methods
         % Try to get git commit hash and branch, and log to git.txt
         try
             % Get current commit hash
-            [status_hash, git_hash] = system('git rev-parse HEAD');
+            [~, git_hash] = system('git rev-parse HEAD');
             % Get current branch name
-            [status_branch, git_branch] = system('git rev-parse --abbrev-ref HEAD');
+            [~, git_branch] = system('git rev-parse --abbrev-ref HEAD');
             % Get last commit log
-            [status_log, git_log] = system('git log -1 --pretty=oneline');
+            [~, git_log] = system('git log -1 --pretty=oneline');
             % Prepare content
             git_info = sprintf('Commit hash: %s\nBranch: %s\nLast commit: %s', ...
                 strtrim(git_hash), strtrim(git_branch), strtrim(git_log));
@@ -864,7 +848,7 @@ methods
         cache.time_transform.f2 = obj.params.time_range(2);
         save(fullfile(result_folder_path, 'mat', strcat(obj.file.name, '_HD_', num2str(index + 1), '.mat')), "cache");
 
-        fprintf("Video Saving took : %f s\n", toc(VideoSavingTime));
+        fprintf("Video Saving took : %0.1f s\n", toc(VideoSavingTime));
     end
 
     function CalculateRegistration(obj)
@@ -912,7 +896,7 @@ methods
         ref_img = ref_img .* disk - disk .* sum(ref_img .* disk, [1, 2]) / nnz(disk); % minus the mean
         ref_img = ref_img ./ (max(abs(ref_img), [], [1, 2])); % rescaling but keeps mean at zero
 
-        [video_M0_reg, obj.registration.shifts] = register_video_from_reference(video_M0_reg, ref_img);
+        [~, obj.registration.shifts] = register_video_from_reference(video_M0_reg, ref_img);
     end
 
     function ApplyRegistration(obj)
@@ -962,8 +946,6 @@ methods
 
                 continue
 
-            elseif strcmp(obj.params.image_types{j}, 'Quadrants')
-                continue
             end
 
             try % in case of not the same image size

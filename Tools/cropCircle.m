@@ -1,5 +1,5 @@
 function img = cropCircle(subImg)
-subImgHW = (size(subImg, 1) + size(subImg, 2))/2;
+subImgHW = (size(subImg, 1) + size(subImg, 2)) / 2;
 radius = round(subImgHW / 2);
 %FIXME anamorph.
 center = [round((size(subImg, 1) + 1) / 2) round((size(subImg, 2) + 1) / 2)];

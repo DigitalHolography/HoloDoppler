@@ -1,4 +1,4 @@
-function [img,img_low,img_high] = construct_colored_image(M_freq_low, M_freq_high)
+function [img, img_low, img_high] = construct_colored_image(M_freq_low, M_freq_high)
 % Constructs a colored image from hologram stacks made with different
 % frequency bands
 %
@@ -14,8 +14,8 @@ avg_M0_high = mean(M_freq_high, 3);
 avg_M0_low = mat2gray(avg_M0_low);
 avg_M0_high = mat2gray(avg_M0_high);
 
-img_low = avg_M0_low;%(interp2(avg_M0_low, 1));
-img_high = avg_M0_high;%(interp2(avg_M0_high, 1));
+img_low = avg_M0_low; %(interp2(avg_M0_low, 1));
+img_high = avg_M0_high; %(interp2(avg_M0_high, 1));
 
 % composite generation
 multiband_img = cat(3, img_high, cat(3, img_low, img_low));

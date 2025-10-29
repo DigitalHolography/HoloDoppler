@@ -1,7 +1,6 @@
 {
   "batch_size": 512,
   "batch_stride": 512,
-  "frame_stride": 1,
   "frame_position": 1,
   "registration_disc_ratio": 0.8,
   "image_types": [
@@ -17,7 +16,7 @@
   ],
   "parfor_arg": 18,
   "batch_size_registration": 512,
-  "image_registration": true
+  "image_registration": true,
   "lambda": 8.52E-7,
   "fs": 78,
   "ppx": 1.9400147441120552E-5,
