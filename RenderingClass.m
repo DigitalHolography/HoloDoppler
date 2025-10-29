@@ -150,8 +150,8 @@ methods
                 if ParamChanged.spatial_filter_range ...
                         || obj.FramesChanged ...
                         || isempty(obj.SpatialFilterMask)
-                    [NY, NX, ~] = size(obj.Frames);
-                    obj.SpatialFilterMask = fftshift(diskMask(NY, NX, Params.spatial_filter_range(1), Params.spatial_filter_range(2)))';
+                    [Ny, Nx, ~] = size(obj.Frames);
+                    obj.SpatialFilterMask = fftshift(diskMask(Ny, Nx, Params.spatial_filter_range(1), Params.spatial_filter_range(2)))';
                 end
 
                 obj.Frames = ifft2(fft2(obj.Frames) .* obj.SpatialFilterMask);
@@ -176,24 +176,27 @@ methods
                     if ParamChanged.spatial_propagation ...
                             || ParamChanged.spatial_transformation ...
                             || isempty(obj.SpatialKernel)
-                        [NY, NX, ~] = size(obj.Frames);
-                        ND = max(NX, NY);
+                        [Ny, Nx, ~] = size(obj.Frames);
+                        ND = max(Nx, Ny);
                         obj.SpatialKernel = propagation_kernelAngularSpectrum(ND, ND, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
                     end
 
-                    obj.FH = fft2(single(pad3DToSquare(obj.Frames))); % zero pading in a square of max(Nx NY) size
+                    obj.FH = fft2(single(pad3DToSquare(obj.Frames))); % zero pading in a square of max(Nx Ny) size
                     obj.FH = obj.FH .* fftshift(obj.SpatialKernel);
+
                 case "Fresnel"
 
                     if ParamChanged.spatial_propagation ...
                             || ParamChanged.spatial_transformation ...
                             || isempty(obj.SpatialKernel)
-                        [NY, NX, ~] = size(obj.Frames);
-                        [obj.SpatialKernel, obj.PhaseFactor] = propagation_kernelFresnel(NX, NY, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
+                        [Ny, Nx, ~] = size(obj.Frames);
+                        [obj.SpatialKernel, obj.PhaseFactor] = propagation_kernelFresnel(Nx, Ny, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
                     end
 
                     obj.FH = single(obj.Frames) .* obj.SpatialKernel;
+
                 case "None"
+
                     obj.FH = [];
 
             end

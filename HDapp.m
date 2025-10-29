@@ -632,14 +632,15 @@ methods (Access = private)
         end
 
         function del_configs(~, ~)
-            file_list = {};
+            L = length(app.HD.drawer_list);
+            file_list = cell(L, 1);
 
             for i = 1:length(app.HD.drawer_list) % Circles through the files added by the user
                 % Get config files
                 [~, path_list] = get_config_files(app.HD.drawer_list{i});
 
                 if (~isempty(path_list))
-                    file_list{end + 1} = {app.HD.drawer_list{i}, path_list};
+                    file_list{i} = {app.HD.drawer_list{i}, path_list};
                 end
 
             end

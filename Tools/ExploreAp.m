@@ -206,12 +206,12 @@ methods
 
         switch obj.Params.spatial_transformation
             case "angular spectrum"
-                [NY, NX, ~] = size(SubapI);
-                SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, obj.Params.spatial_propagation, obj.Params.lambda, obj.Params.ppx, obj.Params.ppy, 0);
+                [Ny, Nx, ~] = size(SubapI);
+                SpatialKernel = propagation_kernelAngularSpectrum(Nx, Ny, obj.Params.spatial_propagation, obj.Params.lambda, obj.Params.ppx, obj.Params.ppy, 0);
                 FH = fft2(single(SubapI)) .* fftshift(SpatialKernel);
             case "Fresnel"
-                [NY, NX, ~] = size(SubapI);
-                [SpatialKernel] = propagation_kernelFresnel(NX, NY, obj.Params.spatial_propagation, obj.Params.lambda, obj.Params.ppx, obj.Params.ppy, 0);
+                [Ny, Nx, ~] = size(SubapI);
+                [SpatialKernel] = propagation_kernelFresnel(Nx, Ny, obj.Params.spatial_propagation, obj.Params.lambda, obj.Params.ppx, obj.Params.ppy, 0);
                 FH = single(SubapI) .* SpatialKernel;
             case "None"
                 FH = [];

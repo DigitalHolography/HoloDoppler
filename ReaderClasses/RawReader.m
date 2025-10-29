@@ -25,7 +25,7 @@ methods
     % constructor
     function obj = RawReader(path, endianness, acquisition, ...
             j_win, j_step)
-        %% set parameters
+        % set parameters
         obj.acquisition = acquisition;
         obj.path = path;
         obj.endianness = endianness;
@@ -39,7 +39,7 @@ methods
         obj.acquisition.Nx = final_frame_size;
         obj.acquisition.Ny = final_frame_size;
 
-        %% construct offsets
+        % construct offsets
         n_frames = obj.num_frames();
         num_batches = floor((n_frames - obj.j_win) / obj.j_step);
         pix_per_image = obj.acquisition.Nx * obj.acquisition.Ny;
