@@ -120,7 +120,7 @@ properties (Access = public)
     Nx matlab.ui.control.NumericEditField
     RefreshAppButton matlab.ui.control.Button
     num_frames matlab.ui.control.Label
-    file_loaded_lamp matlab.ui.control.Lamp
+    FileLoadedLamp matlab.ui.control.Lamp
     positioninfileSlider matlab.ui.control.Slider
     positioninfileSliderLabel matlab.ui.control.Label
     frame_position matlab.ui.control.NumericEditField
@@ -225,20 +225,26 @@ methods (Access = private)
         delete(f); %delete the dummy figure
 
         if fname == 0
+            fprintf("No file selected\n");
             return
         end
 
         try
+            app.FileLoadedLamp.Color = [1 0.5 0];
+            drawnow; % orange in process
+
             LoadAll = app.LoadAllCheckBox.Value;
             app.HD.LoadFile(fullfile(fpath, fname), LoadAll = LoadAll);
             classtogui(app.HD, app);
             app.RenderPreviewButtonPushed();
-            app.file_loaded = 1; app.file_loaded_lamp.Color = [0 1 0]; %
+
+            app.file_loaded = 1;
+            app.FileLoadedLamp.Color = [0 1 0]; % green success
         catch ME
             % Display error message and line number
             fprintf('Error: %s\n', ME.message);
             fprintf('Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
-            app.file_loaded_lamp.Color = [0.8 0.1 0.1];
+            app.FileLoadedLamp.Color = [1 0 0]; % red error happened
             drawnow
         end
 
@@ -252,11 +258,13 @@ methods (Access = private)
 
     % Button pushed function: VideoRenderingButton
     function VideoRenderingButtonPushed(app, ~)
-        app.VideoRenderingLamp.Color = [0.75 0.15 0.1]; drawnow; % red in process
+        app.VideoRenderingLamp.Color = [1 0.5 0];
+        drawnow; % orange in process
 
         try
             app.HD.VideoRendering();
             app.VideoRenderingLamp.Color = [0 1 0]; % green success
+            drawnow;
         catch ME
             % Display error message and line number
             fprintf('Error: %s\n', ME.message);
@@ -266,7 +274,8 @@ methods (Access = private)
                 fprintf('%s : %s, line : %d \n', ME.stack(stackIdx).file, ME.stack(stackIdx).name, ME.stack(stackIdx).line);
             end
 
-            app.VideoRenderingLamp.Color = [0.8 0.1 0.1]; % error happened
+            app.VideoRenderingLamp.Color = [1 0 0]; % error happened
+            drawnow;
         end
 
     end
@@ -700,13 +709,15 @@ methods (Access = private)
 
     % Button pushed function: RenderPreviewButton
     function RenderPreviewButtonPushed(app, ~)
-        app.RenderPreviewLamp.Color = [0.75 0.15 0.1]; drawnow; % red in process
+        app.RenderPreviewLamp.Color = [1 0.5 0]; drawnow; % orange in process
+        drawnow;
 
         try
             Images = app.HD.PreviewRendering();
             app.RenderPreviewLamp.Color = [0 1 0]; % green success
+            app.ImageLeft.ImageSource = toImageSource(Images{1}, app);
+            drawnow;
         catch ME
-            Images = [];
             % Display error message and line number
             fprintf('Error: %s\n', ME.message);
             fprintf('Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
@@ -715,14 +726,9 @@ methods (Access = private)
                 fprintf('%s : %s, line : %d \n', ME.stack(stackIdx).file, ME.stack(stackIdx).name, ME.stack(stackIdx).line);
             end
 
-            app.RenderPreviewLamp.Color = [0.8 0.1 0.1]; % error happened
-            drawnow
-        end
-
-        if ~isempty(Images)
-            app.ImageLeft.ImageSource = toImageSource(Images{1}, app);
-        else
+            app.RenderPreviewLamp.Color = [1 0 0]; % error happened
             app.ImageLeft.ImageSource = '';
+            drawnow;
         end
 
         if ismember("FH_modulus_mean", app.HD.params.image_types)
@@ -1267,10 +1273,10 @@ methods (Access = private)
         app.positioninfileSlider.Tooltip = {'Change value to display a different video timestamp in the gui.'};
         app.positioninfileSlider.Position = [57 53 158 3];
 
-        % Create file_loaded_lamp
-        app.file_loaded_lamp = uilamp(app.FileselectionPanel);
-        app.file_loaded_lamp.Position = [138 843 10 10];
-        app.file_loaded_lamp.Color = [0.9294 0.6902 0.1294];
+        % Create FileLoadedLamp
+        app.FileLoadedLamp = uilamp(app.FileselectionPanel);
+        app.FileLoadedLamp.Position = [138 843 10 10];
+        app.FileLoadedLamp.Color = [0 1 0];
 
         % Create num_frames
         app.num_frames = uilabel(app.FileselectionPanel);
@@ -2118,13 +2124,11 @@ methods (Access = private)
         % Create ImageRight
         app.ImageRight = uiimage(app.GridLayout4);
         app.ImageRight.ScaleMethod = 'stretch';
-        app.ImageRight.ImageClickedFcn = createCallbackFcn(app, @ImageRightClicked, true);
         app.ImageRight.Layout.Row = 1;
         app.ImageRight.Layout.Column = 3;
 
         % Create ImageLeft
         app.ImageLeft = uiimage(app.GridLayout4);
-        app.ImageLeft.ImageClickedFcn = createCallbackFcn(app, @ImageLeftClicked, true);
         app.ImageLeft.Layout.Row = 1;
         app.ImageLeft.Layout.Column = 2;
 

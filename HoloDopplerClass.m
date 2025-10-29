@@ -481,7 +481,7 @@ methods
 
         num_batches = floor((end_frame - first_frame + 1) / obj.params.batch_stride);
 
-        disp(['Rendering ' num2str(num_batches) 'frames.']);
+        fprintf('Rendering %d frames.\n', num_batches);
 
         if num_batches == 0
             return

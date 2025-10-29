@@ -62,7 +62,7 @@ shifts_vector = zeros(num_subapertures_inter ^ 2, num_batches);
 stitched_correlation_video = zeros(Nx, Ny, 1, num_batches, 'single');
 
 if use_gpu || ~use_multithread
-    parf or_arg = 0;
+    parfor_arg = 0;
 else
     parfor_arg = Inf;
 end

@@ -277,7 +277,6 @@ methods
             momentM0 = moment0(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(SH_mask, 3), 0);
             momentM1 = moment1(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(SH_mask, 3), 0);
             momentM2 = moment2(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(SH_mask, 3), 0);
-            % [n1,n2,n3,n4,f_range,f_range_sym] = moment_range(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(obj.SH_processed,3));
             % noramlized spectrum but not relevant spectrumAVG_mask = spectrumAVG_mask*2/(spectrumAVG_mask(n1)+spectrumAVG_mask(n4));
 
             % M0 = squeeze(sum(spectrumAVG_mask(n1:n2))' + sum(spectrumAVG_mask(n3:n4))');

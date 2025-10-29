@@ -20,7 +20,6 @@ else
 
 end
 
-% cache = GuiCache(app);
 % if strcmp(cache.spatialTransformation, 'Fresnel') && (numX ~= numY)
 %
 % end

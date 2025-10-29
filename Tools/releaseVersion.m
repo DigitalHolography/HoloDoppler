@@ -23,7 +23,7 @@ fprintf('Updated version.txt with version %s\n', versionTag);
 cmdCheckout = 'git checkout main';
 cmdAdd = 'git add version.txt';
 cmdCommit = sprintf('git commit -m "chore: update version.txt to %s"', versionTag);
-%cmdPush = 'git push origin main';
+cmdPush = 'git push origin main';
 
 [status, cmdout] = system(cmdCheckout);
 assert(status == 0, cmdout);
@@ -31,7 +31,7 @@ assert(status == 0, cmdout);
 [status, cmdout] = system(cmdAdd);
 assert(status == 0, cmdout);
 
-[status, cmdout] = system(cmdCommit);
+[status, ~] = system(cmdCommit);
 
 if status ~= 0
     disp('No changes to commit.');
