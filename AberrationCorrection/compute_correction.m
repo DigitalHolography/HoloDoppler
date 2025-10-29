@@ -5,7 +5,7 @@ function correction = compute_correction(istream, cache, kernel, rephasing_data,
 % Compute an optimal aberration correction given zernike
 % indices.
 %
-% istream: either a valid CineReader or a RawReader
+% istream: either a valid CineReader
 % cache: gui parameters
 % kernel: reconstruction kernel
 % rephasing_data: rephasing to apply before processing

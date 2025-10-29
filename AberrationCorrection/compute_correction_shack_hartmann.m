@@ -7,7 +7,7 @@ function [correction, stiched_moments_video, shifts_vector, stitched_correlation
 % Compute an optimal aberration correction given zernike
 % indices.
 %
-% istream: either a valid CineReader or a RawReader
+% istream: either a valid CineReader
 % cache: gui parameters
 % kernel: reconstruction kernel
 % rephasing_data: rephasing to apply before processing

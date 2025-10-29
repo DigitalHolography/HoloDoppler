@@ -38,7 +38,6 @@ properties
     diff_mod_pha
     phase_diff
     phase_variance
-    Quadrants
 end
 
 methods
@@ -80,7 +79,6 @@ methods
         obj.diff_mod_pha = ImageType('diff_mod_pha');
         obj.phase_diff = ImageType('phase_diff');
         obj.phase_variance = ImageType('phase_variance');
-        obj.Quadrants = ImageType('Quadrants');
     end
 
     function clear(obj, varargin)
@@ -460,7 +458,6 @@ methods
                 % Get the size of the 3D array
                 [~, image] = max(diff(SH_mod(1:1:end, 1:1:end, 1:1:end), 1, 3), [], 3);
 
-                c
                 obj.cluster_projection.image = image;
 
             catch ME
@@ -496,26 +493,6 @@ methods
                 case 'Fresnel'
                     obj.FH_arg_mean.image = squeeze((mean(angle(FHin), 3)));
             end
-
-        end
-
-        if obj.Quadrants.is_selected
-
-            Q = RenderQuadrant(FHin, Params);
-            obj.Quadrants.parameters = Q;
-            obj.Quadrants.image = imresize(cat(2, cat(1, Q.Q1_m0, Q.Q2_m0), cat(1, Q.Q4_m0, Q.Q3_m0)), [size(FHin, 1), size(FHin, 2)]);
-
-            for i = 1:int16(floor(numel(fieldnames(Q)) / 2))
-                fAVG{i} = Q.(sprintf("Q%d_m1", i)) ./ mean(Q.(sprintf("Q%d_m0", i)), [1 2]);
-            end
-
-            for i = 1:int16(floor(numel(fieldnames(Q)) / 2))
-                f0{i} = Q.(sprintf("Q%d_m0", i)) ./ mean(Q.(sprintf("Q%d_m0", i)), [1 2]);
-            end
-
-            obj.Quadrants.parameters.QuadrantsM1 = mergeColorChannels(fAVG);
-            obj.Quadrants.parameters.QuadrantsM0 = mergeColorChannels(f0);
-            %obj.Quadrants.parameters.QuadrantsM1 = imresize(cat(2,cat(1,Q.Q1_m1,Q.Q2_m1),cat(1,Q.Q4_m1,Q.Q3_m1)),[size(FHin,1),size(FHin,2)]);
 
         end
 

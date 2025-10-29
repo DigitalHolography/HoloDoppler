@@ -667,7 +667,7 @@ methods
         index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HD_'));
         result_folder_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD_', num2str(index + 1)));
 
-        if ~ifolder(result_folder_path)
+        if ~isfolder(result_folder_path)
             mkdir(result_folder_path);
             mkdir(fullfile(result_folder_path, 'avi'));
             mkdir(fullfile(result_folder_path, 'raw'));
@@ -691,7 +691,9 @@ methods
                 end
 
                 generate_video(mat, result_folder_path, strcat('SH'), export_raw = 1, temporal_filter = 2);
+
                 continue
+
             elseif strcmp(image_types{i}, 'buckets')
                 sz = size(tmp{1}.parameters.intervals_0);
                 sz(3) = length(tmp);
@@ -721,49 +723,6 @@ methods
                 end
 
                 continue
-
-            elseif strcmp(image_types{i}, 'Quadrants')
-
-                fields = fieldnames(tmp{1}.parameters);
-                nn = length(fields);
-
-                for j = 1:length(tmp)
-
-                    for k = 1:nn
-
-                        if ~isempty(tmp{j}.parameters) && ~ismember(fields{k}, {'QuadrantsM1', 'QuadrantsM0'})
-                            Q(:, :, j, k) = tmp{j}.parameters.(fields{k});
-                        end
-
-                    end
-
-                    QM1(:, :, :, j) = tmp{j}.parameters.QuadrantsM1;
-                    QM0(:, :, :, j) = tmp{j}.parameters.QuadrantsM0;
-                end
-
-                for k = 1:(nn - 2)
-                    generate_video(Q(:, :, :, k), result_folder_path, fields{k}, export_raw = 1, temporal_filter = [], square = params.square)
-                end
-
-                generate_video(QM1, result_folder_path, 'QuadrantsM1Composite', export_raw = 0, temporal_filter = 2, square = params.square)
-                generate_video(QM0, result_folder_path, 'QuadrantsM0Composite', export_raw = 0, temporal_filter = 2, square = params.square)
-
-                sz = size(tmp{1}.image);
-
-                if length(sz) == 2
-                    sz = [sz 1];
-                end
-
-                sz = [sz length(tmp)];
-                mat = zeros(sz, 'single');
-
-                for j = 1:length(tmp)
-
-                    if ~isempty(tmp{j}.image)
-                        mat(:, :, :, j) = tmp{j}.image;
-                    end
-
-                end
 
             elseif strcmp(image_types{i}, 'SH_avg')
 
@@ -988,8 +947,6 @@ methods
 
                 continue
 
-            elseif strcmp(obj.params.image_types{j}, 'Quadrants')
-                continue
             end
 
             try % in case of not the same image size
