@@ -272,7 +272,6 @@ methods
 
         obj.params.batch_size = 512;
         obj.params.batch_stride = 512;
-        obj.params.frame_stride = 1;
         obj.params.frame_position = 1;
         obj.params.registration_disc_ratio = 0.8;
         obj.params.image_types = {'power_Doppler', 'color_Doppler', 'directional_Doppler', 'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
@@ -387,7 +386,7 @@ methods
             obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, obj.params.frame_position));
         end
 
-        obj.view.Render(obj.params, obj.params.image_types);
+        obj.view.Render(obj.params, obj.params.image_types, 'cache_intermediate_results', true);
         images = obj.view.getImages(obj.params.image_types);
 
         for i = 1:numel(obj.params.image_types)
@@ -604,7 +603,7 @@ methods
                     local_view = RenderingClass();
                     local_view.setFrames(all_frames(:, :, :, i));
                     local_view.ShackHartmannMask = ShackHartmannMask;
-                    local_view.Render(local_params, local_params.image_types, cache_intermediate_results = false);
+                    local_view.Render(local_params, local_params.image_types);
                     local_video(i) = ImageTypeList2();
                     local_video(i).copy_from(local_view.Output);
                     send(D, 0);
@@ -618,7 +617,7 @@ methods
                     local_view = RenderingClass();
                     local_view.setFrames(local_reader.read_frame_batch(batch_size, (i - 1) * batch_stride + 1));
                     local_view.ShackHartmannMask = ShackHartmannMask;
-                    local_view.Render(local_params, local_params.image_types, cache_intermediate_results = false);
+                    local_view.Render(local_params, local_params.image_types);
                     local_video(i) = ImageTypeList2();
                     local_video(i).copy_from(local_view.Output);
                     send(D, 0);
@@ -644,7 +643,7 @@ methods
 
         end
 
-        fprintf("Video Rendering took : %f s\n", toc(VideoRenderingTime));
+        fprintf("Video Rendering took : %0.1f s\n", toc(VideoRenderingTime));
 
         % Save the video
         obj.SaveVideo();
@@ -849,7 +848,7 @@ methods
         cache.time_transform.f2 = obj.params.time_range(2);
         save(fullfile(result_folder_path, 'mat', strcat(obj.file.name, '_HD_', num2str(index + 1), '.mat')), "cache");
 
-        fprintf("Video Saving took : %f s\n", toc(VideoSavingTime));
+        fprintf("Video Saving took : %0.1f s\n", toc(VideoSavingTime));
     end
 
     function CalculateRegistration(obj)

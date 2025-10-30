@@ -445,8 +445,8 @@ methods
                 obj.denoised.image = img;
             catch ME
                 % Display error message and line number
-                fprintf('Error: %s\n', ME.message);
-                fprintf('Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
+                fprintf(2, 'Error: %s\n', ME.message);
+                fprintf(2, 'Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
                 obj.denoised.image = [];
             end
 
@@ -462,8 +462,8 @@ methods
 
             catch ME
                 % Display error message and line number
-                fprintf('Error: %s\n', ME.message);
-                fprintf('Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
+                fprintf(2, 'Error: %s\n', ME.message);
+                fprintf(2, 'Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
                 obj.denoised.image = [];
             end
 

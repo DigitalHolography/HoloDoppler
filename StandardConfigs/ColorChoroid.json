@@ -1,7 +1,6 @@
 {
   "batch_size": 512,
   "batch_stride": 512,
-  "frame_stride": 1,
   "frame_position": 1,
   "registration_disc_ratio": 0.8,
   "image_types": [

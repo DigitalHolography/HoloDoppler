@@ -242,8 +242,8 @@ methods (Access = private)
             app.FileLoadedLamp.Color = [0 1 0]; % green success
         catch ME
             % Display error message and line number
-            fprintf('Error: %s\n', ME.message);
-            fprintf('Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
+            fprintf(2, 'Error: %s\n', ME.message);
+            fprintf(2, 'Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
             app.FileLoadedLamp.Color = [1 0 0]; % red error happened
             drawnow
         end
@@ -267,11 +267,11 @@ methods (Access = private)
             drawnow;
         catch ME
             % Display error message and line number
-            fprintf('Error: %s\n', ME.message);
-            fprintf('Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
+            fprintf(2, 'Error: %s\n', ME.message);
+            fprintf(2, 'Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
 
             for stackIdx = 1:size(ME.stack, 1)
-                fprintf('%s : %s, line : %d \n', ME.stack(stackIdx).file, ME.stack(stackIdx).name, ME.stack(stackIdx).line);
+                fprintf(2, '%s : %s, line : %d \n', ME.stack(stackIdx).file, ME.stack(stackIdx).name, ME.stack(stackIdx).line);
             end
 
             app.VideoRenderingLamp.Color = [1 0 0]; % error happened
@@ -302,7 +302,7 @@ methods (Access = private)
                 end
 
             else
-                fprintf("Couldn't load config");
+                fprintf(2, "Couldn't load config");
             end
 
         end
@@ -581,8 +581,7 @@ methods (Access = private)
                         end
 
                     catch e
-
-                        disp(e)
+                        fprintf(2, e.message);
                     end
 
                 end
@@ -719,11 +718,11 @@ methods (Access = private)
             drawnow;
         catch ME
             % Display error message and line number
-            fprintf('Error: %s\n', ME.message);
-            fprintf('Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
+            fprintf(2, 'Error: %s\n', ME.message);
+            fprintf(2, 'Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
 
             for stackIdx = 1:size(ME.stack, 1)
-                fprintf('%s : %s, line : %d \n', ME.stack(stackIdx).file, ME.stack(stackIdx).name, ME.stack(stackIdx).line);
+                fprintf(2, '%s : %s, line : %d \n', ME.stack(stackIdx).file, ME.stack(stackIdx).name, ME.stack(stackIdx).line);
             end
 
             app.RenderPreviewLamp.Color = [1 0 0]; % error happened
@@ -828,7 +827,7 @@ methods (Access = private)
         try
             app.HD.showVideo();
         catch e
-            fprintf("Couldn't play video (try to video render first) : %s", e.message);
+            fprintf(2, "Couldn't play video (try to video render first) : %s", e.message);
         end
 
     end
