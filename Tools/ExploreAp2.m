@@ -1,4 +1,4 @@
-classdef ExploreAp< handle
+classdef ExploreAp2< handle
 
 properties
     fig % Main figure handle
@@ -15,7 +15,7 @@ end
 
 methods
 
-    function obj = ExploreAp(I,Params)
+    function obj = ExploreAp2(I,Params)
         % Constructor - initialize the application
         obj.I = I;
 
@@ -86,25 +86,6 @@ methods
                 'BackgroundColor', [1, 1, 1]);
         end
 
-        % Add checkboxes for magnitude and phase toggles
-        uicontrol('Parent', obj.panel, ...
-            'Style', 'checkbox', ...
-            'String', 'Show Magnitude', ...
-            'Tag', 'mag', ...
-            'Units', 'normalized', ...
-            'Position', [0.05, 0.2, 0.9, 0.15], ...
-            'Callback', @(src, evt)obj.plotting(), ...
-            'BackgroundColor', [1, 1, 1], 'Value', 1);
-
-        uicontrol('Parent', obj.panel, ...
-            'Style', 'checkbox', ...
-            'String', 'Show Phase', ...
-            'Tag', 'phase', ...
-            'Units', 'normalized', ...
-            'Position', [0.05, 0.05, 0.9, 0.15], ...
-            'Callback', @(src, evt)obj.plotting(), ...
-            'BackgroundColor', [1, 1, 1]);
-
         % Add pushbutton for creating a new ROI
         uicontrol('Parent', obj.panel, ...
             'Style', 'pushbutton', ...
@@ -122,7 +103,7 @@ methods
 
     function updateAverageImage(obj)
         % Calculate average image based on current processing
-        obj.avgImage = mean(abs(obj.I), 3);
+        obj.avgImage = mean(log1p(abs(fft2(obj.I))), 3);
     end
 
     function updateImageDisplay(obj)
@@ -203,7 +184,7 @@ methods
         y1 = max(min((y1),hei),1);
         x1 = max(min((x1),wid),1); % matlab....
 
-        SubapI = obj.I(y1:y2,x1:x2,:);
+        SubapI = twin_image_removal_(obj.I, maskphase);
         switch obj.Params.spatial_transformation
             case "angular spectrum"
                 [NY,NX,~] = size(SubapI);
