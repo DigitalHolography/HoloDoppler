@@ -10,3 +10,4 @@
 *.prj
 resources/
 call_backs/pack/codegen/
+*.holo
