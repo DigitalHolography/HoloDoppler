@@ -10,3 +10,5 @@
 *.prj
 resources/
 call_backs/pack/codegen/
+*.holo
+maskpol.png
