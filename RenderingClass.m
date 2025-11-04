@@ -215,6 +215,8 @@ methods
                     obj.H = ifft2(obj.FH);
                 case "Fresnel"
                     obj.H = fftshift(fftshift(fft2(obj.FH), 1), 2); %.*obj.PhaseFactor;
+                case "twin image removal"
+                    obj.H = twin_image_removal_(single(obj.Frames),[],ParamChanged,Params);
                 case "None"
                     obj.H = single(obj.Frames);
             end
