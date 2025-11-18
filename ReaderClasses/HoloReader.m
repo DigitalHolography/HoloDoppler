@@ -24,7 +24,7 @@ methods
 
         obj.filename = filename;
 
-        %% parse header
+        % parse header
         header_mmap = memmapfile(filename, 'Format', ...
             {'uint8', 4, 'magic_number'; ...
              'uint16', 1, 'version'; ...
@@ -49,7 +49,7 @@ methods
         obj.bit_depth = header_mmap.Data.bit_depth;
         obj.endianness = header_mmap.Data.endianness;
 
-        %% parse footer
+        % parse footer
         footer_skip = 64 + uint64(obj.frame_width * obj.frame_height) * uint64(obj.num_frames) * uint64(obj.bit_depth / 8);
         s = dir(filename);
         footer_size = s.bytes - footer_skip;
@@ -98,7 +98,7 @@ methods
             fclose(fd);
         end
 
-        %% check if all frames can be loaded
+        % check if all frames can be loaded
 
         % Check if available memory is above a certain threshold in GB
 
@@ -238,16 +238,16 @@ methods (Static)
         % threshold: mean value to average value ratio under which a
         %            frame is considered dropped
 
-        %% construct image average values and total average value
+        % construct image average values and total average value
         batch_avgs = squeeze(mean(mean(batch, 1), 2));
         batch_avg = mean(batch_avgs);
 
-        %% setup images filter
+        % setup images filter
         to_delete = abs(batch_avgs - batch_avg) > batch_avg * threshold;
         to_delete = to_delete + circshift(to_delete, 1) + circshift(to_delete, 2);
         to_delete = to_delete > 0;
 
-        %% replace the frames
+        % replace the frames
         batch(:, :, to_delete) = batch(:, :, circshift(to_delete, 3));
     end
 
