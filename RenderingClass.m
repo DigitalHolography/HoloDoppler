@@ -287,9 +287,9 @@ methods
 
             switch spatialTransform
                 case "angular spectrum"
-                    obj.H = ifft2(obj.FH);
+                    obj.H = ifft2(obj.FH) .* sqrt(Nx * Ny);
                 case "Fresnel"
-                    obj.H = fftshift(fftshift(fft2(obj.FH), 1), 2); %.*obj.PhaseFactor;
+                    obj.H = fftshift(fftshift(fft2(obj.FH), 1), 2) ./ sqrt(Nx * Ny); %.*obj.PhaseFactor;
                 case "None"
                     obj.H = single(obj.Frames);
             end
@@ -340,7 +340,7 @@ methods
                 case 'ICA'
                     obj.SH = short_time_ICA(obj.H);
                 case 'FFT'
-                    obj.SH = fft(obj.H, [], 3);
+                    obj.SH = fft(obj.H, [], 3) ./ sqrt(batch_size);
                 case 'autocorrelation'
                     [a, b, c] = size(obj.H);
                     tmp = reshape(obj.H, a * b, c);
