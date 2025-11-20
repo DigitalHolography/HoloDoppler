@@ -1,4 +1,4 @@
-ffunction [registered, shifts] = register_video(frames, ref_idx)
+function [registered, shifts] = register_video(frames, ref_idx)
 % registers a video
 % frames: a video 4D-array width x height x 1 x num_frames
 

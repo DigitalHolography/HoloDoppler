@@ -1,6 +1,15 @@
 %% Get the list of holofiles to be processed from user
 fprintf("=== HOLOPROCESS START ===\n");
 
+appRoot = fileparts(mfilename('fullpath'));
+
+try
+    cd(appRoot);
+    fprintf("Current Working Directory changed to: %s\n", pwd);
+catch ME
+    warning("Could not change directory to appRoot");
+end
+
 version_tag = readlines("version.txt");
 
 fprintf("HoloDoppler version : %s\n", version_tag);
