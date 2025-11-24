@@ -764,6 +764,21 @@ methods
 
                 mat = [];
 
+            elseif strcmp(image_types{i}, 'Energy')
+                sig_E_t = [];
+                sig_E_stdf_t = [];
+                sig_E_stdq_t = [];
+                for j = 1:length(tmp)
+                    sig_E_t = [sig_E_t tmp{j}.parameters.E_t];
+                    sig_E_stdf_t = [sig_E_stdf_t tmp{j}.parameters.E_stdf_t];
+                    sig_E_stdq_t = [sig_E_stdq_t tmp{j}.parameters.E_stdq_t];
+                end
+                generate_signal(sig_E_t, result_folder_path, 'Energy_t');
+                generate_signal(sig_E_stdf_t, result_folder_path, 'Energy_t');
+                generate_signal(sig_E_stdq_t, result_folder_path, 'Energy_t');
+
+                mat = [];
+
             else % image extraction
                 sz = size(tmp{1}.image);
 

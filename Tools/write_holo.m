@@ -24,6 +24,9 @@ function write_holo(filename, m, bit_depth, endianness, footer)
     if nargin < 5
         footer = struct();  % empty footer if none provided
     end
+    if nargin < 4
+        endianness = 1;  % empty footer if none provided
+    end
 
     % --- Validate endianness ---
     if ~ismember(endianness, [0, 1])

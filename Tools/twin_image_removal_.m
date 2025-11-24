@@ -12,9 +12,25 @@ function [OF_obj, OF_obj1,OF_obj2, OF_objn, H1, A_cam, C_cam] = twin_image_remov
         Mp = imgaussfilt(single(Mp),10)>0.5;
 
         CC = bwconncomp(Mp);
-        [~, idx] = max(cellfun(@numel, CC.PixelIdxList));
+
+        [h, w] = size(Mp);
+
+        borderIdx = unique([1:h, ...
+                            (w-1)*h+1:h*w, ...
+                            1:h:h*w, ...
+                            h:h:h*w]);
+        
+        touchesBorder = cellfun(@(x) any(ismember(x, borderIdx)), CC.PixelIdxList);
+        areas = cellfun(@numel, CC.PixelIdxList);
+        areas(touchesBorder) = 0;
+        
+        [~, idx] = max(areas);
+        
         Mp_biggest = false(size(Mp));
-        Mp_biggest(CC.PixelIdxList{idx}) = true;
+        if idx > 0
+            Mp_biggest(CC.PixelIdxList{idx}) = true;
+        end
+        
 
         Mp = Mp_biggest;
 
@@ -40,8 +56,8 @@ function [OF_obj, OF_obj1,OF_obj2, OF_objn, H1, A_cam, C_cam] = twin_image_remov
 
     C_cam = ifft2(circshift(F .* rot90(Mp,0),-[cy,cx]));
 
-    figure(), imshow(Mp);
-    figure(), imagesc(fftshift(log1p(abs(circshift(F .* rot90(Mp,0),-[cy,cx])))));
+    % figure(), imshow(Mp);
+    % figure(), imagesc(fftshift(log1p(abs(circshift(F .* rot90(Mp,0),-[cy,cx])))));
 
     A_cam = abs(ifft2(F .* Ma));
 
@@ -51,7 +67,7 @@ function [OF_obj, OF_obj1,OF_obj2, OF_objn, H1, A_cam, C_cam] = twin_image_remov
     % 
     % [p, fitPhase] = fitSphericPhase(exp(1j*P_cam), X, Y);
 
-    P_cam_unwrapped = unwrap2D(P_cam);
+    P_cam_unwrapped = unwrap_2d2(double(P_cam));
 
     if min(P_cam_unwrapped(:)) < 0
         P_cam_unwrapped = P_cam_unwrapped - min(P_cam_unwrapped(:));

@@ -38,7 +38,8 @@ function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array]
     end
 
     shack_hartmann = ShackHartmann(image_subapertures_size_ratio, num_subapertures_positions, zernike_indices, calibration_factor, subaperture_margin, corrmap_margin, power_filter_corrector, sigma_filter_corrector, ref_image, spatial_transformation);
-
+    shack_hartmann.Nx = Nx;
+    shack_hartmann.Ny = Ny;
     % Calculate the shifts
     ac.Nx = Nx;
     ac.Ny = Ny;

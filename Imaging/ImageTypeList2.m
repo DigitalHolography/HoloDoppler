@@ -39,6 +39,7 @@ properties
     phase_diff
     phase_variance
     Quadrants
+    Energy
 end
 
 methods
@@ -81,6 +82,7 @@ methods
         obj.phase_diff = ImageType('phase_diff');
         obj.phase_variance = ImageType('phase_variance');
         obj.Quadrants = ImageType('Quadrants');
+        obj.Energy = ImageType('Energy', struct("E_t", [],"E_stdf_t", [],"E_stdq_t", []));
     end
 
     function clear(obj, varargin)
@@ -554,6 +556,18 @@ methods
 
         end
 
+    end
+
+    function construct_image_from_Frames(obj, Params, Frames)
+        if isempty(Frames)
+            return
+        end
+
+        if obj.Energy.is_selected
+            obj.Energy.parameters.E_t = sum(abs(Frames).^2, "all");
+            obj.Energy.parameters.E_stdf_t = std(Frames, [], "all");
+            obj.Energy.parameters.E_stdq_t = std(abs(Frames).^2, [], "all");
+        end
     end
 
     function construct_image_from_SVD(obj, Params, covin, Uin, szin)

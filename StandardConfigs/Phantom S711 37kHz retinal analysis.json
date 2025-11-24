@@ -16,6 +16,15 @@
     6,
     18.3
   ],
+  "applyshackhartmannfromref": true,
+    "ShackHartmannCorrection": {
+    "ZernikeProjection": true,
+    "zernikeranks": 2,
+    "subapnumpositions": 5,
+    "imagesubapsizeratio": 2,
+    "subaperturemargin": 0.2,
+    "referenceimage": "central subaperture"
+  },
   "spatial_filter": false,
   "hilbert_filter": false,
   "svd_filter": true,
