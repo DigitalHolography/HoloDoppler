@@ -1,3 +1,4 @@
+
 function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask2(FH, Params)
     
     Nx = size(FH, 1);
@@ -12,6 +13,7 @@ function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array]
     subap_ratio = ShackHartmannCorrection.imagesubapsizeratio;
     subap_marg = ShackHartmannCorrection.subaperturemargin;
     ref_image = ShackHartmannCorrection.referenceimage;
+    only_defocus = 0;
     calibration_factor = 60;
 
     switch zernike_ranks
@@ -102,7 +104,7 @@ function [shifts,moment_chunks_crop_array] = compute_images_shifts(FH, Params, n
             end
 
             % svd filtering
-            %[h,~,~] = svd_filter(h, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride, Params.svd_mean);
+            [h,~,~] = svd_filter(h, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride, Params.svd_mean);
 
             sh_mod = abs(fft(h,[],3)).^2;
 
@@ -138,6 +140,9 @@ function [shifts,moment_chunks_crop_array] = compute_images_shifts(FH, Params, n
         shifts(i) = shift;
     end
 
+    % figure, imagesc(reshape(real(shifts),vx,vy));
+    % figure, imagesc(reshape(imag(shifts),vx,vy));
+
 end
 
 function shift = calculate_image_shift(img, ref_img, reticule_radius)
@@ -165,8 +170,8 @@ function shift = calculate_image_shift(img, ref_img, reticule_radius)
 
      [~,shift] = registerImagesCrossCorrelation(img_reg,ref_img);
 
-     shift(1) = mod(shift(1)+numX,numX);
-     shift(2) = mod(shift(2)+numY,numY);
+     shift(1) = shift(1)+numX;
+     shift(2) = shift(2)+numY;
      shift = shift(1) + 1i * shift(2); % x + i y
 end
 
