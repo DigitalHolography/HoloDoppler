@@ -7,14 +7,17 @@ function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array]
         IterShackHartmannMask = ones(Nx,Ny)+1j*zeros(Nx,Ny); % init the phase mask to zero phase
         for ii = 1:ShackHartmannCorrection.N_iterate
             FH = FH .* IterShackHartmannMask;
-            [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask_once(FH, Params);
-            IterShackHartmannMask = ShackHartmannMask;
+            [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array, coefs] = calculate_shackhartmannmask_once(FH, Params);
+            IterShackHartmannMask = IterShackHartmannMask .* ShackHartmannMask;
         end
+        ShackHartmannMask = IterShackHartmannMask;
+    else
+        [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask_once(FH, Params);
     end
 
 end
 
-function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask_once(FH, Params)
+function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array, coefs] = calculate_shackhartmannmask_once(FH, Params)
     Nx = size(FH, 1);
     Ny = size(FH, 2);
     correlation_chunks_array = [];
@@ -27,8 +30,8 @@ function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array]
     subap_ratio = ShackHartmannCorrection.imagesubapsizeratio;
     subap_marg = ShackHartmannCorrection.subaperturemargin;
     ref_image = ShackHartmannCorrection.referenceimage;
-    only_defocus = 0;
-    calibration_factor = 60;
+    only_defocus = ShackHartmannCorrection.onlydefocus;
+    calibration_factor = ShackHartmannCorrection.calibrationfactor;
 
     switch zernike_ranks
         case 2
@@ -57,22 +60,33 @@ function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array]
         coefs = coefs * calibration_factor;
         % Calculate the phase mask finally
         fprintf("Zernike coefficients : \n");
-        disp(coefs);
+        if only_defocus
+            disp(coefs(2));
+        else
+            disp(coefs);
+        end
 
-        [~, zern] = zernikePhase(zernike_indices, Nx, Ny ,2); % Radius to 2 = full field no diaphragm
+        [~, zern] = zernikePhase(zernike_indices, Nx, Ny ); % Radius to 2 = full field no diaphragm
         phase = 0;
-
-        for i = 1:numel(coefs)
-            phase = phase + coefs(i) * zern(:, :, i);
+        
+        if only_defocus
+            phase = coefs(2) * zern(:, :, 2);
+        else
+            for i = 1:numel(coefs)
+                phase = phase + coefs(i) * zern(:, :, i);
+            end
         end
 
         ShackHartmannMask = exp(1i * phase);
 
     else
-        ShackHartmannMask = exp(1i *-stitch_phase(shifts, ones(Nx, Ny), Nx, Ny, shack_hartmann));
+        warning("Being changed");
+        ShackHartmannMask = ones(Nx,Ny)+1j*zeros(Nx,Ny);
+        % ShackHartmannMask = exp(1i *-stitch_phase(shifts, ones(Nx, Ny), Nx, Ny, shack_hartmann));
     end
 
 end
+
 
 function [shifts,moment_chunks_crop_array] = compute_images_shifts(FH, Params, nsubap, subap_ratio)
     % 1 compute images 
@@ -199,7 +213,7 @@ function M_aso = construct_M_aso(nsubap, zernike_indices, Nx, Ny, calibration_fa
     M_aso = zeros(nsubap ^ 2, length(zernike_indices));
 
     for p = 1:numel(zernike_indices)
-        [~, phi] = zernikePhase(zernike_indices(p), Ny, Nx);
+        [~, phi] = zernikePhase(zernike_indices(p), Ny, Nx); % ,2 ?
         phi = phi * calibration_factor;
         
         shifts_2 = zeros(nsubap, nsubap);
@@ -211,8 +225,8 @@ function M_aso = construct_M_aso(nsubap, zernike_indices, Nx, Ny, calibration_fa
                 range_y = (idy - 1) * Nyy + 1:idy * Nyy;
                 chunk = tmp_phi(range_y, range_x);
                 [FX, FY] = gradient(chunk, (2 * pi) / (Nx), (2 * pi) / (Ny));
-                fx = sum(FX,"all")/nnz(FX);
-                fy = sum(FY,"all")/nnz(FY);
+                fx = sum(FX,"all","omitmissing")/nnz(FX);
+                fy = sum(FY,"all","omitmissing")/nnz(FY);
                 shifts_2(idx, idy) = -(fy + 1i * fx) / nsubap / pi;
             end
 

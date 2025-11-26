@@ -60,6 +60,10 @@ if app.ShackHartmannCheckBox.Value
     HD.params.ShackHartmannCorrection.imagesubapsizeratio = app.imagesubapsizeratioEditField.Value;
     HD.params.ShackHartmannCorrection.subaperturemargin = app.subaperturemarginEditField.Value;
     HD.params.ShackHartmannCorrection.referenceimage = app.referenceimageDropDown.Value;
+    HD.params.ShackHartmannCorrection.calibrationfactor = app.CalibrationFactorEditField.Value;
+    HD.params.ShackHartmannCorrection.convergencethreshold = app.ConvergenceThreshold.Value;
+    HD.params.ShackHartmannCorrection.onlydefocus = app.onlydefocusCheckBox.Value;
+
 else
     HD.params.ShackHartmannCorrection = [];
 end
