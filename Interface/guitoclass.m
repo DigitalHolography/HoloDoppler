@@ -52,6 +52,8 @@ HD.params.square = app.square.Value;
 % Shack-Hartmann correction
 HD.params.applyshackhartmannfromref = app.applyshackhartmannfromref.Value;
 if app.ShackHartmannCheckBox.Value
+    HD.params.ShackHartmannCorrection.iterate = app.IterativeCheckBox.Value;
+    HD.params.ShackHartmannCorrection.N_iterate = app.NumberOfIterationEditField.Value;
     HD.params.ShackHartmannCorrection.ZernikeProjection = app.ZernikeProjectionCheckBox.Value;
     HD.params.ShackHartmannCorrection.zernikeranks = app.shackhartmannzernikeranksEditField.Value;
     HD.params.ShackHartmannCorrection.subapnumpositions = app.subapnumpositionsEditField.Value;

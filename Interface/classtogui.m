@@ -52,6 +52,8 @@ app.ShackHartmannCheckBox.Value = ~isempty(HD.params.ShackHartmannCorrection);
 app.applyshackhartmannfromref.Value = HD.params.applyshackhartmannfromref;
 
 if ~isempty(HD.params.ShackHartmannCorrection)
+    app.IterativeCheckBox.Value = HD.params.ShackHartmannCorrection.iterate;
+    app.NumberOfIterationEditField.Value = HD.params.ShackHartmannCorrection.N_iterate;
     app.ZernikeProjectionCheckBox.Value = HD.params.ShackHartmannCorrection.ZernikeProjection;
     app.shackhartmannzernikeranksEditField.Value = HD.params.ShackHartmannCorrection.zernikeranks;
     app.subapnumpositionsEditField.Value = HD.params.ShackHartmannCorrection.subapnumpositions;

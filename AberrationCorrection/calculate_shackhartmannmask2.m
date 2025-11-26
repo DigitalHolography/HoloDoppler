@@ -1,6 +1,20 @@
 
 function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask2(FH, Params)
-    
+    Nx = size(FH, 1);
+    Ny = size(FH, 2);
+    ShackHartmannCorrection = Params.ShackHartmannCorrection;
+    if ShackHartmannCorrection.iterate
+        IterShackHartmannMask = ones(Nx,Ny)+1j*zeros(Nx,Ny); % init the phase mask to zero phase
+        for ii = 1:ShackHartmannCorrection.N_iterate
+            FH = FH .* IterShackHartmannMask;
+            [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask_once(FH, Params);
+            IterShackHartmannMask = ShackHartmannMask;
+        end
+    end
+
+end
+
+function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask_once(FH, Params)
     Nx = size(FH, 1);
     Ny = size(FH, 2);
     correlation_chunks_array = [];
