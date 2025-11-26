@@ -278,6 +278,7 @@ methods
         obj.params.batch_size_registration = 512;
         obj.params.image_registration = true;
         obj.params.applyshackhartmannfromref = false;
+        obj.params.applyautofocusfromref = false;
         obj.params.first_frame = 0;
         obj.params.end_frame = 0;
         obj.params.end_frame = 0;
@@ -563,6 +564,11 @@ methods
             ShackHartmannMask = [];
         end
 
+        if obj.params.applyautofocusfromref
+            z_opti = autofocus(view_ref,obj.params); % update the z distance 
+            obj.params.spatial_propagation = z_opti;
+        end
+
         % 2) Loop over the batches
         if obj.params.parfor_arg == 0
 
@@ -761,6 +767,21 @@ methods
                 if ~isempty(obj.running_averages.running_averages)
                     generate_video(fftshift(obj.running_averages.running_averages.SH, 3), result_folder_path, strcat(image_types{i}), export_raw = 1, temporal_filter = [], square = params.square);
                 end
+
+                mat = [];
+
+            elseif strcmp(image_types{i}, 'Energy')
+                sig_E_t = [];
+                sig_E_stdf_t = [];
+                sig_E_stdq_t = [];
+                for j = 1:length(tmp)
+                    sig_E_t = [sig_E_t tmp{j}.parameters.E_t];
+                    sig_E_stdf_t = [sig_E_stdf_t tmp{j}.parameters.E_stdf_t];
+                    sig_E_stdq_t = [sig_E_stdq_t tmp{j}.parameters.E_stdq_t];
+                end
+                generate_signal(sig_E_t, result_folder_path, 'Energy_t');
+                generate_signal(sig_E_stdf_t, result_folder_path, 'Energy_t');
+                generate_signal(sig_E_stdq_t, result_folder_path, 'Energy_t');
 
                 mat = [];
 

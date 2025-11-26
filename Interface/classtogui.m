@@ -23,7 +23,6 @@ app.positioninfileSlider.Value = double(HD.params.frame_position);
 app.image_registration.Value = HD.params.image_registration;
 app.num_frames.Text = strcat('/ ',num2str(HD.file.num_frames));
 
-
 app.spatial_filter.Value = HD.params.spatial_filter;
 app.spatial_filter_range1.Value = HD.params.spatial_filter_range(1);
 app.spatial_filter_range2.Value = HD.params.spatial_filter_range(2);
@@ -51,12 +50,19 @@ app.square.Value = HD.params.square;
 app.ShackHartmannCheckBox.Value = ~isempty(HD.params.ShackHartmannCorrection);
 app.applyshackhartmannfromref.Value = HD.params.applyshackhartmannfromref;
 
+app.AutofocusFromRef.Value = HD.params.applyautofocusfromref;
+
 if ~isempty(HD.params.ShackHartmannCorrection)
+    app.IterativeCheckBox.Value = HD.params.ShackHartmannCorrection.iterate;
+    app.NumberOfIterationEditField.Value = HD.params.ShackHartmannCorrection.N_iterate;
     app.ZernikeProjectionCheckBox.Value = HD.params.ShackHartmannCorrection.ZernikeProjection;
     app.shackhartmannzernikeranksEditField.Value = HD.params.ShackHartmannCorrection.zernikeranks;
     app.subapnumpositionsEditField.Value = HD.params.ShackHartmannCorrection.subapnumpositions;
     app.imagesubapsizeratioEditField.Value = HD.params.ShackHartmannCorrection.imagesubapsizeratio;
     app.subaperturemarginEditField.Value = HD.params.ShackHartmannCorrection.subaperturemargin;
     app.referenceimageDropDown.Value = HD.params.ShackHartmannCorrection.referenceimage;
+    app.CalibrationFactorEditField.Value = HD.params.ShackHartmannCorrection.calibrationfactor;
+    app.ConvergenceThreshold.Value = HD.params.ShackHartmannCorrection.convergencethreshold;
+    app.onlydefocusCheckBox.Value = HD.params.ShackHartmannCorrection.onlydefocus;
 end
 end

@@ -10,6 +10,8 @@ classdef ShackHartmann
         SigmaFilterPreCorr
         ref_image
         spatialTransformType
+        Nx
+        Ny
     end
     methods
         % methods declaration
