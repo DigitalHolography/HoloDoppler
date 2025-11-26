@@ -8,7 +8,7 @@ function z_opti = autofocus(rend,Params)
     zmin = 0.1;
     zmax = 1;
 
-    options = optimset('TolX',1e-4,'Display','iter','OutputFcn',@(x,optimValues,state) waitbar_update(x,optimValues,state,f));
+    options = optimset('TolX',1e-4,'Display','off','OutputFcn',@(x,optimValues,state) waitbar_update(x,optimValues,state,f));
 
     z_opti = fminbnd(cost,zmin,zmax,options);
 
