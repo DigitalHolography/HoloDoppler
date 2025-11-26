@@ -49,6 +49,8 @@ HD.params.flip_y = app.flip_y.Value;
 HD.params.flip_x = app.flip_x.Value;
 HD.params.square = app.square.Value;
 
+HD.params.applyautofocusfromref = app.AutofocusFromRef.Value;
+
 % Shack-Hartmann correction
 HD.params.applyshackhartmannfromref = app.applyshackhartmannfromref.Value;
 if app.ShackHartmannCheckBox.Value

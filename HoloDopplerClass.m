@@ -278,6 +278,7 @@ methods
         obj.params.batch_size_registration = 512;
         obj.params.image_registration = true;
         obj.params.applyshackhartmannfromref = false;
+        obj.params.applyautofocusfromref = false;
         obj.params.first_frame = 0;
         obj.params.end_frame = 0;
         obj.params.end_frame = 0;
@@ -561,6 +562,11 @@ methods
             ShackHartmannMask = view_ref.ShackHartmannMask; % get the mask to apply to each frame here
         else
             ShackHartmannMask = [];
+        end
+
+        if obj.params.applyautofocusfromref
+            z_opti = autofocus(view_ref,obj.params); % update the z distance 
+            obj.params.spatial_propagation = z_opti;
         end
 
         % 2) Loop over the batches
