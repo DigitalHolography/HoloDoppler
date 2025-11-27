@@ -28,7 +28,6 @@ function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array,
     zernike_ranks = ShackHartmannCorrection.zernikeranks;
     nsubap = ShackHartmannCorrection.subapnumpositions;
     subap_ratio = ShackHartmannCorrection.imagesubapsizeratio;
-    subap_marg = ShackHartmannCorrection.subaperturemargin;
     ref_image = ShackHartmannCorrection.referenceimage;
     only_defocus = ShackHartmannCorrection.onlydefocus;
     calibration_factor = ShackHartmannCorrection.calibrationfactor;
@@ -66,7 +65,7 @@ function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array,
             disp(coefs);
         end
 
-        [~, zern] = zernikePhase(zernike_indices, Nx, Ny ); % Radius to 2 = full field no diaphragm
+        [~, zern] = zernikePhase(zernike_indices, Nx, Ny, 2 ); % Radius to 2 = full field no diaphragm
         phase = 0;
         
         if only_defocus

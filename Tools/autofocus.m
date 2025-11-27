@@ -1,18 +1,82 @@
 function z_opti = autofocus(rend,Params)
     f = waitbar(0, 'Autofocus in progress. Please wait...');
 
-    cost = @(z) cost_function(rend,Params,z);
 
-    % z0 = Params.spatial_propagation;
+    zmin = 0.42;
+    zmax = 0.55;
 
-    zmin = 0.1;
-    zmax = 1;
+    function c = clamp(c,z,zmin,zmax)
+        fprintf("Evaluating at z = %.6f c = %.6f \n", z, c);
+        if (z<zmin || z>zmax)
+            c = 1e12;
+        end
+    end
 
-    options = optimset('TolX',1e-4,'Display','off','OutputFcn',@(x,optimValues,state) waitbar_update(x,optimValues,state,f));
+    cost = @(z) clamp(cost_function(rend,Params,z),z,zmin,zmax);
 
-    z_opti = fminbnd(cost,zmin,zmax,options);
+    z00 = Params.spatial_propagation;
+    % 
+    % zmin = z0 - 0.05;
+    % zmax = z0 + 0.05;
 
+    
+
+    % N=15;
+    % 
+    % zvals = linspace(zmin,zmax,N);
+    % cvals = zeros(1,N);
+    % for k=1:N
+    %     cvals(k) = cost(zvals(k));
+    % end
+    % 
+    % [~,idx] = min(cvals);
+    % 
+    % z_opti = zvals(idx);
+    % 
+    % figure;
+    % plot(zvals,cvals);
+
+    
+
+
+
+
+    options = optimset('TolX',1e-2,'Display','off','MaxFunEvals',30,'OutputFcn',@(x,optimValues,state) waitbar_update(x,optimValues,state,f));
+
+    obj = @(z) (z<zmin || z>zmax) * 1e12 + cost(z);
+    
+    z0 = (zmin + zmax)/2;
+    
+    [zopti, fval, exitflag, output] = fminsearch(obj, z0, options);
+
+    if exitflag ~=1
+        fprintf("Autofocus did not converge. Using keeping value z = %.6f\n", z0);
+        z_opti = z00;
+    else
+        fprintf("Autofocus converged in %d iterations. Optimal z = %.6f with cost = %.6f\n", output.iterations, zopti, fval);
+        z_opti = zopti;
+    end
+    
     close(f);
+end
+
+function v = cost_2(I)
+G = edge(I,'sobel');
+disk = diskMask(size(I,2),size(I,1),0.35);
+v = -mean(G(disk));
+end
+
+function v = cost_3(I)
+disk = diskMask(size(I,2),size(I,1),0.35);
+vals = I(disk);
+
+G = edge(I,'sobel');
+edges = G(disk);
+
+contrast = std(double(vals));
+edgeStrength = mean(edges);
+
+v = -contrast - edgeStrength;
 end
 
 function stop = waitbar_update(x,optimValues,state,f)
@@ -31,9 +95,8 @@ end
 
 function c = cost_function(rend,Params,z)
     img = renderM0(rend,Params,z);
-    Lx = abs(conv2(img, [1 -2 1], 'same'));
-    Ly = abs(conv2(img, [1; -2; 1], 'same'));
-    c = (mean(Lx(:)) + mean(Ly(:)));
+    
+    c = cost_2(img);
     % c = entropy(img);
 end
 
