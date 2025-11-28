@@ -1,7 +1,9 @@
 
 function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask2(FH, Params)
-    Nx = size(FH, 1);
-    Ny = size(FH, 2);
+   
+    
+    FH = extractcentral(FH); % extract central to get a square only
+   
     ShackHartmannCorrection = Params.ShackHartmannCorrection;
     if ShackHartmannCorrection.iterate
         IterShackHartmannMask = ones(Nx,Ny)+1j*zeros(Nx,Ny); % init the phase mask to zero phase
@@ -48,6 +50,7 @@ function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array,
     end
 
     [shifts,moment_chunks_crop_array] = compute_images_shifts(FH, Params, nsubap, subap_ratio);
+    %figure, imagesc(real(reshape(shifts,nsubap,nsubap)))
 
     if ShackHartmannCorrection.ZernikeProjection % if the phase should be a combination of zernike polynomials
         % Zernike projection

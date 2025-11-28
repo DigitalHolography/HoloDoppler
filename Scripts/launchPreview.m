@@ -78,7 +78,9 @@ for ind = 1:numel(paths)
         HD.LoadFile(currentPath);          % Load holo file
         HD.loadParams(paramspath);         % Load parameter settings
         HD.PreviewRendering();
-        % HD.params.spatial_propagation = autofocus(HD.view, HD.params); % Autofocus
+        if HD.params.applyautofocusfromref
+            HD.params.spatial_propagation = autofocus(HD.view, HD.params); % Autofocus
+        end
         HD.PreviewRendering();               % Render the preview
         img = HD.view.getImages({"power_Doppler"});
         imgs{ind} = img{1};

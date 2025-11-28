@@ -198,7 +198,7 @@ methods
                 end
 
                 if ~isempty(obj.ShackHartmannMask)
-                    obj.FH = obj.FH .* obj.ShackHartmannMask;
+                    obj.FH =  extractcentral(extractcentral(obj.FH) .* obj.ShackHartmannMask,0,size(obj.FH,1),size(obj.FH,2));
                 end
 
             else

@@ -1,9 +1,10 @@
 function z_opti = autofocus(rend,Params)
     f = waitbar(0, 'Autofocus in progress. Please wait...');
 
+    
 
-    zmin = 0.42;
-    zmax = 0.55;
+    zmin = Params.autofocus_range(1);
+    zmax = Params.autofocus_range(2);
 
     function c = clamp(c,z,zmin,zmax)
         fprintf("Evaluating at z = %.6f c = %.6f \n", z, c);
@@ -62,6 +63,16 @@ end
 
 function v = cost_2(I)
 G = edge(I,'sobel');
+
+
+% Gx = [-1 0 1; -2 0 2; -1 0 1];
+% Gy = [-1 -2 -1; 0 0 0; 1 2 1];
+% 
+% Ix = conv2(I, Gx, 'same');
+% Iy = conv2(I, Gy, 'same');
+% 
+% G = sqrt(Ix.^2 + Iy.^2);
+
 disk = diskMask(size(I,2),size(I,1),0.35);
 v = -mean(G(disk));
 end

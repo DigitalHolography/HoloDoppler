@@ -279,6 +279,7 @@ methods
         obj.params.image_registration = true;
         obj.params.applyshackhartmannfromref = false;
         obj.params.applyautofocusfromref = false;
+        obj.params.autofocus_range = [0.45,0.52];
         obj.params.first_frame = 0;
         obj.params.end_frame = 0;
         obj.params.end_frame = 0;
