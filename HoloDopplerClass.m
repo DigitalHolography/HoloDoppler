@@ -460,7 +460,7 @@ methods
         fclose(fid);
     end
 
-    function VideoRendering(obj)
+    function result_folder_path = VideoRendering(obj)
         %VideoRendering Construct the Video according to the current params
         close all; % make sure to close  all figs
 
@@ -647,10 +647,10 @@ methods
         fprintf("Video Rendering took : %f s\n", toc(VideoRenderingTime));
 
         %% Save the video
-        obj.SaveVideo();
+        result_folder_path = obj.SaveVideo();
     end
 
-    function SaveVideo(obj, image_types, params)
+    function result_folder_path = SaveVideo(obj, image_types, params)
 
         if nargin < 2
             image_types = obj.params.image_types;

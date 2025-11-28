@@ -227,8 +227,16 @@ function M_aso = construct_M_aso(nsubap, zernike_indices, Nx, Ny, calibration_fa
                 range_y = (idy - 1) * Nyy + 1:idy * Nyy;
                 chunk = tmp_phi(range_y, range_x);
                 [FX, FY] = gradient(chunk, (2 * pi) / (Nx), (2 * pi) / (Ny));
-                fx = sum(FX,"all","omitmissing")/nnz(FX);
-                fy = sum(FY,"all","omitmissing")/nnz(FY);
+                if nnz(FX)>0
+                    fx = sum(FX,"all","omitnan")/nnz(FX);
+                else
+                    fx = 0;
+                end
+                if nnz(FY)>0
+                    fy = sum(FY,"all","omitnan")/nnz(FY);
+                else
+                    fy = 0;
+                end
                 shifts_2(idx, idy) = -(fy + 1i * fx) / nsubap / pi;
             end
 
