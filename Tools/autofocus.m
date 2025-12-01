@@ -51,7 +51,7 @@ function z_opti = autofocus(rend,Params)
     [zopti, fval, exitflag, output] = fminsearch(obj, z0, options);
 
     if exitflag ~=1
-        fprintf("Autofocus did not converge. Using keeping value z = %.6f\n", z0);
+        fprintf("Autofocus did not converge. Using keeping value z = %.6f\n", z00);
         z_opti = z00;
     else
         fprintf("Autofocus converged in %d iterations. Optimal z = %.6f with cost = %.6f\n", output.iterations, zopti, fval);

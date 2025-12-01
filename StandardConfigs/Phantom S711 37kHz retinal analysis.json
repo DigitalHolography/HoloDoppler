@@ -25,7 +25,7 @@
   "svd_stride": [],
   "time_transform": "FFT",
   "flatfield_gw": 35,
-  "applyautofocusfromref": true,
+  "applyautofocusfromref": false,
   "batch_size_registration": 512,
   "buckets_ranges": [
     [
