@@ -164,8 +164,8 @@ end
 bucketsEdit.ValueChangedFcn = @(src, event) buckEditCallBack(src);
 
 % Add validation for frame values
-firstFrameEdit.Limits = [1 Inf];
-lastFrameEdit.Limits = [1 Inf];
+firstFrameEdit.Limits = [0 Inf];
+lastFrameEdit.Limits = [0 Inf];
 firstFrameEdit.RoundFractionalValues = 'on';
 lastFrameEdit.RoundFractionalValues = 'on';
 

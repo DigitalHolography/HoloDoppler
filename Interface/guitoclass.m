@@ -49,15 +49,23 @@ HD.params.flip_y = app.flip_y.Value;
 HD.params.flip_x = app.flip_x.Value;
 HD.params.square = app.square.Value;
 
+HD.params.applyautofocusfromref = app.AutofocusFromRef.Value;
+
 % Shack-Hartmann correction
 HD.params.applyshackhartmannfromref = app.applyshackhartmannfromref.Value;
 if app.ShackHartmannCheckBox.Value
+    HD.params.ShackHartmannCorrection.iterate = app.IterativeCheckBox.Value;
+    HD.params.ShackHartmannCorrection.N_iterate = app.NumberOfIterationEditField.Value;
     HD.params.ShackHartmannCorrection.ZernikeProjection = app.ZernikeProjectionCheckBox.Value;
     HD.params.ShackHartmannCorrection.zernikeranks = app.shackhartmannzernikeranksEditField.Value;
     HD.params.ShackHartmannCorrection.subapnumpositions = app.subapnumpositionsEditField.Value;
     HD.params.ShackHartmannCorrection.imagesubapsizeratio = app.imagesubapsizeratioEditField.Value;
     HD.params.ShackHartmannCorrection.subaperturemargin = app.subaperturemarginEditField.Value;
     HD.params.ShackHartmannCorrection.referenceimage = app.referenceimageDropDown.Value;
+    HD.params.ShackHartmannCorrection.calibrationfactor = app.CalibrationFactorEditField.Value;
+    HD.params.ShackHartmannCorrection.convergencethreshold = app.ConvergenceThreshold.Value;
+    HD.params.ShackHartmannCorrection.onlydefocus = app.onlydefocusCheckBox.Value;
+
 else
     HD.params.ShackHartmannCorrection = [];
 end

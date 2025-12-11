@@ -126,7 +126,7 @@ methods
         %1) Apply corrections to interferograms
 
         doFrames = ParamChanged.spatial_filter || ParamChanged.hilbert_filter || ParamChanged.spatial_filter_range || obj.FramesChanged;
-
+        [Nx, Ny, batch_size] = size(obj.Frames);
         if doFrames % change or if the frames changed
 
             if Params.hilbert_filter
@@ -139,6 +139,9 @@ methods
             end
 
         end
+
+        obj.Output.construct_image_from_Frames(Params, obj.Frames);
+
 
         if doFrames % change or if the frames changed
 
@@ -189,13 +192,13 @@ methods
                 if ~Params.applyshackhartmannfromref || isempty(obj.ShackHartmannMask) % in case we apply ShackHartmann from precalculated Mask
 
                     if doFH || ParamChanged.ShackHartmannCorrection || isempty(obj.ShackHartmannMask)
-                        [obj.ShackHartmannMask, obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH, Params.spatial_transformation, Params.spatial_propagation, Params.time_range, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
+                        [obj.ShackHartmannMask, obj.moment_chunks_crop_array] = calculate_shackhartmannmask2(obj.FH, Params);
                     end
 
                 end
 
                 if ~isempty(obj.ShackHartmannMask)
-                    obj.FH = obj.FH .* obj.ShackHartmannMask;
+                    obj.FH =  extractcentral(extractcentral(obj.FH) .* obj.ShackHartmannMask,0,size(obj.FH,1),size(obj.FH,2));
                 end
 
             else
@@ -212,9 +215,9 @@ methods
 
             switch Params.spatial_transformation
                 case "angular spectrum"
-                    obj.H = ifft2(obj.FH);
+                    obj.H = ifft2(obj.FH) .* sqrt(Nx * Ny);
                 case "Fresnel"
-                    obj.H = fftshift(fftshift(fft2(obj.FH), 1), 2); %.*obj.PhaseFactor;
+                    obj.H = fftshift(fftshift(fft2(obj.FH), 1), 2) ./ sqrt(Nx * Ny); %.*obj.PhaseFactor;
                 case "twin image removal"
                     obj.H = twin_image_removal_(single(obj.Frames),[],ParamChanged,Params);
                 case "None"
@@ -276,7 +279,7 @@ methods
                 case 'ICA'
                     obj.SH = short_time_ICA(obj.H);
                 case 'FFT'
-                    obj.SH = fft(obj.H, [], 3);
+                    obj.SH = fft(obj.H, [], 3) ./ sqrt(batch_size);
                 case 'Wavelet_Morlet'
                     obj.SH = morlet1D_transform_3rdDim(obj.H, [], 3);
                 case 'autocorrelation'
