@@ -1,4 +1,6 @@
-function A_padded = pad3DToSquare(A)
+function A_padded = pad3DToSquare(A, ND)
+
+    
     % Get size of the 3D array
     [rows, cols, ~] = size(A);
     if rows == cols 
@@ -6,8 +8,12 @@ function A_padded = pad3DToSquare(A)
         return
     end
     
+    [NY, NX, ~] = size(A);
     % Determine the target size
-    targetSize = max(rows, cols);
+    if nargin < 2
+        ND = max(NX, NY);
+    end
+    targetSize = ND;
     
     % Compute padding for rows and columns
     rowPadTotal = targetSize - rows;

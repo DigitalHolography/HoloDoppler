@@ -2,7 +2,7 @@
 function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask2(FH, Params)
    
     
-    FH = extractcentral(FH); % extract central to get a square only
+    FH = (FH); % extract central to get a square only
    
     ShackHartmannCorrection = Params.ShackHartmannCorrection;
     if ShackHartmannCorrection.iterate
@@ -50,16 +50,24 @@ function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array,
     end
 
     [shifts,moment_chunks_crop_array] = compute_images_shifts(FH, Params, nsubap, subap_ratio);
-    %figure, imagesc(real(reshape(shifts,nsubap,nsubap)))
+
+    figure, imagesc(real(shifts))
+
+    shifts = reshape(shifts,1,[]);
+
+    
 
     if ShackHartmannCorrection.ZernikeProjection % if the phase should be a combination of zernike polynomials
         % Zernike projection
-        M_aso = construct_M_aso(nsubap, zernike_indices, Nx, Ny, calibration_factor);
-        Y = cat(1, real(shifts), imag(shifts));
-        M_aso_concat = cat(1, real(M_aso), imag(M_aso));
+        M_aso = construct_M_aso(Nx, Ny, zernike_indices, nsubap, nsubap);
+        Y = cat(2, real(shifts), imag(shifts))';
+
+        for k=1:size(M_aso,4)
+            M_aso_concat(:,k) = cat(2, reshape(M_aso(1,:,:,k),1,[]),reshape(M_aso(2,:,:,k),1,[]));
+        end
+
         % solve linear system
         coefs = M_aso_concat \ Y;
-        coefs = coefs * calibration_factor;
         % Calculate the phase mask finally
         fprintf("Zernike coefficients : \n");
         if only_defocus
@@ -84,7 +92,6 @@ function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array,
     else
         warning("Being changed");
         ShackHartmannMask = ones(Nx,Ny)+1j*zeros(Nx,Ny);
-        % ShackHartmannMask = exp(1i *-stitch_phase(shifts, ones(Nx, Ny), Nx, Ny, shack_hartmann));
     end
 
 end
@@ -97,19 +104,23 @@ function [shifts,moment_chunks_crop_array] = compute_images_shifts(FH, Params, n
     Nt = size(FH,3);
     vx = nsubap; % num of SubAp in x direction
     vy = nsubap; % num of SubAp in y direction
-    Nxx = floor(Nx / vx * subap_ratio); % size of new SubAp in x Nsub_ap == size ratio n_SubAp_inter == num positions
-    Nyy = floor(Ny / vy * subap_ratio); % size of new SubAp in y
+    kx = subap_ratio; % num of overlapping sub ap between two sub aps
+    ky = subap_ratio; % num of overlapping sub ap between two sub aps
 
-    stridex = floor(Nx / vx); % stride x between two SubAp
-    stridey = floor(Ny / vy); % stride y between two SubAp
+    Nxx = floor(Nx / vx); % size of new SubAp in x Nsub_ap 
+    Nyy = floor(Ny / vy );
+
+    stridex = floor(Nx / (vx*kx) ); % stride x between two SubAp
+    stridey = floor(Ny / (vy*ky) ); % stride y between two SubAp
+
     offsetx = floor(stridex/2); % center of SubAp in x
     offsety = floor(stridey/2); % center of SubAp in y
 
     moment_chunks_crop_array = zeros(Nx * subap_ratio, Ny * subap_ratio);
 
     images_mat = zeros(Nyy, Nxx, vx * vy);
-    for idy = 1:vy        
-        for idx = 1:vx
+    for idy = 1:((vy-1)*ky+1)        
+        for idx = 1:((vx-1)*kx+1)
             
             % Construction of subaperture image
             
@@ -119,7 +130,7 @@ function [shifts,moment_chunks_crop_array] = compute_images_shifts(FH, Params, n
             idx_range = idx_range(idx_range > 0 & idx_range <= Nx);
             idy_range = idy_range(idy_range > 0 & idy_range <= Ny);
             
-            fh = FH(idx_range, idy_range, :);
+            fh = pad3DToSquare(FH(idx_range, idy_range, :));
             % propagate wave
 
             switch Params.spatial_transformation
@@ -163,11 +174,13 @@ function [shifts,moment_chunks_crop_array] = compute_images_shifts(FH, Params, n
     end
     
     % calculate the shifts between images and reference image
-    shifts = zeros(vx * vy, 1) +  1j*zeros(vx * vy, 1);
+    shifts = zeros(vx, vy) +  1j*zeros(vx, vy);
     
-    for i = 1 : vx * vy
-        shift = calculate_image_shift(images_mat(:, :, i), reference_image, Params.registration_disc_ratio); % Here we take registration disc ratio as reticule radius
-        shifts(i) = shift;
+    for i = 1 : vx 
+        for j = 1 : vy
+            shift = calculate_image_shift(images_mat(:, :, i), reference_image, Params.registration_disc_ratio); % Here we take registration disc ratio as reticule radius
+            shifts(i,j) = shift;
+        end
     end
 
     % figure, imagesc(reshape(real(shifts),vx,vy));
@@ -180,69 +193,66 @@ function shift = calculate_image_shift(img, ref_img, reticule_radius)
     numY = size(img, 2);
     numX = size(img, 1);
 
+    p1 = prctile(img(:), 1);
+    p99 = prctile(img(:), 99);
+    img = min(max(img, p1), p99);
+
+    p1r = prctile(ref_img(:), 1);
+    p99r = prctile(ref_img(:), 99);
+    ref_img = min(max(ref_img, p1r), p99r);
+
     if reticule_radius > 0
         disk_ratio = reticule_radius;
         disk = diskMask(numY, numX, disk_ratio);
-
         if size(disk, 1) ~= size(img, 1)
             disk = disk';
         end
-
     else
         disk = ones([numY, numX]);
     end
 
-    img_reg = img .* disk - disk .* sum(img .* disk, [1, 2]) / nnz(disk); % minus the mean in the disc of each frame
-    img_reg = img_reg ./ (max(abs(img_reg), [], [1, 2])); % rescaling each frame but keeps mean at zero
+    img_reg = img .* disk - disk .* sum(img .* disk, [1, 2]) / nnz(disk);
+    img_reg = img_reg ./ max(abs(img_reg), [], [1, 2]);
 
-    ref_img = ref_img .* disk - disk .* sum(ref_img .* disk, [1, 2]) / nnz(disk); % minus the mean
-    ref_img = ref_img ./ (max(abs(ref_img), [], [1, 2])); % rescaling but keeps mean at zero
+    ref_img = ref_img .* disk - disk .* sum(ref_img .* disk, [1, 2]) / nnz(disk);
+    ref_img = ref_img ./ max(abs(ref_img), [], [1, 2]);
 
-     [~,shift] = registerImagesCrossCorrelation(img_reg,ref_img);
+    [~, shift] = registerImagesCrossCorrelationSubPix(img_reg, ref_img);
 
-     shift(1) = shift(1)+numX;
-     shift(2) = shift(2)+numY;
-     shift = shift(1) + 1i * shift(2); % x + i y
+     shift = shift(1) + 1i * shift(2);
 end
 
-function M_aso = construct_M_aso(nsubap, zernike_indices, Nx, Ny, calibration_factor)
 
-    vx = nsubap; % num of SubAp in x direction
-    vy = nsubap; % num of SubAp in y direction
-    Nxx = floor(Nx / vx); % size of new SubAp in x
-    Nyy = floor(Ny / vy); % size of new SubAp in y
+function M = construct_M_aso(Nx, Ny, mode_indices, sub_nx, sub_ny, dx, dy)
 
-    M_aso = zeros(nsubap ^ 2, length(zernike_indices));
+    if nargin < 6
+        dx = 1;
+        dy = 1;
+    end
 
-    for p = 1:numel(zernike_indices)
-        [~, phi] = zernikePhase(zernike_indices(p), Ny, Nx); % ,2 ?
-        phi = phi * calibration_factor;
-        
-        shifts_2 = zeros(nsubap, nsubap);
+    n_modes = numel(mode_indices);
+    M = zeros(2, sub_ny, sub_nx, n_modes);
 
-        for idx = 1:vx
-            for idy = 1:vy
-                tmp_phi = phi * pi;
-                range_x = (idx - 1) * Nxx + 1:idx * Nxx;
-                range_y = (idy - 1) * Nyy + 1:idy * Nyy;
-                chunk = tmp_phi(range_y, range_x);
-                [FX, FY] = gradient(chunk, (2 * pi) / (Nx), (2 * pi) / (Ny));
-                if nnz(FX)>0
-                    fx = sum(FX,"all","omitnan")/nnz(FX);
-                else
-                    fx = 0;
-                end
-                if nnz(FY)>0
-                    fy = sum(FY,"all","omitnan")/nnz(FY);
-                else
-                    fy = 0;
-                end
-                shifts_2(idx, idy) = -(fy + 1i * fx) / nsubap / pi;
+    for k = 1:n_modes
+        Z = zernikePhase(mode_indices(k), Ny, Nx);
+
+        [dZdx,dZdy] = gradient(Z, dx, dy);
+
+        for iy = 1:sub_ny
+            for ix = 1:sub_nx
+                y_start = (iy - 1) * floor(Ny / sub_ny) + 1;
+                y_end   = y_start + floor(Ny / sub_ny) - 1;
+                x_start = (ix - 1) * floor(Nx / sub_nx) + 1;
+                x_end   = x_start + floor(Nx / sub_nx) - 1;
+
+                dZdx_sub = dZdx(y_start:y_end, x_start:x_end);
+                dZdy_sub = dZdy(y_start:y_end, x_start:x_end);
+
+                dZdx_avg = mean(dZdx_sub, "all", "omitnan");
+                dZdy_avg = mean(dZdy_sub, "all", "omitnan");
+
+                M(:, iy, ix, k) = [dZdx_avg; dZdy_avg];
             end
-
         end
-
-        shifts = reshape(shifts_2, [nsubap * nsubap 1]);
-        M_aso(:, p) = shifts;
     end
 end

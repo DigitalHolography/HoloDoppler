@@ -27,6 +27,7 @@ app.spatial_filter.Value = HD.params.spatial_filter;
 app.spatial_filter_range1.Value = HD.params.spatial_filter_range(1);
 app.spatial_filter_range2.Value = HD.params.spatial_filter_range(2);
 app.spatial_transformation.Items = ["Fresnel","angular spectrum","twin image removal","None"];
+app.Padding_num.Value = HD.params.Padding_num;
 app.spatial_transformation.Value = HD.params.spatial_transformation;
 app.spatial_propagation.Value = HD.params.spatial_propagation;
 app.svd_filter.Value = HD.params.svd_filter;
