@@ -30,7 +30,6 @@ function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array,
     zernike_ranks = ShackHartmannCorrection.zernikeranks;
     nsubap = ShackHartmannCorrection.subapnumpositions;
     subap_ratio = ShackHartmannCorrection.imagesubapsizeratio;
-    ref_image = ShackHartmannCorrection.referenceimage;
     only_defocus = ShackHartmannCorrection.onlydefocus;
     calibration_factor = ShackHartmannCorrection.calibrationfactor;
 
@@ -88,7 +87,7 @@ function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array,
             end
         end
 
-        ShackHartmannMask = exp(1i * phase);
+        ShackHartmannMask = exp(1i * (-calibration_factor) * phase);
 
     else
         warning("Being changed");
@@ -121,7 +120,7 @@ function [shifts,moment_chunks_crop_array] = compute_images_shifts(FH, Params, n
     ny_big = ((vy-1)*ky + 1) * Nyy;
     
     moment_chunks_crop_array = zeros(nx_big, ny_big);
-    images_mat = zeros(Nyy, Nxx, ((vy-1)*ky + 1) * ((vx-1)*kx + 1));
+    images_mat = zeros(Nyy, Nxx, ((vy-1)*ky + 1), ((vx-1)*kx + 1));
     
     cnt = 1;
     
@@ -160,7 +159,7 @@ function [shifts,moment_chunks_crop_array] = compute_images_shifts(FH, Params, n
                 img = imresize(img,[Nxx Nyy]);
             end
     
-            images_mat(:,:,cnt) = img';
+            images_mat(:,:,idx,idy) = img';
             cnt = cnt + 1;
     
             bx = (idx-1)*Nxx + (1:Nxx);
@@ -181,10 +180,10 @@ function [shifts,moment_chunks_crop_array] = compute_images_shifts(FH, Params, n
     % calculate the shifts between images and reference image
     shifts = zeros(vx, vy) +  1j*zeros(vx, vy);
     
-    for i = 1 : vx 
-        for j = 1 : vy
-            shift = calculate_image_shift(images_mat(:, :, i), reference_image, Params.registration_disc_ratio); % Here we take registration disc ratio as reticule radius
-            shifts(i,j) = shift;
+    for ix = 1 : vx 
+        for jy = 1 : vy
+            shift = calculate_image_shift(images_mat(:, :, ix, jy), reference_image, 0); % Here we take registration disc ratio as reticule radius
+            shifts(ix,jy) = shift;
         end
     end
 
