@@ -3,7 +3,7 @@ function A_padded = pad3DToSquare(A, ND)
     
     % Get size of the 3D array
     [rows, cols, ~] = size(A);
-    if rows == cols 
+    if rows == cols && rows == ND
         A_padded = A;
         return
     end
