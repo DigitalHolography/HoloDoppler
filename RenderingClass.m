@@ -177,14 +177,14 @@ methods
                     end
 
                     if ParamChanged.spatial_propagation || ParamChanged.Padding_num || ParamChanged.spatial_transformation || isempty(obj.SpatialKernel)
-                        if ~isempty(Params.ShackHartmannCorrection)
+                        if isempty(Params.ShackHartmannCorrection)
                             obj.SpatialKernel = propagation_kernelAngularSpectrum(ND, ND, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
                         else
                             obj.SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
                         end
 
                     end
-                    if ~isempty(Params.ShackHartmannCorrection)
+                    if isempty(Params.ShackHartmannCorrection)
                         obj.FH = fft2(single(pad3DToSquare(obj.Frames, ND))); % zero pading in a square of max(Nx NY) size
                     else
                         obj.FH = fft2(single(obj.Frames));

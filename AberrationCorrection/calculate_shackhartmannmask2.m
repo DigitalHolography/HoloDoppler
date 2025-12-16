@@ -52,6 +52,7 @@ function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array,
     [shifts,moment_chunks_crop_array] = compute_images_shifts(FH, Params, nsubap, subap_ratio);
 
     figure, imagesc(real(shifts))
+    figure, imagesc(imag(shifts))
 
     shifts = reshape(shifts,1,[]);
 
@@ -98,73 +99,77 @@ end
 
 
 function [shifts,moment_chunks_crop_array] = compute_images_shifts(FH, Params, nsubap, subap_ratio)
-    % 1 compute images 
     Nx = size(FH,1);
     Ny = size(FH,2);
     Nt = size(FH,3);
-    vx = nsubap; % num of SubAp in x direction
-    vy = nsubap; % num of SubAp in y direction
-    kx = subap_ratio; % num of overlapping sub ap between two sub aps
-    ky = subap_ratio; % num of overlapping sub ap between two sub aps
-
-    Nxx = floor(Nx / vx); % size of new SubAp in x Nsub_ap 
-    Nyy = floor(Ny / vy );
-
-    stridex = floor(Nx / (vx*kx) ); % stride x between two SubAp
-    stridey = floor(Ny / (vy*ky) ); % stride y between two SubAp
-
-    offsetx = floor(stridex/2); % center of SubAp in x
-    offsety = floor(stridey/2); % center of SubAp in y
-
-    moment_chunks_crop_array = zeros(Nx * subap_ratio, Ny * subap_ratio);
-
-    images_mat = zeros(Nyy, Nxx, vx * vy);
-    for idy = 1:((vy-1)*ky+1)        
-        for idx = 1:((vx-1)*kx+1)
-            
-            % Construction of subaperture image
-            
-            idx_range = (idx-1) * stridex + 1 + offsetx - floor(Nxx/2) : (idx-1) * stridex + 1 + offsetx + floor(Nxx/2);
-            idy_range = (idy-1) * stridey + 1 + offsety - floor(Nyy/2) : (idy-1) * stridey + 1 + offsety + floor(Nyy/2);
-
-            idx_range = idx_range(idx_range > 0 & idx_range <= Nx);
-            idy_range = idy_range(idy_range > 0 & idy_range <= Ny);
-            
+    
+    vx = nsubap;
+    vy = nsubap;
+    kx = subap_ratio;
+    ky = subap_ratio;
+    
+    Nxx = floor(Nx / vx);
+    Nyy = floor(Ny / vy);
+    
+    stridex = floor(Nx / ((vx-1)*kx + 1));
+    stridey = floor(Ny / ((vy-1)*ky + 1));
+    
+    offsetx = floor(stridex/2);
+    offsety = floor(stridey/2);
+    
+    nx_big = ((vx-1)*kx + 1) * Nxx;
+    ny_big = ((vy-1)*ky + 1) * Nyy;
+    
+    moment_chunks_crop_array = zeros(nx_big, ny_big);
+    images_mat = zeros(Nyy, Nxx, ((vy-1)*ky + 1) * ((vx-1)*kx + 1));
+    
+    cnt = 1;
+    
+    for idy = 1:((vy-1)*ky + 1)
+        for idx = 1:((vx-1)*kx + 1)
+    
+            cx = (idx-1)*stridex + 1 + offsetx;
+            cy = (idy-1)*stridey + 1 + offsety;
+    
+            idx_range = cx - floor(Nxx/2) : cx + ceil(Nxx/2) - 1;
+            idy_range = cy - floor(Nyy/2) : cy + ceil(Nyy/2) - 1;
+    
+            idx_range = max(1, min(Nx, idx_range));
+            idy_range = max(1, min(Ny, idy_range));
+    
             fh = pad3DToSquare(FH(idx_range, idy_range, :));
-            % propagate wave
-
+    
             switch Params.spatial_transformation
                 case "angular spectrum"
                     h = ifft2(fh) .* sqrt(Nxx * Nyy);
                 case "Fresnel"
-                    h = fftshift(fftshift(fft2(fh), 1), 2) ./ sqrt(Nxx * Nyy); %.*obj.PhaseFactor;
-                case "twin image removal"
-                    h = single(fh);
-                case "None"
+                    h = fftshift(fftshift(fft2(fh),1),2) ./ sqrt(Nxx * Nyy);
+                case {"twin image removal","None"}
                     h = single(fh);
             end
-
-            % svd filtering
-            [h,~,~] = svd_filter(h, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride, Params.svd_mean);
-
+    
+            [h,~,~] = svd_filter(h, Params.svd_threshold, Params.time_range(1), ...
+                                 Params.fs, Params.svd_stride, Params.svd_mean);
+    
             sh_mod = abs(fft(h,[],3)).^2;
-
-            img = moment0(sh_mod, Params.time_range(1), Params.time_range(2), Params.fs, Nt, Params.flatfield_gw);
-
-            if any(size(img) ~= [Nxx, Nyy]) % for edges without the full range
-                img = imresize(img, [Nxx, Nyy]);
+    
+            img = moment0(sh_mod, Params.time_range(1), Params.time_range(2), ...
+                          Params.fs, Nt, Params.flatfield_gw);
+    
+            if ~isequal(size(img),[Nxx Nyy])
+                img = imresize(img,[Nxx Nyy]);
             end
-            
-            images_mat(:, :, (idy - 1) * vx + idx) = img';
+    
+            images_mat(:,:,cnt) = img';
+            cnt = cnt + 1;
+    
+            bx = (idx-1)*Nxx + (1:Nxx);
+            by = (idy-1)*Nyy + (1:Nyy);
+    
+            moment_chunks_crop_array(bx,by) = img;
+        end
+    end
 
-            idx_range_big = (idx-1) * Nxx + 1 : (idx) * Nxx + 1;
-            idy_range_big = (idy-1) * Nyy + 1 : (idy) * Nyy + 1;
-            
-            moment_chunks_crop_array(idx_range_big, idy_range_big) = imresize(img,[length(idx_range_big),length(idy_range_big)]);
-            
-        end 
-        
-    end 
 
     if strcmp(Params.ShackHartmannCorrection.referenceimage,"central subaperture")
         % use the central image as reference
