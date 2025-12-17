@@ -7,6 +7,7 @@ classdef ImageTypeList2 < handle
         power_2_Doppler
         color_Doppler
         directional_Doppler
+        power_01_Doppler
         M0sM1r
         velocity_estimate
         phase_variation
@@ -27,6 +28,7 @@ classdef ImageTypeList2 < handle
             obj.power_2_Doppler = ImageType('power2');
             obj.color_Doppler = ImageType('color', struct('freq_low', [], 'freq_high', []));
             obj.directional_Doppler = ImageType('directional', struct('M0_pos', [], 'M0_neg', []));
+            obj.power_01_Doppler = ImageType('power_01_Doppler');
             obj.M0sM1r = ImageType('ratio');
             obj.velocity_estimate = ImageType('velocity');
             obj.phase_variation = ImageType('phase_variation');
@@ -128,6 +130,12 @@ classdef ImageTypeList2 < handle
             if obj.directional_Doppler.is_selected % Directional Doppler has been chosen
                 [M0_pos, M0_neg] = directional(SH, Params.f1, Params.f2, Params.fs, Params.batch_size, Params.flatfield_gw);
                 obj.directional_Doppler.image = construct_directional_image( gather(M0_pos), gather(M0_neg));
+            end
+
+            if obj.power_01_Doppler.is_selected % Directional Doppler has been chosen
+                img0 = moment0(SH, Params.f1, Params.f2, Params.fs, Params.batch_size, Params.flatfield_gw);
+                img1 = moment1(SH, Params.f1, Params.f2, Params.fs, Params.batch_size, Params.flatfield_gw);
+                obj.power_01_Doppler.image = img;
             end
             
             if obj.spectrogram.is_selected

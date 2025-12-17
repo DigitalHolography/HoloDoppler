@@ -7,6 +7,7 @@ properties
     power_2_Doppler
     color_Doppler
     directional_Doppler
+    power_01_Doppler
     pure_PCA
     spectrogram
     broadening
@@ -50,6 +51,7 @@ methods
         obj.power_2_Doppler = ImageType('power2');
         obj.color_Doppler = ImageType('color', struct('freq_low', [], 'freq_high', []));
         obj.directional_Doppler = ImageType('directional', struct('M0_pos', [], 'M0_neg', []));
+        obj.power_01_Doppler = ImageType('power_01_Doppler');
         obj.pure_PCA = ImageType('PCA');
         obj.spectrogram = ImageType('spectrogram');
         obj.broadening = ImageType('broadening');
@@ -220,6 +222,42 @@ methods
         if obj.power_2_Doppler.is_selected % Power Doppler has been chosen
             img = moment2(SH_mod, f1, f2, Params.fs, NT, Params.flatfield_gw);
             obj.power_2_Doppler.image = img;
+        end
+
+        if obj.power_01_Doppler.is_selected % Power Doppler has been chosen
+            img0 = moment0(SH_mod, f1, f2, Params.fs, Params.batch_size, Params.flatfield_gw);
+            img1 = moment1(SH_mod, f1, f2, Params.fs, Params.batch_size, Params.flatfield_gw);
+
+            img0 = double(img0);
+            img1 = imgaussfilt(img1,3);
+
+
+            
+            img0n = img0 / max(img0(:));
+            rgb = repmat(img0n,[1 1 3]);
+            
+            m = max(abs(img1(:)));
+            img1n = abs(img1) / m;
+            
+            th = 0.0;
+            w = max(0, (img1n - th) / (1 - th));
+            
+            gamma = 1;
+            w = w .^ gamma;
+            
+            pos = img1 > m/16;
+            neg = img1 < -m/16;
+            
+            red  = rgb(:,:,1);
+            blue = rgb(:,:,3);
+            
+            rgb(:,:,1) = red  .* (1 - w .* pos) + w .* pos;
+            rgb(:,:,3) = blue .* (1 - w .* neg) + w .* neg;
+
+            obj.power_01_Doppler.image = rgb;
+            
+            % figure,imshow(rgb)
+
         end
 
         if obj.color_Doppler.is_selected % Color Doppler has been chosen

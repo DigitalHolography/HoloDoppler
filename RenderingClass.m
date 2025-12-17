@@ -38,6 +38,9 @@ methods
         Params.spatial_filter_range = [0, 1];
         Params.spatial_transformation = "Fresnel";
         Params.spatial_propagation = 0.5;
+        Params.Padding_num = 0;
+
+
         Params.svd_filter = 1;
         Params.svdx_filter = false;
         Params.svdx_t_filter = false;
@@ -159,29 +162,53 @@ methods
 
         %2) Spatial transformation (from Frames to H)
 
-        doFH = doFrames || ParamChanged.spatial_transformation || ParamChanged.spatial_propagation || ParamChanged.ShackHartmannCorrection || obj.FramesChanged || ~options.cache_intermediate_results;
+        doFH = doFrames || ParamChanged.Padding_num || ParamChanged.spatial_transformation || ParamChanged.spatial_propagation || ParamChanged.ShackHartmannCorrection || obj.FramesChanged || ~options.cache_intermediate_results;
 
         if doFH % change or if the frames changed
 
             switch Params.spatial_transformation
                 case "angular spectrum"
 
-                    if ParamChanged.spatial_propagation || ParamChanged.spatial_transformation || isempty(obj.SpatialKernel)
-                        [NY, NX, ~] = size(obj.Frames);
-                        ND = max(NX, NY);
-                        obj.SpatialKernel = propagation_kernelAngularSpectrum(ND, ND, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
+                    [NY, NX, ~] = size(obj.Frames);
+                    if Params.Padding_num > 0 
+                        ND = Params.Padding_num;
+                    else 
+                        ND = max(NX, NY);                        
                     end
 
-                    obj.FH = fft2(single(pad3DToSquare(obj.Frames))); % zero pading in a square of max(Nx NY) size
+                    if ParamChanged.spatial_propagation || ParamChanged.Padding_num || ParamChanged.spatial_transformation || isempty(obj.SpatialKernel)
+                        if isempty(Params.ShackHartmannCorrection)
+                            obj.SpatialKernel = propagation_kernelAngularSpectrum(ND, ND, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
+                        else
+                            obj.SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
+                        end
+
+                    end
+                    if isempty(Params.ShackHartmannCorrection)
+                        obj.FH = fft2(single(pad3DToSquare(obj.Frames, ND))); % zero pading in a square of max(Nx NY) size
+                    else
+                        obj.FH = fft2(single(obj.Frames));
+                    end
                     obj.FH = obj.FH .* fftshift(obj.SpatialKernel);
                 case "Fresnel"
+                    
+                    [NY, NX, ~] = size(obj.Frames);
 
-                    if ParamChanged.spatial_propagation || ParamChanged.spatial_transformation || isempty(obj.SpatialKernel)
-                        [NY, NX, ~] = size(obj.Frames);
-                        [obj.SpatialKernel, obj.PhaseFactor] = propagation_kernelFresnel(NX, NY, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
+                    if Params.Padding_num > 0 
+                        NY = Params.Padding_num;
+                        NX = Params.Padding_num;
                     end
 
-                    obj.FH = single(obj.Frames) .* obj.SpatialKernel;
+                    if ParamChanged.spatial_propagation || ParamChanged.Padding_num || ParamChanged.spatial_transformation || isempty(obj.SpatialKernel)
+                        
+                        [obj.SpatialKernel, obj.PhaseFactor] = propagation_kernelFresnel(NX, NY, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
+                    end
+                    if Params.Padding_num > 0 
+                        obj.FH = single(pad3DToSquare(obj.Frames, Params.Padding_num)) .* obj.SpatialKernel;
+                    else
+                        obj.FH = single(obj.Frames) .* obj.SpatialKernel;
+                    end
+
                 case "None"
                     obj.FH = [];
 
@@ -198,7 +225,7 @@ methods
                 end
 
                 if ~isempty(obj.ShackHartmannMask)
-                    obj.FH =  extractcentral(extractcentral(obj.FH) .* obj.ShackHartmannMask,0,size(obj.FH,1),size(obj.FH,2));
+                    obj.FH =  obj.FH .* obj.ShackHartmannMask;
                 end
 
             else
