@@ -17,7 +17,9 @@ methods
     function obj = HoloDopplerClass()
         %HoloDopplerClass Construct an instance of this class
         setInitParams(obj);
-        addpath("AberrationCorrection\", "FolderManagement\", "Imaging\", "Interface\", "ReaderClasses\", "Rendering\", "Saving\", "Scripts\", "Saving\Registering\", "Tools\", "StandardConfigs\");
+        if ~isdeployed
+            addpath("AberrationCorrection\", "FolderManagement\", "Imaging\", "Interface\", "ReaderClasses\", "Rendering\", "Saving\", "Scripts\", "Saving\Registering\", "Tools\", "StandardConfigs\");
+        end
         obj.view = RenderingClass();
         set(0, 'defaultfigurecolor', [1 1 1]);
     end
