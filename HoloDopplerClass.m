@@ -861,7 +861,8 @@ methods
         fclose(fid);
 
         % copy the HD version file
-        copyfile('version.txt', result_folder_path);
+        appRoot = fileparts(mfilename('fullpath'));
+        copyfile(fullfile(appRoot, 'version.txt'), result_folder_path);
         % Try to get git commit hash and branch, and log to git.txt
         try
             % Get current commit hash
