@@ -3,6 +3,8 @@ function holodopplercli(varargin)
     appRoot = fileparts(mfilename('fullpath'));
     versionFile = fullfile(appRoot, "version.txt");
 
+    fprintf("Application root is %s\n", appRoot);
+
     if isfile(versionFile)
         version_tag = readlines(versionFile);
         fprintf("HoloDoppler version : %s\n", version_tag);
@@ -10,29 +12,39 @@ function holodopplercli(varargin)
         fprintf("HoloDoppler version : Unknown (version.txt not found)\n");
     end
 
-    % --- ARGUMENT PARSING & PATH SELECTION ---
+    % --- ARGUMENT PARSING ---
     mode = 'single';
     inputPath = "";
     paths = string.empty;
+    paramspath = "";
 
-    % Check arguments
-    if nargin > 0
-        arg1 = string(varargin{1});
+    idx = 1;
+    while idx <= nargin
+        arg = string(varargin{idx});
 
-        if arg1 == "-b"
-            mode = 'batch';
-
-            if nargin > 1
-                inputPath = string(varargin{2});
-            end
-
-        else
-            mode = 'single';
-            inputPath = arg1;
+        switch arg
+            case "-batch"
+                mode = 'batch';
+            case "-config"
+                % Check if next argument exists and isn't another flag
+                if idx < nargin && ~startsWith(string(varargin{idx+1}), "-")
+                    paramspath = string(varargin{idx+1});
+                    idx = idx + 1; % Skip next arg as it was the path
+                else
+                    % Open file explorer for config if flag present but no path provided
+                    [json_name, json_path] = uigetfile('*.json', 'Select parameter file (.json)');
+                    if ~isequal(json_name, 0)
+                        paramspath = fullfile(json_path, json_name);
+                    end
+                end
+            otherwise
+                % Assume this is the input path (holo file or batch list)
+                inputPath = arg;
         end
-
+        idx = idx + 1;
     end
 
+    % --- PATH SELECTION ---
     try
 
         if strcmp(mode, 'batch')
@@ -79,39 +91,48 @@ function holodopplercli(varargin)
     end
 
     % --- PARAMETER SELECTION ---
-    % Get default or user-defined parameter file
-    paramspath = [];
+    
+    % 1. Check if paramspath was provided via CLI (-config)
+    if paramspath ~= ""
+        if ~isfile(paramspath)
+             fprintf("[WARNING] Custom parameter file not found: %s\n", paramspath);
+             paramspath = ""; % Reset to force fallback
+        else
+             fprintf("Using Custom Parameter file: %s\n", paramspath);
+        end
+    end
 
-    % Check for default config definition
-    defaultConfigFile = fullfile(appRoot, "StandardConfigs", "CurrentDefault.txt");
+    % 2. Check for default config definition (if no custom provided)
+    if paramspath == ""
+        defaultConfigFile = fullfile(appRoot, "StandardConfigs", "CurrentDefault.txt");
 
-    if isfile(defaultConfigFile)
-        DefConfName = strtrim(readlines(defaultConfigFile));
+        if isfile(defaultConfigFile)
+            DefConfName = strtrim(readlines(defaultConfigFile));
 
-        if ~isempty(DefConfName)
-            defaultParamPath = fullfile(appRoot, "StandardConfigs", sprintf("%s.json", DefConfName(1)));
+            if ~isempty(DefConfName)
+                defaultParamPath = fullfile(appRoot, "StandardConfigs", sprintf("%s.json", DefConfName(1)));
 
-            if isfile(defaultParamPath)
-                paramspath = defaultParamPath;
+                if isfile(defaultParamPath)
+                    paramspath = defaultParamPath;
+                    fprintf("Using Default Parameter file: %s\n", paramspath);
+                end
+
             end
 
         end
-
     end
 
-    % If no default found, or if user needs to select (Optional: you can enforce UI here if preferred)
-    if isempty(paramspath)
+    % 3. If still empty, ask user
+    if paramspath == ""
         fprintf('Select parameter file (.json)\n');
         [json_name, json_path] = uigetfile('*.json', 'Select parameter file (.json)');
 
         if ~isequal(json_name, 0)
             paramspath = fullfile(json_path, json_name);
+            fprintf("Using User-Selected Parameter file: %s\n", paramspath);
         else
             error("No parameter file selected. Exiting.");
         end
-
-    else
-        fprintf("Using parameter file: %s\n", paramspath);
     end
 
     % --- EXECUTION LOOP ---

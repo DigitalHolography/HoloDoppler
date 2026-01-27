@@ -21,6 +21,7 @@ addpath('Interface');
 addpath('ReaderClasses');
 addpath('Rendering');
 addpath('Saving');
+addpath(fullfile('Saving', 'Registering'));
 addpath('Scripts');
 addpath('StandardConfigs');
 addpath('Tools');
