@@ -3,7 +3,7 @@ classdef HoloDopplerClass < handle
 
 properties
     file % stores main file information : path, camera pixel pitches, dimensions, wavelength used, frame rate etc
-    drawer_list cell % stores the path of files to be processed
+    drawer_list cell % stores the path of files to be processed % TODO remove
     reader % class obj to read new parts of the file
     view % RenderingClass
     params % rendering parameters
@@ -21,7 +21,7 @@ methods
             addpath("AberrationCorrection\", "FolderManagement\", "Imaging\", "Interface\", "ReaderClasses\", "Rendering\", "Saving\", "Scripts\", "Saving\Registering\", "Tools\", "StandardConfigs\");
         end
         obj.view = RenderingClass();
-        set(0, 'defaultfigurecolor', [1 1 1]);
+        set(0, 'defaultfigurecolor', [1 1 1]); % background of figures in white
     end
 
     function LoadFile(obj, file_path, opt)
@@ -33,7 +33,7 @@ methods
             opt.LoadAll = false; % Optional parameter to Load All the file in memory if possible
         end
 
-        %LoadFile
+        % LoadFile
 
         % 0) Reset the reader and the file
         obj.reader = [];
@@ -52,10 +52,11 @@ methods
         obj.file.ext = ext;
 
         %1 ) Metadata extraction
-        holo_version_threshold = 5; % current is version 7
+        
 
         switch ext
             case '.holo'
+                holo_version_threshold = 5; % current is version 7
 
                 try
                     obj.reader = HoloReader(obj.file.path, opt.LoadAll);
@@ -359,25 +360,6 @@ methods
 
     end
 
-    function getparamsfromGUI(obj, app)
-        % HD params and renderer params
-
-        % unused for now
-
-        fields = fieldnames(obj.params);
-
-        for i = 1:numel(fields)
-
-            try
-                obj.params.(fields{i}) = app.(fields{i}).Value;
-            catch e
-                warning("Couldn't set the parameter %s due to error :%s", fields{i}, e);
-            end
-
-        end
-
-    end
-
     function images = PreviewRendering(obj)
         %PreviewRendering Construct the image according to the current params
         if isempty(obj.reader)
@@ -495,7 +477,7 @@ methods
         parfor_arg = obj.params.parfor_arg;
 
         if parfor_arg < 1
-            %delete(poolobj);
+            %
         elseif isempty(poolobj) || poolobj.NumWorkers ~= parfor_arg
             delete(poolobj); %close the current pool to create a new one with correct num of workers
             parpool(parfor_arg);
