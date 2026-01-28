@@ -361,7 +361,7 @@ methods
     end
 
     function images = PreviewRendering(obj)
-        %PreviewRendering Construct the image according to the current params
+        % PreviewRendering Construct the image according to the current params
         if isempty(obj.reader)
             error("No file loaded")
         end
@@ -465,6 +465,10 @@ methods
         end
 
         num_batches = floor((end_frame - first_frame + 1) / obj.params.batch_stride);
+
+        if num_batches * obj.params.batch_stride + obj.params.batch_size > end_frame
+            num_batches = num_batches - 1;
+        end
 
         disp(['Rendering ' num2str(num_batches) 'frames.']);
 
@@ -838,6 +842,12 @@ methods
 
         end
 
+        disp('Saving registration...');
+
+        [~, output_dirname] = fileparts(result_folder_path);
+        output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
+        export_h5_video(fullfile(result_folder_path, 'raw', output_filename_h5), "registration", obj.registration.shifts);
+
         fid = fopen(fullfile(result_folder_path, strcat(obj.file.name, '_HD_', num2str(index + 1), '_', 'input_HD_params.json')), 'w');
         fwrite(fid, jsonencode(params, "PrettyPrint", true), 'char');
         fclose(fid);
@@ -919,7 +929,7 @@ methods
         ref_img = ref_img .* disk - disk .* sum(ref_img .* disk, [1, 2]) / nnz(disk); % minus the mean
         ref_img = ref_img ./ (max(abs(ref_img), [], [1, 2])); % rescaling but keeps mean at zero
 
-        [video_M0_reg, obj.registration.shifts] = register_video_from_reference(video_M0_reg, ref_img);
+        [~, obj.registration.shifts] = register_video_from_reference(video_M0_reg, ref_img);
     end
 
     function ApplyRegistration(obj)
@@ -939,7 +949,7 @@ methods
                 for i = 1:num_batches
 
                     for m = 1:bs
-                        obj.video(i).('SH').parameters.SH(:, :, m) = circshift(obj.video(i).('SH').parameters.SH(:, :, m), floor(obj.registration.shifts(:, i) .* ratio'));
+                        obj.video(i).('SH').parameters.SH(:, :, m) = circshift(obj.video(i).('SH').parameters.SH(:, :, m), -floor(obj.registration.shifts(:, i) .* ratio')');
                     end
 
                 end
@@ -959,10 +969,10 @@ methods
                 for i = 1:num_batches
 
                     for k = 1:numF
-                        obj.video(i).('buckets').parameters.intervals_0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_0(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
-                        obj.video(i).('buckets').parameters.intervals_1(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_1(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
-                        obj.video(i).('buckets').parameters.intervals_2(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_2(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
-                        obj.video(i).('buckets').parameters.M0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.M0(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
+                        obj.video(i).('buckets').parameters.intervals_0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_0(:, :, :, k), -floor(obj.registration.shifts(:, i) .* ratio')');
+                        obj.video(i).('buckets').parameters.intervals_1(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_1(:, :, :, k), -floor(obj.registration.shifts(:, i) .* ratio')');
+                        obj.video(i).('buckets').parameters.intervals_2(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_2(:, :, :, k), -floor(obj.registration.shifts(:, i) .* ratio')');
+                        obj.video(i).('buckets').parameters.M0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.M0(:, :, :, k), -floor(obj.registration.shifts(:, i) .* ratio')');
                     end
 
                 end
@@ -980,7 +990,7 @@ methods
             end
 
             for i = 1:num_batches
-                obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, floor(obj.registration.shifts(:, i) .* ratio'));
+                obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, -floor(obj.registration.shifts(:, i) .* ratio')');
             end
 
         end
