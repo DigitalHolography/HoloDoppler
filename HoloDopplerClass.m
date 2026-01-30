@@ -949,7 +949,7 @@ methods
                 for i = 1:num_batches
 
                     for m = 1:bs
-                        obj.video(i).('SH').parameters.SH(:, :, m) = circshift(obj.video(i).('SH').parameters.SH(:, :, m), -floor(obj.registration.shifts(:, i) .* ratio')');
+                        obj.video(i).('SH').parameters.SH(:, :, m) = circshift(obj.video(i).('SH').parameters.SH(:, :, m), floor(obj.registration.shifts(:, i) .* ratio'));
                     end
 
                 end
@@ -969,10 +969,10 @@ methods
                 for i = 1:num_batches
 
                     for k = 1:numF
-                        obj.video(i).('buckets').parameters.intervals_0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_0(:, :, :, k), -floor(obj.registration.shifts(:, i) .* ratio')');
-                        obj.video(i).('buckets').parameters.intervals_1(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_1(:, :, :, k), -floor(obj.registration.shifts(:, i) .* ratio')');
-                        obj.video(i).('buckets').parameters.intervals_2(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_2(:, :, :, k), -floor(obj.registration.shifts(:, i) .* ratio')');
-                        obj.video(i).('buckets').parameters.M0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.M0(:, :, :, k), -floor(obj.registration.shifts(:, i) .* ratio')');
+                        obj.video(i).('buckets').parameters.intervals_0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_0(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
+                        obj.video(i).('buckets').parameters.intervals_1(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_1(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
+                        obj.video(i).('buckets').parameters.intervals_2(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_2(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
+                        obj.video(i).('buckets').parameters.M0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.M0(:, :, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
                     end
 
                 end
@@ -990,7 +990,7 @@ methods
             end
 
             for i = 1:num_batches
-                obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, -floor(obj.registration.shifts(:, i) .* ratio')');
+                obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, floor(obj.registration.shifts(:, i) .* ratio'));
             end
 
         end

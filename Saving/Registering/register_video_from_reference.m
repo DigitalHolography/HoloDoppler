@@ -16,7 +16,7 @@ afterEach(D,@parforWaitbar);
 
 parfor i = 1:num_frames
     send(D,i);
-    [frames(:,:,:,i),shifts(:,i)] = registerImagesCrossCorrelationSubPix(frames(:,:,:,i), ref_img);
+    [frames(:,:,:,i),shifts(:,i)] = registerImagesCrossCorrelation(frames(:,:,:,i), ref_img);
 end
 
 function parforWaitbar(waitbarHandle,iterations)
