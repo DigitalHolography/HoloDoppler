@@ -176,16 +176,16 @@ end
 
 function updateFrameParams(app, edit1, edit2, which)
     % Validate frame order
-    if edit1.Value > edit2.Value
-
-        if strcmp(which, 'first')
-            edit1.Value = edit2.Value;
-        else
-            edit2.Value = edit1.Value;
-        end
-
-        uialert(app.UIFigure, 'First frame must be ≤ last frame', 'Invalid Frame Order');
-    end
+    % if edit1.Value > edit2.Value
+    % 
+    %     if strcmp(which, 'first')
+    %         edit1.Value = edit2.Value;
+    %     else
+    %         edit2.Value = edit1.Value;
+    %     end
+    % 
+    %     uialert(app.UIFigure, 'First frame must be ≤ last frame', 'Invalid Frame Order');
+    % end
 
     % Update parameters
     app.HD.params.first_frame = edit1.Value;

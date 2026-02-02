@@ -32,6 +32,11 @@ function [reg_image,shift] = registerImagesCrossCorrelationSubPix(MOVING,FIXED)
     shift_x = (px - cx) + dx;
 
     shift = [shift_x; shift_y];
-    reg_image = imtranslate(MOVING, [-shift_x, -shift_y], 'linear', 'FillValues', 0);
+
+    if ~any(isnan(MOVING))
+        reg_image = imtranslate(MOVING, [-shift_x, -shift_y], 'linear', 'FillValues', 0);
+    else
+        reg_image = MOVING;
+    end
 
 end

@@ -175,7 +175,7 @@ classdef HoloReader < handle
                     catch ME
                         retry = true;
                         retrycnt = retrycnt + 1;
-                        MEdisp(ME);
+                        %MEdisp(ME);
                         frame_batch(width_range, height_range, i) = NaN;
                         fprintf("Holo file frame in position %d was not found\n", i);
                     end
