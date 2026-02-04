@@ -17,9 +17,11 @@ methods
     function obj = HoloDopplerClass()
         %HoloDopplerClass Construct an instance of this class
         setInitParams(obj);
+
         if ~isdeployed
             addpath("AberrationCorrection\", "FolderManagement\", "Imaging\", "Interface\", "ReaderClasses\", "Rendering\", "Saving\", "Scripts\", "Saving\Registering\", "Tools\", "StandardConfigs\");
         end
+
         obj.view = RenderingClass();
         set(0, 'defaultfigurecolor', [1 1 1]); % background of figures in white
     end
@@ -52,7 +54,6 @@ methods
         obj.file.ext = ext;
 
         %1 ) Metadata extraction
-        
 
         switch ext
             case '.holo'
@@ -282,7 +283,7 @@ methods
         obj.params.image_registration = true;
         obj.params.applyshackhartmannfromref = false;
         obj.params.applyautofocusfromref = false;
-        obj.params.autofocus_range = [0.45,0.52];
+        obj.params.autofocus_range = [0.45, 0.52];
         obj.params.first_frame = 0;
         obj.params.end_frame = 0;
         obj.params.end_frame = 0;
@@ -554,7 +555,7 @@ methods
         end
 
         if obj.params.applyautofocusfromref
-            z_opti = autofocus(view_ref,obj.params); % update the z distance 
+            z_opti = autofocus(view_ref, obj.params); % update the z distance
             obj.params.spatial_propagation = z_opti;
         end
 
@@ -709,6 +710,25 @@ methods
                 end
 
                 continue
+            elseif strcmp(image_types{i}, 'full_buckets')
+                sz = size(tmp{1}.parameters.SH_full);
+                sz(3) = 32;
+                sz(4) = length(tmp);
+                mat_ = zeros(sz, 'single');
+
+                for j = 1:length(tmp)
+
+                    for k = 1:32
+                        mat_(:, :, k, j) = tmp{j}.parameters.SH_full(:, :, k);
+                    end
+
+                end
+
+                [~, output_dirname] = fileparts(result_folder_path);
+                output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
+                export_h5_video(fullfile(result_folder_path, 'raw', output_filename_h5), "SH_Slices", mat_);
+
+                continue
             elseif strcmp(image_types{i}, 'Quadrants')
                 fields = fieldnames(tmp{1}.parameters);
                 nn = length(fields);
@@ -763,11 +783,13 @@ methods
                 sig_E_t = [];
                 sig_E_stdf_t = [];
                 sig_E_stdq_t = [];
+
                 for j = 1:length(tmp)
                     sig_E_t = [sig_E_t tmp{j}.parameters.E_t];
                     sig_E_stdf_t = [sig_E_stdf_t tmp{j}.parameters.E_stdf_t];
                     sig_E_stdq_t = [sig_E_stdq_t tmp{j}.parameters.E_stdq_t];
                 end
+
                 generate_signal(sig_E_t, result_folder_path, 'Energy_t');
                 generate_signal(sig_E_stdf_t, result_folder_path, 'Energy_t');
                 generate_signal(sig_E_stdq_t, result_folder_path, 'Energy_t');
@@ -844,9 +866,13 @@ methods
 
         disp('Saving registration...');
 
-        [~, output_dirname] = fileparts(result_folder_path);
-        output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
-        export_h5_video(fullfile(result_folder_path, 'raw', output_filename_h5), "registration", obj.registration.shifts);
+        try
+            [~, output_dirname] = fileparts(result_folder_path);
+            output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
+            export_h5_video(fullfile(result_folder_path, 'raw', output_filename_h5), "registration", obj.registration.shifts);
+        catch
+            disp("Error while saving the registration.")
+        end
 
         fid = fopen(fullfile(result_folder_path, strcat(obj.file.name, '_HD_', num2str(index + 1), '_', 'input_HD_params.json')), 'w');
         fwrite(fid, jsonencode(params, "PrettyPrint", true), 'char');
