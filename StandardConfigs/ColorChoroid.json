@@ -23,7 +23,7 @@
   "ppx": 1.9400147441120552E-5,
   "ppy": 1.9400147441120552E-5,
   "spatial_transformation": "Fresnel",
-  "spatial_propagation": 1.13,
+  "spatial_propagation": 1.25,
   "time_range": [
     6,
     18
