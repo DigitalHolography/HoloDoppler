@@ -23,9 +23,9 @@ M0 = imadjustn(M0, stretchlim(M0(:), [0.02, 0.998]));
 
 img = zeros(Nx, Ny, 3, 'single');
 
-img1 = hsv2rgb(1 * ones(Nx, Ny), sat(:,:), M0(:,:));
-img2 = hsv2rgb(0.66 * ones(Nx, Ny), sat(:,:), M0(:,:));
-img(:,:,:) = img1 .* (M0_diff(:,:) > 0) + img2 .* (M0_diff(:,:) < 0);
+img1 = hsv2rgb(1 * ones(Nx, Ny), sat(:, :), M0(:, :));
+img2 = hsv2rgb(0.66 * ones(Nx, Ny), sat(:, :), M0(:, :));
+img(:, :, :) = img1 .* (M0_diff(:, :) > 0) + img2 .* (M0_diff(:, :) < 0);
 
 %FIXME : create adequate img for display with holo/show_hologram (line 260)
 img = mat2gray(img);

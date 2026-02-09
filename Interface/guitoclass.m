@@ -37,7 +37,6 @@ HD.params.svdx_t_threshold = app.svdx_t_threshold.Value;
 HD.params.svdx_Nsub = app.svdx_Nsub.Value;
 HD.params.svdx_t_Nsub = app.svdx_t_Nsub.Value;
 
-
 % Time transformation parameters
 HD.params.time_transform = app.time_transform.Value;
 HD.params.time_range = [app.time_range1.Value, app.time_range2.Value];
@@ -54,6 +53,7 @@ HD.params.applyautofocusfromref = app.AutofocusFromRef.Value;
 
 % Shack-Hartmann correction
 HD.params.applyshackhartmannfromref = app.applyshackhartmannfromref.Value;
+
 if app.ShackHartmannCheckBox.Value
     HD.params.ShackHartmannCorrection.iterate = app.IterativeCheckBox.Value;
     HD.params.ShackHartmannCorrection.N_iterate = app.NumberOfIterationEditField.Value;
@@ -70,6 +70,5 @@ if app.ShackHartmannCheckBox.Value
 else
     HD.params.ShackHartmannCorrection = [];
 end
-
 
 end
