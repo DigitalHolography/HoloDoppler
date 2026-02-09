@@ -231,6 +231,12 @@ methods
             rescale = true;
         end
 
+        % Extract parameters for easier access
+        f_1 = obj.f1;
+        f_2 = obj.f2;
+        f_s = obj.fs;
+        batch_size = size(obj.SH_processed, 3);
+
         axes(obj.axPlot);
         cla(obj.axPlot); % Clear the previous plot
 
@@ -248,12 +254,12 @@ methods
 
         % Plot the spectrum for the selected region
         obj.updateMasks();
-        xline(obj.f1, '--')
-        xline(obj.f2, '--')
-        xline(-obj.f1, '--')
-        xline(-obj.f2, '--')
-        xticks([-obj.f2 -obj.f1 0 obj.f1 obj.f2])
-        xticklabels({num2str(round(-obj.f2, 1)), num2str(round(-obj.f1, 1)), '0', num2str(round(obj.f1, 1)), num2str(round(obj.f2, 1))})
+        xline(f_1, '--')
+        xline(f_2, '--')
+        xline(-f_1, '--')
+        xline(-f_2, '--')
+        xticks([-f_2 -f_1 0 f_1 f_2])
+        xticklabels({num2str(round(-f_2, 1)), num2str(round(-f_1, 1)), '0', num2str(round(f_1, 1)), num2str(round(f_2, 1))})
         fontsize(gca, 12, "points");
         xlabel('frequency (kHz)', 'FontSize', 14);
 
@@ -271,42 +277,31 @@ methods
                 return;
             end
 
+            % Compute the average spectrum for the masked region
             SH_mask = obj.SH_processed .* mask;
-
             spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(mask);
-            momentM0 = moment0(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(SH_mask, 3), 0);
-            momentM1 = moment1(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(SH_mask, 3), 0);
-            momentM2 = moment2(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(SH_mask, 3), 0);
-            % [n1,n2,n3,n4,f_range,f_range_sym] = moment_range(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(obj.SH_processed,3));
-            % noramlized spectrum but not relevant spectrumAVG_mask = spectrumAVG_mask*2/(spectrumAVG_mask(n1)+spectrumAVG_mask(n4));
-
-            % M0 = squeeze(sum(spectrumAVG_mask(n1:n2))' + sum(spectrumAVG_mask(n3:n4))');
-            % M1 = squeeze(sum(spectrumAVG_mask(n1:n2)'.*f_range) + sum(spectrumAVG_mask(n3:n4)'.*f_range_sym));
-            % M2 = squeeze(sum(spectrumAVG_mask(n1:n2)'.*f_range.^2) + sum(spectrumAVG_mask(n3:n4)'.*f_range_sym.^2));
-            % omegaAVG = M1/M0;
-            % omegaRMS = sqrt(M2/M0);
-            M0 = mean(momentM0(mask)); % versus mean(momentM0,[1,2])
+            momentM0 = moment0(obj.SH_processed, f_1, f_2, f_s, batch_size);
+            momentM2 = moment2(obj.SH_processed, f_1, f_2, f_s, batch_size);
             M0_full = mean(momentM0, [1, 2]);
-            M1 = mean(momentM1(mask));
             M2 = mean(momentM2(mask));
-            omegaAVG = M1 / M0_full; % M1/M0;
             omegaRMS = sqrt(M2 / M0_full); % sqrt(M2/M0);
-            omegaRMS_index = omegaRMS * size(SH_mask, 3) / obj.fs;
+            omegaRMS_index = omegaRMS * batch_size / f_s;
             I_omega = scalingfn(spectrumAVG_mask(round(omegaRMS_index)));
-            axis_x = linspace(-obj.fs / 2, obj.fs / 2, size(SH_mask, 3));
+            axis_x = linspace(-f_s / 2, f_s / 2, size(SH_mask, 3));
 
             % Get the color of the current ROI
             roiColor = obj.rois{i}.Color;
 
             p_mask = plot(axis_x, fftshift(scalingfn(spectrumAVG_mask)), 'Color', roiColor, 'LineWidth', 1, 'DisplayName', 'Arteries');
-            xlim([-obj.fs / 2 obj.fs / 2])
-            sclingrange = abs(fftshift(axis_x)) > obj.f1;
+            xlim([-f_s / 2 f_s / 2])
+            sclingrange = abs(fftshift(axis_x)) > f_1;
 
             if rescale
                 yrange = [.99 * scalingfn(min(spectrumAVG_mask(sclingrange))) 1.01 * scalingfn(max(spectrumAVG_mask(sclingrange)))];
                 ylim(yrange)
             else
                 yrange = get(gca, 'YLim');
+                ylim(yrange)
             end
 
             om_RMS_line = line([-omegaRMS omegaRMS], [I_omega I_omega]);
@@ -324,13 +319,13 @@ methods
 
             hold on
 
+            fit_spectrum(axis_x, log10(fftshift(spectrumAVG_mask)), f_1, f_2, annotation = false);
+
         end
 
         pbaspect([1.618 1 1]);
-
-        % rectangle('Position', [-f1 yrange(1)  2*f1 (yrange(2)-yrange(1))], 'FaceColor', [0.9 0.9 0.9], 'EdgeColor', 'none');
-        % rectangle('Position', [-fs/2 yrange(1) (fs/2-f2) (yrange(2)-yrange(1))], 'FaceColor', [0.9 0.9 0.9], 'EdgeColor', 'none');
-        % rectangle('Position', [f2 yrange(1) (fs/2-f2) (yrange(2)-yrange(1))], 'FaceColor', [0.9 0.9 0.9], 'EdgeColor', 'none');
+        box on
+        set(gca, 'FontSize', 12, 'LineWidth', 2);
 
     end
 

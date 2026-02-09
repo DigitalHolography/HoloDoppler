@@ -186,7 +186,7 @@ methods
 
         if obj.pure_PCA.is_selected
 
-            if ~(r1 - floor(r1) == 0) && ~(r2 - floor(r2) == 0) %both not integer
+            if ~(r1 - floor(r1) == 0) && ~(r2 - floor(r2) == 0) % both not integer
                 r1p = floor(r1 * 2 / Params.fs * NT);
                 r2p = floor(r2 * 2 / Params.fs * NT);
             else
@@ -205,8 +205,8 @@ methods
             obj.power_Doppler.image = img;
         end
 
-        if obj.power_adapt.is_selected %
-            img = moment0(SH_mod, f1, f2, Params.fs, NT, 0);
+        if obj.power_adapt.is_selected % Power Doppler with adaptive histogram equalization has been chosen
+            img = moment0(SH_mod, f1, f2, Params.fs, NT);
             img = adapthisteq(rescale(img), "NumTiles", [12 12], "NBins", 128);
             obj.power_adapt.image = img;
         end
@@ -217,7 +217,7 @@ methods
         end
 
         if obj.power_1_Doppler.is_selected % Power Doppler 1 has been chosen
-            img = moment1(SH_mod, f1, f2, Params.fs, NT, Params.flatfield_gw);
+            img = moment1(SH_mod, f1, f2, Params.fs, NT);
             obj.power_1_Doppler.image = img;
         end
 
@@ -228,7 +228,7 @@ methods
 
         if obj.power_01_Doppler.is_selected % Power Doppler has been chosen
             img0 = moment0(SH_mod, f1, f2, Params.fs, Params.batch_size, Params.flatfield_gw);
-            img1 = moment1(SH_mod, f1, f2, Params.fs, Params.batch_size, Params.flatfield_gw);
+            img1 = moment1(SH_mod, f1, f2, Params.fs, Params.batch_size);
 
             img0 = double(img0);
             img1 = imgaussfilt(img1, 3);
@@ -293,6 +293,8 @@ methods
                 frame = getframe(fi); % Capture the figure
                 % obj.spectrogram.graph = gca;
                 obj.spectrogram.image = frame.cdata;
+            catch E
+                MEdisp(E);
             end
 
         end
@@ -300,7 +302,7 @@ methods
         if obj.broadening.is_selected
 
             try
-                fi = figure("Visible", "off");
+                fi = figure("Visible", "on");
                 disc = diskMask(size(SH_mod, 1), size(SH_mod, 2), Params.registration_disc_ratio)';
                 spectrum_ploting(SH_mod(:, :, :), disc, Params.fs, Params.time_range(1), Params.time_range(2));
                 % ylim([-0 50])
@@ -308,7 +310,7 @@ methods
                 % obj.broadening.graph = gca;
                 obj.broadening.image = frame.cdata;
             catch E
-                disp(E)
+                MEdisp(E);
             end
 
         end
@@ -340,33 +342,35 @@ methods
                 frame = getframe(fi); % Capture the figure
                 % obj.autocorrelogram.graph = gca;
                 obj.autocorrelogram.image = frame.cdata;
+            catch E
+                MEdisp(E);
             end
 
         end
 
         if obj.moment_0.is_selected % Moment 0 has been chosen
-            img = moment0(SH_mod, f1, f2, Params.fs, NT, 0);
+            img = moment0(SH_mod, f1, f2, Params.fs, NT);
             obj.moment_0.image = img;
         end
 
         if obj.arg_0.is_selected % Arg 0 has been chosen
-            img = moment0(SH_arg, f1, f2, Params.fs, NT, 0);
+            img = moment0(SH_arg, f1, f2, Params.fs, NT);
             obj.arg_0.image = img;
         end
 
         if obj.moment_1.is_selected % Moment 1 has been chosen
-            img = moment1(SH_mod, f1, f2, Params.fs, NT, 0);
+            img = moment1(SH_mod, f1, f2, Params.fs, NT);
             obj.moment_1.image = img;
         end
 
         if obj.moment_2.is_selected % Moment 2 has been chosen
-            img = moment2(SH_mod, f1, f2, Params.fs, NT, 0);
+            img = moment2(SH_mod, f1, f2, Params.fs, NT);
             obj.moment_2.image = img;
         end
 
         if obj.f_RMS.is_selected
-            M0 = moment0(SH_mod, f1, f2, Params.fs, NT, 0);
-            M2 = moment2(SH_mod, f1, f2, Params.fs, NT, 0);
+            M0 = moment0(SH_mod, f1, f2, Params.fs, NT);
+            M2 = moment2(SH_mod, f1, f2, Params.fs, NT);
 
             try
                 fi = figure("Visible", "off");
@@ -379,6 +383,8 @@ methods
                 frame = getframe(fi); % Capture the figure
                 % obj.f_RMS.graph = gca;
                 obj.f_RMS.image = frame.cdata;
+            catch E
+                MEdisp(E);
             end
 
         end
@@ -468,18 +474,18 @@ methods
             % why this here ? flatfield should be enough , circleMask = fftshift(diskMask(numY, numX, 0.15)); -> Michael
 
             for freqIdx = 1:numranges
-                img = moment0(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), Params.fs, NT, 0);
+                img = moment0(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), Params.fs, NT);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                 obj.buckets.parameters.intervals_0(:, :, :, freqIdx) = img;
 
                 img = moment0(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), Params.fs, NT, Params.flatfield_gw);
                 obj.buckets.parameters.M0(:, :, :, freqIdx) = img;
 
-                img = moment1(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), Params.fs, NT, 0);
+                img = moment1(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), Params.fs, NT);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                 obj.buckets.parameters.intervals_1(:, :, :, freqIdx) = img;
 
-                img = moment2(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), Params.fs, NT, 0);
+                img = moment2(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), Params.fs, NT);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                 obj.buckets.parameters.intervals_2(:, :, :, freqIdx) = img;
             end

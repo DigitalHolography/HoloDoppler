@@ -1,8 +1,17 @@
 function [M0, sqrt_M0] = moment0(SH, f1, f2, fs, batch_size, gw)
 
+arguments
+    SH
+    f1
+    f2
+    fs
+    batch_size
+    gw = 0
+end
+
 SH = abs(SH);
 
-%% integration interval
+% integration interval
 % convert frequencies to indices
 n1 = ceil(f1 * batch_size / fs);
 n2 = ceil(f2 * batch_size / fs);

@@ -36,7 +36,7 @@ for i = 1:4
     end
 
     Q.(sprintf("Q%d_m0", i)) = moment0(SH, Params.time_range(1), Params.time_range(2), Params.fs, size(FH, 3), Params.flatfield_gw);
-    Q.(sprintf("Q%d_m1", i)) = moment1(SH, Params.time_range(1), Params.time_range(2), Params.fs, size(FH, 3), Params.flatfield_gw);
+    Q.(sprintf("Q%d_m1", i)) = moment1(SH, Params.time_range(1), Params.time_range(2), Params.fs, size(FH, 3));
 end
 
 %Q.numQuadrants=4;

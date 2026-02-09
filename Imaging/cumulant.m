@@ -1,5 +1,5 @@
 function [C] = cumulant(A, n1, n2)
-%% integration interval
+% integration interval
 % A : 3D array x,y,omega
 % idxspan1 = index vector (positive freqs)
 % idxspan2 = index vector (negative freqs)

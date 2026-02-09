@@ -224,12 +224,12 @@ methods
         miniSH = obj.SH(floor(pos(2)):floor(pos(2) + pos(4) - 1), floor(pos(1)):floor(pos(1) + pos(3) - 1), :);
         minibkg = obj.bkgmask(floor(pos(2)):floor(pos(2) + pos(4) - 1), floor(pos(1)):floor(pos(1) + pos(3) - 1));
         minivess = obj.vesselmask(floor(pos(2)):floor(pos(2) + pos(4) - 1), floor(pos(1)):floor(pos(1) + pos(3) - 1));
-        M0 = moment0(abs(miniSH), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH, 3), 0);
-        M2 = moment2(abs(miniSH), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH, 3), 0);
+        M0 = moment0(abs(miniSH), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH, 3));
+        M2 = moment2(abs(miniSH), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH, 3));
         %f_ = sqrt(M2./M0);
         f_ = sqrt(M2 ./ mean(M0, [1, 2]));
-        M0_bkg = moment0(abs(miniSH .* minibkg), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH, 3), 0);
-        M2_bkg = moment2(abs(miniSH .* minibkg), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH, 3), 0);
+        M0_bkg = moment0(abs(miniSH .* minibkg), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH, 3));
+        M2_bkg = moment2(abs(miniSH .* minibkg), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH, 3));
         f_bkg = sqrt(M2_bkg ./ M0_bkg);
         d = max(size(miniSH, 1), size(miniSH, 2));
         f_bkg = maskedAverage(f_bkg, d, minibkg, minivess);
@@ -283,21 +283,21 @@ methods
         ylabel('log_{10}(S)', 'FontSize', 14);
 
         if ~isempty(obj.vesselmask)
-            mask = obj.mask .* obj.vesselmask;
+            local_mask = obj.mask .* obj.vesselmask;
         else
-            mask = obj.mask;
+            local_mask = obj.mask;
         end
 
-        SH_mask = abs(obj.SH) .* mask;
+        SH_mask = abs(obj.SH) .* local_mask;
 
-        spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(mask);
-        momentM0 = moment0(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3), 0);
-        momentM1 = moment1(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3), 0);
-        momentM2 = moment2(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3), 0);
-        M0 = squeeze(sum(momentM0 .* mask, [1 2]) / nnz(mask)); % versus mean(momentM0,[1,2])
+        spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(local_mask);
+        momentM0 = moment0(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3));
+        momentM1 = moment1(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3));
+        momentM2 = moment2(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3));
+        M0 = squeeze(sum(momentM0 .* local_mask, [1 2]) / nnz(local_mask)); % versus mean(momentM0,[1,2])
         M0_full = mean(momentM0, [1, 2]);
-        M1 = squeeze(sum(momentM1 .* mask, [1 2]) / nnz(mask));
-        M2 = squeeze(sum(momentM2 .* mask, [1 2]) / nnz(mask));
+        M1 = squeeze(sum(momentM1 .* local_mask, [1 2]) / nnz(local_mask));
+        M2 = squeeze(sum(momentM2 .* local_mask, [1 2]) / nnz(local_mask));
         omegaAVG = M1 / M0_full; % M1/M0;
         omegaRMS = sqrt(M2 / M0_full); % vs the local version : sqrt(M2/M0);
         omegaRMS_index = omegaRMS * size(SH_mask, 3) / obj.Params.fs;
@@ -329,23 +329,23 @@ methods
 
         hold on
 
-        mask = obj.mask .* obj.bkgmask;
+        local_mask = obj.mask .* obj.bkgmask;
         pbaspect([1.618 1 1]);
 
-        if isempty(mask)
+        if isempty(local_mask)
             return
         end
 
-        SH_mask = abs(obj.SH) .* mask;
+        SH_mask = abs(obj.SH) .* local_mask;
 
-        spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(mask);
-        momentM0 = moment0(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3), 0);
-        momentM1 = moment1(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3), 0);
-        momentM2 = moment2(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3), 0);
-        M0 = squeeze(sum(momentM0 .* mask, [1 2]) / nnz(mask)); % versus mean(momentM0,[1,2])
+        spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(local_mask);
+        momentM0 = moment0(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3));
+        momentM1 = moment1(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3));
+        momentM2 = moment2(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3));
+        M0 = squeeze(sum(momentM0 .* local_mask, [1 2]) / nnz(local_mask)); % versus mean(momentM0,[1,2])
         M0_full = mean(momentM0, [1, 2]);
-        M1 = squeeze(sum(momentM1 .* mask, [1 2]) / nnz(mask));
-        M2 = squeeze(sum(momentM2 .* mask, [1 2]) / nnz(mask));
+        M1 = squeeze(sum(momentM1 .* local_mask, [1 2]) / nnz(local_mask));
+        M2 = squeeze(sum(momentM2 .* local_mask, [1 2]) / nnz(local_mask));
         omegaAVG = M1 / M0_full; % M1/M0;
         omegaRMS = sqrt(M2 / M0_full); % vs the local version : sqrt(M2/M0);
         omegaRMS_index = omegaRMS * size(SH_mask, 3) / obj.Params.fs;

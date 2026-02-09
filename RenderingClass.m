@@ -125,7 +125,7 @@ methods
 
         end
 
-        %1) Apply corrections to interferograms
+        % 1) Apply corrections to interferograms
 
         doFrames = ParamChanged.spatial_filter || ParamChanged.hilbert_filter || ParamChanged.spatial_filter_range || obj.FramesChanged;
         [Nx, Ny, batch_size] = size(obj.Frames);
@@ -159,7 +159,7 @@ methods
 
         end
 
-        %2) Spatial transformation (from Frames to H)
+        % 2) Spatial transformation (from Frames to H)
 
         doFH = doFrames || ParamChanged.Padding_num || ParamChanged.spatial_transformation || ParamChanged.spatial_propagation || ParamChanged.ShackHartmannCorrection || obj.FramesChanged || ~options.cache_intermediate_results;
 
@@ -264,7 +264,7 @@ methods
             obj.FH = [];
         end
 
-        %3) H fluctuation batch filtering
+        % 3) H fluctuation batch filtering
 
         if doH
 
@@ -298,7 +298,7 @@ methods
 
         end
 
-        %4) Short-time transformation
+        % 4) Short-time transformation
 
         doSH = doH || ParamChanged.time_transform || obj.FramesChanged || ParamChanged.flip_y || ParamChanged.flip_x || ~options.cache_intermediate_results;
 
