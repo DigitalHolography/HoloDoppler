@@ -83,6 +83,7 @@ opts.MaxIter = 2000;
 
 % Evaluate fit over full axis for overlay
 xx = linspace(min(x), max(x), 2000).';
+dx = xx(2) - xx(1);
 
 if fix_x0_to_zero
     yy = fitObj.a + fitObj.b * log10(fitObj.g ^ 2) - fitObj.b * log10((xx) .^ 2 + fitObj.g ^ 2);
@@ -105,7 +106,13 @@ else
 end
 
 disp(txt);
-fprintf('---------------\nf = %d\n', fitObj.g ^ 2 / (2 * fitObj.x0 * fitObj.b - 3));
+
+fitMask = (abs(xx) <= f2) & (abs(xx) >= f1);
+M2_est =  sum((xx(fitMask) - fitObj.x0).^2 .* yy(fitMask)) .* dx;
+M0_est =  sum(yy(fitMask)) .* dx;
+f_RMS = sqrt(M2_est / M0_est);
+
+fprintf('---------------\nf_RMS = %.2f kHz\n', f_RMS);
 
 % Put a small annotation in the corner
 if opt.annotation

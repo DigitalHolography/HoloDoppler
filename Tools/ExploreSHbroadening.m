@@ -215,12 +215,16 @@ methods
 
             roiPos = roi.Position; % [x, y, width, height]
 
+
             % Create a binary mask
             [ny, nx, ~] = size(obj.SH_processed);
+            M = max(nx, ny);
+            rx = nx / M;
+            ry = ny / M;
             [X, Y] = meshgrid(1:nx, 1:ny);
 
-            obj.masks{i} = (X >= roiPos(1)) & (X <= roiPos(1) + roiPos(3)) & ...
-                (Y >= roiPos(2)) & (Y <= roiPos(2) + roiPos(4));
+            obj.masks{i} = (X >= roiPos(1) * rx) & (X <= roiPos(1) * rx + roiPos(3) * rx) & ...
+                (Y >= roiPos(2) * ry) & (Y <= roiPos(2) * ry + roiPos(4) * ry);
         end
 
     end
@@ -324,7 +328,8 @@ methods
         end
 
         pbaspect([1.618 1 1]);
-        box on
+        yline(0, 'LineWidth', 2)
+        box on,
         set(gca, 'FontSize', 12, 'LineWidth', 2);
 
     end

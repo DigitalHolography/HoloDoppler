@@ -61,4 +61,5 @@ uistack(p_mask, 'top');
 uistack(gca, 'top');
 
 fit_spectrum(axis_x, signal_log, f1, f2);
+
 end
