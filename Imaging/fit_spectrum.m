@@ -1,6 +1,6 @@
 function [fitObj, gof] = fit_spectrum(axis_x, signal, f1, f2, opt)
 % Fit a spectrum to a model of the form:
-%   y = a + b*log10((x-x0)^2 + g^2)
+%   y = a + b*log10(g^2) - b*log10((x-x0)^2 + g^2)
 % where:
 %   a = baseline level
 %   b = slope of the log10 term
@@ -42,10 +42,10 @@ end
 
 % Define fit type
 if fix_x0_to_zero
-    ft = fittype('a + b*log10((x).^2 + g^2)', ...
+    ft = fittype('a + b*log10(g^2) - b*log10((x).^2 + g^2)', ...
         'independent', 'x', 'coefficients', {'a', 'b', 'g'});
 else
-    ft = fittype('a + b*log10((x-x0).^2 + g^2)', ...
+    ft = fittype('a + b*log10(g^2) - b*log10((x-x0).^2 + g^2)', ...
         'independent', 'x', 'coefficients', {'a', 'b', 'x0', 'g'});
 end
 
@@ -85,15 +85,15 @@ opts.MaxIter = 2000;
 xx = linspace(min(x), max(x), 2000).';
 
 if fix_x0_to_zero
-    yy = fitObj.a + fitObj.b * log10((xx) .^ 2 + fitObj.g ^ 2);
+    yy = fitObj.a + fitObj.b * log10(fitObj.g ^ 2) - fitObj.b * log10((xx) .^ 2 + fitObj.g ^ 2);
     x0_est = 0;
 else
-    yy = fitObj.a + fitObj.b * log10((xx - fitObj.x0) .^ 2 + fitObj.g ^ 2);
+    yy = fitObj.a + fitObj.b * log10(fitObj.g ^ 2) - fitObj.b * log10((xx - fitObj.x0) .^ 2 + fitObj.g ^ 2);
     x0_est = fitObj.x0;
 end
 
 % Plot overlay
-p_fit = plot(xx, yy, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Fit: a+b log10((x-x0)^2+g^2)');
+p_fit = plot(xx, yy, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Fit: a - b log10((x-x0)^2+g^2)');
 
 % Report parameters in command window and optionally on plot
 g_est = fitObj.g; % gamma in kHz (in your axis units)
@@ -105,6 +105,7 @@ else
 end
 
 disp(txt);
+fprintf('---------------\nf = %d\n', fitObj.g ^ 2 / (2 * fitObj.x0 * fitObj.b - 3));
 
 % Put a small annotation in the corner
 if opt.annotation

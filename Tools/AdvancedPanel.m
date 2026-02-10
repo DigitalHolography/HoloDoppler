@@ -156,7 +156,7 @@ function buckEditCallBack(src)
         assert(size(app.HD.params.buckets_ranges, 2) == 2);
     catch E
         disp("Couldn't get the ranges try to write input frequency ranges like '[[6,18]; [6,25]]' in kHz.")
-        disp(E)
+        MEdisp(E)
     end
 
 end

@@ -302,7 +302,7 @@ methods
         if obj.broadening.is_selected
 
             try
-                fi = figure("Visible", "on");
+                fi = figure("Visible", "off");
                 disc = diskMask(size(SH_mod, 1), size(SH_mod, 2), Params.registration_disc_ratio)';
                 spectrum_ploting(SH_mod(:, :, :), disc, Params.fs, Params.time_range(1), Params.time_range(2));
                 % ylim([-0 50])
