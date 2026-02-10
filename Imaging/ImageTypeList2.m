@@ -492,27 +492,14 @@ methods
             nBuckets = 32;
             nFreq = size(SH_mod, 3);
 
-            SH_mod = fftshift(SH_mod,3);
-
-            %edges = round(linspace(1, nFreq + 1, nBuckets + 1));%  linear
-            %scalse
-
-            edges_plus = nFreq/2 + round(logspace(log10(nFreq/2/39), log10(nFreq/2 + 1), nBuckets/2 + 1));
-            edges_minus = sort(2 + nFreq/2 - round(logspace(log10(nFreq/2/39), log10(nFreq/2 + 1), nBuckets/2 + 1)));
+            edges = round(linspace(1, nFreq + 1, nBuckets + 1));
             obj.full_buckets.parameters.SH_full = zeros(numX, numY, nBuckets, 'single');
 
-            for freqIdx = 1:nBuckets/2
-                i1 = edges_minus(freqIdx);
-                i2 = edges_minus(freqIdx + 1) - 1;
+            for freqIdx = 1:nBuckets
+                i1 = edges(freqIdx);
+                i2 = edges(freqIdx + 1) - 1;
                 obj.full_buckets.parameters.SH_full(:, :, freqIdx) = ...
-                    single(log10(mean(SH_mod(:, :, i1:i2), 3)));
-            end
-
-            for freqIdx = 1:nBuckets/2
-                i1 = edges_plus(freqIdx);
-                i2 = edges_plus(freqIdx + 1) - 1;
-                obj.full_buckets.parameters.SH_full(:, :, nBuckets/2 + freqIdx) = ...
-                    single(log10(mean(SH_mod(:, :, i1:i2), 3)));
+                    single(log(mean(SH_mod(:, :, i1:i2), 3)));
             end
 
         end
