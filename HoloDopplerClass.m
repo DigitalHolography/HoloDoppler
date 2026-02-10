@@ -1005,6 +1005,20 @@ methods
 
                 continue
 
+            elseif strcmp(obj.params.image_types{j}, 'full_buckets')
+                sz = size(obj.video(1).full_buckets.parameters.SH_full);
+
+                ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
+
+                for i = 1:num_batches
+                    for k = 1:sz(3)
+                        obj.video(i).('full_buckets').parameters.SH_full(:, :, k) = circshift(obj.video(i).('full_buckets').parameters.SH_full(:, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
+                    end
+
+                end
+
+                continue
+
             elseif strcmp(obj.params.image_types{j}, 'Quadrants')
                 continue
             end
