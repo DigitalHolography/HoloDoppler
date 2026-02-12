@@ -1,7 +1,7 @@
 function AdvancedPanel(app)
 % Create the UIFigure with improved styling
 fig = uifigure('Name', 'Advanced Controls', ...
-    'Position', [100 100 450 250], ...
+    'Position', [100 100 500 250], ...
     'Color', [0.2 0.2 0.2], ...
     'Resize', 'off');
 
@@ -156,7 +156,6 @@ function buckEditCallBack(src)
         assert(size(app.HD.params.buckets_ranges, 2) == 2);
     catch E
         disp("Couldn't get the ranges try to write input frequency ranges like '[[6,18]; [6,25]]' in kHz.")
-        disp(E)
     end
 
 end
@@ -177,13 +176,13 @@ end
 function updateFrameParams(app, edit1, edit2, which)
     % Validate frame order
     % if edit1.Value > edit2.Value
-    % 
+    %
     %     if strcmp(which, 'first')
     %         edit1.Value = edit2.Value;
     %     else
     %         edit2.Value = edit1.Value;
     %     end
-    % 
+    %
     %     uialert(app.UIFigure, 'First frame must be ≤ last frame', 'Invalid Frame Order');
     % end
 

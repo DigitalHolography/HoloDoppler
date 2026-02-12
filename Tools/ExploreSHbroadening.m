@@ -9,6 +9,7 @@ properties
     axPlot % Axis for the spectrum plot
     rois % list of Region of Interest handle
     masks % list of masks from ROIs
+    colors
     panel
     btnGroup % Button group for display options
     fs
@@ -30,8 +31,6 @@ methods
 
         % Create the figure
         obj.createUI();
-
-        
 
     end
 
@@ -104,6 +103,14 @@ methods
             'Position', [0.5, 0.2, 0.45, 0.2], ...
             'Callback', @(src, evt)obj.roiNew());
 
+        % Add pushbutton for loading PNG mask
+        uicontrol('Parent', obj.panel, ...
+            'Style', 'pushbutton', ...
+            'String', 'Load PNG Mask', ...
+            'Units', 'normalized', ...
+            'Position', [0.5, 0.4, 0.45, 0.2], ...
+            'Callback', @(src, evt)obj.loadPNGMask());
+
         % Add pushbutton for clearing all ROIs
         uicontrol('Parent', obj.panel, ...
             'Style', 'pushbutton', ...
@@ -146,16 +153,16 @@ methods
 
     function updateAverageImage(obj)
         % Calculate average image based on current processing
-        obj.avgImage = moment0(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(obj.SH_processed,3), 0);
+        obj.avgImage = moment0(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(obj.SH_processed, 3), 0);
     end
 
     function updateImageDisplay(obj)
 
         % Update the image display with real values
         axes(obj.axImage);
-        [Nx,Ny] = size(obj.avgImage);
-        Nd = max(Nx,Ny);
-        imagesc(imresize(obj.avgImage,[Nd Nd]));
+        [Nx, Ny] = size(obj.avgImage);
+        Nd = max(Nx, Ny);
+        imagesc(imresize(obj.avgImage, [Nd Nd]));
         axis image;
         colormap(obj.axImage, 'gray');
         title('Moment order 0 f1 f2 Image');
@@ -169,6 +176,14 @@ methods
 
             for i = 1:length(obj.rois)
 
+                if obj.rois{i} == 1
+                    break;
+                end
+
+                if isempty(obj.rois{i}) || ~isvalid(obj.rois{i})
+                    break;
+                end
+
                 delete(obj.rois{i});
 
             end
@@ -177,6 +192,8 @@ methods
 
         obj.rois = [];
         obj.masks = [];
+        obj.colors = [];
+        obj.updateImageDisplay();
         obj.spectrum_plotting(); % Update the spectrum plot
     end
 
@@ -186,7 +203,9 @@ methods
             manual = false;
         end
 
-        randomColor = rand(1, 3); % Generate a random RGB color
+        n = length(obj.rois);
+        C = colororder('gem');
+        randomColor = C(mod(n, 7), :); % Generate a random RGB color
 
         if manual
             obj.rois{end + 1} = drawfreehand(obj.axImage, 'Color', randomColor, ...
@@ -199,7 +218,7 @@ methods
                 'FaceAlpha', 0.2, ...
                 'InteractionsAllowed', 'translate');
         end
-
+        obj.colors{end + 1} = randomColor;
         % Add listener to ROI for position changes
         addlistener(obj.rois{end}, 'MovingROI', @(src, evt)obj.spectrum_plotting());
         % Callback for when ROI is moved
@@ -211,6 +230,10 @@ methods
         for i = 1:numel(obj.rois)
             roi = obj.rois{i};
 
+            if roi == 1
+                return;
+            end
+
             if isempty(roi) || ~isvalid(roi)
                 return;
             end
@@ -218,11 +241,81 @@ methods
             roiPos = roi.Position; % [x, y, width, height]
 
             % Create a binary mask
-            [ny, nx, ~] = size(obj.SH_processed);
-            [X, Y] = meshgrid(1:nx, 1:ny);
+            [Ny, Nx, ~] = size(obj.SH_processed);
+            M = max(Nx, Ny);
+            rx = Nx / M;
+            ry = Ny / M;
+            [X, Y] = meshgrid(1:Nx, 1:Ny);
 
-            obj.masks{i} = (X >= roiPos(1)) & (X <= roiPos(1) + roiPos(3)) & ...
-                (Y >= roiPos(2)) & (Y <= roiPos(2) + roiPos(4));
+            obj.masks{i} = (X >= roiPos(1) * rx) & (X <= roiPos(1) * rx + roiPos(3) * rx) & ...
+                (Y >= roiPos(2) * ry) & (Y <= roiPos(2) * ry + roiPos(4) * ry);
+        end
+
+    end
+
+    function loadPNGMask(obj)
+        % Load a PNG file and use it as a mask
+        [filename, pathname] = uigetfile({'*.png;*.bmp;*.jpg;*.tif', 'Image Files'; ...
+                                              '*.*', 'All Files'}, ...
+        'Select a mask image');
+
+        if isequal(filename, 0) || isequal(pathname, 0)
+            % User cancelled
+            return;
+        end
+
+        fullpath = fullfile(pathname, filename);
+
+        try
+            % Read the image
+            maskImage = imread(fullpath);
+
+            % Convert to grayscale if RGB
+            if size(maskImage, 3) > 1
+                maskImage = rgb2gray(maskImage);
+            end
+
+            % Convert to binary mask (non-zero values become 1)
+            maskBinary = imbinarize(maskImage);
+
+            % Get the current image size
+            [Ny, Nx, ~] = size(obj.SH_processed);
+            M = max(Nx, Ny);
+
+            % Resize the mask to match the current image display dimensions
+            maskResized = imresize(maskBinary, [Ny, Nx]);
+
+            obj.rois{end + 1} = 1;
+            obj.masks{end + 1} = maskResized; % Store the image handle
+
+            n = length(obj.rois);
+            C = colororder('gem');
+            randomColor = C(mod(n, 7), :); % Generate a random RGB color
+            obj.colors{end + 1} = randomColor;
+
+            % Create a visual representation of the mask
+            % Since we can't create a drawrectangle/drawfreehand from existing mask,
+            % we'll create a semitransparent overlay
+            hold(obj.axImage, 'on');
+
+            % Create an overlay image
+            overlay = zeros(Ny, Nx, 3);
+
+            for c = 1:3
+                overlay(:, :, c) = maskResized * randomColor(c);
+            end
+
+            % Display the overlay
+            h = imagesc(imresize(overlay, [M, M]), 'Parent', obj.axImage);
+            set(h, 'AlphaData', imresize(maskResized, [M, M]) * 0.3); % 30 % transparency
+
+            % Just update the spectrum plot
+            obj.spectrum_plotting();
+
+            fprintf('Loaded mask from: %s\n', filename);
+
+        catch ME
+            MEdisp(ME);
         end
 
     end
@@ -232,6 +325,12 @@ methods
         if nargin < 2
             rescale = true;
         end
+
+        % Extract parameters for easier access
+        f_1 = obj.f1;
+        f_2 = obj.f2;
+        f_s = obj.fs;
+        batch_size = size(obj.SH_processed, 3);
 
         axes(obj.axPlot);
         cla(obj.axPlot); % Clear the previous plot
@@ -250,12 +349,12 @@ methods
 
         % Plot the spectrum for the selected region
         obj.updateMasks();
-        xline(obj.f1, '--')
-        xline(obj.f2, '--')
-        xline(-obj.f1, '--')
-        xline(-obj.f2, '--')
-        xticks([-obj.f2 -obj.f1 0 obj.f1 obj.f2])
-        xticklabels({num2str(round(-obj.f2, 1)), num2str(round(-obj.f1, 1)), '0', num2str(round(obj.f1, 1)), num2str(round(obj.f2, 1))})
+        xline(f_1, '--')
+        xline(f_2, '--')
+        xline(-f_1, '--')
+        xline(-f_2, '--')
+        xticks([-f_2 -f_1 0 f_1 f_2])
+        xticklabels({num2str(round(-f_2, 1)), num2str(round(-f_1, 1)), '0', num2str(round(f_1, 1)), num2str(round(f_2, 1))})
         fontsize(gca, 12, "points");
         xlabel('frequency (kHz)', 'FontSize', 14);
 
@@ -265,7 +364,6 @@ methods
             ylabel('log10 S', 'FontSize', 14);
         end
 
-
         for i = 1:numel(obj.rois)
 
             mask = obj.masks{i};
@@ -274,42 +372,31 @@ methods
                 return;
             end
 
+            % Compute the average spectrum for the masked region
             SH_mask = obj.SH_processed .* mask;
-
             spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(mask);
-            momentM0 = moment0(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(SH_mask, 3), 0);
-            momentM1 = moment1(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(SH_mask, 3), 0);
-            momentM2 = moment2(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(SH_mask, 3), 0);
-            % [n1,n2,n3,n4,f_range,f_range_sym] = moment_range(obj.SH_processed, obj.f1, obj.f2, obj.fs, size(obj.SH_processed,3));
-            % noramlized spectrum but not relevant spectrumAVG_mask = spectrumAVG_mask*2/(spectrumAVG_mask(n1)+spectrumAVG_mask(n4));
-            
-            % M0 = squeeze(sum(spectrumAVG_mask(n1:n2))' + sum(spectrumAVG_mask(n3:n4))'); 
-            % M1 = squeeze(sum(spectrumAVG_mask(n1:n2)'.*f_range) + sum(spectrumAVG_mask(n3:n4)'.*f_range_sym)); 
-            % M2 = squeeze(sum(spectrumAVG_mask(n1:n2)'.*f_range.^2) + sum(spectrumAVG_mask(n3:n4)'.*f_range_sym.^2)); 
-            % omegaAVG = M1/M0;
-            % omegaRMS = sqrt(M2/M0);
-            M0 = mean(momentM0(mask)); % versus mean(momentM0,[1,2])
-            M0_full = mean(momentM0,[1,2]);
-            M1 = mean(momentM1(mask));
+            momentM0 = moment0(obj.SH_processed, f_1, f_2, f_s, batch_size);
+            momentM2 = moment2(obj.SH_processed, f_1, f_2, f_s, batch_size);
+            M0_full = mean(momentM0, [1, 2]);
             M2 = mean(momentM2(mask));
-            omegaAVG = M1/M0_full; % M1/M0;
-            omegaRMS = sqrt(M2/M0_full); % sqrt(M2/M0);
-            omegaRMS_index = omegaRMS * size(SH_mask, 3) / obj.fs;
+            omegaRMS = sqrt(M2 / M0_full); % sqrt(M2/M0);
+            omegaRMS_index = omegaRMS * batch_size / f_s;
             I_omega = scalingfn(spectrumAVG_mask(round(omegaRMS_index)));
-            axis_x = linspace(-obj.fs / 2, obj.fs / 2, size(SH_mask, 3));
+            axis_x = linspace(-f_s / 2, f_s / 2, size(SH_mask, 3));
 
             % Get the color of the current ROI
-            roiColor = obj.rois{i}.Color;
+            roiColor = obj.colors{i};
 
             p_mask = plot(axis_x, fftshift(scalingfn(spectrumAVG_mask)), 'Color', roiColor, 'LineWidth', 1, 'DisplayName', 'Arteries');
-            xlim([-obj.fs / 2 obj.fs / 2])
-            sclingrange = abs(fftshift(axis_x)) > obj.f1;
+            xlim([-f_s / 2 f_s / 2])
+            sclingrange = abs(fftshift(axis_x)) > f_1;
 
             if rescale
                 yrange = [.99 * scalingfn(min(spectrumAVG_mask(sclingrange))) 1.01 * scalingfn(max(spectrumAVG_mask(sclingrange)))];
                 ylim(yrange)
             else
                 yrange = get(gca, 'YLim');
+                ylim(yrange)
             end
 
             om_RMS_line = line([-omegaRMS omegaRMS], [I_omega I_omega]);
@@ -320,20 +407,21 @@ methods
             om_RMS_line.LineWidth = 1;
             om_RMS_line.Tag = sprintf('f_{RMS %d} = %.2f kHz', i, omegaRMS);
             %fprintf('f_{RMS %d} = %.2f kHz\n', i, omegaRMS);
-            text(10, I_omega, sprintf('f_{RMS %d} = %.2f kHz', i, omegaRMS), 'HorizontalAlignment','center', 'VerticalAlignment','bottom')
+            text(10, I_omega, sprintf('f_{RMS %d} = %.2f kHz', i, omegaRMS), 'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom')
             set(gca, 'LineWidth', 1);
             uistack(p_mask, 'top');
             uistack(gca, 'top');
 
             hold on
 
+            fit_spectrum(axis_x, log10(fftshift(spectrumAVG_mask)), f_1, f_2, annotation = false);
+
         end
 
         pbaspect([1.618 1 1]);
-
-        % rectangle('Position', [-f1 yrange(1)  2*f1 (yrange(2)-yrange(1))], 'FaceColor', [0.9 0.9 0.9], 'EdgeColor', 'none');
-        % rectangle('Position', [-fs/2 yrange(1) (fs/2-f2) (yrange(2)-yrange(1))], 'FaceColor', [0.9 0.9 0.9], 'EdgeColor', 'none');
-        % rectangle('Position', [f2 yrange(1) (fs/2-f2) (yrange(2)-yrange(1))], 'FaceColor', [0.9 0.9 0.9], 'EdgeColor', 'none');
+        yline(0, 'LineWidth', 2)
+        box on,
+        set(gca, 'FontSize', 12, 'LineWidth', 2);
 
     end
 

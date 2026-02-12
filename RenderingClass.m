@@ -40,7 +40,6 @@ methods
         Params.spatial_propagation = 0.5;
         Params.Padding_num = 0;
 
-
         Params.svd_filter = 1;
         Params.svdx_filter = false;
         Params.svdx_t_filter = false;
@@ -126,10 +125,11 @@ methods
 
         end
 
-        %1) Apply corrections to interferograms
+        % 1) Apply corrections to interferograms
 
         doFrames = ParamChanged.spatial_filter || ParamChanged.hilbert_filter || ParamChanged.spatial_filter_range || obj.FramesChanged;
         [Nx, Ny, batch_size] = size(obj.Frames);
+
         if doFrames % change or if the frames changed
 
             if Params.hilbert_filter
@@ -145,7 +145,6 @@ methods
 
         obj.Output.construct_image_from_Frames(Params, obj.Frames);
 
-
         if doFrames % change or if the frames changed
 
             if Params.spatial_filter
@@ -160,7 +159,7 @@ methods
 
         end
 
-        %2) Spatial transformation (from Frames to H)
+        % 2) Spatial transformation (from Frames to H)
 
         doFH = doFrames || ParamChanged.Padding_num || ParamChanged.spatial_transformation || ParamChanged.spatial_propagation || ParamChanged.ShackHartmannCorrection || obj.FramesChanged || ~options.cache_intermediate_results;
 
@@ -170,13 +169,15 @@ methods
                 case "angular spectrum"
 
                     [NY, NX, ~] = size(obj.Frames);
-                    if Params.Padding_num > 0 
+
+                    if Params.Padding_num > 0
                         ND = Params.Padding_num;
-                    else 
-                        ND = max(NX, NY);                        
+                    else
+                        ND = max(NX, NY);
                     end
 
                     if ParamChanged.spatial_propagation || ParamChanged.Padding_num || ParamChanged.spatial_transformation || isempty(obj.SpatialKernel)
+
                         if isempty(Params.ShackHartmannCorrection)
                             obj.SpatialKernel = propagation_kernelAngularSpectrum(ND, ND, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
                         else
@@ -184,26 +185,29 @@ methods
                         end
 
                     end
+
                     if isempty(Params.ShackHartmannCorrection)
                         obj.FH = fft2(single(pad3DToSquare(obj.Frames, ND))); % zero pading in a square of max(Nx NY) size
                     else
                         obj.FH = fft2(single(obj.Frames));
                     end
+
                     obj.FH = obj.FH .* fftshift(obj.SpatialKernel);
                 case "Fresnel"
-                    
+
                     [NY, NX, ~] = size(obj.Frames);
 
-                    if Params.Padding_num > 0 
+                    if Params.Padding_num > 0
                         NY = Params.Padding_num;
                         NX = Params.Padding_num;
                     end
 
                     if ParamChanged.spatial_propagation || ParamChanged.Padding_num || ParamChanged.spatial_transformation || isempty(obj.SpatialKernel)
-                        
+
                         [obj.SpatialKernel, obj.PhaseFactor] = propagation_kernelFresnel(NX, NY, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
                     end
-                    if Params.Padding_num > 0 
+
+                    if Params.Padding_num > 0
                         obj.FH = single(pad3DToSquare(obj.Frames, Params.Padding_num)) .* obj.SpatialKernel;
                     else
                         obj.FH = single(obj.Frames) .* obj.SpatialKernel;
@@ -225,7 +229,7 @@ methods
                 end
 
                 if ~isempty(obj.ShackHartmannMask)
-                    obj.FH =  obj.FH .* obj.ShackHartmannMask;
+                    obj.FH = obj.FH .* obj.ShackHartmannMask;
                 end
 
             else
@@ -246,7 +250,7 @@ methods
                 case "Fresnel"
                     obj.H = fftshift(fftshift(fft2(obj.FH), 1), 2) ./ sqrt(Nx * Ny); %.*obj.PhaseFactor;
                 case "twin image removal"
-                    obj.H = twin_image_removal_(single(obj.Frames),[],ParamChanged,Params);
+                    obj.H = twin_image_removal_(single(obj.Frames), [], ParamChanged, Params);
                 case "None"
                     obj.H = single(obj.Frames);
             end
@@ -260,7 +264,7 @@ methods
             obj.FH = [];
         end
 
-        %3) H fluctuation batch filtering
+        % 3) H fluctuation batch filtering
 
         if doH
 
@@ -294,7 +298,7 @@ methods
 
         end
 
-        %4) Short-time transformation
+        % 4) Short-time transformation
 
         doSH = doH || ParamChanged.time_transform || obj.FramesChanged || ParamChanged.flip_y || ParamChanged.flip_x || ~options.cache_intermediate_results;
 

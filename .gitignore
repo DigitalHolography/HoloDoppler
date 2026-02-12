@@ -13,3 +13,11 @@ call_backs/pack/codegen/
 *.holo
 maskpol.png
 build/
+
+Scripts/*.png
+Scripts/*.eps
+Scripts/old/*.png
+Scripts/old/*.eps
+Scripts/old2/*.png
+Scripts/old2/*.eps
+Scripts/**

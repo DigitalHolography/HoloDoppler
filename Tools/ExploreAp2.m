@@ -1,4 +1,4 @@
-classdef ExploreAp2< handle
+classdef ExploreAp2 < handle
 
 properties
     fig % Main figure handle
@@ -15,7 +15,7 @@ end
 
 methods
 
-    function obj = ExploreAp2(I,Params)
+    function obj = ExploreAp2(I, Params)
         % Constructor - initialize the application
         obj.I = I;
 
@@ -168,32 +168,32 @@ methods
             return;
         end
 
-
-        hei = size(obj.I,1);
-        wid = size(obj.I,2);
+        hei = size(obj.I, 1);
+        wid = size(obj.I, 2);
 
         pos = obj.roi.Position;
-        pos = arrayfun(@floor,pos);
+        pos = arrayfun(@floor, pos);
         x1 = pos(1);
         y1 = pos(2);
         w1 = pos(3);
         h1 = pos(4);
-        
-        y2 = max(min((y1+h1),hei),1);
-        x2 = max(min((x1+w1),wid),1);
-        y1 = max(min((y1),hei),1);
-        x1 = max(min((x1),wid),1); % matlab....
+
+        y2 = max(min((y1 + h1), hei), 1);
+        x2 = max(min((x1 + w1), wid), 1);
+        y1 = max(min((y1), hei), 1);
+        x1 = max(min((x1), wid), 1); % matlab....
 
         SubapI = twin_image_removal_(obj.I, maskphase);
+
         switch obj.Params.spatial_transformation
             case "angular spectrum"
-                [NY,NX,~] = size(SubapI);
-                SpatialKernel = propagation_kernelAngularSpectrum(NX,NY,obj.Params.spatial_propagation,obj.Params.lambda,obj.Params.ppx,obj.Params.ppy,0);
+                [NY, NX, ~] = size(SubapI);
+                SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, obj.Params.spatial_propagation, obj.Params.lambda, obj.Params.ppx, obj.Params.ppy, 0);
                 FH = fft2(single(SubapI)) .* fftshift(SpatialKernel);
             case "Fresnel"
-                [NY,NX,~] = size(SubapI);
-                [SpatialKernel] = propagation_kernelFresnel(NX,NY,obj.Params.spatial_propagation,obj.Params.lambda,obj.Params.ppx,obj.Params.ppy,0);
-                FH = single(SubapI) .* SpatialKernel ;
+                [NY, NX, ~] = size(SubapI);
+                [SpatialKernel] = propagation_kernelFresnel(NX, NY, obj.Params.spatial_propagation, obj.Params.lambda, obj.Params.ppx, obj.Params.ppy, 0);
+                FH = single(SubapI) .* SpatialKernel;
             case "None"
                 FH = [];
         end
@@ -202,7 +202,7 @@ methods
             case "angular spectrum"
                 H = ifft2(FH);
             case "Fresnel"
-                H = fftshift(fftshift(fft2(FH),1),2) ;%.*obj.PhaseFactor;
+                H = fftshift(fftshift(fft2(FH), 1), 2); %.*obj.PhaseFactor;
             case "None"
                 H = single(SubapI);
         end
@@ -210,6 +210,7 @@ methods
         if obj.Params.svd_filter
             [H] = svd_filter(H, obj.Params.svd_threshold, obj.Params.time_range(1), obj.Params.fs, obj.Params.svd_stride);
         end
+
         switch obj.Params.time_transform
             case 'FFT'
                 SH = fft(H, [], 3);
@@ -218,12 +219,12 @@ methods
             case 'None'
                 SH = H;
         end
-        if strcmp(obj.Params.time_transform,'PCA')
+
+        if strcmp(obj.Params.time_transform, 'PCA')
             img = cumulant(SH, obj.Params.index_range(1), obj.Params.index_range(2));
         else
-            img = moment0(SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.I,3), obj.Params.flatfield_gw);
+            img = moment0(SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.I, 3), obj.Params.flatfield_gw);
         end
-        
 
         % Plot
         axes(obj.axPlot);
@@ -232,8 +233,6 @@ methods
         imagesc(img);
         colormap(obj.axPlot, 'gray');
         colorbar;
-
-        
 
     end
 

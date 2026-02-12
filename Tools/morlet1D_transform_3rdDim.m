@@ -17,33 +17,32 @@ function W = morlet1D_transform_3rdDim(A, scales, omega0)
 %       scales = logspace(0, 2, 32);
 %       W = morlet1D_transform_3rdDim(A, scales, 6);
 
-    if nargin < 2 || isempty(scales)
-        scales =  1;
-    end
+if nargin < 2 || isempty(scales)
+    scales = 1;
+end
 
-    if nargin < 3
-        omega0 = 6; % default central frequency
-    end
-    
+if nargin < 3
+    omega0 = 6; % default central frequency
+end
 
-    [nx, ny, nz] = size(A);
-    ns = numel(scales);
-    W = zeros(nx, ny, ns, nz,"single");
+[nx, ny, nz] = size(A);
+ns = numel(scales);
+W = zeros(nx, ny, ns, nz, "single");
 
-    % Frequency vector
-    freqs = ifftshift((-floor(nz/2):ceil(nz/2)-1)/nz * 2*pi);
+% Frequency vector
+freqs = ifftshift((-floor(nz / 2):ceil(nz / 2) - 1) / nz * 2 * pi);
 
-    % FFT along 3rd dimension
-    A_fft = fft(A, [], 3);
+% FFT along 3rd dimension
+A_fft = fft(A, [], 3);
 
-    for si = 1:ns
-        s = scales(si);
-        % Morlet wavelet in frequency domain
-        psi_hat = (pi^(-0.25)) * exp(-0.5 * (s * freqs - omega0).^2);
-        psi_hat = reshape(psi_hat, [1 1 nz]); % match dimensions
-        % Apply convolution in frequency domain
-        W(:, :, si, :) = ifft(A_fft .* psi_hat, [], 3);
-    end
+for si = 1:ns
+    s = scales(si);
+    % Morlet wavelet in frequency domain
+    psi_hat = (pi ^ (-0.25)) * exp(-0.5 * (s * freqs - omega0) .^ 2);
+    psi_hat = reshape(psi_hat, [1 1 nz]); % match dimensions
+    % Apply convolution in frequency domain
+    W(:, :, si, :) = ifft(A_fft .* psi_hat, [], 3);
+end
 
-    W = squeeze(W);
+W = squeeze(W);
 end

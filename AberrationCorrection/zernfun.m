@@ -97,12 +97,12 @@ m = m(:);
 
 if any(mod(n - m, 2))
     error('zernfun:NMmultiplesof2', ...
-        'All N and M must differ by multiples of 2 (including 0).')
+    'All N and M must differ by multiples of 2 (including 0).')
 end
 
 if any(m > n)
     error('zernfun:MlessthanN', ...
-        'Each M must be less than or equal to its corresponding N.')
+    'Each M must be less than or equal to its corresponding N.')
 end
 
 % if any( r>1 | r<0 )
@@ -119,7 +119,7 @@ length_r = length(r);
 
 if length_r ~= length(theta)
     error('zernfun:RTHlength', ...
-        'The number of R- and THETA-values must be equal.')
+    'The number of R- and THETA-values must be equal.')
 end
 
 % Check normalization:
