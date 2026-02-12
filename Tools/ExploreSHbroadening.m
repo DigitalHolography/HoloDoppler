@@ -167,7 +167,6 @@ methods
         colormap(obj.axImage, 'gray');
         title('Moment order 0 f1 f2 Image');
         colorbar;
-        obj.clearROIs();
     end
 
     function clearROIs(obj)

@@ -16,6 +16,8 @@ arguments
     opt.annotation (1, 1) logical = true
 end
 
+tic
+
 % Model
 x = double(axis_x(:));
 y = double(signal(:));
@@ -107,12 +109,6 @@ end
 
 disp(txt);
 
-fitMask = (abs(xx) <= f2) & (abs(xx) >= f1);
-M2_est =  sum((xx(fitMask) - fitObj.x0).^2 .* yy(fitMask)) .* dx;
-M0_est =  sum(yy(fitMask)) .* dx;
-f_RMS = sqrt(M2_est / M0_est);
-
-fprintf('---------------\nf_RMS = %.2f kHz\n', f_RMS);
 
 % Put a small annotation in the corner
 if opt.annotation
@@ -122,5 +118,9 @@ if opt.annotation
         'FontSize', 9, 'Color', 'r', 'Interpreter', 'none');
     uistack(p_fit, 'top');
 end
+
+toc
+
+fprintf('---------------\n');
 
 end
