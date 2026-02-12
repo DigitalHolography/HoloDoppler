@@ -9,6 +9,7 @@ properties
     axPlot % Axis for the spectrum plot
     rois % list of Region of Interest handle
     masks % list of masks from ROIs
+    colors
     panel
     btnGroup % Button group for display options
     fs
@@ -102,6 +103,14 @@ methods
             'Position', [0.5, 0.2, 0.45, 0.2], ...
             'Callback', @(src, evt)obj.roiNew());
 
+        % Add pushbutton for loading PNG mask
+        uicontrol('Parent', obj.panel, ...
+            'Style', 'pushbutton', ...
+            'String', 'Load PNG Mask', ...
+            'Units', 'normalized', ...
+            'Position', [0.5, 0.4, 0.45, 0.2], ...
+            'Callback', @(src, evt)obj.loadPNGMask());
+
         % Add pushbutton for clearing all ROIs
         uicontrol('Parent', obj.panel, ...
             'Style', 'pushbutton', ...
@@ -167,6 +176,14 @@ methods
 
             for i = 1:length(obj.rois)
 
+                if obj.rois{i} == 1
+                    break;
+                end
+
+                if isempty(obj.rois{i}) || ~isvalid(obj.rois{i})
+                    break;
+                end
+
                 delete(obj.rois{i});
 
             end
@@ -175,6 +192,8 @@ methods
 
         obj.rois = [];
         obj.masks = [];
+        obj.colors = [];
+        obj.updateImageDisplay();
         obj.spectrum_plotting(); % Update the spectrum plot
     end
 
@@ -184,7 +203,9 @@ methods
             manual = false;
         end
 
-        randomColor = rand(1, 3); % Generate a random RGB color
+        n = length(obj.rois);
+        C = colororder('gem');
+        randomColor = C(mod(n, 7), :); % Generate a random RGB color
 
         if manual
             obj.rois{end + 1} = drawfreehand(obj.axImage, 'Color', randomColor, ...
@@ -197,7 +218,7 @@ methods
                 'FaceAlpha', 0.2, ...
                 'InteractionsAllowed', 'translate');
         end
-
+        obj.colors{end + 1} = randomColor;
         % Add listener to ROI for position changes
         addlistener(obj.rois{end}, 'MovingROI', @(src, evt)obj.spectrum_plotting());
         % Callback for when ROI is moved
@@ -209,22 +230,92 @@ methods
         for i = 1:numel(obj.rois)
             roi = obj.rois{i};
 
+            if roi == 1
+                return;
+            end
+
             if isempty(roi) || ~isvalid(roi)
                 return;
             end
 
             roiPos = roi.Position; % [x, y, width, height]
 
-
             % Create a binary mask
-            [ny, nx, ~] = size(obj.SH_processed);
-            M = max(nx, ny);
-            rx = nx / M;
-            ry = ny / M;
-            [X, Y] = meshgrid(1:nx, 1:ny);
+            [Ny, Nx, ~] = size(obj.SH_processed);
+            M = max(Nx, Ny);
+            rx = Nx / M;
+            ry = Ny / M;
+            [X, Y] = meshgrid(1:Nx, 1:Ny);
 
             obj.masks{i} = (X >= roiPos(1) * rx) & (X <= roiPos(1) * rx + roiPos(3) * rx) & ...
                 (Y >= roiPos(2) * ry) & (Y <= roiPos(2) * ry + roiPos(4) * ry);
+        end
+
+    end
+
+    function loadPNGMask(obj)
+        % Load a PNG file and use it as a mask
+        [filename, pathname] = uigetfile({'*.png;*.bmp;*.jpg;*.tif', 'Image Files'; ...
+                                              '*.*', 'All Files'}, ...
+        'Select a mask image');
+
+        if isequal(filename, 0) || isequal(pathname, 0)
+            % User cancelled
+            return;
+        end
+
+        fullpath = fullfile(pathname, filename);
+
+        try
+            % Read the image
+            maskImage = imread(fullpath);
+
+            % Convert to grayscale if RGB
+            if size(maskImage, 3) > 1
+                maskImage = rgb2gray(maskImage);
+            end
+
+            % Convert to binary mask (non-zero values become 1)
+            maskBinary = imbinarize(maskImage);
+
+            % Get the current image size
+            [Ny, Nx, ~] = size(obj.SH_processed);
+            M = max(Nx, Ny);
+
+            % Resize the mask to match the current image display dimensions
+            maskResized = imresize(maskBinary, [Ny, Nx]);
+
+            obj.rois{end + 1} = 1;
+            obj.masks{end + 1} = maskResized; % Store the image handle
+
+            n = length(obj.rois);
+            C = colororder('gem');
+            randomColor = C(mod(n, 7), :); % Generate a random RGB color
+            obj.colors{end + 1} = randomColor;
+
+            % Create a visual representation of the mask
+            % Since we can't create a drawrectangle/drawfreehand from existing mask,
+            % we'll create a semitransparent overlay
+            hold(obj.axImage, 'on');
+
+            % Create an overlay image
+            overlay = zeros(Ny, Nx, 3);
+
+            for c = 1:3
+                overlay(:, :, c) = maskResized * randomColor(c);
+            end
+
+            % Display the overlay
+            h = imagesc(imresize(overlay, [M, M]), 'Parent', obj.axImage);
+            set(h, 'AlphaData', imresize(maskResized, [M, M]) * 0.3); % 30 % transparency
+
+            % Just update the spectrum plot
+            obj.spectrum_plotting();
+
+            fprintf('Loaded mask from: %s\n', filename);
+
+        catch ME
+            MEdisp(ME);
         end
 
     end
@@ -294,7 +385,7 @@ methods
             axis_x = linspace(-f_s / 2, f_s / 2, size(SH_mask, 3));
 
             % Get the color of the current ROI
-            roiColor = obj.rois{i}.Color;
+            roiColor = obj.colors{i};
 
             p_mask = plot(axis_x, fftshift(scalingfn(spectrumAVG_mask)), 'Color', roiColor, 'LineWidth', 1, 'DisplayName', 'Arteries');
             xlim([-f_s / 2 f_s / 2])

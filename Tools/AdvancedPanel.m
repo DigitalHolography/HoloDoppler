@@ -1,7 +1,7 @@
 function AdvancedPanel(app)
 % Create the UIFigure with improved styling
 fig = uifigure('Name', 'Advanced Controls', ...
-    'Position', [100 100 450 250], ...
+    'Position', [100 100 500 250], ...
     'Color', [0.2 0.2 0.2], ...
     'Resize', 'off');
 
@@ -156,7 +156,6 @@ function buckEditCallBack(src)
         assert(size(app.HD.params.buckets_ranges, 2) == 2);
     catch E
         disp("Couldn't get the ranges try to write input frequency ranges like '[[6,18]; [6,25]]' in kHz.")
-        MEdisp(E)
     end
 
 end
