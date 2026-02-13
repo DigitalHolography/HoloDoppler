@@ -176,11 +176,11 @@ methods
             for i = 1:length(obj.rois)
 
                 if obj.rois{i} == 1
-                    break;
+                    continue;
                 end
 
                 if isempty(obj.rois{i}) || ~isvalid(obj.rois{i})
-                    break;
+                    continue;
                 end
 
                 delete(obj.rois{i});
@@ -204,7 +204,7 @@ methods
 
         n = length(obj.rois);
         C = colororder('gem');
-        randomColor = C(mod(n, 7), :); % Generate a random RGB color
+        randomColor = C(mod(n, 7) + 1, :); % Generate a random RGB color
 
         if manual
             obj.rois{end + 1} = drawfreehand(obj.axImage, 'Color', randomColor, ...
@@ -230,11 +230,11 @@ methods
             roi = obj.rois{i};
 
             if roi == 1
-                return;
+                continue;
             end
 
             if isempty(roi) || ~isvalid(roi)
-                return;
+                continue;
             end
 
             roiPos = roi.Position; % [x, y, width, height]
@@ -287,9 +287,9 @@ methods
             obj.rois{end + 1} = 1;
             obj.masks{end + 1} = maskResized; % Store the image handle
 
-            n = length(obj.rois);
+            n = length(obj.rois) - 1;
             C = colororder('gem');
-            randomColor = C(mod(n, 7), :); % Generate a random RGB color
+            randomColor = C(mod(n, 7) + 1, :); % Generate a random RGB color
             obj.colors{end + 1} = randomColor;
 
             % Create a visual representation of the mask

@@ -316,9 +316,9 @@ methods
         end
 
         if obj.SH.is_selected
-            bin_x = 4;
-            bin_y = 4;
-            bin_w = 16;
+            bin_x = 1;
+            bin_y = 1;
+            bin_w = 1;
             obj.SH.parameters.SH = imresize3(gather(SH_mod), [size(SH_mod, 1) / bin_x size(SH_mod, 2) / bin_y size(SH_mod, 3) / bin_w], 'Method', 'linear');
             obj.SH.parameters.vector = zeros(1, NT);
         end
