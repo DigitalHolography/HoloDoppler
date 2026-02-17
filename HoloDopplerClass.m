@@ -419,7 +419,7 @@ methods
         index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HDPreview'));
         result_folder_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HDPreview_', num2str(index + 1)));
 
-        if not(exist(result_folder_path))
+        if ~isfolder(result_folder_path)
             mkdir(result_folder_path);
         end
 
@@ -656,7 +656,7 @@ methods
         index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HD_'));
         result_folder_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD_', num2str(index + 1)));
 
-        if not(exist(result_folder_path))
+        if ~isfolder(result_folder_path)
             mkdir(result_folder_path);
             mkdir(fullfile(result_folder_path, 'avi'));
             mkdir(fullfile(result_folder_path, 'raw'));

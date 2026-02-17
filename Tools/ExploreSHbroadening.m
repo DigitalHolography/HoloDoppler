@@ -36,7 +36,7 @@ methods
 
     function createUI(obj)
         % Create the main figure with fixed size
-        obj.fig = figure('Name', 'Explore SH', 'NumberTitle', 'off', ...
+        obj.fig = figure('Name', 'Explore SH Broadening', 'NumberTitle', 'off', ...
             'Position', [100, 100, 1000, 600], ...
             'CloseRequestFcn', @(src, evt)obj.closeFigure(), ...
             'Color', [1, 1, 1]);
@@ -60,7 +60,6 @@ methods
         title(obj.axPlot, 'Signal Spectrum');
         xlabel(obj.axPlot, 'Dimension 3 Index');
         ylabel(obj.axPlot, 'Magnitude');
-        grid(obj.axPlot, 'on');
 
         % Create display options panel (bottom left)
         obj.panel = uipanel('Parent', obj.fig, ...
@@ -100,7 +99,7 @@ methods
             'Style', 'pushbutton', ...
             'String', 'Select ROI', ...
             'Units', 'normalized', ...
-            'Position', [0.5, 0.2, 0.45, 0.2], ...
+            'Position', [0.5, 0.7, 0.45, 0.2], ...
             'Callback', @(src, evt)obj.roiNew());
 
         % Add pushbutton for loading PNG mask
@@ -108,7 +107,7 @@ methods
             'Style', 'pushbutton', ...
             'String', 'Load PNG Mask', ...
             'Units', 'normalized', ...
-            'Position', [0.5, 0.4, 0.45, 0.2], ...
+            'Position', [0.5, 0.5, 0.45, 0.2], ...
             'Callback', @(src, evt)obj.loadPNGMask());
 
         % Add pushbutton for clearing all ROIs
@@ -116,8 +115,16 @@ methods
             'Style', 'pushbutton', ...
             'String', 'Clear ROIs', ...
             'Units', 'normalized', ...
-            'Position', [0.5, 0.6, 0.45, 0.2], ...
+            'Position', [0.5, 0.1, 0.45, 0.2], ...
             'Callback', @(src, evt)obj.clearROIs());
+
+        % Add pushbutton for clearing all ROIs
+        uicontrol('Parent', obj.panel, ...
+            'Style', 'pushbutton', ...
+            'String', 'Save Spectra', ...
+            'Units', 'normalized', ...
+            'Position', [0.5, 0.3, 0.45, 0.2], ...
+            'Callback', @(src, evt)obj.saveSpectra());
 
         % Set default selection
         set(obj.btnGroup, 'SelectedObject', findobj(obj.btnGroup, 'Tag', 'abs'));
@@ -196,6 +203,43 @@ methods
         obj.spectrum_plotting(); % Update the spectrum plot
     end
 
+    function saveSpectra(obj)
+        % Saves Spectra into the preview folder
+
+        folderPath = uigetdir(pwd, 'Select a folder to save the figure');
+
+        % Check if user selected a folder (didn't click Cancel)
+        if folderPath ~= 0
+            % Ask user for filename
+            defaultName = 'spectra';
+            prompt = {'Enter filename (without extension):'};
+            dlgtitle = 'Save Figure';
+            dims = [1 35];
+            answer = inputdlg(prompt, dlgtitle, dims, {defaultName});
+
+            % Check if user entered a filename
+            if ~isempty(answer)
+                fileName = answer{1};
+
+                % Construct full file path
+                fullFilePath = fullfile(folderPath, [fileName, '.png']);
+
+                % Save the figure using exportgraphics
+                exportgraphics(obj.axPlot, fullFilePath, 'Resolution', 300);
+
+                % Display confirmation message
+                fprintf('Figure saved successfully to:\n%s\n', fullFilePath);
+
+            else
+                disp('Save cancelled: No filename provided');
+            end
+
+        else
+            disp('Save cancelled: No folder selected');
+        end
+
+    end
+
     function roiNew(obj, manual)
 
         if nargin < 2
@@ -217,6 +261,7 @@ methods
                 'FaceAlpha', 0.2, ...
                 'InteractionsAllowed', 'translate');
         end
+
         obj.colors{end + 1} = randomColor;
         % Add listener to ROI for position changes
         addlistener(obj.rois{end}, 'MovingROI', @(src, evt)obj.spectrum_plotting());
@@ -333,6 +378,9 @@ methods
 
         axes(obj.axPlot);
         cla(obj.axPlot); % Clear the previous plot
+        title(obj.axPlot, 'Signal Spectrum');
+        xlabel(obj.axPlot, 'Dimension 3 Index');
+        ylabel(obj.axPlot, 'Magnitude');
 
         if isempty(obj.rois)
             return
@@ -348,14 +396,6 @@ methods
 
         % Plot the spectrum for the selected region
         obj.updateMasks();
-        xline(f_1, '--')
-        xline(f_2, '--')
-        xline(-f_1, '--')
-        xline(-f_2, '--')
-        xticks([-f_2 -f_1 0 f_1 f_2])
-        xticklabels({num2str(round(-f_2, 1)), num2str(round(-f_1, 1)), '0', num2str(round(f_1, 1)), num2str(round(f_2, 1))})
-        fontsize(gca, 12, "points");
-        xlabel('frequency (kHz)', 'FontSize', 14);
 
         if angleout
             ylabel('S', 'FontSize', 14);
@@ -418,9 +458,38 @@ methods
         end
 
         pbaspect([1.618 1 1]);
-        yline(0, 'LineWidth', 2)
         box on,
         set(gca, 'FontSize', 12, 'LineWidth', 2);
+
+        % Fill in gray the are between f1 and -f1, and between f2 or -f2 and outer boundaries
+        % Store fill handles for later reordering
+        fillHandles = gobjects(3, 1);
+
+        fig_axis = axis;
+        c_gray = [0.9 0.9 0.9];
+        X = [fig_axis(1) -f_2 -f_2 fig_axis(1)];
+        Y = [fig_axis(4) fig_axis(4) fig_axis(3) fig_axis(3)];
+        fillHandles(1) = fill(X, Y, c_gray, 'EdgeColor', 'black', 'LineWidth', 1, 'DisplayName', 'Arteries');
+
+        X = [-f_1 f_1 f_1 -f_1];
+        Y = [fig_axis(4) fig_axis(4) fig_axis(3) fig_axis(3)];
+        fillHandles(2) = fill(X, Y, c_gray, 'EdgeColor', 'black', 'LineWidth', 1, 'DisplayName', 'Arteries');
+
+        X = [f_2 fig_axis(2) fig_axis(2) f_2];
+        Y = [fig_axis(4) fig_axis(4) fig_axis(3) fig_axis(3)];
+        fillHandles(3) = fill(X, Y, c_gray, 'EdgeColor', 'black', 'LineWidth', 1, 'DisplayName', 'Arteries');
+
+        % Move all fills to the background
+        for j = 1:length(fillHandles)
+            uistack(fillHandles(j), 'bottom');
+        end
+
+        xticks([-f_2 -f_1 0 f_1 f_2])
+        xticklabels({num2str(round(-f_2, 1)), num2str(round(-f_1, 1)), '0', num2str(round(f_1, 1)), num2str(round(f_2, 1))})
+        fontsize(gca, 12, "points");
+        xlabel('frequency (kHz)', 'FontSize', 14);
+
+        yline(0, 'LineWidth', 2)
 
     end
 
