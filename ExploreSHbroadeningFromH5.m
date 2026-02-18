@@ -9,6 +9,7 @@ properties
     axPlot % Axis for the spectrum plot
     rois % list of Region of Interest handle
     masks % list of masks from ROIs
+    fitROIs % list of fit results for each ROI
     colors
     panel
     btnGroup % Button group for display options
@@ -22,9 +23,9 @@ methods
     function obj = ExploreSHbroadeningFromH5(fs, f1, f2)
 
         arguments
-            fs = 37.037
-            f1 = 4
-            f2 = 16
+            fs = 78
+            f1 = 6
+            f2 = 39
         end
 
         % Select a H5 file
@@ -105,21 +106,13 @@ methods
                 'BackgroundColor', [1, 1, 1]);
         end
 
-        % Add pushbutton for creating a new ROI
+        % Add pushbutton to make a grid of ROIs
         uicontrol('Parent', obj.panel, ...
             'Style', 'pushbutton', ...
-            'String', 'Select ROI', ...
+            'String', 'Save Spectra', ...
             'Units', 'normalized', ...
-            'Position', [0.5, 0.7, 0.45, 0.2], ...
-            'Callback', @(src, evt)obj.roiNew());
-
-        % Add pushbutton for loading PNG mask
-        uicontrol('Parent', obj.panel, ...
-            'Style', 'pushbutton', ...
-            'String', 'Load PNG Mask', ...
-            'Units', 'normalized', ...
-            'Position', [0.5, 0.5, 0.45, 0.2], ...
-            'Callback', @(src, evt)obj.loadPNGMask());
+            'Position', [0.5, -0.1, 0.45, 0.2], ...
+            'Callback', @(src, evt)obj.makeROIGrid());
 
         % Add pushbutton for clearing all ROIs
         uicontrol('Parent', obj.panel, ...
@@ -129,13 +122,29 @@ methods
             'Position', [0.5, 0.1, 0.45, 0.2], ...
             'Callback', @(src, evt)obj.clearROIs());
 
-        % Add pushbutton for clearing all ROIs
+        % Add pushbutton for saving spectra
         uicontrol('Parent', obj.panel, ...
             'Style', 'pushbutton', ...
             'String', 'Save Spectra', ...
             'Units', 'normalized', ...
             'Position', [0.5, 0.3, 0.45, 0.2], ...
             'Callback', @(src, evt)obj.saveSpectra());
+
+        % Add pushbutton for loading PNG mask
+        uicontrol('Parent', obj.panel, ...
+            'Style', 'pushbutton', ...
+            'String', 'Load PNG Mask', ...
+            'Units', 'normalized', ...
+            'Position', [0.5, 0.5, 0.45, 0.2], ...
+            'Callback', @(src, evt)obj.loadPNGMask());
+
+        % Add pushbutton for creating a new ROI
+        uicontrol('Parent', obj.panel, ...
+            'Style', 'pushbutton', ...
+            'String', 'Select ROI', ...
+            'Units', 'normalized', ...
+            'Position', [0.5, 0.7, 0.45, 0.2], ...
+            'Callback', @(src, evt)obj.roiNew());
 
         % Set default selection
         set(obj.btnGroup, 'SelectedObject', findobj(obj.btnGroup, 'Tag', 'abs'));
@@ -250,6 +259,44 @@ methods
         else
             disp('Save cancelled: No folder selected');
         end
+
+    end
+
+    function makeROIGrid(obj)
+
+        % Clear existing ROIs and masks
+        obj.clearROIs();
+
+        % Create a grid of ROIs across the image
+        numRows = 16; % Number of rows in the grid
+        numCols = 16; % Number of columns in the grid
+
+        % Get current axis limits
+        xLimits = get(obj.axImage, 'XLim');
+        yLimits = get(obj.axImage, 'YLim');
+
+        % Calculate width and height of each ROI based on axis limits
+        roiWidth = (xLimits(2) - xLimits(1)) / numCols;
+        roiHeight = (yLimits(2) - yLimits(1)) / numRows;
+
+        % Loop through rows and columns to create ROIs
+        for row = 0:(numRows - 1)
+
+            for col = 0:(numCols - 1)
+                % Calculate position for the current ROI
+                xPos = xLimits(1) + col * roiWidth;
+                yPos = yLimits(1) + row * roiHeight;
+
+                % Create a new ROI at the calculated position
+                obj.roiNew();
+                obj.rois{end}.Position = [xPos, yPos, roiWidth, roiHeight];
+            end
+
+        end
+
+        % Update the spectrum plot after creating the grid of ROIs
+        obj.spectrum_plotting();
+        obj.gridFigure();
 
     end
 
@@ -377,7 +424,7 @@ methods
 
     end
 
-    function spectrum_plotting(obj, rescale)
+    function fitResults = spectrum_plotting(obj, rescale)
 
         if nargin < 2
             rescale = true;
@@ -415,6 +462,8 @@ methods
         else
             ylabel('log10 S', 'FontSize', 14);
         end
+
+        fitResults = cell(numel(obj.rois), 1);
 
         for i = 1:numel(obj.rois)
 
@@ -466,9 +515,11 @@ methods
 
             hold on
 
-            fit_spectrum(axis_x, log10(fftshift(spectrumAVG_mask)), f_1, f_2, annotation = false);
+            fitResults{i} = fit_spectrum(axis_x, log10(fftshift(spectrumAVG_mask)), f_1, f_2, annotation = false);
 
         end
+
+        obj.fitROIs = fitResults;
 
         pbaspect([1.618 1 1]);
         box on,
@@ -509,6 +560,52 @@ methods
     function closeFigure(obj)
         % Clean up when figure is closed
         delete(obj.fig);
+    end
+
+    function gridFigure(obj)
+
+        % Create a grid of ROIs and plot the fit parameters as images
+        a = zeros(numRows, numCols);
+        b = zeros(numRows, numCols);
+        g = zeros(numRows, numCols);
+        f0 = zeros(numRows, numCols);
+
+        for row = 0:(numRows - 1)
+
+            for col = 0:(numCols - 1)
+
+                if isempty(obj.fitROIs{row * numCols + col + 1})
+                    continue;
+                end
+
+                a(row + 1, col + 1) = obj.fitROIs{row * numCols + col + 1}.a;
+                b(row + 1, col + 1) = obj.fitROIs{row * numCols + col + 1}.b;
+                g(row + 1, col + 1) = obj.fitROIs{row * numCols + col + 1}.g;
+                f0(row + 1, col + 1) = obj.fitROIs{row * numCols + col + 1}.f0;
+
+            end
+
+        end
+
+        figure,
+        imagesc(a);
+        colorbar;
+        title('a');
+
+        figure,
+        imagesc(b);
+        colorbar;
+        title('b');
+
+        figure,
+        imagesc(g);
+        colorbar;
+        title('g');
+
+        figure,
+        imagesc(f0);
+        colorbar;
+        title('f0');
     end
 
 end
