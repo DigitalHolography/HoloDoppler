@@ -301,9 +301,13 @@ methods
                 xPos = xLimits(1) + col * roiWidth;
                 yPos = yLimits(1) + row * roiHeight;
 
-                % Create a new ROI at the calculated position
-                obj.roiNew();
-                obj.rois{end}.Position = [xPos, yPos, roiWidth, roiHeight];
+                % Create a new ROI
+                obj.rois{end + 1} = 1;
+
+                % Create a binary mask for the current ROI
+                [X, Y] = meshgrid(1:xLimits(2), 1:yLimits(2));
+                obj.masks{end + 1} = (X >= xPos) & (X <= xPos + roiWidth) & ...
+                    (Y >= yPos) & (Y <= yPos + roiHeight);
             end
 
         end
