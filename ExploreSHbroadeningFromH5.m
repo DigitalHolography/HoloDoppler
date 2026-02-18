@@ -20,24 +20,38 @@ end
 
 methods
 
-    function obj = ExploreSHbroadeningFromH5(fs, f1, f2)
+    function obj = ExploreSHbroadeningFromH5(options)
 
         arguments
-            fs = 78
-            f1 = 6
-            f2 = 39
+            options.path = [];
+            options.fs = 78
+            options.f1 = 6
+            options.f2 = 39
         end
 
         % Select a H5 file
-        [h5_file, h5_path] = uigetfile('*.h5', 'Select a h5 file.');
-        SH = h5read(fullfile(h5_path, h5_file), "/SH_Slices");
+        try
+
+            if isempty(options.path)
+                [h5_file, h5_path] = uigetfile('*.h5', 'Select a h5 file.');
+                SH = h5read(fullfile(h5_path, h5_file), "/SH_Slices");
+            else
+                SH = h5read(options.path, "/SH_Slices");
+            end
+
+        catch ME
+
+            MEdisp(ME);
+            error('Failed to load H5 file. Please check the file path and try again.');
+
+        end
 
         % Constructor - initialize the application
         obj.SH = SH;
         obj.SH_processed = []; % Start with none
-        obj.fs = fs;
-        obj.f1 = f1;
-        obj.f2 = f2;
+        obj.fs = options.fs;
+        obj.f1 = options.f1;
+        obj.f2 = options.f2;
         % Calculate initial average image
         obj.updateAverageImage();
 
@@ -296,6 +310,8 @@ methods
 
         % Update the spectrum plot after creating the grid of ROIs
         obj.spectrum_plotting();
+
+        % fitParams as images
         obj.gridFigure();
 
     end
@@ -465,12 +481,12 @@ methods
 
         fitResults = cell(numel(obj.rois), 1);
 
-        for i = 1:numel(obj.rois)
+        parfor i = 1:numel(obj.rois)
 
             mask = obj.masks{i};
 
             if isempty(mask)
-                return;
+                continue;
             end
 
             % Compute the average spectrum for the masked region
