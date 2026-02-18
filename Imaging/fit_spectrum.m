@@ -14,6 +14,7 @@ arguments
     f2 (1, 1) {mustBeNumeric, mustBePositive, mustBeGreaterThan(f2, f1)}
     opt.useSymmetricFit (1, 1) logical = false
     opt.annotation (1, 1) logical = true
+    opt.verbose (1, 1) logical = true
 end
 
 tic
@@ -79,9 +80,12 @@ opts.Lower = lb;
 opts.Upper = ub;
 opts.Robust = 'Bisquare'; % robust to spikes/outliers
 opts.MaxIter = 2000;
+opts.Display = 'off';
 
 % Fit
+warning('off')
 [fitObj, gof] = fit(xf_fit, yf_fit, ft, opts);
+warning('on')
 
 % Evaluate fit over full axis for overlay
 xx = linspace(min(x), max(x), 2000).';
@@ -96,7 +100,9 @@ else
 end
 
 % Plot overlay
-p_fit = plot(xx, yy, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Fit: a - b log10((x-x0)^2+g^2)');
+if opt.verbose
+    p_fit = plot(xx, yy, 'r--', 'LineWidth', 1.5, 'DisplayName', 'Fit: a - b log10((x-x0)^2+g^2)');
+end
 
 % Report parameters in command window and optionally on plot
 g_est = fitObj.g; % gamma in kHz (in your axis units)
@@ -107,9 +113,6 @@ else
     txt = sprintf('Fit: a=%.3g, b=%.3g,\nx0=%.3g kHz,\ng=%.3g kHz | R^2=%.4f', fitObj.a, fitObj.b, x0_est, g_est, gof.rsquare);
 end
 
-disp(txt);
-
-
 % Put a small annotation in the corner
 if opt.annotation
     yl = ylim;
@@ -119,8 +122,13 @@ if opt.annotation
     uistack(p_fit, 'top');
 end
 
-toc
+if opt.verbose
 
-fprintf('---------------\n');
+    disp(txt);
+
+    toc
+
+    fprintf('---------------\n');
+end
 
 end
