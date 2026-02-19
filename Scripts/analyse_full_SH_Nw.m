@@ -58,7 +58,7 @@ Vtw = reshape(V, Nw, Nt, kmax);
 
 for j=1:kmax
     inv = 1;
-    
+         
     imwrite(rescalemask(inv * Uimg(:,:,j),mask),fullfile(h5folder,name,sprintf("%s mode %d lin ff.png",NAME,j)));
 
     f=figure("Visible","off"); imagesc(inv * Vtw(:,:,j)),axis off, saveas(f,fullfile(h5folder,name,sprintf("%s mode %d spectrogram.png",NAME,j)));
