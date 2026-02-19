@@ -1,4 +1,4 @@
-classdef ExploreSHbroadening < handle
+classdef ExploreSHbroadeningFromH5 < handle
 
 properties
     fig % Main figure handle
@@ -9,6 +9,7 @@ properties
     axPlot % Axis for the spectrum plot
     rois % list of Region of Interest handle
     masks % list of masks from ROIs
+    fitROIs % list of fit results for each ROI
     colors
     panel
     btnGroup % Button group for display options
@@ -19,13 +20,38 @@ end
 
 methods
 
-    function obj = ExploreSHbroadening(SH, fs, f1, f2)
+    function obj = ExploreSHbroadeningFromH5(options)
+
+        arguments
+            options.path = [];
+            options.fs = 78
+            options.f1 = 6
+            options.f2 = 39
+        end
+
+        % Select a H5 file
+        try
+
+            if isempty(options.path)
+                [h5_file, h5_path] = uigetfile('*.h5', 'Select a h5 file.');
+                SH = h5read(fullfile(h5_path, h5_file), "/SH_Slices");
+            else
+                SH = h5read(options.path, "/SH_Slices");
+            end
+
+        catch ME
+
+            MEdisp(ME);
+            error('Failed to load H5 file. Please check the file path and try again.');
+
+        end
+
         % Constructor - initialize the application
         obj.SH = SH;
         obj.SH_processed = []; % Start with none
-        obj.fs = fs;
-        obj.f1 = f1;
-        obj.f2 = f2;
+        obj.fs = options.fs;
+        obj.f1 = options.f1;
+        obj.f2 = options.f2;
         % Calculate initial average image
         obj.updateAverageImage();
 
@@ -94,37 +120,45 @@ methods
                 'BackgroundColor', [1, 1, 1]);
         end
 
-        % Add pushbutton for creating a new ROI
+        % Add pushbutton to make a grid of ROIs
         uicontrol('Parent', obj.panel, ...
             'Style', 'pushbutton', ...
-            'String', 'Select ROI', ...
+            'String', 'Make ROI Grid', ...
             'Units', 'normalized', ...
-            'Position', [0.5, 0.7, 0.45, 0.2], ...
-            'Callback', @(src, evt)obj.roiNew());
-
-        % Add pushbutton for loading PNG mask
-        uicontrol('Parent', obj.panel, ...
-            'Style', 'pushbutton', ...
-            'String', 'Load PNG Mask', ...
-            'Units', 'normalized', ...
-            'Position', [0.5, 0.5, 0.45, 0.2], ...
-            'Callback', @(src, evt)obj.loadPNGMask());
+            'Position', [0.5, 0, 0.45, 0.2], ...
+            'Callback', @(src, evt)obj.makeROIGrid());
 
         % Add pushbutton for clearing all ROIs
         uicontrol('Parent', obj.panel, ...
             'Style', 'pushbutton', ...
             'String', 'Clear ROIs', ...
             'Units', 'normalized', ...
-            'Position', [0.5, 0.1, 0.45, 0.2], ...
+            'Position', [0.5, 0.2, 0.45, 0.2], ...
             'Callback', @(src, evt)obj.clearROIs());
 
-        % Add pushbutton for clearing all ROIs
+        % Add pushbutton for saving spectra
         uicontrol('Parent', obj.panel, ...
             'Style', 'pushbutton', ...
             'String', 'Save Spectra', ...
             'Units', 'normalized', ...
-            'Position', [0.5, 0.3, 0.45, 0.2], ...
+            'Position', [0.5, 0.4, 0.45, 0.2], ...
             'Callback', @(src, evt)obj.saveSpectra());
+
+        % Add pushbutton for loading PNG mask
+        uicontrol('Parent', obj.panel, ...
+            'Style', 'pushbutton', ...
+            'String', 'Load PNG Mask', ...
+            'Units', 'normalized', ...
+            'Position', [0.5, 0.6, 0.45, 0.2], ...
+            'Callback', @(src, evt)obj.loadPNGMask());
+
+        % Add pushbutton for creating a new ROI
+        uicontrol('Parent', obj.panel, ...
+            'Style', 'pushbutton', ...
+            'String', 'Select ROI', ...
+            'Units', 'normalized', ...
+            'Position', [0.5, 0.8, 0.45, 0.2], ...
+            'Callback', @(src, evt)obj.roiNew());
 
         % Set default selection
         set(obj.btnGroup, 'SelectedObject', findobj(obj.btnGroup, 'Tag', 'abs'));
@@ -151,6 +185,8 @@ methods
             case 'angle'
                 obj.SH_processed = angle(obj.SH);
         end
+
+        obj.SH_processed = squeeze(mean(obj.SH_processed, 4));
 
         % Update display
         obj.updateAverageImage();
@@ -197,6 +233,7 @@ methods
         end
 
         obj.rois = [];
+        obj.fitROIs = [];
         obj.masks = [];
         obj.colors = [];
         obj.updateImageDisplay();
@@ -237,6 +274,51 @@ methods
         else
             disp('Save cancelled: No folder selected');
         end
+
+    end
+
+    function makeROIGrid(obj)
+
+        % Clear existing ROIs and masks
+        obj.clearROIs();
+
+        % Create a grid of ROIs across the image
+        numRows = 16; % Number of rows in the grid
+        numCols = 16; % Number of columns in the grid
+
+        % Get current axis limits
+        xLimits = get(obj.axImage, 'XLim');
+        yLimits = get(obj.axImage, 'YLim');
+
+        % Calculate width and height of each ROI based on axis limits
+        roiWidth = (xLimits(2) - xLimits(1)) / numCols;
+        roiHeight = (yLimits(2) - yLimits(1)) / numRows;
+
+        % Loop through rows and columns to create ROIs
+        for row = 0:(numRows - 1)
+
+            for col = 0:(numCols - 1)
+                % Calculate position for the current ROI
+                xPos = xLimits(1) + col * roiWidth;
+                yPos = yLimits(1) + row * roiHeight;
+
+                % Create a new ROI
+                obj.rois{end + 1} = 1;
+
+                % Create a binary mask for the current ROI
+                [X, Y] = meshgrid(1:xLimits(2), 1:yLimits(2));
+                obj.masks{end + 1} = (X >= xPos) & (X <= xPos + roiWidth) & ...
+                    (Y >= yPos) & (Y <= yPos + roiHeight);
+                obj.colors{end + 1} =  rand(1, 3);
+            end
+
+        end
+
+        % Update the spectrum plot after creating the grid of ROIs
+        obj.fit_spectra();
+
+        % fitParams as images
+        obj.gridFigure(numRows, numCols);
 
     end
 
@@ -364,7 +446,7 @@ methods
 
     end
 
-    function spectrum_plotting(obj, rescale)
+    function fitResults = spectrum_plotting(obj, rescale)
 
         if nargin < 2
             rescale = true;
@@ -403,12 +485,14 @@ methods
             ylabel('log10 S', 'FontSize', 14);
         end
 
-        for i = 1:numel(obj.rois)
+        fitResults = cell(numel(obj.rois), 1);
+
+        parfor i = 1:numel(obj.rois)
 
             mask = obj.masks{i};
 
             if isempty(mask)
-                return;
+                continue;
             end
 
             % Compute the average spectrum for the masked region
@@ -453,9 +537,11 @@ methods
 
             hold on
 
-            fit_spectrum(axis_x, log10(fftshift(spectrumAVG_mask)), f_1, f_2, annotation = false);
+            fitResults{i} = fit_spectrum(axis_x, log10(fftshift(spectrumAVG_mask)), f_1, f_2, annotation = false);
 
         end
+
+        obj.fitROIs = fitResults;
 
         pbaspect([1.618 1 1]);
         box on,
@@ -493,9 +579,95 @@ methods
 
     end
 
+    function fitResults = fit_spectra(obj)
+
+        % Extract parameters for easier access
+        f_1 = obj.f1;
+        f_2 = obj.f2;
+        f_s = obj.fs;
+
+        if isempty(obj.rois)
+            return
+        end
+
+        % Plot the spectrum for the selected region
+        obj.updateMasks();
+
+        fitResults = cell(numel(obj.rois), 1);
+        
+        tic
+
+        parfor i = 1:numel(obj.rois)
+
+            mask = obj.masks{i};
+            
+            if isempty(mask)
+                continue;
+            end
+
+            % Compute the average spectrum for the masked region
+            SH_mask = obj.SH_processed .* mask;
+            spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(mask);
+            axis_x = linspace(-f_s / 2, f_s / 2, size(SH_mask, 3));
+            fitResults{i} = fit_spectrum(axis_x, log10(fftshift(spectrumAVG_mask)), f_1, f_2, annotation = false, verbose = false);
+
+        end
+
+        toc
+
+        obj.fitROIs = fitResults;
+
+    end
+
     function closeFigure(obj)
         % Clean up when figure is closed
         delete(obj.fig);
+    end
+
+    function gridFigure(obj, numRows, numCols)
+
+        % Create a grid of ROIs and plot the fit parameters as images
+        a = zeros(numRows, numCols);
+        b = zeros(numRows, numCols);
+        g = zeros(numRows, numCols);
+        x0 = zeros(numRows, numCols);
+
+        for row = 0:(numRows - 1)
+
+            for col = 0:(numCols - 1)
+
+                if isempty(obj.fitROIs{row * numCols + col + 1})
+                    continue;
+                end
+
+                a(row + 1, col + 1) = obj.fitROIs{row * numCols + col + 1}.a;
+                b(row + 1, col + 1) = obj.fitROIs{row * numCols + col + 1}.b;
+                g(row + 1, col + 1) = obj.fitROIs{row * numCols + col + 1}.g;
+                x0(row + 1, col + 1) = obj.fitROIs{row * numCols + col + 1}.x0;
+
+            end
+
+        end
+
+        figure,
+        imagesc(a);
+        colorbar;
+        title('a');
+
+        figure,
+        imagesc(b);
+        colorbar;
+        title('b');
+
+        figure,
+        imagesc(g);
+        colorbar;
+        title('g');
+
+        figure,
+        imagesc(x0);
+        colorbar;
+        title('x0');
     end
 
 end
