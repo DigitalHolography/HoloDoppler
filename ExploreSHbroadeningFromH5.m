@@ -283,8 +283,8 @@ methods
         obj.clearROIs();
 
         % Create a grid of ROIs across the image
-        numRows = 16; % Number of rows in the grid
-        numCols = 16; % Number of columns in the grid
+        numRows = 512; % Number of rows in the grid
+        numCols = 512; % Number of columns in the grid
 
         % Get current axis limits
         xLimits = get(obj.axImage, 'XLim');

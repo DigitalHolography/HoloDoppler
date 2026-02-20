@@ -17,8 +17,6 @@ arguments
     opt.verbose (1, 1) logical = true
 end
 
-tic
-
 % Model
 x = double(axis_x(:));
 y = double(signal(:));
@@ -125,8 +123,6 @@ end
 if opt.verbose
 
     disp(txt);
-
-    toc
 
     fprintf('---------------\n');
 end
