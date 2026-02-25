@@ -42,6 +42,9 @@ properties
     phase_variance
     Quadrants
     Energy
+    moment_0_star
+    moment_1_star
+    moment_2_star
 end
 
 methods
@@ -62,6 +65,9 @@ methods
         obj.moment_0 = ImageType('M0');
         obj.moment_1 = ImageType('M1');
         obj.moment_2 = ImageType('M2');
+        obj.moment_0_star = ImageType('M0_star');
+        obj.moment_1_star = ImageType('M1_star');
+        obj.moment_2_star = ImageType('M2_star');
         obj.arg_0 = ImageType('arg0');
         obj.f_RMS = ImageType('f_RMS');
         obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', [], 'intervals_2', [], 'M0', []));
@@ -321,6 +327,33 @@ methods
             bin_w = 1;
             obj.SH.parameters.SH = imresize3(gather(SH_mod), [size(SH_mod, 1) / bin_x size(SH_mod, 2) / bin_y size(SH_mod, 3) / bin_w], 'Method', 'linear');
             obj.SH.parameters.vector = zeros(1, NT);
+        end
+
+        if obj.moment_0_star.is_selected
+            [Nx, Ny, ~] = size(SH_mod);
+            outerMask = ~diskMask(Ny, Nx, 1.2);
+            SH_mask = SH_mod .* outerMask;
+            outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
+            img = moment0(SH_mod ./ outerReference, f1, f2, Params.fs, NT);
+            obj.moment_0_star.image = img;
+        end
+
+        if obj.moment_1_star.is_selected % Moment 1 has been chosen
+            [Nx, Ny, ~] = size(SH_mod);
+            outerMask = ~diskMask(Ny, Nx, 1.2);
+            SH_mask = SH_mod .* outerMask;
+            outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
+            img = moment1(SH_mod ./ outerReference, f1, f2, Params.fs, NT);
+            obj.moment_1_star.image = img;
+        end
+
+        if obj.moment_2_star.is_selected % Moment 2 has been chosen
+            [Nx, Ny, ~] = size(SH_mod);
+            outerMask = ~diskMask(Ny, Nx, 1.2);
+            SH_mask = SH_mod .* outerMask;
+            outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
+            img = moment2(SH_mod ./ outerReference, f1, f2, Params.fs, NT);
+            obj.moment_2_star.image = img;
         end
 
         if obj.autocorrelogram.is_selected

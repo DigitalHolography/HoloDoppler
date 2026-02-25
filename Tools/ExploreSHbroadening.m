@@ -15,6 +15,7 @@ properties
     fs
     f1
     f2
+    outerReference % Reference spectrum from outer diaphragm
 end
 
 methods
@@ -403,6 +404,8 @@ methods
             ylabel('log10 S', 'FontSize', 14);
         end
 
+        obj.makeOuterDiaphragmReference()
+
         for i = 1:numel(obj.rois)
 
             mask = obj.masks{i};
@@ -414,6 +417,7 @@ methods
             % Compute the average spectrum for the masked region
             SH_mask = obj.SH_processed .* mask;
             spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(mask);
+            spectrumAVG_mask = spectrumAVG_mask ./ obj.outerReference;
             momentM0 = moment0(obj.SH_processed, f_1, f_2, f_s, batch_size);
             momentM2 = moment2(obj.SH_processed, f_1, f_2, f_s, batch_size);
             M0_full = mean(momentM0, [1, 2]);
@@ -428,15 +432,10 @@ methods
 
             p_mask = plot(axis_x, fftshift(scalingfn(spectrumAVG_mask)), 'Color', roiColor, 'LineWidth', 1, 'DisplayName', 'Arteries');
             xlim([-f_s / 2 f_s / 2])
-            sclingrange = abs(fftshift(axis_x)) > f_1;
 
-            if rescale
-                yrange = [.99 * scalingfn(min(spectrumAVG_mask(sclingrange))) 1.01 * scalingfn(max(spectrumAVG_mask(sclingrange)))];
-                ylim(yrange)
-            else
-                yrange = get(gca, 'YLim');
-                ylim(yrange)
-            end
+            axis padded
+            axP = axis;
+            axis([-f_s / 2 f_s / 2, axP(3), axP(4)])
 
             om_RMS_line = line([-omegaRMS omegaRMS], [I_omega I_omega]);
             om_RMS_line.Color = roiColor;
@@ -490,6 +489,18 @@ methods
         xlabel('frequency (kHz)', 'FontSize', 14);
 
         yline(0, 'LineWidth', 2)
+
+    end
+
+    function makeOuterDiaphragmReference(obj)
+        % This function can be implemented to create a reference spectrum from an outer diaphragm region
+        % It can be called when the user clicks a button to set the reference spectrum for fitting
+
+        [Nx, Ny, batch_size] = size(obj.SH_processed);
+        outerMask = ~diskMask(Ny, Nx, 1.1);
+        largeMask = repmat(outerMask, [1 1 batch_size]);
+        SH_mask = obj.SH_processed .* largeMask;
+        obj.outerReference = squeeze(sum(SH_mask, [1 2])) / nnz(outerMask);
 
     end
 

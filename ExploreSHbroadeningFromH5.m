@@ -13,9 +13,10 @@ properties
     colors
     panel
     btnGroup % Button group for display options
-    fs
-    f1
-    f2
+    fs % Sampling frequency for spectrum calculation
+    f1 % Frequency bounds for moment calculation
+    f2 % Frequency bounds for moment calculation
+    outerReference % Reference spectrum from outer diaphragm
 end
 
 methods
@@ -309,7 +310,7 @@ methods
                 [X, Y] = meshgrid(1:xLimits(2), 1:yLimits(2));
                 obj.masks{end + 1} = (X >= xPos) & (X <= xPos + roiWidth) & ...
                     (Y >= yPos) & (Y <= yPos + roiHeight);
-                obj.colors{end + 1} =  rand(1, 3);
+                obj.colors{end + 1} = rand(1, 3);
             end
 
         end
@@ -594,13 +595,13 @@ methods
         obj.updateMasks();
 
         fitResults = cell(numel(obj.rois), 1);
-        
+
         tic
 
         parfor i = 1:numel(obj.rois)
 
             mask = obj.masks{i};
-            
+
             if isempty(mask)
                 continue;
             end
@@ -668,6 +669,26 @@ methods
         imagesc(x0);
         colorbar;
         title('x0');
+    end
+
+    function makeOuterDiaphragmReference(obj)
+        % This function can be implemented to create a reference spectrum from an outer diaphragm region
+        % It can be called when the user clicks a button to set the reference spectrum for fitting
+
+        [Nx, Ny, batch_size] = size(obj.SH_processed);
+        outerMask = diskMask(Nx, Ny, 0.9); % Example: create a circular mask with radius 50 pixels
+        SH_mask = obj.SH_processed .* outerMask;
+        obj.outerReference = squeeze(sum(SH_mask, [1 2])) / nnz(outerMask);
+        axis_x = linspace(-obj.fs / 2, obj.fs / 2, batch_size);
+
+        figure,
+        semilogy(obj.outerReference);
+        title('Outer Diaphragm Reference Spectrum');
+
+        figure,
+        loglog(axis_x, obj.outerReference);
+        title('Outer Diaphragm Reference Spectrum (log-log)');
+
     end
 
 end
