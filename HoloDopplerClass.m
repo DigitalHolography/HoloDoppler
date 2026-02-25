@@ -828,6 +828,12 @@ methods
                     generate_video(mat, result_folder_path, strcat('moment1'), export_raw = 1, temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'moment_2')
                     generate_video(mat, result_folder_path, strcat('moment2'), export_raw = 1, temporal_filter = 2, square = params.square);
+                elseif strcmp(image_types{i}, 'moment_0_star') % raw moments are always outputted if they are selected
+                    generate_video(mat, result_folder_path, strcat('moment_0_star'), export_raw = 1, temporal_filter = 2, square = params.square); % three cases just to rename each correctly for PW
+                elseif strcmp(image_types{i}, 'moment_1_star')
+                    generate_video(mat, result_folder_path, strcat('moment_1_star'), export_raw = 1, temporal_filter = 2, square = params.square);
+                elseif strcmp(image_types{i}, 'moment_2_star')
+                    generate_video(mat, result_folder_path, strcat('moment_2_star'), export_raw = 1, temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'power_Doppler')
                     generate_video(mat, result_folder_path, strcat('M0'), temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'spectrogram')
