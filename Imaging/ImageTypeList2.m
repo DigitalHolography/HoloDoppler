@@ -45,6 +45,9 @@ properties
     moment_0_star
     moment_1_star
     moment_2_star
+    moment_0_logstar
+    moment_1_logstar
+    moment_2_logstar
 end
 
 methods
@@ -68,6 +71,9 @@ methods
         obj.moment_0_star = ImageType('M0_star');
         obj.moment_1_star = ImageType('M1_star');
         obj.moment_2_star = ImageType('M2_star');
+        obj.moment_0_logstar = ImageType('M0_logstar');
+        obj.moment_1_logstar = ImageType('M1_logstar');
+        obj.moment_2_logstar = ImageType('M2_logstar');
         obj.arg_0 = ImageType('arg0');
         obj.f_RMS = ImageType('f_RMS');
         obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', [], 'intervals_2', [], 'M0', []));
@@ -334,7 +340,7 @@ methods
             outerMask = ~diskMask(Ny, Nx, 1.2);
             SH_mask = SH_mod .* outerMask;
             outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment0(SH_mod ./ outerReference, f1, f2, Params.fs, NT);
+            img = moment0(SH_mod - outerReference, f1, f2, Params.fs, NT);
             obj.moment_0_star.image = img;
         end
 
@@ -343,7 +349,7 @@ methods
             outerMask = ~diskMask(Ny, Nx, 1.2);
             SH_mask = SH_mod .* outerMask;
             outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment1(SH_mod ./ outerReference, f1, f2, Params.fs, NT);
+            img = moment1(SH_mod - outerReference, f1, f2, Params.fs, NT);
             obj.moment_1_star.image = img;
         end
 
@@ -352,8 +358,35 @@ methods
             outerMask = ~diskMask(Ny, Nx, 1.2);
             SH_mask = SH_mod .* outerMask;
             outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment2(SH_mod ./ outerReference, f1, f2, Params.fs, NT);
+            img = moment2(SH_mod - outerReference, f1, f2, Params.fs, NT);
             obj.moment_2_star.image = img;
+        end
+
+        if obj.moment_0_logstar.is_selected
+            [Nx, Ny, ~] = size(SH_mod);
+            outerMask = ~diskMask(Ny, Nx, 1.2);
+            SH_mask = SH_mod .* outerMask;
+            outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
+            img = moment0(log10(SH_mod ./ outerReference), f1, f2, Params.fs, NT);
+            obj.moment_0_logstar.image = img;
+        end
+
+        if obj.moment_1_logstar.is_selected % Moment 1 has been chosen
+            [Nx, Ny, ~] = size(SH_mod);
+            outerMask = ~diskMask(Ny, Nx, 1.2);
+            SH_mask = SH_mod .* outerMask;
+            outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
+            img = moment1(log10(SH_mod ./ outerReference), f1, f2, Params.fs, NT);
+            obj.moment_1_logstar.image = img;
+        end
+
+        if obj.moment_1_logstar.is_selected % Moment 2 has been chosen
+            [Nx, Ny, ~] = size(SH_mod);
+            outerMask = ~diskMask(Ny, Nx, 1.2);
+            SH_mask = SH_mod .* outerMask;
+            outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
+            img = moment2(log10(SH_mod ./ outerReference), f1, f2, Params.fs, NT);
+            obj.moment_2_logstar.image = img;
         end
 
         if obj.autocorrelogram.is_selected
