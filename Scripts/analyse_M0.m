@@ -9,7 +9,7 @@ if ~isfolder(fullfile(h5folder,name))
 end
 
 NAME = name;
-[Nx,Ny,Nw,Nt] = size(SH); 
+[Nx,Ny,Nt] = size(SH); 
 
 M0=mean(SH(:,:,1:8,:)+SH(:,:,25:32,:),3);
 M0_ = reshape(M0,Nx*Ny,Nt);

@@ -3,16 +3,21 @@ function plotSig(Vtw, j, outPrefix)
 %
 % Uses y = -sum(Vtw(:,:,j),1) convention (sum over dimension 1).
 % Vtw is expected to be [Nt x Nw x kmax] or [something x something x kmax].
-
+if nargin < 2 || isempty(j)
+    j = 0;
+end
 if nargin < 3 || isempty(outPrefix)
     outPrefix = sprintf("mode_%d", j);
 end
 
 fs = 78000/512;   % Hz
 dt = 1/fs;
-
-% y: sum over dim=1, then squeeze -> column vector (typically length Nw)
-y = squeeze(sum(Vtw(:,:,j), 1));   % -> [Nw x 1] (or [1 x Nw] -> squeeze fixes it)
+if isvector(Vtw)
+    y = Vtw(:); 
+else
+    % y: sum over dim=1, then squeeze -> column vector (typically length Nw)
+    y = squeeze(sum(Vtw(:,:,j), 1));   % -> [Nw x 1] (or [1 x Nw] -> squeeze fixes it)
+end
 y = y(:);                           % force column
 
 t = (0:numel(y)-1) * dt;            % seconds (index -> seconds)
