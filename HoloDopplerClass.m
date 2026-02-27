@@ -834,6 +834,12 @@ methods
                     generate_video(mat, result_folder_path, strcat('moment_1_star'), export_raw = 1, temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'moment_2_star')
                     generate_video(mat, result_folder_path, strcat('moment_2_star'), export_raw = 1, temporal_filter = 2, square = params.square);
+                elseif strcmp(image_types{i}, 'moment_0_logstar') % raw moments are always outputted if they are selected
+                    generate_video(mat, result_folder_path, strcat('moment_0_logstar'), export_raw = 1, temporal_filter = 2, square = params.square); % three cases just to rename each correctly for PW
+                elseif strcmp(image_types{i}, 'moment_1_logstar')
+                    generate_video(mat, result_folder_path, strcat('moment_1_logstar'), export_raw = 1, temporal_filter = 2, square = params.square);
+                elseif strcmp(image_types{i}, 'moment_2_logstar')
+                    generate_video(mat, result_folder_path, strcat('moment_2_logstar'), export_raw = 1, temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'power_Doppler')
                     generate_video(mat, result_folder_path, strcat('M0'), temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'spectrogram')
@@ -878,6 +884,17 @@ methods
             export_h5_video(fullfile(result_folder_path, 'raw', output_filename_h5), "registration", obj.registration.shifts);
         catch
             disp("Error while saving the registration.")
+        end
+
+        disp('Saving parameters...');
+
+        try
+            str = jsonencode(params);
+            [~, output_dirname] = fileparts(result_folder_path);
+            output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
+            export_h5_string(fullfile(result_folder_path, 'raw', output_filename_h5), "HD_parameters", str);
+        catch
+            disp("Error while saving the parameters.")
         end
 
         fid = fopen(fullfile(result_folder_path, strcat(obj.file.name, '_HD_', num2str(index + 1), '_', 'input_HD_params.json')), 'w');
