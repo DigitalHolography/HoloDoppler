@@ -43,7 +43,7 @@ methods
         catch ME
 
             MEdisp(ME);
-            error('Failed to load H5 file. Please check the file path and try again.');
+            fprintf(2, 'Failed to load H5 file. Please check the file path and try again.');
 
         end
 
@@ -620,11 +620,6 @@ methods
 
     end
 
-    function closeFigure(obj)
-        % Clean up when figure is closed
-        delete(obj.fig);
-    end
-
     function gridFigure(obj, numRows, numCols)
 
         % Create a grid of ROIs and plot the fit parameters as images
@@ -676,19 +671,16 @@ methods
         % It can be called when the user clicks a button to set the reference spectrum for fitting
 
         [Nx, Ny, batch_size] = size(obj.SH_processed);
-        outerMask = diskMask(Nx, Ny, 0.9); % Example: create a circular mask with radius 50 pixels
-        SH_mask = obj.SH_processed .* outerMask;
+        outerMask = ~diskMask(Ny, Nx, 1.2);
+        largeMask = repmat(outerMask, [1 1 batch_size]);
+        SH_mask = obj.SH_processed .* largeMask;
         obj.outerReference = squeeze(sum(SH_mask, [1 2])) / nnz(outerMask);
-        axis_x = linspace(-obj.fs / 2, obj.fs / 2, batch_size);
 
-        figure,
-        semilogy(obj.outerReference);
-        title('Outer Diaphragm Reference Spectrum');
+    end
 
-        figure,
-        loglog(axis_x, obj.outerReference);
-        title('Outer Diaphragm Reference Spectrum (log-log)');
-
+    function closeFigure(obj)
+        % Clean up when figure is closed
+        delete(obj.fig);
     end
 
 end

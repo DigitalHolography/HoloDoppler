@@ -334,7 +334,7 @@ methods
             outerMask = ~diskMask(Ny, Nx, 1.2);
             SH_mask = SH_mod .* outerMask;
             outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment0(SH_mod ./ outerReference, f1, f2, Params.fs, NT);
+            img = moment0(SH_mod - outerReference, f1, f2, Params.fs, NT);
             obj.moment_0_star.image = img;
         end
 
@@ -343,7 +343,7 @@ methods
             outerMask = ~diskMask(Ny, Nx, 1.2);
             SH_mask = SH_mod .* outerMask;
             outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment1(SH_mod ./ outerReference, f1, f2, Params.fs, NT);
+            img = moment1(SH_mod - outerReference, f1, f2, Params.fs, NT);
             obj.moment_1_star.image = img;
         end
 
@@ -352,7 +352,7 @@ methods
             outerMask = ~diskMask(Ny, Nx, 1.2);
             SH_mask = SH_mod .* outerMask;
             outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment2(SH_mod ./ outerReference, f1, f2, Params.fs, NT);
+            img = moment2(SH_mod - outerReference, f1, f2, Params.fs, NT);
             obj.moment_2_star.image = img;
         end
 
