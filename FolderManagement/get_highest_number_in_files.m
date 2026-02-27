@@ -13,7 +13,7 @@ for i = 1:numel(files)
     % Check if the file name contains the search string and is a regular file
     if contains(file_name, search_str) && ~files(i).isdir
 
-        [~, file_name, ext] = fileparts(file_name);
+        [~, file_name, ~] = fileparts(file_name);
         % Use a regular expression to find numbers at the end of the file name
         tokens = regexp(file_name, '(\d+)$', 'tokens');
 
@@ -35,7 +35,7 @@ end
 
 % If no valid number is found, return a message or default value (e.g., -Inf)
 if highest_number == 0
-    %% disp('No files with the specified string and a number at the end were found.');
+    % disp('No files with the specified string and a number at the end were found.');
 end
 
 end

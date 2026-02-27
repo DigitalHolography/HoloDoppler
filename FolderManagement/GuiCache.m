@@ -200,6 +200,9 @@ methods (Access = public)
             app.SVDStrideEditField.Value = loadGUIVariable(obj.SVD_Stride);
             app.SVDThresholdCheckBox.Value = loadGUIVariable(obj.isSVD_Stride);
 
+        catch ME
+            MEdisp(ME);
+            fprintf('Error loading parameters from cache to GUI: %s\n', ME.message);
         end
 
     end

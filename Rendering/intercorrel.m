@@ -1,6 +1,6 @@
 function SH = intercorrel(H, sub_size)
 
-[width, height, batch_size] = size(H);
+[width, height, ~] = size(H);
 Lx = (1:sub_size:width);
 Ly = (1:sub_size:height);
 

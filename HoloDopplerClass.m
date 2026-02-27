@@ -137,7 +137,7 @@ methods
             otherwise
                 obj.file = [];
                 obj.reader = [];
-                error(sprintf(". %s files are not accepted as correct files", ext))
+                fprintf(2, ". %s files are not accepted as correct files", ext)
         end
 
         % 2) Rendering parameters initialization
@@ -161,6 +161,9 @@ methods
                         tmp.first = obj.reader.footer.info.timestamps_us.unix_first;
                         tmp.last = obj.reader.footer.info.timestamps_us.unix_last;
                         obj.params.record_time_stamps_us = tmp;
+                    catch ME
+                        MEdisp(ME);
+                        fprintf("No timestamp info found in the holo file, time related parameters will be set to default values.\n")
                     end
 
                 end
@@ -318,9 +321,8 @@ methods
         if nargin < 2
             name = obj.file.name;
             dir = obj.file.dir;
-            ext = obj.file.ext;
         else
-            [dir, name, ext] = fileparts(filename);
+            [dir, name, ~] = fileparts(filename);
         end
 
         if nargin < 3
@@ -578,46 +580,47 @@ methods
             afterEach(D, @update_waitbar);
             dq = parallel.pool.DataQueue;
 
-            file_path = obj.file.path;
-            params = obj.params;
-            video = obj.video;
-            afterEach(dq, @(data) obj.running_averages.update(data{1}, data{2}, params));
+            l_params = obj.params;
+            l_video = obj.video;
+            afterEach(dq, @(data) obj.running_averages.update(data{1}, data{2}, l_params));
+            l_reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
 
-            [dir, name, ext] = fileparts(file_path);
-            reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
+            % parameters
+            batch_size = l_params.batch_size;
+            batch_stride = l_params.batch_stride;
 
-            if isprop(reader, "all_frames") && ~isempty(reader.all_frames)
-                all_frames = reshape(reader.all_frames, size(reader.all_frames, 1), size(reader.all_frames, 2), params.batch_size, []);
+            if isprop(l_reader, "all_frames") && ~isempty(l_reader.all_frames)
+                all_frames = reshape(l_reader.all_frames, size(l_reader.all_frames, 1), size(l_reader.all_frames, 2), batch_size, []);
 
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
-                    view = RenderingClass();
-                    view.setFrames(all_frames(:, :, :, i));
-                    view.ShackHartmannMask = ShackHartmannMask;
-                    view.Render(params, params.image_types, cache_intermediate_results = false);
-                    video(i) = ImageTypeList2();
-                    video(i).copy_from(view.Output);
+                    l_view = RenderingClass();
+                    l_view.setFrames(all_frames(:, :, :, i));
+                    l_view.ShackHartmannMask = ShackHartmannMask;
+                    l_view.Render(l_params, l_params.image_types, cache_intermediate_results = false);
+                    l_video(i) = ImageTypeList2();
+                    l_video(i).copy_from(l_view.Output);
                     send(D, 0);
-                    SH_PSD = calc_registration_from_views(view, view_ref, params);
+                    SH_PSD = calc_registration_from_views(l_view, view_ref, l_params);
                     send(dq, {SH_PSD, i});
                 end
 
             else
 
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
-                    view = RenderingClass();
-                    view.setFrames(reader.read_frame_batch(params.batch_size, (i - 1) * params.batch_stride + 1));
-                    view.ShackHartmannMask = ShackHartmannMask;
-                    view.Render(params, params.image_types, cache_intermediate_results = false);
-                    video(i) = ImageTypeList2();
-                    video(i).copy_from(view.Output);
+                    l_view = RenderingClass();
+                    l_view.setFrames(l_reader.read_frame_batch(batch_size, (i - 1) * batch_stride + 1));
+                    l_view.ShackHartmannMask = ShackHartmannMask;
+                    l_view.Render(l_params, l_params.image_types, cache_intermediate_results = false);
+                    l_video(i) = ImageTypeList2();
+                    l_video(i).copy_from(l_view.Output);
                     send(D, 0);
-                    SH_PSD = calc_registration_from_views(view, view_ref, params);
+                    SH_PSD = calc_registration_from_views(l_view, view_ref, l_params);
                     send(dq, {SH_PSD, i});
                 end
 
             end
 
-            obj.video = video;
+            obj.video = l_video;
         end
 
         close(h);
@@ -635,7 +638,7 @@ methods
 
         fprintf("Video Rendering took : %f s\n", toc(VideoRenderingTime));
 
-        %% Save the video
+        % Save the video
         result_folder_path = obj.SaveVideo();
     end
 
@@ -907,11 +910,11 @@ methods
         % Try to get git commit hash and branch, and log to git.txt
         try
             % Get current commit hash
-            [status_hash, git_hash] = system('git rev-parse HEAD');
+            [~, git_hash] = system('git rev-parse HEAD');
             % Get current branch name
-            [status_branch, git_branch] = system('git rev-parse --abbrev-ref HEAD');
+            [~, git_branch] = system('git rev-parse --abbrev-ref HEAD');
             % Get last commit log
-            [status_log, git_log] = system('git log -1 --pretty=oneline');
+            [~, git_log] = system('git log -1 --pretty=oneline');
             % Prepare content
             git_info = sprintf('Commit hash: %s\nBranch: %s\nLast commit: %s', ...
                 strtrim(git_hash), strtrim(git_branch), strtrim(git_log));
@@ -1034,6 +1037,7 @@ methods
                 ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
 
                 for i = 1:num_batches
+
                     for k = 1:sz(3)
                         obj.video(i).('full_buckets').parameters.SH_full(:, :, k) = circshift(obj.video(i).('full_buckets').parameters.SH_full(:, :, k), floor(obj.registration.shifts(:, i) .* ratio'));
                     end

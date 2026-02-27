@@ -596,6 +596,8 @@ methods
             try
                 % Get the size of the 3D array
 
+                %{
+
                 if 0
                     [xSize, ySize, zSize] = size(SH_mod(1:4:end, 1:4:end, 1:1:end));
 
@@ -641,11 +643,13 @@ methods
                     image = ind2rgb(idx, lines(N));
 
                 elseif 1
-                    [~, image] = max(diff(SH_mod(1:1:end, 1:1:end, 1:1:end), 1, 3), [], 3);
-                    % image = moment0(diff(SH_mod(1:1:end,1:1:end,1:1:end),1,3), f1, f2 , Params.fs, NT, 0);
-                    %image = flat_field_correction(image,Params.flatfield_gw);
+                    %}
 
-                end
+                [~, image] = max(diff(SH_mod(1:1:end, 1:1:end, 1:1:end), 1, 3), [], 3);
+                % image = moment0(diff(SH_mod(1:1:end,1:1:end,1:1:end),1,3), f1, f2 , Params.fs, NT, 0);
+                % image = flat_field_correction(image,Params.flatfield_gw);
+
+                % end
 
                 obj.cluster_projection.image = image;
 
@@ -707,7 +711,7 @@ methods
 
     end
 
-    function construct_image_from_Frames(obj, Params, Frames)
+    function construct_image_from_Frames(obj, ~, Frames)
 
         if isempty(Frames)
             return
@@ -721,7 +725,7 @@ methods
 
     end
 
-    function construct_image_from_SVD(obj, Params, covin, Uin, szin)
+    function construct_image_from_SVD(obj, ~, covin, Uin, szin)
         % szin is just the size of a batch nx ny nt for reference
         if isempty(covin)
             obj.SVD_cov.image = [];
@@ -752,13 +756,16 @@ methods
                 frame = getframe(fi);
                 % obj.SVD_U.graph = gca;
                 obj.SVD_U.image = frame.cdata;
+            catch
+                MEdisp(E);
+                obj.SVD_U.image = [];
             end
 
         end
 
     end
 
-    function construct_image_from_ShackHartmann(obj, Params, moment_chunks_crop_array, ShackHartmannMask)
+    function construct_image_from_ShackHartmann(obj, ~, moment_chunks_crop_array, ShackHartmannMask)
 
         if isempty(ShackHartmannMask)
             obj.ShackHartmann_Cropped_Moments.image = [];
