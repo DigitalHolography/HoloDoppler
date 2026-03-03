@@ -538,7 +538,7 @@ methods
 
             hold on
 
-            fitResults{i} = fit_spectrum(axis_x, log10(fftshift(spectrumAVG_mask)), f_1, f_2, annotation = false);
+            fitResults{i} = fit_spectrum_voigt(axis_x, log10(fftshift(spectrumAVG_mask)), f_1, f_2, annotation = false);
 
         end
 

@@ -39,8 +39,7 @@ methods
         % Create the main figure with fixed size
         obj.fig = figure('Name', 'Explore SH Broadening', 'NumberTitle', 'off', ...
             'Position', [100, 100, 1000, 600], ...
-            'CloseRequestFcn', @(src, evt)obj.closeFigure(), ...
-            'Color', [1, 1, 1]);
+            'CloseRequestFcn', @(src, evt)obj.closeFigure());
 
         % Define layout parameters
         imageWidth = 0.45; % Width of image display area
@@ -66,13 +65,11 @@ methods
         obj.panel = uipanel('Parent', obj.fig, ...
             'Title', 'Display Options', ...
             'Position', [margin, margin, imageWidth, panelHeight], ...
-            'BackgroundColor', [1, 1, 1], ...
-            'BorderType', 'etchedin');
+            'BorderType', 'line');
 
         % Create button group for display options
         obj.btnGroup = uibuttongroup('Parent', obj.panel, ...
             'Position', [0.02, 0.45, 0.43, 0.5], ...
-            'BackgroundColor', [1, 1, 1], ...
             'SelectionChangedFcn', @(src, evt)obj.changeDisplayOption());
 
         % Add radio buttons and checkboxes dynamically
@@ -91,8 +88,7 @@ methods
                 'String', options{i, 2}, ...
                 'Tag', options{i, 1}, ...
                 'Units', 'normalized', ...
-                'Position', [0.05, 0.8 - 0.15 * (i - 1), 1, 0.15], ...
-                'BackgroundColor', [1, 1, 1]);
+                'Position', [0.05, 0.8 - 0.15 * (i - 1), 1, 0.15]);
         end
 
         % Add pushbutton for creating a new ROI
@@ -365,11 +361,7 @@ methods
 
     end
 
-    function spectrum_plotting(obj, rescale)
-
-        if nargin < 2
-            rescale = true;
-        end
+    function spectrum_plotting(obj)
 
         % Extract parameters for easier access
         f_1 = obj.f1;
@@ -452,9 +444,11 @@ methods
 
             hold on
 
-            fit_spectrum(axis_x, log10(fftshift(spectrumAVG_mask)), f_1, f_2, annotation = false);
+            fit_spectrum_voigt(axis_x, log10(fftshift(spectrumAVG_mask)), f_1, f_2, annotation = false);
 
         end
+
+
 
         pbaspect([1.618 1 1]);
         box on,
