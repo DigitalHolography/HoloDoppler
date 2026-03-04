@@ -48,6 +48,7 @@ properties
     moment_0_logstar
     moment_1_logstar
     moment_2_logstar
+    cdf_type
 end
 
 methods
@@ -99,6 +100,7 @@ methods
         obj.phase_variance = ImageType('phase_variance');
         obj.Quadrants = ImageType('Quadrants');
         obj.Energy = ImageType('Energy', struct("E_t", [], "E_stdf_t", [], "E_stdq_t", []));
+        obj.cdf_type = ImageType('cdf');
     end
 
     function clear(obj, varargin)
@@ -190,57 +192,61 @@ methods
 
         r1 = Params.index_range(1);
         r2 = Params.index_range(2);
-        [~, ~, NT] = size(SHin);
+
+        [~, ~, batch_size] = size(SHin);
+        fs = Params.fs;
+        gw = Params.flatfield_gw;
 
         % clear phase
         SH_mod = abs(SHin) .^ 2;
         SH_arg = angle(SHin);
+        [Nx, Ny, ~] = size(SH_mod);
 
         if obj.pure_PCA.is_selected
 
             if ~(r1 - floor(r1) == 0) && ~(r2 - floor(r2) == 0) % both not integer
-                r1p = floor(r1 * 2 / Params.fs * NT);
-                r2p = floor(r2 * 2 / Params.fs * NT);
+                r1p = floor(r1 * 2 / fs * batch_size);
+                r2p = floor(r2 * 2 / fs * batch_size);
             else
                 r1p = r1;
                 r2p = r2;
             end
 
-            r1p = min(max(r1p, 1), NT);
-            r2p = min(max(r2p, 1), NT);
+            r1p = min(max(r1p, 1), batch_size);
+            r2p = min(max(r2p, 1), batch_size);
             obj.pure_PCA.image = cumulant(SH_mod, r1p, r2p);
-            obj.pure_PCA.image = flat_field_correction(obj.pure_PCA.image, Params.flatfield_gw);
+            obj.pure_PCA.image = flat_field_correction(obj.pure_PCA.image, gw);
         end
 
         if obj.power_Doppler.is_selected % Power Doppler has been chosen
-            img = moment0(SH_mod, f1, f2, Params.fs, NT, Params.flatfield_gw);
+            img = moment0(SH_mod, f1, f2, fs, batch_size, gw);
             obj.power_Doppler.image = img;
         end
 
         if obj.power_adapt.is_selected % Power Doppler with adaptive histogram equalization has been chosen
-            img = moment0(SH_mod, f1, f2, Params.fs, NT);
+            img = moment0(SH_mod, f1, f2, fs, batch_size);
             img = adapthisteq(rescale(img), "NumTiles", [12 12], "NBins", 128);
             obj.power_adapt.image = img;
         end
 
         if obj.power_Doppler_wiener.is_selected %
-            img = moment0(SH_mod, f1, f2, Params.fs, NT, Params.flatfield_gw);
+            img = moment0(SH_mod, f1, f2, fs, batch_size, gw);
             obj.power_Doppler_wiener.image = wiener2(img, [2 2], 10);
         end
 
         if obj.power_1_Doppler.is_selected % Power Doppler 1 has been chosen
-            img = moment1(SH_mod, f1, f2, Params.fs, NT);
+            img = moment1(SH_mod, f1, f2, fs, batch_size);
             obj.power_1_Doppler.image = img;
         end
 
         if obj.power_2_Doppler.is_selected % Power Doppler has been chosen
-            img = moment2(SH_mod, f1, f2, Params.fs, NT, Params.flatfield_gw);
+            img = moment2(SH_mod, f1, f2, fs, batch_size, gw);
             obj.power_2_Doppler.image = img;
         end
 
         if obj.power_01_Doppler.is_selected % Power Doppler has been chosen
-            img0 = moment0(SH_mod, f1, f2, Params.fs, Params.batch_size, Params.flatfield_gw);
-            img1 = moment1(SH_mod, f1, f2, Params.fs, Params.batch_size);
+            img0 = moment0(SH_mod, f1, f2, fs, batch_size, gw);
+            img1 = moment1(SH_mod, f1, f2, fs, batch_size);
 
             img0 = double(img0);
             img1 = imgaussfilt(img1, 3);
@@ -280,12 +286,12 @@ methods
                 f3 = Params.time_range_extra;
             end
 
-            [freq_low, freq_high] = composite(SH_mod, f1, f3, f2, Params.fs, NT, max(Params.flatfield_gw, 20));
+            [freq_low, freq_high] = composite(SH_mod, f1, f3, f2, fs, batch_size, max(gw, 20));
             obj.color_Doppler.image = construct_colored_image(gather(freq_low), gather(freq_high));
         end
 
         if obj.directional_Doppler.is_selected % Directional Doppler has been chosen
-            [M0_pos, M0_neg] = directional(SH_mod, f1, f2, Params.fs, NT, max(Params.flatfield_gw, 20));
+            [M0_pos, M0_neg] = directional(SH_mod, f1, f2, fs, batch_size, max(gw, 20));
             obj.directional_Doppler.image = construct_directional_image(gather(M0_pos), gather(M0_neg));
         end
 
@@ -293,7 +299,7 @@ methods
 
             try
                 fi = figure("Visible", "off");
-                freqs = ((0:(NT - 1)) - NT / 2) .* (Params.fs / NT);
+                freqs = ((0:(batch_size - 1)) - batch_size / 2) .* (fs / batch_size);
                 spect = fftshift(abs(squeeze(sum(SH_mod, [1 2]) / (size(SH_mod, 1) * size(SH_mod, 2))) .^ 2));
 
                 plot(freqs, 10 * log10(spect));
@@ -316,7 +322,7 @@ methods
             try
                 fi = figure("Visible", "off");
                 disc = diskMask(size(SH_mod, 1), size(SH_mod, 2), Params.registration_disc_ratio)';
-                spectrum_ploting(SH_mod(:, :, :), disc, Params.fs, Params.time_range(1), Params.time_range(2));
+                spectrum_ploting(SH_mod(:, :, :), disc, fs, Params.time_range(1), Params.time_range(2));
                 % ylim([-0 50])
                 frame = getframe(fi); % Capture the figure
                 % obj.broadening.graph = gca;
@@ -332,68 +338,67 @@ methods
             bin_y = 1;
             bin_w = 1;
             obj.SH.parameters.SH = imresize3(gather(SH_mod), [size(SH_mod, 1) / bin_x size(SH_mod, 2) / bin_y size(SH_mod, 3) / bin_w], 'Method', 'linear');
-            obj.SH.parameters.vector = zeros(1, NT);
+            obj.SH.parameters.vector = zeros(1, batch_size);
         end
 
         if obj.moment_0_star.is_selected
-            [Nx, Ny, ~] = size(SH_mod);
             outerMask = ~diskMask(Ny, Nx, 1.2);
             SH_mask = SH_mod .* outerMask;
             outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment0(SH_mod - outerReference, f1, f2, Params.fs, NT);
+            img = moment0(SH_mod - outerReference, f1, f2, fs, batch_size);
             obj.moment_0_star.image = img;
         end
 
         if obj.moment_1_star.is_selected % Moment 1 has been chosen
-            [Nx, Ny, ~] = size(SH_mod);
             outerMask = ~diskMask(Ny, Nx, 1.2);
             SH_mask = SH_mod .* outerMask;
             outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment1(SH_mod - outerReference, f1, f2, Params.fs, NT);
+            img = moment1(SH_mod - outerReference, f1, f2, fs, batch_size);
             obj.moment_1_star.image = img;
         end
 
         if obj.moment_2_star.is_selected % Moment 2 has been chosen
-            [Nx, Ny, ~] = size(SH_mod);
             outerMask = ~diskMask(Ny, Nx, 1.2);
             SH_mask = SH_mod .* outerMask;
             outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment2(SH_mod - outerReference, f1, f2, Params.fs, NT);
+            img = moment2(SH_mod - outerReference, f1, f2, fs, batch_size);
             obj.moment_2_star.image = img;
         end
 
         if obj.moment_0_logstar.is_selected
-            [Nx, Ny, ~] = size(SH_mod);
             outerMask = ~diskMask(Ny, Nx, 1.2);
             SH_mask = SH_mod .* outerMask;
             outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment0(log10(SH_mod ./ outerReference), f1, f2, Params.fs, NT);
+            img = moment0(log10(SH_mod ./ outerReference), f1, f2, fs, batch_size);
             obj.moment_0_logstar.image = img;
         end
 
         if obj.moment_1_logstar.is_selected % Moment 1 has been chosen
-            [Nx, Ny, ~] = size(SH_mod);
             outerMask = ~diskMask(Ny, Nx, 1.2);
             SH_mask = SH_mod .* outerMask;
             outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment1(log10(SH_mod ./ outerReference), f1, f2, Params.fs, NT);
+            img = moment1(log10(SH_mod ./ outerReference), f1, f2, fs, batch_size);
             obj.moment_1_logstar.image = img;
         end
 
-        if obj.moment_1_logstar.is_selected % Moment 2 has been chosen
-            [Nx, Ny, ~] = size(SH_mod);
+        if obj.moment_2_logstar.is_selected % Moment 2 has been chosen
             outerMask = ~diskMask(Ny, Nx, 1.2);
             SH_mask = SH_mod .* outerMask;
             outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment2(log10(SH_mod ./ outerReference), f1, f2, Params.fs, NT);
+            img = moment2(log10(SH_mod ./ outerReference), f1, f2, fs, batch_size);
             obj.moment_2_logstar.image = img;
+        end
+
+        if obj.cdf_type.is_selected
+            img = cdf(SH_mod, f1, f2, fs, 0.5, batch_size);
+            obj.cdf_type.image = img;
         end
 
         if obj.autocorrelogram.is_selected
 
             try
                 fi = figure("Visible", "off");
-                indices = ((0:(NT - 1)) - NT / 2) .* (1 / (Params.fs * 1000));
+                indices = ((0:(batch_size - 1)) - batch_size / 2) .* (1 / (fs * 1000));
                 % disc = diskMask(size(SH,1),size(SH,2),0.7)';
                 disc = ones(size(SH_mod, 1), size(SH_mod, 2));
                 spect = squeeze(abs(sum(SH_mod .* disc, [1 2])) / nnz(disc));
@@ -415,28 +420,28 @@ methods
         end
 
         if obj.moment_0.is_selected % Moment 0 has been chosen
-            img = moment0(SH_mod, f1, f2, Params.fs, NT);
+            img = moment0(SH_mod, f1, f2, fs, batch_size);
             obj.moment_0.image = img;
         end
 
         if obj.arg_0.is_selected % Arg 0 has been chosen
-            img = moment0(SH_arg, f1, f2, Params.fs, NT);
+            img = moment0(SH_arg, f1, f2, fs, batch_size);
             obj.arg_0.image = img;
         end
 
         if obj.moment_1.is_selected % Moment 1 has been chosen
-            img = moment1(SH_mod, f1, f2, Params.fs, NT);
+            img = moment1(SH_mod, f1, f2, fs, batch_size);
             obj.moment_1.image = img;
         end
 
         if obj.moment_2.is_selected % Moment 2 has been chosen
-            img = moment2(SH_mod, f1, f2, Params.fs, NT);
+            img = moment2(SH_mod, f1, f2, fs, batch_size);
             obj.moment_2.image = img;
         end
 
         if obj.f_RMS.is_selected
-            M0 = moment0(SH_mod, f1, f2, Params.fs, NT);
-            M2 = moment2(SH_mod, f1, f2, Params.fs, NT);
+            M0 = moment0(SH_mod, f1, f2, fs, batch_size);
+            M2 = moment2(SH_mod, f1, f2, fs, batch_size);
 
             try
                 fi = figure("Visible", "off");
@@ -458,17 +463,17 @@ methods
         if obj.pure_phase.is_selected
             %
             if ~(r1 - floor(r1) == 0) && ~(r2 - floor(r2) == 0) %both not integer
-                r1p = floor(r1 * 2 / Params.fs * NT);
-                r2p = floor(r2 * 2 / Params.fs * NT);
+                r1p = floor(r1 * 2 / fs * batch_size);
+                r2p = floor(r2 * 2 / fs * batch_size);
             else
                 r1p = r1;
                 r2p = r2;
             end
 
-            r1p = min(max(r1p, 1), NT);
-            r2p = min(max(r2p, 1), NT);
+            r1p = min(max(r1p, 1), batch_size);
+            r2p = min(max(r2p, 1), batch_size);
             obj.pure_phase.image = cumulant(SH_arg, r1p, r2p);
-            obj.pure_phase.image = flat_field_correction(obj.pure_phase.image, Params.flatfield_gw);
+            obj.pure_phase.image = flat_field_correction(obj.pure_phase.image, gw);
         end
 
         if obj.doppler_variance_mod.is_selected %
@@ -523,7 +528,7 @@ methods
 
             if buckranges(1) == -1
                 disp("special case defining 32 buckets automatically");
-                ra = linspace(0, Params.fs / 2, 16 + 1);
+                ra = linspace(0, fs / 2, 16 + 1);
 
                 for kk = 1:(length(ra) - 1)
                     ra(kk)
@@ -540,18 +545,18 @@ methods
             % why this here ? flatfield should be enough , circleMask = fftshift(diskMask(numY, numX, 0.15)); -> Michael
 
             for freqIdx = 1:numranges
-                img = moment0(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), Params.fs, NT);
+                img = moment0(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), fs, batch_size);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                 obj.buckets.parameters.intervals_0(:, :, :, freqIdx) = img;
 
-                img = moment0(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), Params.fs, NT, Params.flatfield_gw);
+                img = moment0(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), fs, batch_size, gw);
                 obj.buckets.parameters.M0(:, :, :, freqIdx) = img;
 
-                img = moment1(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), Params.fs, NT);
+                img = moment1(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), fs, batch_size);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                 obj.buckets.parameters.intervals_1(:, :, :, freqIdx) = img;
 
-                img = moment2(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), Params.fs, NT);
+                img = moment2(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), fs, batch_size);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                 obj.buckets.parameters.intervals_2(:, :, :, freqIdx) = img;
             end
@@ -580,7 +585,7 @@ methods
 
             try
                 SHdenoised = denoiseNGMeet(SH_mod, 'Sigma', 0.01, 'NumIterations', 2);
-                img = moment0(SHdenoised, f1, f2, Params.fs, NT, 0);
+                img = moment0(SHdenoised, f1, f2, fs, batch_size, 0);
                 obj.denoised.image = img;
             catch ME
                 % Display error message and line number
@@ -646,8 +651,8 @@ methods
                     %}
 
                 [~, image] = max(diff(SH_mod(1:1:end, 1:1:end, 1:1:end), 1, 3), [], 3);
-                % image = moment0(diff(SH_mod(1:1:end,1:1:end,1:1:end),1,3), f1, f2 , Params.fs, NT, 0);
-                % image = flat_field_correction(image,Params.flatfield_gw);
+                % image = moment0(diff(SH_mod(1:1:end,1:1:end,1:1:end),1,3), f1, f2 , fs, NT, 0);
+                % image = flat_field_correction(image,gw);
 
                 % end
 
