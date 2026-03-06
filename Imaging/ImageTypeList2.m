@@ -49,6 +49,7 @@ properties
     moment_1_logstar
     moment_2_logstar
     cdf_type
+    energy_ratio_type
 end
 
 methods
@@ -101,6 +102,7 @@ methods
         obj.Quadrants = ImageType('Quadrants');
         obj.Energy = ImageType('Energy', struct("E_t", [], "E_stdf_t", [], "E_stdq_t", []));
         obj.cdf_type = ImageType('cdf');
+        obj.energy_ratio_type = ImageType('energy_ratio');
     end
 
     function clear(obj, varargin)
@@ -392,6 +394,14 @@ methods
         if obj.cdf_type.is_selected
             img = cdf(SH_mod, f1, f2, fs, 0.5, batch_size);
             obj.cdf_type.image = img;
+        end
+
+        if obj.energy_ratio_type.is_selected
+            outerMask = ~diskMask(Ny, Nx, 1.2);
+            SH_mask = SH_mod .* outerMask;
+            outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
+            img = energy_ratio(SH_mod - outerReference, f1, f2, (f1+f2)/2, fs, batch_size);
+            obj.energy_ratio_type.image = img;
         end
 
         if obj.autocorrelogram.is_selected
