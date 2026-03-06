@@ -397,10 +397,10 @@ methods
         end
 
         if obj.energy_ratio_type.is_selected
-            outerMask = ~diskMask(Ny, Nx, 1.2);
-            SH_mask = SH_mod .* outerMask;
-            outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = energy_ratio(SH_mod - outerReference, f1, f2, (f1+f2)/2, fs, batch_size);
+            % outerMask = ~diskMask(Ny, Nx, 1.2);
+            % SH_mask = SH_mod .* outerMask;
+            % outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
+            img = energy_ratio(SH_mod, f1, f2, 9, fs, batch_size);
             obj.energy_ratio_type.image = img;
         end
 
