@@ -843,6 +843,8 @@ methods
                     generate_video(mat, result_folder_path, strcat('moment_1_logstar'), export_raw = 1, temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'moment_2_logstar')
                     generate_video(mat, result_folder_path, strcat('moment_2_logstar'), export_raw = 1, temporal_filter = 2, square = params.square);
+                elseif strcmp(image_types{i}, 'energy_ratio_type')
+                    generate_video(mat, result_folder_path, strcat('energy_ratio_type'), export_raw = 1, temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'power_Doppler')
                     generate_video(mat, result_folder_path, strcat('M0'), temporal_filter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'spectrogram')
