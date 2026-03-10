@@ -23,14 +23,8 @@ n2 = max(min(n2, ceil(size(SH, 3) / 2)), 1); % -f1
 n3 = size(SH, 3) - n2 + 1; % f1
 n4 = size(SH, 3) - n1 + 1; % f2
 
-% compute noise
-[Nx, Ny, ~] = size(SH);
-outerMask = ~diskMask(Ny, Nx, 1.2);
-SH_mask = SH .* outerMask;
-outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-
 % compute CDF
-SH_shifted = fftshift(SH ./ outerReference, 3);
+SH_shifted = fftshift(SH, 3);
 S = SH_shifted(:, :, n3:n4);
 CDF = cumsum(S, 3) ./ sum(S, 3);
 
@@ -51,34 +45,20 @@ cdf_freq = f(idx);
 % CDF = cumsum(S, 3) ./ nnz(maskArteryChoroid); % CDF / NNZ
 % meanCDF = squeeze(mean(CDF, [1 2], 'omitnan'));
 % plot(f, meanCDF - meanCDF(end))
-% idx = sum(CDF - CDF(:, :, end) < floor, 3) + 1;
-% cdf_freq = f(idx);
 % 
 % S = SH_shifted .* maskVeinChoroid;
 % S = S(:, :, n3:n4);
 % CDF = cumsum(S, 3) ./ nnz(maskVeinChoroid); % CDF / NNZ
 % meanCDF = squeeze(mean(CDF, [1 2], 'omitnan'));
 % plot(f, meanCDF - meanCDF(end))
-% idx = sum(meanCDF - meanCDF(end) < floor, 3) + 1;
-% cdf_freq = f(idx);
 % 
 % S = SH_shifted .* maskBackground;
 % S = S(:, :, n3:n4);
 % CDF = cumsum(S, 3) ./ nnz(maskBackground); % CDF / NNZ
 % meanCDF = squeeze(mean(CDF, [1 2], 'omitnan'));
 % plot(f, meanCDF - meanCDF(end))
-% idx = sum(meanCDF - meanCDF(end) < floor, 3) + 1;
-% cdf_freq = f(idx);
 % 
-% S = SH_shifted .* outerMask;
-% S = S(:, :, n3:n4);
-% CDF = cumsum(S, 3) ./ nnz(outerMask); % CDF / NNZ
-% meanCDF = squeeze(mean(CDF, [1 2], 'omitnan'));
-% plot(f, meanCDF - meanCDF(end))
-% idx = sum(meanCDF - meanCDF(end) < floor, 3) + 1;
-% cdf_freq = f(idx);
-% 
-% legend({'Arterial Choroid', 'Venous Choroid', 'Background', 'Noise'}, ...
+% legend({'Arterial Choroid', 'Venous Choroid', 'Background'}, ...
 %     'Location', 'northwest')
 % box on, set(gca, 'LineWidth', 2)
 % axis([f1, f2, 0, 1])
@@ -97,10 +77,7 @@ cdf_freq = f(idx);
 % S = S(:, :, n3:n4);
 % plot(f, squeeze(sum(S, [1 2]) / nnz(maskBackground)))
 % 
-% S = SH_shifted .* outerMask;
-% S = S(:, :, n3:n4);
-% plot(f, squeeze(sum(S, [1 2]) / nnz(outerMask)))
-% legend({'Arterial Choroid', 'Venous Choroid', 'Background', 'Noise'})
+% legend({'Arterial Choroid', 'Venous Choroid', 'Background'})
 % box on, set(gca, 'LineWidth', 2)
 % 
 % axis padded

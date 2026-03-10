@@ -42,14 +42,8 @@ properties
     phase_variance
     Quadrants
     Energy
-    moment_0_star
-    moment_1_star
-    moment_2_star
-    moment_0_logstar
-    moment_1_logstar
-    moment_2_logstar
-    cdf_type
-    energy_ratio_type
+    cumulative_distribution
+    band_ratio
 end
 
 methods
@@ -70,12 +64,6 @@ methods
         obj.moment_0 = ImageType('M0');
         obj.moment_1 = ImageType('M1');
         obj.moment_2 = ImageType('M2');
-        obj.moment_0_star = ImageType('M0_star');
-        obj.moment_1_star = ImageType('M1_star');
-        obj.moment_2_star = ImageType('M2_star');
-        obj.moment_0_logstar = ImageType('M0_logstar');
-        obj.moment_1_logstar = ImageType('M1_logstar');
-        obj.moment_2_logstar = ImageType('M2_logstar');
         obj.arg_0 = ImageType('arg0');
         obj.f_RMS = ImageType('f_RMS');
         obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', [], 'intervals_2', [], 'M0', []));
@@ -101,8 +89,8 @@ methods
         obj.phase_variance = ImageType('phase_variance');
         obj.Quadrants = ImageType('Quadrants');
         obj.Energy = ImageType('Energy', struct("E_t", [], "E_stdf_t", [], "E_stdq_t", []));
-        obj.cdf_type = ImageType('cdf');
-        obj.energy_ratio_type = ImageType('energy_ratio');
+        obj.cumulative_distribution = ImageType('cdf');
+        obj.band_ratio = ImageType('energy_ratio');
     end
 
     function clear(obj, varargin)
@@ -202,7 +190,6 @@ methods
         % clear phase
         SH_mod = abs(SHin) .^ 2;
         SH_arg = angle(SHin);
-        [Nx, Ny, ~] = size(SH_mod);
 
         if obj.pure_PCA.is_selected
 
@@ -343,65 +330,14 @@ methods
             obj.SH.parameters.vector = zeros(1, batch_size);
         end
 
-        if obj.moment_0_star.is_selected
-            outerMask = ~diskMask(Ny, Nx, 1.2);
-            SH_mask = SH_mod .* outerMask;
-            outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment0(SH_mod - outerReference, f1, f2, fs, batch_size);
-            obj.moment_0_star.image = img;
-        end
-
-        if obj.moment_1_star.is_selected % Moment 1 has been chosen
-            outerMask = ~diskMask(Ny, Nx, 1.2);
-            SH_mask = SH_mod .* outerMask;
-            outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment1(SH_mod - outerReference, f1, f2, fs, batch_size);
-            obj.moment_1_star.image = img;
-        end
-
-        if obj.moment_2_star.is_selected % Moment 2 has been chosen
-            outerMask = ~diskMask(Ny, Nx, 1.2);
-            SH_mask = SH_mod .* outerMask;
-            outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment2(SH_mod - outerReference, f1, f2, fs, batch_size);
-            obj.moment_2_star.image = img;
-        end
-
-        if obj.moment_0_logstar.is_selected
-            outerMask = ~diskMask(Ny, Nx, 1.2);
-            SH_mask = SH_mod .* outerMask;
-            outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment0(log10(SH_mod ./ outerReference), f1, f2, fs, batch_size);
-            obj.moment_0_logstar.image = img;
-        end
-
-        if obj.moment_1_logstar.is_selected % Moment 1 has been chosen
-            outerMask = ~diskMask(Ny, Nx, 1.2);
-            SH_mask = SH_mod .* outerMask;
-            outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment1(log10(SH_mod ./ outerReference), f1, f2, fs, batch_size);
-            obj.moment_1_logstar.image = img;
-        end
-
-        if obj.moment_2_logstar.is_selected % Moment 2 has been chosen
-            outerMask = ~diskMask(Ny, Nx, 1.2);
-            SH_mask = SH_mod .* outerMask;
-            outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = moment2(log10(SH_mod ./ outerReference), f1, f2, fs, batch_size);
-            obj.moment_2_logstar.image = img;
-        end
-
-        if obj.cdf_type.is_selected
+        if obj.cumulative_distribution.is_selected
             img = cdf(SH_mod, f1, f2, fs, 0.5, batch_size);
-            obj.cdf_type.image = img;
+            obj.cumulative_distribution.image = img;
         end
 
-        if obj.energy_ratio_type.is_selected
-            % outerMask = ~diskMask(Ny, Nx, 1.2);
-            % SH_mask = SH_mod .* outerMask;
-            % outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
+        if obj.band_ratio.is_selected
             img = energy_ratio(SH_mod, f1, f2, 9, fs, batch_size);
-            obj.energy_ratio_type.image = img;
+            obj.band_ratio.image = img;
         end
 
         if obj.autocorrelogram.is_selected
@@ -709,6 +645,9 @@ methods
             Q = RenderQuadrant(FHin, Params);
             obj.Quadrants.parameters = Q;
             obj.Quadrants.image = imresize(cat(2, cat(1, Q.Q1_m0, Q.Q2_m0), cat(1, Q.Q4_m0, Q.Q3_m0)), [size(FHin, 1), size(FHin, 2)]);
+
+            fAVG = cell(1, int16(floor(numel(fieldnames(Q)) / 2)));
+            f0 = cell(1, int16(floor(numel(fieldnames(Q)) / 2)));
 
             for i = 1:int16(floor(numel(fieldnames(Q)) / 2))
                 fAVG{i} = Q.(sprintf("Q%d_m1", i)) ./ mean(Q.(sprintf("Q%d_m0", i)), [1 2]);
