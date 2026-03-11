@@ -13,7 +13,8 @@ end
 SH = abs(SH);
 
 % Create frequency weights for the first moment calculation
-weights = linspace(-fs / 2, fs / 2, batch_size);
+f = fftfreq(batch_size, 1/fs);
+weights = f;
 weights(abs(weights) > f2) = 0;
 weights(abs(weights) < f1) = 0;
 
