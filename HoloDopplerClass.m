@@ -61,10 +61,11 @@ methods
 
                 try
                     obj.reader = HoloReader(obj.file.path, opt.LoadAll);
-                catch e
+                catch ME
                     obj.file = [];
                     obj.reader = [];
-                    error("Couldn't read the holo file with holo reader: %s", e.message)
+                    MEdisp(ME);
+                    error("Couldn't read the holo file with holo reader: %s", ME.message)
                 end
 
                 fields = properties(obj.reader);
@@ -110,10 +111,11 @@ methods
 
                 try
                     obj.reader = CineReader(obj.file.path);
-                catch e
+                catch ME
                     obj.file = [];
                     obj.reader = [];
-                    error("The file is not a valid cine file: %s", e.message)
+                    MEdisp(ME);
+                    error("The file is not a valid cine file: %s", ME.message)
                 end
 
                 fields = properties(obj.reader);
@@ -473,7 +475,7 @@ methods
             num_batches = num_batches - 1;
         end
 
-        disp(['Rendering ' num2str(num_batches) 'frames.']);
+        fprintf("Rendering %d frames.\n", num_batches);
 
         if num_batches == 0
             return
@@ -887,7 +889,8 @@ methods
             [~, output_dirname] = fileparts(result_folder_path);
             output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
             export_h5_video(fullfile(result_folder_path, 'raw', output_filename_h5), "registration", obj.registration.shifts);
-        catch
+        catch ME
+            MEdisp(ME);
             disp("Error while saving the registration.")
         end
 
@@ -898,7 +901,8 @@ methods
             [~, output_dirname] = fileparts(result_folder_path);
             output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
             export_h5_string(fullfile(result_folder_path, 'raw', output_filename_h5), "HD_parameters", str);
-        catch
+        catch ME
+            MEdisp(ME);
             disp("Error while saving the parameters.")
         end
 
@@ -924,7 +928,8 @@ methods
             fid_git = fopen(fullfile(result_folder_path, 'git.txt'), 'w');
             fwrite(fid_git, git_info);
             fclose(fid_git);
-        catch err
+        catch ME
+            MEdisp(ME);
             disp('No git git info.');
         end
 
@@ -936,6 +941,8 @@ methods
         save(fullfile(result_folder_path, 'mat', strcat(obj.file.name, '_HD_', num2str(index + 1), '.mat')), "cache");
 
         fprintf("Video Saving took : %f s\n", toc(VideoSavingTime));
+
+        fprintf("All done! Results saved in %s\n", result_folder_path);
     end
 
     function CalculateRegistration(obj)
@@ -1156,8 +1163,8 @@ methods
         try
             sha = abs(obj.view.SH);
             implay(rescale(sha, InputMin = min(sha, [], [1, 2]), InputMax = max(sha, [], [1, 2])));
-        catch e
-            disp(e)
+        catch ME
+            MEdisp(ME);
         end
 
     end

@@ -224,7 +224,7 @@ methods
         end
 
         if obj.power_1_Doppler.is_selected % Power Doppler 1 has been chosen
-            img = moment1(SH_mod, f1, f2, fs, batch_size);
+            img = moment1(SH_mod, f1, f2, fs, batch_size, gw);
             obj.power_1_Doppler.image = img;
         end
 
@@ -336,7 +336,7 @@ methods
         end
 
         if obj.band_ratio.is_selected
-            img = energy_ratio(SH_mod, f1, f2, 9, fs, batch_size);
+            img = energy_ratio(SH_mod, f1, f2, 5, 6, fs, batch_size);
             obj.band_ratio.image = img;
         end
 
@@ -366,41 +366,40 @@ methods
         end
 
         if obj.moment_0.is_selected % Moment 0 has been chosen
-            img = moment0(SH_mod, f1, f2, fs, batch_size);
-            obj.moment_0.image = img;
+            img_M0 = moment0(SH_mod, f1, f2, fs, batch_size);
+            obj.moment_0.image = img_M0;
         end
 
         if obj.arg_0.is_selected % Arg 0 has been chosen
-            img = moment0(SH_arg, f1, f2, fs, batch_size);
-            obj.arg_0.image = img;
+            img_arg0 = moment0(SH_arg, f1, f2, fs, batch_size);
+            obj.arg_0.image = img_arg0;
         end
 
         if obj.moment_1.is_selected % Moment 1 has been chosen
-            img = moment1(SH_mod, f1, f2, fs, batch_size);
-            obj.moment_1.image = img;
+            img_M1 = moment1(SH_mod, f1, f2, fs, batch_size);
+            obj.moment_1.image = img_M1;
         end
 
         if obj.moment_2.is_selected % Moment 2 has been chosen
-            img = moment2(SH_mod, f1, f2, fs, batch_size);
-            obj.moment_2.image = img;
+            img_M2 = moment2(SH_mod, f1, f2, fs, batch_size);
+            obj.moment_2.image = img_M2;
         end
 
         if obj.f_RMS.is_selected
-            M0 = moment0(SH_mod, f1, f2, fs, batch_size);
-            M2 = moment2(SH_mod, f1, f2, fs, batch_size);
-
+            img_M0 = moment0(SH_mod, f1, f2, fs, batch_size);
+            img_M2 = moment2(SH_mod, f1, f2, fs, batch_size);
+            img_fRMS = sqrt(img_M2 ./ mean(img_M0, [1, 2]));
             try
                 fi = figure("Visible", "off");
-                imagesc(sqrt(M2 ./ mean(M0, [1, 2])));
-                %imagesc(sqrt(M2./M0));
-                axis off; axis image;
+                imagesc(img_fRMS);
+                axis off; axis square;
                 title("f_{RMS} (in kHz)")
-                colormap("gray");
-                colorbar;
+                colormap("gray"); colorbar;
                 frame = getframe(fi); % Capture the figure
                 % obj.f_RMS.graph = gca;
                 obj.f_RMS.image = frame.cdata;
             catch E
+                obj.f_RMS.image = img_fRMS;
                 MEdisp(E);
             end
 
