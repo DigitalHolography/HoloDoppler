@@ -16,7 +16,7 @@ outerMask = diskMask(Ny, Nx, 0.95);
 
 high_freqs = squeeze(mean(SH_(:,:,n1:n4,:),3));
 
-y = squeeze(sum(ratio_video .* (mask & outerMask),[1,2]))/nnz((mask & outerMask))';
+y = squeeze(sum(high_freqs .* (mask & outerMask),[1,2]))/nnz((mask & outerMask))';
 
 
 

@@ -400,7 +400,7 @@ methods
             outerMask = diskMask(Ny, Nx, 0.95);
             % SH_mask = SH_mod .* outerMask;
             % outerReference = sum(SH_mask, [1 2]) / nnz(outerMask);
-            img = flat_field_correction(energy_ratio(SH_mod, f1, f2, 4, 10, fs, batch_size),35) .* outerMask;
+            img = flat_field_correction(energy_ratio(SH_mod, f1, f2, 5, 5, fs, batch_size),25) .* outerMask;
             obj.energy_ratio_type.image = (img);
         end
 

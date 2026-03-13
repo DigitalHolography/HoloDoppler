@@ -22,7 +22,7 @@ y = y(:);                           % force column
 
 t = (0:numel(y)-1) * dt;            % seconds (index -> seconds)
 
-f = figure('Visible','off','Color','w');
+f = figure('Visible','on','Color','w');
 ax = axes(f); hold(ax,'on'); box(ax,'on');
 
 plot(ax, t, y, 'k-', 'LineWidth', 2);   % black line
