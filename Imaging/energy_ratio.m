@@ -12,29 +12,26 @@ end
 
 SH = abs(SH);
 
-% integration interval
-% convert frequencies to indices
-n1 = ceil(f1 * batch_size / fs);
-n2 = ceil(f2 * batch_size / fs);
-ni1 = ceil(fi1 * batch_size / fs);
-ni2 = ceil(fi2 * batch_size / fs);
+% Weights
+f = linspace(-fs / 2, fs / 2, batch_size);
+weights = f;
+abs_weights = abs(weights);
+weights(abs_weights > f2) = 0;
+weights(abs_weights < f1) = 0;
 
-n1 = max(min(n1, ceil(size(SH, 3) / 2)), 1);
-n2 = max(min(n2, ceil(size(SH, 3) / 2)), 1);
-ni1 = max(min(ni1, ceil(size(SH, 3) / 2)), 1);
-ni2 = max(min(ni2, ceil(size(SH, 3) / 2)), 1);
+% Low Frequency Weights
+weightsLF = weights;
+weightsLF(abs_weights > fi1) = 0;
+weightsLF(weightsLF ~= 0) = 1;
 
-% symetric integration interval
-n3 = size(SH, 3) - n2 + 1;
-n4 = size(SH, 3) - n1 + 1;
-nj1 = size(SH, 3) - ni1 + 1;
-nj2 = size(SH, 3) - ni2 + 1;
+% High Frequency Weights
+weightsHF = weights;
+weightsHF(abs_weights < fi2) = 0;
+weightsHF(weightsHF ~= 0) = 1;
 
 % Energies
-LF_psd_avg = squeeze(mean(SH(:, :, n1:ni1), 3)) + ...
-    squeeze(mean(SH(:, :, nj1:n4), 3));
-HF_psd_avg = squeeze(mean(SH(:, :, ni2:n2), 3)) + ...
-    squeeze(mean(SH(:, :, n3:nj2), 3));
+LF_psd_avg = mean(SH .* reshape(weightsLF, 1, 1, []), 3);
+HF_psd_avg = mean(SH .* reshape(weightsHF, 1, 1, []), 3);
 
 % energy ratio
 high_low_ratio = HF_psd_avg ./ LF_psd_avg ;
