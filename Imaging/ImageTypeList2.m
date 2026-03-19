@@ -337,7 +337,8 @@ methods
 
         if obj.band_ratio.is_selected
             img = energy_ratio(SH_mod, f1, f2, 5, 6, fs, batch_size);
-            obj.band_ratio.image = img;
+            color_img = color_energy_ratio(SH_mod, f1, f2, 5, 5, fs, batch_size, gw);
+            obj.band_ratio.image = color_img;
         end
 
         if obj.autocorrelogram.is_selected
