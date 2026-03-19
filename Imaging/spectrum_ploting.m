@@ -50,7 +50,7 @@ else
     xticklabels({num2str(round(-f2, 1)), num2str(round(f2, 1))})
 end
 
-title(sprintf('f_{RMS} = %.2f kHz', omegaRMS))
+% title(sprintf('f_{RMS} = %.2f kHz', omegaRMS))
 fontsize(gca, 12, "points");
 xlabel('frequency (kHz)', 'FontSize', 14);
 ylabel('log10 S', 'FontSize', 14);
@@ -60,6 +60,6 @@ set(gca, 'LineWidth', 2);
 uistack(p_mask, 'top');
 uistack(gca, 'top');
 
-fit_spectrum(axis_x, signal_log, f1, f2);
+% fit_spectrum_voigt(axis_x, signal_log, f1, f2);
 
 end

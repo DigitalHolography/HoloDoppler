@@ -390,6 +390,7 @@ methods
             img_M0 = moment0(SH_mod, f1, f2, fs, batch_size);
             img_M2 = moment2(SH_mod, f1, f2, fs, batch_size);
             img_fRMS = sqrt(img_M2 ./ mean(img_M0, [1, 2]));
+
             try
                 fi = figure("Visible", "off");
                 imagesc(img_fRMS);
