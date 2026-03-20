@@ -44,6 +44,8 @@ properties
     Energy
     cumulative_distribution
     band_ratio
+    color_band_ratio
+    entropy
 end
 
 methods
@@ -91,6 +93,8 @@ methods
         obj.Energy = ImageType('Energy', struct("E_t", [], "E_stdf_t", [], "E_stdq_t", []));
         obj.cumulative_distribution = ImageType('cdf');
         obj.band_ratio = ImageType('energy_ratio');
+        obj.color_band_ratio = ImageType('color_energy_ratio');
+        obj.entropy = ImageType('entropy');
     end
 
     function clear(obj, varargin)
@@ -336,9 +340,18 @@ methods
         end
 
         if obj.band_ratio.is_selected
-            img = energy_ratio(SH_mod, f1, f2, 5, 6, fs, batch_size);
+            img = energy_ratio(SH_mod, f1, f2, 5, 5, fs, batch_size);
+            obj.band_ratio.image = img;
+        end
+
+        if obj.color_band_ratio.is_selected
             color_img = color_energy_ratio(SH_mod, f1, f2, 5, 5, fs, batch_size, gw);
-            obj.band_ratio.image = color_img;
+            obj.color_band_ratio.image = color_img;
+        end
+
+        if obj.entropy.is_selected
+            img = spectral_entropy(SH_mod, f1, f2, fs, batch_size);
+            obj.entropy.image = img;
         end
 
         if obj.autocorrelogram.is_selected

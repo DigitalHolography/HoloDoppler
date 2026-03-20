@@ -14,13 +14,13 @@ SH = abs(SH);
 
 % Create frequency weights for the zeroth moment calculation
 f = fftfreq(batch_size, 1/fs);
-weights = f;
-weights(abs(weights) > f2) = 0;
-weights(abs(weights) < f1) = 0;
-weights(weights ~= 0) = 1; % Set non-zero weights to 1 for the zeroth moment
+abs_f = abs(f);
+
+% Boolean mask for the visible window [f1, f2]
+mask = (abs_f >= f1) & (abs_f <= f2);
 
 % Compute the zeroth moment by summing the weighted spectrum across frequencies
-moment0 = sum(SH .* reshape(weights, 1, 1, []), 3);
+moment0 = sum(SH .* reshape(mask, 1, 1, []), 3);
 
 if gw ~= 0
     moment0 = flat_field_correction(moment0, gw);

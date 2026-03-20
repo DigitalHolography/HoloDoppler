@@ -12,21 +12,29 @@ arguments
 end
 
 [Ny, Nx, ~] = size(SH);
-mask = diskMask(Nx, Ny, 1);
+mask = diskMask(Nx, Ny, 1); % DISK
 
-img_M0 = moment0(SH, f1, f2, fs, batch_size, gw);
-img_M0(~mask) = NaN;
-img_M0 = rescale(img_M0);
-[img_energy_ratio] = 1 ./ energy_ratio(SH, f1, f2, fi1, fi2, fs, batch_size);
+img_M0_ff = moment0(SH, fi2, f2, fs, batch_size, gw);
+img_M0_ff(~mask) = NaN;
+img_M0_ff = rescale(img_M0_ff);
 
+[img_energy_ratio] = energy_ratio(SH, f1, f2, fi1, fi2, fs, batch_size);
 ER_ff = img_energy_ratio ./ imgaussfilt(img_energy_ratio, gw);
 img_energy_ratio_centered = log(ER_ff);
-img_color = labDuoImage(img_M0, img_energy_ratio_centered);
+img_color = labDuoImage(img_M0_ff, img_energy_ratio_centered);
 
 mask_3D = [~mask ~mask ~mask];
 img_color(mask_3D) = 0;
-img_color(img_color<0) = 0;
-img_color(img_color>1) = 1;
+img_color(img_color < 0) = 0;
+img_color(img_color > 1) = 1;
+
+% A = zeros(Ny, Nx, 3);
+% A(:,:,1) = rescale(img_energy_ratio_centered);
+% A(:,:,2) = rescale(img_M0_ff);
+% A(:,:,3) = rescale(img_M0_ff);
+% A(mask_3D) = 0;
+% img_color = A;
+
 end
 
 function [RGB] = labDuoImage(image_1, image_2, h)
@@ -51,8 +59,8 @@ image_1 = image_1 ./ max(abs(max(image_1, [], "all")), abs(min(image_1, [], "all
 image_2 = image_2 ./ max(abs(max(image_2, [], "all")), abs(min(image_2, [], "all")));
 
 L = 100 .* image_1;
-a = 128 .* image_2 * rx;
-b = 128 .* image_2 * ry;
+a = 127.5 .* image_2 * rx - 0.5;
+b = 127.5 .* image_2 * ry - 0.5;
 
 Lab(:, :, 1) = L;
 Lab(:, :, 2) = a;

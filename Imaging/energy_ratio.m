@@ -13,7 +13,7 @@ end
 SH = abs(SH);
 
 % Weights
-f = linspace(-fs / 2, fs / 2, batch_size);
+f = fftfreq(batch_size, 1 / fs);
 weights = f;
 abs_weights = abs(weights);
 weights(abs_weights > f2) = 0;
@@ -34,7 +34,7 @@ LF_psd_avg = mean(SH .* reshape(weightsLF, 1, 1, []), 3);
 HF_psd_avg = mean(SH .* reshape(weightsHF, 1, 1, []), 3);
 
 % energy ratio
-high_low_ratio = HF_psd_avg ./ LF_psd_avg ;
+high_low_ratio = HF_psd_avg ./ LF_psd_avg;
 
 energy_ratio = gather(high_low_ratio);
 
