@@ -418,6 +418,7 @@ methods
                 MEdisp(E);
             end
 
+            obj.f_RMS.image = sqrt(img_M2 ./ img_M0);
         end
 
         if obj.pure_phase.is_selected

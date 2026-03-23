@@ -21,6 +21,8 @@ img_M0_ff = rescale(img_M0_ff);
 [img_energy_ratio] = energy_ratio(SH, f1, f2, fi1, fi2, fs, batch_size);
 ER_ff = img_energy_ratio ./ imgaussfilt(img_energy_ratio, gw);
 img_energy_ratio_centered = log(ER_ff);
+img_energy_ratio_centered(~mask) = NaN;
+
 img_color = labDuoImage(img_M0_ff, img_energy_ratio_centered);
 
 mask_3D = [~mask ~mask ~mask];
