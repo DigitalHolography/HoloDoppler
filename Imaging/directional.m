@@ -1,8 +1,8 @@
-function [M0_pos, M0_neg] = directional(SH, f1, f2, fs, batch_size, gw)
+function [M0_pos, M0_neg] = directional(SH, f1, f2, fs, batchSize, gw)
 %% integration interval
 % convert frequencies to indices
-n1 = ceil(f1 * batch_size / fs);
-n2 = ceil(f2 * batch_size / fs);
+n1 = ceil(f1 * batchSize / fs);
+n2 = ceil(f2 * batchSize / fs);
 
 n1 = max(min(n1, ceil(size(SH, 3) / 2)), 1);
 n2 = max(min(n2, ceil(size(SH, 3) / 2)), 1);

@@ -11,13 +11,13 @@ if ~thresh
     thresh = ceil(f1 * size(H, 3) / fs * 2);
 end
 
-[width, height, batch_size] = size(H);
+[width, height, batchSize] = size(H);
 Lx = linspace(1, width, NbSubAp + 1);
 Ly = linspace(1, height, NbSubAp + 1);
 
 if nargin == 4
     % third parameter does not exist, so default it to something
-    thresh = round(f1 * batch_size / fs / NbSubAp) * 2 + 1;
+    thresh = round(f1 * batchSize / fs / NbSubAp) * 2 + 1;
 end
 
 C = zeros([width, height], 'single');
@@ -27,7 +27,7 @@ for ii = 1:NbSubAp
 
     for kk = 1:NbSubAp
         H1 = H(round(Lx(ii)):round(Lx(ii + 1) - 1), round(Ly(kk)):round(Ly(kk + 1) - 1), :);
-        H1 = reshape(H1, (round(Lx(ii + 1)) - round(Lx(ii))) * (round(Ly(kk + 1)) - round(Ly(kk))), batch_size);
+        H1 = reshape(H1, (round(Lx(ii + 1)) - round(Lx(ii))) * (round(Ly(kk + 1)) - round(Ly(kk))), batchSize);
 
         % SVD of spatio-temporal features
         cov = H1' * H1;
@@ -44,8 +44,8 @@ for ii = 1:NbSubAp
             bigU(round(Lx(ii)):round(Lx(ii + 1) - 1), round(Ly(kk)):round(Ly(kk + 1) - 1), 2) = imresize(mean(abs(U(:, :, 2:end)), 3), sz);
         end
 
-        H1 = reshape(H1 - H_tissue, (round(Lx(ii + 1)) - round(Lx(ii))), (round(Ly(kk + 1)) - round(Ly(kk))), batch_size);
-        H(round(Lx(ii)):round(Lx(ii + 1) - 1), round(Ly(kk)):round(Ly(kk + 1) - 1), :) = reshape(H1, (round(Lx(ii + 1)) - round(Lx(ii))), (round(Ly(kk + 1)) - round(Ly(kk))), batch_size);
+        H1 = reshape(H1 - H_tissue, (round(Lx(ii + 1)) - round(Lx(ii))), (round(Ly(kk + 1)) - round(Ly(kk))), batchSize);
+        H(round(Lx(ii)):round(Lx(ii + 1) - 1), round(Ly(kk)):round(Ly(kk + 1) - 1), :) = reshape(H1, (round(Lx(ii + 1)) - round(Lx(ii))), (round(Ly(kk + 1)) - round(Ly(kk))), batchSize);
 
     end
 

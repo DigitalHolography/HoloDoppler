@@ -2,8 +2,8 @@ function H_PCA = short_time_PCA(H)
 % PCA of short time spatio-temporal features
 % H: frame batch already propagated to the distance of reconstruction
 
-[width, height, batch_size] = size(H);
-H = reshape(H, width * height, batch_size);
+[width, height, batchSize] = size(H);
+H = reshape(H, width * height, batchSize);
 
 % SVD of spatio-temporal features
 cov = H' * H;
@@ -18,5 +18,5 @@ V = V(:, sort_idx);
 
 % projection of H
 H_PCA = H * V;
-H_PCA = reshape(H_PCA, width, height, batch_size);
+H_PCA = reshape(H_PCA, width, height, batchSize);
 end

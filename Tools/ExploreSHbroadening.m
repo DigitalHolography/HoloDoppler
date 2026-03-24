@@ -367,7 +367,7 @@ methods
         f_1 = obj.f1;
         f_2 = obj.f2;
         f_s = obj.fs;
-        batch_size = size(obj.SH_processed, 3);
+        batchSize = size(obj.SH_processed, 3);
 
         axes(obj.axPlot);
         cla(obj.axPlot); % Clear the previous plot
@@ -410,12 +410,12 @@ methods
             SH_mask = obj.SH_processed .* mask;
             spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(mask);
             spectrumAVG_mask = spectrumAVG_mask ./ obj.outerReference;
-            momentM0 = moment0(obj.SH_processed, f_1, f_2, f_s, batch_size);
-            momentM2 = moment2(obj.SH_processed, f_1, f_2, f_s, batch_size);
+            momentM0 = moment0(obj.SH_processed, f_1, f_2, f_s, batchSize);
+            momentM2 = moment2(obj.SH_processed, f_1, f_2, f_s, batchSize);
             M0_full = mean(momentM0, [1, 2]);
             M2 = mean(momentM2(mask));
             omegaRMS = sqrt(M2 / M0_full); % sqrt(M2/M0);
-            omegaRMS_index = omegaRMS * batch_size / f_s;
+            omegaRMS_index = omegaRMS * batchSize / f_s;
             I_omega = scalingfn(spectrumAVG_mask(round(omegaRMS_index)));
             axis_x = linspace(-f_s / 2, f_s / 2, size(SH_mask, 3));
 
@@ -447,8 +447,6 @@ methods
             fit_spectrum_voigt(axis_x, log10(fftshift(spectrumAVG_mask)), f_1, f_2, annotation = false);
 
         end
-
-
 
         pbaspect([1.618 1 1]);
         box on,
@@ -490,9 +488,9 @@ methods
         % This function can be implemented to create a reference spectrum from an outer diaphragm region
         % It can be called when the user clicks a button to set the reference spectrum for fitting
 
-        [Nx, Ny, batch_size] = size(obj.SH_processed);
+        [Nx, Ny, batchSize] = size(obj.SH_processed);
         outerMask = ~diskMask(Ny, Nx, 1.1);
-        largeMask = repmat(outerMask, [1 1 batch_size]);
+        largeMask = repmat(outerMask, [1 1 batchSize]);
         SH_mask = obj.SH_processed .* largeMask;
         obj.outerReference = squeeze(sum(SH_mask, [1 2])) / nnz(outerMask);
 

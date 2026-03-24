@@ -1,11 +1,11 @@
-function moment1 = moment1(SH, f1, f2, fs, batch_size, gw)
+function moment1 = moment1(SH, f1, f2, fs, batchSize, gw)
 
 arguments
     SH
     f1
     f2
     fs
-    batch_size
+    batchSize
     gw = 0
 end
 
@@ -13,7 +13,7 @@ end
 SH = abs(SH);
 
 % Create frequency weights for the first moment calculation
-f = fftfreq(batch_size, 1/fs);
+f = fftfreq(batchSize, 1 / fs);
 weights = f;
 weights(abs(weights) > f2) = 0;
 weights(abs(weights) < f1) = 0;

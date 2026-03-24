@@ -12,8 +12,8 @@ function [correction, stiched_moments_video, shifts_vector, stitched_correlation
 % kernel: reconstruction kernel
 % rephasing_data: rephasing to apply before processing
 % gw: size of gaussian filter
-% batch_size: number of frames in a batch
-% batch_stride: number of frames to skip between each batches
+% batchSize: number of frames in a batch
+% batchStride: number of frames to skip between each batches
 % complex_mask: apply a fake aberration complex mask (Nx*Ny complex matrix)
 %               ignored if empty
 % progress_bar: gui progress bar to display computation progress
@@ -46,8 +46,8 @@ nin = nargin; % local alias because nargin can't be used in parfor loops
 % threads during parfor loop
 Nx = istream.get_frame_width();
 Ny = istream.get_frame_height();
-j_win = cache.batch_size;
-j_step = cache.batch_stride;
+j_win = cache.batchSize;
+j_step = cache.batchStride;
 f1 = cache.time_transform.f1;
 f2 = cache.time_transform.f2;
 acquisition = DopplerAcquisition(Nx, Ny, cache.Fs / 1000, cache.z, cache.z_retina, cache.z_iris, cache.wavelength, cache.DX, cache.DY, cache.pix_width, cache.pix_height);

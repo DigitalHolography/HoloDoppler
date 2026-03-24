@@ -1,4 +1,4 @@
-function [cdf_freq] = cdf(SH, f1, f2, fs, floor, batch_size)
+function [cdf_freq] = cdf(SH, f1, f2, fs, floor, batchSize)
 
 arguments
     SH
@@ -6,15 +6,15 @@ arguments
     f2
     fs
     floor
-    batch_size
+    batchSize
 end
 
 SH = abs(SH);
 
 % integration interval
 % convert frequencies to indices
-n1 = ceil(f1 * batch_size / fs);
-n2 = ceil(f2 * batch_size / fs);
+n1 = ceil(f1 * batchSize / fs);
+n2 = ceil(f2 * batchSize / fs);
 
 n1 = max(min(n1, ceil(size(SH, 3) / 2)), 1); % -f2
 n2 = max(min(n2, ceil(size(SH, 3) / 2)), 1); % -f1

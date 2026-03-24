@@ -6,7 +6,7 @@ classdef GuiCache
 properties (Access = public)
 
     nb_cpu_cores double
-    batch_size double
+    batchSize double
     spatialTransformation char
     z double
     z_retina double
@@ -30,7 +30,7 @@ properties (Access = public)
     % video rendering
 
     ref_batch_size double
-    batch_stride double
+    batchStride double
     DX double
     DY double
 
@@ -84,9 +84,9 @@ methods (Access = public)
 
     function obj = GuiCache(app)
         obj.nb_cpu_cores = app.numworkersSpinner.Value;
-        obj.batch_size = app.batchsizeEditField.Value;
+        obj.batchSize = app.batchsizeEditField.Value;
         obj.ref_batch_size = app.refbatchsizeEditField.Value;
-        obj.batch_stride = app.batchstrideEditField.Value;
+        obj.batchStride = app.batchstrideEditField.Value;
         obj.spatialTransformation = app.spatialTransformationDropDown.Value; % Fresnel or angular spectrum...&obj.
         obj.z_switch = app.Switch.Value;
         obj.z_retina = app.zretinaEditField.Value;
@@ -155,11 +155,11 @@ methods (Access = public)
         try
             app.ppx.Value = loadGUIVariable(obj.pix_width);
             app.ppy.Value = loadGUIVariable(obj.pix_height);
-            app.batchsizeEditField.Value = loadGUIVariable(obj.batch_size);
+            app.batchsizeEditField.Value = loadGUIVariable(obj.batchSize);
             app.max_PCAEditField.Limits = loadGUIVariable([0 double(app.batchsizeEditField.Value)]);
             app.spatialTransformationDropDown.Value = loadGUIVariable(obj.spatialTransformation);
             app.refbatchsizeEditField.Value = loadGUIVariable(obj.ref_batch_size);
-            app.batchstrideEditField.Value = loadGUIVariable(obj.batch_stride);
+            app.batchstrideEditField.Value = loadGUIVariable(obj.batchStride);
             app.Switch.Value = loadGUIVariable(obj.z_switch);
             app.zretinaEditField.Value = loadGUIVariable(obj.z_retina);
             app.zirisEditField.Value = loadGUIVariable(obj.z_iris);

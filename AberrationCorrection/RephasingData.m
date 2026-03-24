@@ -1,8 +1,8 @@
 classdef RephasingData
 
 properties
-    batch_size
-    batch_stride
+    batchSize
+    batchStride
     aberration_correction
 
     image_registration
@@ -15,9 +15,9 @@ end
 
 methods
 
-    function obj = RephasingData(batch_size, batch_stride, aberration_correction)
-        obj.batch_size = batch_size;
-        obj.batch_stride = batch_stride;
+    function obj = RephasingData(batchSize, batchStride, aberration_correction)
+        obj.batchSize = batchSize;
+        obj.batchStride = batchStride;
         obj.aberration_correction = aberration_correction;
     end
 
@@ -33,8 +33,8 @@ methods
         obj.frame_ranges = zeros(2, Nt);
 
         for i = 1:Nt
-            obj.frame_ranges(1, i) = (i - 1) * obj.batch_stride + 1;
-            obj.frame_ranges(2, i) = obj.frame_ranges(1, i) + obj.batch_size;
+            obj.frame_ranges(1, i) = (i - 1) * obj.batchStride + 1;
+            obj.frame_ranges(2, i) = obj.frame_ranges(1, i) + obj.batchSize;
         end
 
     end

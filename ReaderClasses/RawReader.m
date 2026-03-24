@@ -79,12 +79,12 @@ methods
         fd = fopen(obj.path, 'r');
         fseek(fd, obj.offsets(k), 'bof');
         data = fread(fd, obj.true_frame_width * obj.true_frame_height * obj.j_win, 'uint16=>single', obj.endianness); % big endian
-        batch(width_range, height_range, :) = reshape(data, obj.true_frame_width, obj.true_frame_height, batch_size);
+        batch(width_range, height_range, :) = reshape(data, obj.true_frame_width, obj.true_frame_height, batchSize);
         fclose(fd);
         batch = replace_dropped_frames(batch, 0.2);
     end
 
-    function batch = read_frame_batch(obj, batch_size, frame_offset)
+    function batch = read_frame_batch(obj, batchSize, frame_offset)
         ac = obj.acquisition;
 
         final_frame_size = ac.Nx;
@@ -99,15 +99,15 @@ methods
             width_range = 1:obj.true_frame_width;
         end
 
-        batch = zeros(ac.Nx, ac.Ny, batch_size, 'single');
+        batch = zeros(ac.Nx, ac.Ny, batchSize, 'single');
 
         fd = fopen(obj.path, 'r');
         frame_bytes_size = obj.true_frame_width * obj.true_frame_height * 2;
         bytes_offset = frame_offset * frame_bytes_size;
 
         fseek(fd, bytes_offset, 'bof');
-        data = fread(fd, obj.true_frame_width * obj.true_frame_height * batch_size, 'uint16=>single', obj.endianness);
-        batch(width_range, height_range, :) = reshape(data, obj.true_frame_width, obj.true_frame_height, batch_size);
+        data = fread(fd, obj.true_frame_width * obj.true_frame_height * batchSize, 'uint16=>single', obj.endianness);
+        batch(width_range, height_range, :) = reshape(data, obj.true_frame_width, obj.true_frame_height, batchSize);
         fclose(fd);
 
         batch = replace_dropped_frames(batch, 0.2);
@@ -121,13 +121,13 @@ methods
         height = obj.acquisition.Ny;
     end
 
-    function frame_batches = read_all_frames(obj, batch_size, batch_stride)
+    function frame_batches = read_all_frames(obj, batchSize, batchStride)
 
-        num_batches = floor((obj.num_frames - batch_size) / batch_stride);
-        frame_batches = zeros(obj.j_win, obj.j_step, batch_size, num_batches);
+        num_batches = floor((obj.num_frames - batchSize) / batchStride);
+        frame_batches = zeros(obj.j_win, obj.j_step, batchSize, num_batches);
 
         for batchIdx = 1:num_batches
-            frame_batches(:, :, :, batchIdx) = int32(obj.read_frame_batch(batch_size, (batchIdx - 1) * batch_stride));
+            frame_batches(:, :, :, batchIdx) = int32(obj.read_frame_batch(batchSize, (batchIdx - 1) * batchStride));
         end
 
     end

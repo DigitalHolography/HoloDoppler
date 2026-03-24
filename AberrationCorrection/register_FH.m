@@ -7,7 +7,7 @@ function FH = register_FH(FH, shifts, reg_batch_size, size_factor)
 % dy shifts for registration
 %
 % reg_batch_size: the size of an interferogram batch used when
-% computing the shifts (N.B. ~= size(FH,3) because here size(FH,3) == batch_size * size_factor)
+% computing the shifts (N.B. ~= size(FH,3) because here size(FH,3) == batchSize * size_factor)
 %
 % size_factor: the factor between the registration batch size
 % and the current batch size (optional, defaults to 1)

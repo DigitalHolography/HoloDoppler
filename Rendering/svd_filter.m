@@ -6,16 +6,16 @@ function [H, cov, U] = svd_filter(H, thresh, f1, fs, stride_param, true_mean_cor
 % threshold : number of firsts components of the svd decomposition removed
 % f1 fs : thresh frequency and sampling frequency for default behavior
 
-[iwidth, iheight, batch_size] = size(H); % 'i' for initial
+[iwidth, iheight, batchSize] = size(H); % 'i' for initial
 
-Hi = reshape(H, iwidth * iheight, batch_size);
+Hi = reshape(H, iwidth * iheight, batchSize);
 
 if ~thresh
     % thresh parameter does not exist, so default it to something
-    thresh = ceil(f1 * batch_size / fs * 2);
+    thresh = ceil(f1 * batchSize / fs * 2);
 end
 
-thresh = max(min(thresh, batch_size), 1);
+thresh = max(min(thresh, batchSize), 1);
 
 if nargin < 5 || isempty(stride_param)
     % stride_param doesnt exist so default to 1 (full H)
@@ -39,7 +39,7 @@ yrange = unique(round(1:stride_param:iheight));
 H = H(xrange, yrange, :); % sub sample H for faster computations
 
 [width, height, ~] = size(H);
-H = reshape(H, width * height, batch_size);
+H = reshape(H, width * height, batchSize);
 
 % SVD of spatio-temporal features
 cov = H' * H;
@@ -49,8 +49,8 @@ cov = H' * H;
 V = V(:, sort_idx);
 H_tissue = Hi * V(:, 1:thresh) * V(:, 1:thresh)';
 U = Hi * V(:, 1:thresh); % U is also divided by S^2 but normalization of each U image removes this factor
-H = reshape(Hi - H_tissue, iwidth, iheight, batch_size);
-H = reshape(H, iwidth, iheight, batch_size);
+H = reshape(Hi - H_tissue, iwidth, iheight, batchSize);
+H = reshape(H, iwidth, iheight, batchSize);
 
 if true_mean_correction
     % re add the mean of H

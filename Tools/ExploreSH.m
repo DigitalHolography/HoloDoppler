@@ -238,7 +238,7 @@ methods
         meanSpectrum = mean(abs(maskedSH), 1);
 
         Fs = obj.params.fs;
-        batch_size = obj.params.batch_size;
+        batchSize = obj.params.batchSize;
 
         freqs = linspace(-Fs / 2, Fs / 2, size(obj.SH, 3));
 

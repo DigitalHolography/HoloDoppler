@@ -32,7 +32,6 @@ methods
             obj
             file_path
             opt.params = []; % Optional parameters to force in case the default behavior (finding existing in the folder is not ideal)
-            opt.LoadAll = false; % Optional parameter to Load All the file in memory if possible
         end
 
         % LoadFile
@@ -60,7 +59,7 @@ methods
                 holo_version_threshold = 5; % current is version 7
 
                 try
-                    obj.reader = HoloReader(obj.file.path, opt.LoadAll);
+                    obj.reader = HoloReader(obj.file.path);
                 catch ME
                     obj.file = [];
                     obj.reader = [];
@@ -277,21 +276,80 @@ methods
 
         obj.params = [];
 
-        obj.params.batch_size = 512;
-        obj.params.batch_stride = 512;
+        obj.params.batchSize = 512;
+        obj.params.batchStride = 512;
         obj.params.frame_stride = 1;
         obj.params.frame_position = 1;
         obj.params.registration_disc_ratio = 0.8;
         obj.params.image_types = {'power_Doppler', 'color_Doppler', 'directional_Doppler', 'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
         obj.params.parfor_arg = 10;
-        obj.params.batch_size_registration = 512;
+        obj.params.refBatchSize = 512;
         obj.params.image_registration = true;
         obj.params.applyshackhartmannfromref = false;
         obj.params.applyautofocusfromref = false;
         obj.params.autofocus_range = [0.45, 0.52];
         obj.params.first_frame = 0;
         obj.params.end_frame = 0;
-        obj.params.end_frame = 0;
+
+        % Initialize missing fields that were causing errors
+        obj.params.svdx_enable = false;
+        obj.params.svdx_subap = 3;
+        obj.params.svd_threshold_enable = false;
+        obj.params.svd_threshold_value = 64;
+        obj.params.svd_stride = 1;
+        obj.params.local_spatial_filter = false;
+        obj.params.local_temporal_filter = false;
+        obj.params.local_phi1 = 0;
+        obj.params.local_phi2 = 0;
+        obj.params.local_nu1 = 0;
+        obj.params.local_nu2 = 0;
+        obj.params.unit_cells = 8;
+        obj.params.r1 = 3;
+        obj.params.xy_stride = 32;
+        obj.params.temporal_filter = false;
+        obj.params.temporal_filter_value = 0;
+        obj.params.phase_registration = false;
+        obj.params.rephasing = false;
+        obj.params.iterative_registration = false;
+        obj.params.show_ref = false;
+
+        % Initialize SVD filter parameters
+        obj.params.svd_filter = false;
+        obj.params.svdx_filter = false;
+        obj.params.svdx_t_filter = false;
+        obj.params.svd_threshold = 0;
+        obj.params.svdx_threshold = 0;
+        obj.params.svdx_t_threshold = 0;
+        obj.params.svdx_Nsub = 1;
+        obj.params.svdx_t_Nsub = 1;
+
+        % Initialize spatial filtering parameters
+        obj.params.spatial_filter = false;
+        obj.params.hilbert_filter = false;
+        obj.params.spatial_filter_range = [0, 1];
+        obj.params.spatial_transformation = 'Fresnel';
+        obj.params.spatial_propagation = 0;
+        obj.params.Padding_num = 0;
+
+        % Initialize time transformation parameters
+        obj.params.time_transform = 'FFT';
+        obj.params.time_range = [0, 100];
+        obj.params.index_range = [1, 100];
+
+        % Initialize image transformation parameters
+        obj.params.flip_y = false;
+        obj.params.flip_x = false;
+        obj.params.square = false;
+        obj.params.flatfield_gw = 0;
+
+        % Initialize Shack-Hartmann correction
+        obj.params.ShackHartmannCorrection = [];
+
+        % Initialize other parameters
+        obj.params.fs = 0;
+        obj.params.lambda = 0;
+        obj.params.ppx = 0;
+        obj.params.ppy = 0;
 
     end
 
@@ -373,8 +431,8 @@ methods
 
         firstframe = obj.reader.read_frame_batch(1, obj.params.frame_position);
 
-        if ~isequal(obj.view.Frames(:, :, 1), firstframe) || obj.params.batch_size ~= size(obj.view.Frames, 3) % if first frame is different of batch sized changed
-            obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, obj.params.frame_position));
+        if ~isequal(obj.view.Frames(:, :, 1), firstframe) || obj.params.batchSize ~= size(obj.view.Frames, 3) % if first frame is different of batch sized changed
+            obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batchSize, obj.params.frame_position));
         end
 
         obj.view.Render(obj.params, obj.params.image_types);
@@ -469,9 +527,9 @@ methods
             end_frame = obj.params.end_frame;
         end
 
-        num_batches = floor((end_frame - first_frame + 1) / obj.params.batch_stride);
+        num_batches = floor((end_frame - first_frame + 1) / obj.params.batchStride);
 
-        if num_batches * obj.params.batch_stride + obj.params.batch_size > end_frame
+        if num_batches * obj.params.batchStride + obj.params.batchSize > end_frame
             num_batches = num_batches - 1;
         end
 
@@ -549,7 +607,7 @@ methods
         obj.running_averages = RunningAveragesHolder(); %reset this here
 
         view_ref = RenderingClass();
-        view_ref.setFrames(obj.reader.read_frame_batch(obj.params.batch_size_registration, obj.params.frame_position));
+        view_ref.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.frame_position));
         view_ref.Render(obj.params, obj.params.image_types, cache_intermediate_results = false);
 
         if obj.params.applyshackhartmannfromref
@@ -567,7 +625,7 @@ methods
         if obj.params.parfor_arg == 0
 
             for i = 1:(num_batches)
-                obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size, (i - 1) * obj.params.batch_stride + first_frame));
+                obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batchSize, (i - 1) * obj.params.batchStride + first_frame));
                 obj.view.ShackHartmannMask = ShackHartmannMask;
                 obj.view.Render(obj.params, obj.params.image_types);
                 obj.video(i) = ImageTypeList2();
@@ -588,11 +646,11 @@ methods
             l_reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
 
             % parameters
-            batch_size = l_params.batch_size;
-            batch_stride = l_params.batch_stride;
+            batchSize = l_params.batchSize;
+            batchStride = l_params.batchStride;
 
             if isprop(l_reader, "all_frames") && ~isempty(l_reader.all_frames)
-                all_frames = reshape(l_reader.all_frames, size(l_reader.all_frames, 1), size(l_reader.all_frames, 2), batch_size, []);
+                all_frames = reshape(l_reader.all_frames, size(l_reader.all_frames, 1), size(l_reader.all_frames, 2), batchSize, []);
 
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
                     l_view = RenderingClass();
@@ -610,7 +668,7 @@ methods
 
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
                     l_view = RenderingClass();
-                    l_view.setFrames(l_reader.read_frame_batch(batch_size, (i - 1) * batch_stride + 1));
+                    l_view.setFrames(l_reader.read_frame_batch(batchSize, (i - 1) * batchStride + 1));
                     l_view.ShackHartmannMask = ShackHartmannMask;
                     l_view.Render(l_params, l_params.image_types, cache_intermediate_results = false);
                     l_video(i) = ImageTypeList2();
@@ -872,7 +930,7 @@ methods
                 elseif strcmp(image_types{i}, 'ShackHartmann_Phase')
                     generate_video(mat, result_folder_path, strcat('ShackHartmann_Phase'), temporal_filter = []);
                 elseif strcmp(image_types{i}, 'color_Doppler')
-                    generate_video(mat, result_folder_path, strcat('color_Doppler'), square = params.square, temporal_filter = [], enhance_contrast = true, export_gif = true, gif_freq = 16, gif_Duration = size(mat, 4) * params.batch_stride / (obj.params.fs * 1000));
+                    generate_video(mat, result_folder_path, strcat('color_Doppler'), square = params.square, temporal_filter = [], enhance_contrast = true, export_gif = true, gif_freq = 16, gif_Duration = size(mat, 4) * params.batchStride / (obj.params.fs * 1000));
                 else
                     generate_video(mat, result_folder_path, strcat(image_types{i}), temporal_filter = 2, square = params.square);
                 end
@@ -935,7 +993,7 @@ methods
 
         %saving a small mat for old versions of PW
         cache.Fs = obj.params.fs * 1000;
-        cache.batch_stride = obj.params.batch_stride;
+        cache.batchStride = obj.params.batchStride;
         cache.time_transform.f1 = obj.params.time_range(1);
         cache.time_transform.f2 = obj.params.time_range(2);
         save(fullfile(result_folder_path, 'mat', strcat(obj.file.name, '_HD_', num2str(index + 1), '.mat')), "cache");
@@ -982,7 +1040,7 @@ methods
         video_M0_reg = video_M0 .* disk - disk .* sum(video_M0 .* disk, [1, 2]) / nnz(disk); % minus the mean in the disc of each frame
         video_M0_reg = video_M0_reg ./ (max(abs(video_M0_reg), [], [1, 2])); % rescaling each frame but keeps mean at zero
 
-        obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batch_size_registration, obj.params.frame_position));
+        obj.view.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.frame_position));
         obj.view.Render(obj.params, obj.params.image_types);
 
         ref_img = obj.view.Output.power_Doppler.image;
@@ -1122,38 +1180,6 @@ methods
                 obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, - floor(obj.registration.shifts(:, i) .* ratio'));
             end
 
-        end
-
-    end
-
-    function showVideo(obj, images_type)
-
-        if nargin < 2
-            images_type = obj.params.image_types{1};
-        end
-
-        tmp = {obj.video.(images_type)};
-        % image extraction
-        sz = size(tmp{1}.image);
-
-        if length(sz) == 2
-            sz = [sz 1];
-        end
-
-        sz = [sz length(tmp)];
-        mat = zeros(sz, 'single');
-
-        for j = 1:length(tmp)
-            mat(:, :, :, j) = tmp{j}.image;
-        end
-
-        mat = rescale(mat);
-        videofig(length(tmp), @redrawat);
-
-        function redrawat(frame_index)
-            imshow(mat(:, :, frame_index));
-            axis image;
-            text(10, 10, num2str(frame_index));
         end
 
     end

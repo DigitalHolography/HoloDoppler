@@ -1,6 +1,6 @@
 {
-  "batch_size": 256,
-  "batch_stride": 256,
+  "batchSize": 256,
+  "batchStride": 256,
   "frame_stride": 1,
   "registration_disc_ratio": 0.8,
   "image_types": [
@@ -26,7 +26,7 @@
   "time_transform": "FFT",
   "flatfield_gw": 35,
   "applyautofocusfromref": false,
-  "batch_size_registration": 512,
+  "refBatchSize": 512,
   "buckets_ranges": [
     [
       3,
