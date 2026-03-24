@@ -290,7 +290,66 @@ methods
         obj.params.autofocus_range = [0.45, 0.52];
         obj.params.first_frame = 0;
         obj.params.end_frame = 0;
-        obj.params.end_frame = 0;
+
+        % Initialize missing fields that were causing errors
+        obj.params.svdx_enable = false;
+        obj.params.svdx_subap = 3;
+        obj.params.svd_threshold_enable = false;
+        obj.params.svd_threshold_value = 64;
+        obj.params.svd_stride = 1;
+        obj.params.local_spatial_filter = false;
+        obj.params.local_temporal_filter = false;
+        obj.params.local_phi1 = 0;
+        obj.params.local_phi2 = 0;
+        obj.params.local_nu1 = 0;
+        obj.params.local_nu2 = 0;
+        obj.params.unit_cells = 8;
+        obj.params.r1 = 3;
+        obj.params.xy_stride = 32;
+        obj.params.temporal_filter = false;
+        obj.params.temporal_filter_value = 0;
+        obj.params.phase_registration = false;
+        obj.params.rephasing = false;
+        obj.params.iterative_registration = false;
+        obj.params.show_ref = false;
+
+        % Initialize SVD filter parameters
+        obj.params.svd_filter = false;
+        obj.params.svdx_filter = false;
+        obj.params.svdx_t_filter = false;
+        obj.params.svd_threshold = 0;
+        obj.params.svdx_threshold = 0;
+        obj.params.svdx_t_threshold = 0;
+        obj.params.svdx_Nsub = 1;
+        obj.params.svdx_t_Nsub = 1;
+
+        % Initialize spatial filtering parameters
+        obj.params.spatial_filter = false;
+        obj.params.hilbert_filter = false;
+        obj.params.spatial_filter_range = [0, 1];
+        obj.params.spatial_transformation = 'Fresnel';
+        obj.params.spatial_propagation = 0;
+        obj.params.Padding_num = 0;
+
+        % Initialize time transformation parameters
+        obj.params.time_transform = 'FFT';
+        obj.params.time_range = [0, 100];
+        obj.params.index_range = [1, 100];
+
+        % Initialize image transformation parameters
+        obj.params.flip_y = false;
+        obj.params.flip_x = false;
+        obj.params.square = false;
+        obj.params.flatfield_gw = 0;
+
+        % Initialize Shack-Hartmann correction
+        obj.params.ShackHartmannCorrection = [];
+
+        % Initialize other parameters
+        obj.params.fs = 0;
+        obj.params.lambda = 0;
+        obj.params.ppx = 0;
+        obj.params.ppy = 0;
 
     end
 
