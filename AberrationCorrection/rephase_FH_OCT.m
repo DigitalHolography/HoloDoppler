@@ -1,4 +1,4 @@
-function FH = rephase_FH_OCT(FH, rephasing_data, batch_size, frame_offset, num_frames)
+function FH = rephase_FH_OCT(FH, rephasing_data, batchSize, frame_offset, num_frames)
 
 if isempty(rephasing_data)
     return
@@ -24,7 +24,7 @@ for rephasing_data = rephasing_data
 
         % global idx of first/last frames of current batch
         first_frame_idx = frame_offset + 1;
-        last_frame_idx = frame_offset + batch_size;
+        last_frame_idx = frame_offset + batchSize;
 
         shift = squeeze(mean(coefs(first_frame_idx:last_frame_idx)));
 

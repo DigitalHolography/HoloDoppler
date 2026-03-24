@@ -187,7 +187,7 @@ methods
         r1 = Params.index_range(1);
         r2 = Params.index_range(2);
 
-        [~, ~, batch_size] = size(SHin);
+        [~, ~, batchSize] = size(SHin);
         fs = Params.fs;
         gw = Params.flatfield_gw;
 
@@ -198,48 +198,48 @@ methods
         if obj.pure_PCA.is_selected
 
             if ~(r1 - floor(r1) == 0) && ~(r2 - floor(r2) == 0) % both not integer
-                r1p = floor(r1 * 2 / fs * batch_size);
-                r2p = floor(r2 * 2 / fs * batch_size);
+                r1p = floor(r1 * 2 / fs * batchSize);
+                r2p = floor(r2 * 2 / fs * batchSize);
             else
                 r1p = r1;
                 r2p = r2;
             end
 
-            r1p = min(max(r1p, 1), batch_size);
-            r2p = min(max(r2p, 1), batch_size);
+            r1p = min(max(r1p, 1), batchSize);
+            r2p = min(max(r2p, 1), batchSize);
             obj.pure_PCA.image = cumulant(SH_mod, r1p, r2p);
             obj.pure_PCA.image = flat_field_correction(obj.pure_PCA.image, gw);
         end
 
         if obj.power_Doppler.is_selected % Power Doppler has been chosen
-            img = moment0(SH_mod, f1, f2, fs, batch_size, gw);
+            img = moment0(SH_mod, f1, f2, fs, batchSize, gw);
             obj.power_Doppler.image = img;
         end
 
         if obj.power_adapt.is_selected % Power Doppler with adaptive histogram equalization has been chosen
-            img = moment0(SH_mod, f1, f2, fs, batch_size);
+            img = moment0(SH_mod, f1, f2, fs, batchSize);
             img = adapthisteq(rescale(img), "NumTiles", [12 12], "NBins", 128);
             obj.power_adapt.image = img;
         end
 
         if obj.power_Doppler_wiener.is_selected %
-            img = moment0(SH_mod, f1, f2, fs, batch_size, gw);
+            img = moment0(SH_mod, f1, f2, fs, batchSize, gw);
             obj.power_Doppler_wiener.image = wiener2(img, [2 2], 10);
         end
 
         if obj.power_1_Doppler.is_selected % Power Doppler 1 has been chosen
-            img = moment1(SH_mod, f1, f2, fs, batch_size, gw);
+            img = moment1(SH_mod, f1, f2, fs, batchSize, gw);
             obj.power_1_Doppler.image = img;
         end
 
         if obj.power_2_Doppler.is_selected % Power Doppler has been chosen
-            img = moment2(SH_mod, f1, f2, fs, batch_size, gw);
+            img = moment2(SH_mod, f1, f2, fs, batchSize, gw);
             obj.power_2_Doppler.image = img;
         end
 
         if obj.power_01_Doppler.is_selected % Power Doppler has been chosen
-            img0 = moment0(SH_mod, f1, f2, fs, batch_size, gw);
-            img1 = moment1(SH_mod, f1, f2, fs, batch_size);
+            img0 = moment0(SH_mod, f1, f2, fs, batchSize, gw);
+            img1 = moment1(SH_mod, f1, f2, fs, batchSize);
 
             img0 = double(img0);
             img1 = imgaussfilt(img1, 3);
@@ -279,12 +279,12 @@ methods
                 f3 = Params.time_range_extra;
             end
 
-            [freq_low, freq_high] = composite(SH_mod, f1, f3, f2, fs, batch_size, max(gw, 20));
+            [freq_low, freq_high] = composite(SH_mod, f1, f3, f2, fs, batchSize, max(gw, 20));
             obj.color_Doppler.image = construct_colored_image(gather(freq_low), gather(freq_high));
         end
 
         if obj.directional_Doppler.is_selected % Directional Doppler has been chosen
-            [M0_pos, M0_neg] = directional(SH_mod, f1, f2, fs, batch_size, max(gw, 20));
+            [M0_pos, M0_neg] = directional(SH_mod, f1, f2, fs, batchSize, max(gw, 20));
             obj.directional_Doppler.image = construct_directional_image(gather(M0_pos), gather(M0_neg));
         end
 
@@ -292,7 +292,7 @@ methods
 
             try
                 fi = figure("Visible", "off");
-                freqs = ((0:(batch_size - 1)) - batch_size / 2) .* (fs / batch_size);
+                freqs = ((0:(batchSize - 1)) - batchSize / 2) .* (fs / batchSize);
                 spect = fftshift(abs(squeeze(sum(SH_mod, [1 2]) / (size(SH_mod, 1) * size(SH_mod, 2))) .^ 2));
 
                 plot(freqs, 10 * log10(spect));
@@ -331,26 +331,26 @@ methods
             bin_y = 1;
             bin_w = 1;
             obj.SH.parameters.SH = imresize3(gather(SH_mod), [size(SH_mod, 1) / bin_x size(SH_mod, 2) / bin_y size(SH_mod, 3) / bin_w], 'Method', 'linear');
-            obj.SH.parameters.vector = zeros(1, batch_size);
+            obj.SH.parameters.vector = zeros(1, batchSize);
         end
 
         if obj.cumulative_distribution.is_selected
-            img = cdf(SH_mod, f1, f2, fs, 0.5, batch_size);
+            img = cdf(SH_mod, f1, f2, fs, 0.5, batchSize);
             obj.cumulative_distribution.image = img;
         end
 
         if obj.band_ratio.is_selected
-            img = energy_ratio(SH_mod, f1, f2, 5, 5, fs, batch_size);
+            img = energy_ratio(SH_mod, f1, f2, 5, 5, fs, batchSize);
             obj.band_ratio.image = img;
         end
 
         if obj.color_band_ratio.is_selected
-            color_img = color_energy_ratio(SH_mod, f1, f2, 5, 5, fs, batch_size, gw);
+            color_img = color_energy_ratio(SH_mod, f1, f2, 5, 5, fs, batchSize, gw);
             obj.color_band_ratio.image = color_img;
         end
 
         if obj.entropy.is_selected
-            img = spectral_entropy(SH_mod, f1, f2, fs, batch_size);
+            img = spectral_entropy(SH_mod, f1, f2, fs, batchSize);
             obj.entropy.image = img;
         end
 
@@ -358,7 +358,7 @@ methods
 
             try
                 fi = figure("Visible", "off");
-                indices = ((0:(batch_size - 1)) - batch_size / 2) .* (1 / (fs * 1000));
+                indices = ((0:(batchSize - 1)) - batchSize / 2) .* (1 / (fs * 1000));
                 % disc = diskMask(size(SH,1),size(SH,2),0.7)';
                 disc = ones(size(SH_mod, 1), size(SH_mod, 2));
                 spect = squeeze(abs(sum(SH_mod .* disc, [1 2])) / nnz(disc));
@@ -380,28 +380,28 @@ methods
         end
 
         if obj.moment_0.is_selected % Moment 0 has been chosen
-            img_M0 = moment0(SH_mod, f1, f2, fs, batch_size);
+            img_M0 = moment0(SH_mod, f1, f2, fs, batchSize);
             obj.moment_0.image = img_M0;
         end
 
         if obj.arg_0.is_selected % Arg 0 has been chosen
-            img_arg0 = moment0(SH_arg, f1, f2, fs, batch_size);
+            img_arg0 = moment0(SH_arg, f1, f2, fs, batchSize);
             obj.arg_0.image = img_arg0;
         end
 
         if obj.moment_1.is_selected % Moment 1 has been chosen
-            img_M1 = moment1(SH_mod, f1, f2, fs, batch_size);
+            img_M1 = moment1(SH_mod, f1, f2, fs, batchSize);
             obj.moment_1.image = img_M1;
         end
 
         if obj.moment_2.is_selected % Moment 2 has been chosen
-            img_M2 = moment2(SH_mod, f1, f2, fs, batch_size);
+            img_M2 = moment2(SH_mod, f1, f2, fs, batchSize);
             obj.moment_2.image = img_M2;
         end
 
         if obj.f_RMS.is_selected
-            img_M0 = moment0(SH_mod, f1, f2, fs, batch_size);
-            img_M2 = moment2(SH_mod, f1, f2, fs, batch_size);
+            img_M0 = moment0(SH_mod, f1, f2, fs, batchSize);
+            img_M2 = moment2(SH_mod, f1, f2, fs, batchSize);
             img_fRMS = sqrt(img_M2 ./ mean(img_M0, [1, 2]));
 
             try
@@ -424,15 +424,15 @@ methods
         if obj.pure_phase.is_selected
             %
             if ~(r1 - floor(r1) == 0) && ~(r2 - floor(r2) == 0) %both not integer
-                r1p = floor(r1 * 2 / fs * batch_size);
-                r2p = floor(r2 * 2 / fs * batch_size);
+                r1p = floor(r1 * 2 / fs * batchSize);
+                r2p = floor(r2 * 2 / fs * batchSize);
             else
                 r1p = r1;
                 r2p = r2;
             end
 
-            r1p = min(max(r1p, 1), batch_size);
-            r2p = min(max(r2p, 1), batch_size);
+            r1p = min(max(r1p, 1), batchSize);
+            r2p = min(max(r2p, 1), batchSize);
             obj.pure_phase.image = cumulant(SH_arg, r1p, r2p);
             obj.pure_phase.image = flat_field_correction(obj.pure_phase.image, gw);
         end
@@ -506,18 +506,18 @@ methods
             % why this here ? flatfield should be enough , circleMask = fftshift(diskMask(numY, numX, 0.15)); -> Michael
 
             for freqIdx = 1:numranges
-                img = moment0(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), fs, batch_size);
+                img = moment0(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), fs, batchSize);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                 obj.buckets.parameters.intervals_0(:, :, :, freqIdx) = img;
 
-                img = moment0(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), fs, batch_size, gw);
+                img = moment0(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), fs, batchSize, gw);
                 obj.buckets.parameters.M0(:, :, :, freqIdx) = img;
 
-                img = moment1(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), fs, batch_size);
+                img = moment1(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), fs, batchSize);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                 obj.buckets.parameters.intervals_1(:, :, :, freqIdx) = img;
 
-                img = moment2(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), fs, batch_size);
+                img = moment2(SH_mod, buckranges(freqIdx, 1), buckranges(freqIdx, 2), fs, batchSize);
                 %img = img / (sum(img .* circleMask, [1 2]) / nnz(circleMask));
                 obj.buckets.parameters.intervals_2(:, :, :, freqIdx) = img;
             end
@@ -546,7 +546,7 @@ methods
 
             try
                 SHdenoised = denoiseNGMeet(SH_mod, 'Sigma', 0.01, 'NumIterations', 2);
-                img = moment0(SHdenoised, f1, f2, fs, batch_size, 0);
+                img = moment0(SHdenoised, f1, f2, fs, batchSize, 0);
                 obj.denoised.image = img;
             catch ME
                 % Display error message and line number

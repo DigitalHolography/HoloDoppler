@@ -6,10 +6,10 @@ HD.params.lambda = app.lambda.Value;
 HD.params.ppx = app.ppx.Value;
 HD.params.ppy = app.ppy.Value;
 HD.params.parfor_arg = app.parfor_arg.Value;
-HD.params.batch_size = app.batch_size.Value;
-HD.params.batch_size_registration = app.batch_size_registration.Value;
+HD.params.batchSize = app.batchSize.Value;
+HD.params.refBatchSize = app.refBatchSize.Value;
 
-HD.params.batch_stride = app.batch_stride.Value;
+HD.params.batchStride = app.batchStride.Value;
 HD.params.frame_position = app.frame_position.Value;
 HD.params.registration_disc_ratio = app.registration_disc_ratio.Value;
 

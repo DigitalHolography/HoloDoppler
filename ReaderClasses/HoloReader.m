@@ -96,19 +96,19 @@ methods
 
     end
 
-    function frame_batch = read_frame_batch(obj, batch_size, frame_position)
+    function frame_batch = read_frame_batch(obj, batchSize, frame_position)
 
         frame_offset = frame_position - 1;
 
         if ~isempty(obj.all_frames) % if all frames are loaded in RAM
-            frame_batch = obj.all_frames(:, :, frame_offset + 1:frame_offset + batch_size);
+            frame_batch = obj.all_frames(:, :, frame_offset + 1:frame_offset + batchSize);
             return
         end
 
         fd = fopen(obj.filename, 'r');
 
         frame_size = obj.frame_width * obj.frame_height * uint32(obj.bit_depth / 8);
-        frame_batch = zeros(obj.frame_width, obj.frame_height, batch_size, 'single');
+        frame_batch = zeros(obj.frame_width, obj.frame_height, batchSize, 'single');
 
         width_range = 1:obj.frame_width;
         height_range = 1:obj.frame_height;
@@ -127,7 +127,7 @@ methods
         while retry && retrycnt < 3
             retry = false;
 
-            for i = 1:batch_size
+            for i = 1:batchSize
                 fseek(fd, 64 + uint64(frame_size) * (uint64(frame_offset) + (i - 1)), 'bof');
 
                 try
@@ -157,7 +157,7 @@ methods
         %             frame_batch = HoloReader.replace_dropped_frames(flipud(rot90(frame_batch)), 0.2);
         %         end
         %         imagesc(flipud(rot90(frame_batch(:,:,1))));
-        %         peaksnr = psnr(frame_batch(:,:,1), frame_batch(:,:,batch_size));
+        %         peaksnr = psnr(frame_batch(:,:,1), frame_batch(:,:,batchSize));
         %         peaksnr
         fclose(fd);
     end
@@ -170,13 +170,13 @@ methods
         height = obj.frame_height;
     end
 
-    function frame_batches = read_all_frames(obj, batch_size, batch_stride)
+    function frame_batches = read_all_frames(obj, batchSize, batchStride)
 
-        num_batches = floor((obj.num_frames - batch_size) / batch_stride);
-        frame_batches = zeros(obj.frame_width, obj.frame_height, batch_size, num_batches);
+        num_batches = floor((obj.num_frames - batchSize) / batchStride);
+        frame_batches = zeros(obj.frame_width, obj.frame_height, batchSize, num_batches);
 
         for batchIdx = 1:num_batches
-            frame_batches(:, :, :, batchIdx) = int32(obj.read_frame_batch(batch_size, (batchIdx - 1) * batch_stride));
+            frame_batches(:, :, :, batchIdx) = int32(obj.read_frame_batch(batchSize, (batchIdx - 1) * batchStride));
         end
 
     end

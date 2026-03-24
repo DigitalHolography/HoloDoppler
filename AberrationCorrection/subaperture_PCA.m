@@ -1,7 +1,7 @@
 function [FH] = subaperture_PCA (FH, SubAp_PCA, acquisition, enable_svd, f1, f2, gw)
 
 ac = acquisition;
-batch_size = size(FH, 3);
+batchSize = size(FH, 3);
 % shifts is a 1D vector
 % it maps the 2D SubApils grid by iterating column first
 % example of ordering for a 4x4 SubApil grid
@@ -19,7 +19,7 @@ subAp_Ny = floor(ac.Nx / n_subAp_x); % assume : image is square
 
 subAp_M0 = zeros(subAp_Nx, subAp_Ny, n_subAp_x * n_subAp_y);
 
-FH_4D = zeros(subAp_Nx, subAp_Ny, batch_size, n_subAp_x * n_subAp_y) + 1i * zeros(subAp_Nx, subAp_Ny, batch_size, n_subAp_x * n_subAp_y);
+FH_4D = zeros(subAp_Nx, subAp_Ny, batchSize, n_subAp_x * n_subAp_y) + 1i * zeros(subAp_Nx, subAp_Ny, batchSize, n_subAp_x * n_subAp_y);
 
 skip = ones(n_subAp_x + 2, n_subAp_y + 2);
 skip = skip .* hann(n_subAp_x + 2);
@@ -95,7 +95,7 @@ for id_y = 1:n_subAp_y
                 sz2 = size(H_chunk, 2);
                 sz3 = size(H_chunk, 3);
                 H_chunk = reshape(H_chunk, [sz1 * sz2, sz3]);
-                threshold = round(f1 * batch_size / ac.fs) * 2 + 1;
+                threshold = round(f1 * batchSize / ac.fs) * 2 + 1;
                 % Singular Value Decomposition (SVD) of spatio-temporal
                 % features
                 COV = H_chunk' * H_chunk;
@@ -110,8 +110,8 @@ for id_y = 1:n_subAp_y
             hologram_chunk = abs(SH_chunk) .^ 2; % stack of holograms
 
             % frequency integration
-            n1 = round(f1 * batch_size / ac.fs) + 1;
-            n2 = round(f2 * batch_size / ac.fs);
+            n1 = round(f1 * batchSize / ac.fs) + 1;
+            n2 = round(f2 * batchSize / ac.fs);
             n3 = size(hologram_chunk, 3) - n2 + 2;
             n4 = size(hologram_chunk, 3) - n1 + 2;
 
@@ -161,7 +161,7 @@ end
 imagesc(abs(M0_stitched) .^ 2);
 axis square;
 
-FH_2D = reshape(FH_4D, subAp_Nx * subAp_Ny * batch_size, n_subAp_x * n_subAp_y);
+FH_2D = reshape(FH_4D, subAp_Nx * subAp_Ny * batchSize, n_subAp_x * n_subAp_y);
 
 cov = FH_2D' * FH_2D;
 
@@ -171,7 +171,7 @@ V = V(:, sort_idx);
 
 %singular value selection
 % %FIXME ATTN 2f1
-% threshold = round(f1 * batch_size / ac.fs)*2 + 1;
+% threshold = round(f1 * batchSize / ac.fs)*2 + 1;
 
 %PCA (reciprocal space)
 % FH_2D = FH_2D * V(:,3:end);
@@ -184,10 +184,10 @@ for id_y = 1:n_subAp_y
 
 end
 
-FH_2D = reshape(FH_4D, subAp_Nx * subAp_Ny * batch_size, n_subAp_x * n_subAp_y);
+FH_2D = reshape(FH_4D, subAp_Nx * subAp_Ny * batchSize, n_subAp_x * n_subAp_y);
 FH_2D = FH_2D * V(:, SubAp_PCA.min:SubAp_PCA.max) * V(:, SubAp_PCA.min:SubAp_PCA.max)';
 
-FH_4D = reshape(FH_2D, subAp_Nx, subAp_Ny, batch_size, n_subAp_x * n_subAp_y);
+FH_4D = reshape(FH_2D, subAp_Nx, subAp_Ny, batchSize, n_subAp_x * n_subAp_y);
 
 for id_y = 1:n_subAp_y
 

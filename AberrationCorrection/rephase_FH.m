@@ -1,4 +1,4 @@
-function FH = rephase_FH(FH, rephasing_data, batch_size, frame_offset)
+function FH = rephase_FH(FH, rephasing_data, batchSize, frame_offset)
 % Applies a phase to FH computed from rephasing data
 
 if isempty(rephasing_data)
@@ -16,7 +16,7 @@ for rephasing_data = rephasing_data
 
     % global idx of first/last frames of current batch
     first_frame_idx = frame_offset + 1;
-    last_frame_idx = frame_offset + batch_size;
+    last_frame_idx = frame_offset + batchSize;
 
     indices1 = find(rephasing_data.frame_ranges >= first_frame_idx);
     indices2 = find(rephasing_data.frame_ranges <= last_frame_idx);

@@ -1,4 +1,4 @@
-function [img_color] = color_energy_ratio(SH, f1, f2, fi1, fi2, fs, batch_size, gw)
+function [img_color] = color_energy_ratio(SH, f1, f2, fi1, fi2, fs, batchSize, gw)
 
 arguments
     SH
@@ -7,18 +7,18 @@ arguments
     fi1
     fi2
     fs
-    batch_size
+    batchSize
     gw
 end
 
 [Ny, Nx, ~] = size(SH);
 mask = diskMask(Nx, Ny, 1); % DISK
 
-img_M0_ff = moment0(SH, fi2, f2, fs, batch_size, gw);
+img_M0_ff = moment0(SH, fi2, f2, fs, batchSize, gw);
 img_M0_ff(~mask) = NaN;
 img_M0_ff = rescale(img_M0_ff);
 
-[img_energy_ratio] = energy_ratio(SH, f1, f2, fi1, fi2, fs, batch_size);
+[img_energy_ratio] = energy_ratio(SH, f1, f2, fi1, fi2, fs, batchSize);
 ER_ff = img_energy_ratio ./ imgaussfilt(img_energy_ratio, gw);
 img_energy_ratio_centered = log(ER_ff);
 img_energy_ratio_centered(~mask) = NaN;

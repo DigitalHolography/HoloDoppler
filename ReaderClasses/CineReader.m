@@ -124,7 +124,7 @@ methods
         obj.frame_height = final_frame_size;
     end
 
-    function frame_batch = read_frame_batch(obj, batch_size, frame_offset)
+    function frame_batch = read_frame_batch(obj, batchSize, frame_offset)
         final_frame_size = max(obj.true_frame_width, obj.true_frame_height);
 
         if obj.true_frame_width <= obj.true_frame_height
@@ -140,9 +140,9 @@ methods
         if obj.is_packed
             % assume it is 12 bits packed for now
             fd = fopen(obj.filename, 'r');
-            frame_batch = zeros(final_frame_size, final_frame_size, batch_size, 'double');
+            frame_batch = zeros(final_frame_size, final_frame_size, batchSize, 'double');
 
-            for i = 1:batch_size
+            for i = 1:batchSize
                 fseek(fd, obj.image_offsets(frame_offset + i), 'bof');
                 % read annotation size
                 annotation_size = fread(fd, 1, 'uint32', 'l');
@@ -166,9 +166,9 @@ methods
         else %not 12bit packed
             fd = fopen(obj.filename, 'r');
             % skip additional 17 bytes to skip useless struct before pix array
-            frame_batch = zeros(final_frame_size, final_frame_size, batch_size, 'single');
+            frame_batch = zeros(final_frame_size, final_frame_size, batchSize, 'single');
 
-            for i = 1:batch_size
+            for i = 1:batchSize
                 fseek(fd, obj.image_offsets(frame_offset + i), 'bof');
                 % read annotation size
                 annotation_size = fread(fd, 1, 'uint32', 'l');
@@ -200,13 +200,13 @@ methods
         height = obj.frame_height;
     end
 
-    function frame_batches = read_all_frames(obj, batch_size, batch_stride)
+    function frame_batches = read_all_frames(obj, batchSize, batchStride)
 
-        num_batches = floor((obj.num_frames - batch_size) / batch_stride);
-        frame_batches = zeros(obj.frame_width, obj.frame_height, batch_size, num_batches);
+        num_batches = floor((obj.num_frames - batchSize) / batchStride);
+        frame_batches = zeros(obj.frame_width, obj.frame_height, batchSize, num_batches);
 
         for batchIdx = 1:num_batches
-            frame_batches(:, :, :, batchIdx) = int32(obj.read_frame_batch(batch_size, (batchIdx - 1) * batch_stride));
+            frame_batches(:, :, :, batchIdx) = int32(obj.read_frame_batch(batchSize, (batchIdx - 1) * batchStride));
         end
 
     end
@@ -215,25 +215,25 @@ methods
         obj.rephasing_data = rephasing_data;
     end
 
-    %     function FH = read_FH(obj, batch_size, frame_offset, kernel)
+    %     function FH = read_FH(obj, batchSize, frame_offset, kernel)
     %        % read a frame batch and compute FH, then applies a phase computed
     %        % from rephasing data
     %
-    %        frame_batch = obj.read_frame_batch(batch_size, frame_offset);
+    %        frame_batch = obj.read_frame_batch(batchSize, frame_offset);
     %        FH = fftshift(fft2(frame_batch)) .* kernel;
     %
     %        if ~isempty(obj.rephasing_data)
     %            % interpolate rephasing coefs to current batch
     %            rephasing_num_batches = obj.rephasing_data.get_Nt();
     %
-    % %            current_num_batches = floor((obj.num_frames - batch_size) / batch_stride);
+    % %            current_num_batches = floor((obj.num_frames - batchSize) / batchStride);
     %
     %            % select indices of batches in rephasing data that corresponds
     %            % to current frame batch
     %
     %            % global idx of first/last frames of current batch
     %            first_frame_idx = frame_offset+1;
-    %            last_frame_idx = frame_offset + batch_size;
+    %            last_frame_idx = frame_offset + batchSize;
     %
     %            indices1 = find(obj.rephasing_data.frame_ranges >= first_frame_idx);
     %            indices2 = find(obj.rephasing_data.frame_ranges <= last_frame_idx);

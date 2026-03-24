@@ -1,11 +1,11 @@
-function moment0 = moment0(SH, f1, f2, fs, batch_size, gw)
+function moment0 = moment0(SH, f1, f2, fs, batchSize, gw)
 
 arguments
     SH
     f1
     f2
     fs
-    batch_size
+    batchSize
     gw = 0
 end
 
@@ -13,7 +13,7 @@ end
 SH = abs(SH);
 
 % Create frequency weights for the zeroth moment calculation
-f = fftfreq(batch_size, 1/fs);
+f = fftfreq(batchSize, 1 / fs);
 abs_f = abs(f);
 
 % Boolean mask for the visible window [f1, f2]

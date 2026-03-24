@@ -1,4 +1,4 @@
-function [energy_ratio] = energy_ratio(SH, f1, f2, fi1, fi2, fs, batch_size)
+function [energy_ratio] = energy_ratio(SH, f1, f2, fi1, fi2, fs, batchSize)
 
 arguments
     SH
@@ -7,13 +7,13 @@ arguments
     fi1
     fi2
     fs
-    batch_size
+    batchSize
 end
 
 SH = abs(SH);
 
 % Weights
-f = fftfreq(batch_size, 1 / fs);
+f = fftfreq(batchSize, 1 / fs);
 weights = f;
 abs_weights = abs(weights);
 weights(abs_weights > f2) = 0;

@@ -20,22 +20,32 @@ properties (Access = public)
 
     % ---- file selection panel (left column) ----
     FileselectionPanel matlab.ui.container.Panel
+
+    % ---- top grid menu ----
+    mainParametersGrid matlab.ui.container.GridLayout
     LoadfileButton matlab.ui.control.Button
     fileLoadedLamp matlab.ui.control.Lamp
+
     fsLabel matlab.ui.control.Label
     fs matlab.ui.control.NumericEditField
+
     lambdaLabel matlab.ui.control.Label
     lambda matlab.ui.control.NumericEditField
+
     pixelPitchLabel matlab.ui.control.Label
     ppx matlab.ui.control.NumericEditField
     ppy matlab.ui.control.NumericEditField
+
     imageSizeLabel matlab.ui.control.Label
     Nx matlab.ui.control.NumericEditField
     Ny matlab.ui.control.NumericEditField
+
     numworkersSpinnerLabel matlab.ui.control.Label
     parfor_arg matlab.ui.control.Spinner
+
     NotesTextAreaLabel matlab.ui.control.Label
     NotesTextArea matlab.ui.control.TextArea
+
     AdvancedButton matlab.ui.control.Button
     RefreshAppButton matlab.ui.control.Button
     positioninfileSlider matlab.ui.control.Slider
@@ -43,21 +53,22 @@ properties (Access = public)
     framePositionField matlab.ui.control.NumericEditField
 
     % ---- batch / video rendering sub-panel ----
-    BatchselectionparametersandVideoRenderingPanel matlab.ui.container.Panel
+    batchPanel matlab.ui.container.Panel
+    batchGrid matlab.ui.container.GridLayout
     SaveconfigButton matlab.ui.control.Button
     PlayButton matlab.ui.control.Button
     ShowHistogramButton matlab.ui.control.Button
     VideoRenderingLamp matlab.ui.control.Lamp
     SaveVideoButton matlab.ui.control.Button
-    batch_size matlab.ui.control.NumericEditField
-    batchsizeLabel matlab.ui.control.Label
+    batchSize matlab.ui.control.NumericEditField
+    batchSizeLabel matlab.ui.control.Label
     Image_typesListBox matlab.ui.control.ListBox
     registrationDiscLabel matlab.ui.control.Label
     registration_disc_ratio matlab.ui.control.NumericEditField
-    batch_size_registration matlab.ui.control.NumericEditField
-    refbatchsizeEditFieldLabel matlab.ui.control.Label
-    batch_stride matlab.ui.control.NumericEditField
-    batchstrideEditFieldLabel matlab.ui.control.Label
+    refBatchSize matlab.ui.control.NumericEditField
+    refBatchSizeLabel matlab.ui.control.Label
+    batchStride matlab.ui.control.NumericEditField
+    batchStrideLabel matlab.ui.control.Label
     LoadconfigButton matlab.ui.control.Button
     VideoRenderingButton matlab.ui.control.Button
     FoldermanagementButton matlab.ui.control.Button
@@ -216,11 +227,11 @@ methods (Access = private)
 
         if exist("version.txt", 'file')
             v = readlines('version.txt');
-            fprintf("==========================================\n " + ...
+            fprintf("============================================\n " + ...
                 "Welcome to HoloDoppler %s\n" + ...
-                "------------------------------------------\n" + ...
+                "--------------------------------------------\n" + ...
                 "Developed by the DigitalHolographyFoundation\n" + ...
-                "==========================================\n", v(1));
+                "============================================\n", v(1));
         end
 
         app.HoloDopplerUIFigure.Name = ['HoloDoppler ', char(v(1))];
@@ -367,16 +378,6 @@ methods (Access = private)
         app.HD.savePreview();
     end
 
-    function PlayButtonPushed(app, ~)
-
-        try
-            app.HD.showVideo();
-        catch e
-            fprintf("Couldn't play video (try to video render first) : %s", e.message);
-        end
-
-    end
-
     % --- UI state sync / refresh -------------------------------------------
 
     % Sync every widget value into the HD class, then update enable states.
@@ -457,7 +458,7 @@ methods (Access = private)
     function svd_threshold_reset_buttonPushed(app, ~)
 
         if app.svd_threshold.Value == 0
-            val = ceil(app.time_range1.Value * 2 * app.batch_size.Value / app.fs.Value);
+            val = ceil(app.time_range1.Value * 2 * app.batchSize.Value / app.fs.Value);
 
             if ~isnan(val)
                 app.svd_threshold.Value = val;
@@ -580,367 +581,372 @@ methods (Access = private)
 
     % -----------------------------------------------------------------------
     function createFileSelectionPanel(app)
+
+        backgroundColor = [0.2 0.2 0.2];
+        darkBackgroundColor = [0.15 0.15 0.15];
+        fontColor = [0.9 0.9 0.9];
+        grayButtonColor = [0.5 0.5 0.5];
+
         app.FileselectionPanel = uipanel(app.RootGrid);
         app.FileselectionPanel.Tooltip = {''};
-        app.FileselectionPanel.ForegroundColor = [0.8 0.8 0.8];
+        app.FileselectionPanel.ForegroundColor = fontColor;
         app.FileselectionPanel.TitlePosition = 'centertop';
         app.FileselectionPanel.Title = 'File selection';
-        app.FileselectionPanel.BackgroundColor = [0.2 0.2 0.2];
+        app.FileselectionPanel.BackgroundColor = backgroundColor;
         app.FileselectionPanel.Layout.Row = [1 2];
         app.FileselectionPanel.Layout.Column = 1;
 
-        app.LoadfileButton = uibutton(app.FileselectionPanel, 'push');
+        app.mainParametersGrid = uigridlayout(app.FileselectionPanel, [9 3]);
+        app.mainParametersGrid.RowHeight = {'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', '1x'};
+        app.mainParametersGrid.ColumnWidth = {'1x', '1x', '1x'};
+        app.mainParametersGrid.Padding = [10 10 10 10];
+        app.mainParametersGrid.RowSpacing = 5;
+        app.mainParametersGrid.ColumnSpacing = 5;
+        app.mainParametersGrid.BackgroundColor = backgroundColor;
+
+        app.LoadfileButton = uibutton(app.mainParametersGrid, 'push');
         app.LoadfileButton.ButtonPushedFcn = createCallbackFcn(app, @LoadfileButtonPushed, true);
-        app.LoadfileButton.BackgroundColor = [0.502 0.502 0.502];
-        app.LoadfileButton.FontColor = [0.902 0.902 0.902];
-        app.LoadfileButton.Position = [30 837 100 22];
+        app.LoadfileButton.BackgroundColor = grayButtonColor;
+        app.LoadfileButton.FontColor = fontColor;
+        app.LoadfileButton.Tooltip = {'Load a raw video file (formats : .raw, .cine, .holo)'};
+        app.LoadfileButton.Layout.Row = 1;
+        app.LoadfileButton.Layout.Column = 1;
         app.LoadfileButton.Text = 'Load file';
 
-        app.fileLoadedLamp = uilamp(app.FileselectionPanel);
-        app.fileLoadedLamp.Position = [138 843 10 10];
+        app.fileLoadedLamp = uilamp(app.mainParametersGrid);
+        app.fileLoadedLamp.Layout.Row = 1;
+        app.fileLoadedLamp.Layout.Column = 3;
 
-        app.lambdaLabel = uilabel(app.FileselectionPanel);
-        app.lambdaLabel.HorizontalAlignment = 'center';
-        app.lambdaLabel.FontColor = [0.8 0.8 0.8];
+        app.lambdaLabel = uilabel(app.mainParametersGrid);
+        app.lambdaLabel.FontColor = fontColor;
         app.lambdaLabel.Tooltip = {'Laser''s wavelength for light propagation calculations in (m)'};
-        app.lambdaLabel.Position = [40 771 84 22];
-        app.lambdaLabel.Text = 'wavelength';
+        app.lambdaLabel.Text = 'λ (m)';
+        app.lambdaLabel.HorizontalAlignment = 'center';
+        app.lambdaLabel.Layout.Row = 2;
+        app.lambdaLabel.Layout.Column = 1;
 
-        app.lambda = uieditfield(app.FileselectionPanel, 'numeric');
+        app.lambda = uieditfield(app.mainParametersGrid, 'numeric');
         app.lambda.Limits = [0 Inf];
         app.lambda.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.lambda.FontColor = [0.8 0.8 0.8];
-        app.lambda.BackgroundColor = [0.149 0.149 0.149];
+        app.lambda.FontColor = fontColor;
+        app.lambda.BackgroundColor = darkBackgroundColor;
         app.lambda.Tooltip = {'Laser wavelength in nanometers'};
-        app.lambda.Position = [123 772 100 22];
+        app.lambda.Layout.Row = 2;
+        app.lambda.Layout.Column = 2;
 
-        app.fsLabel = uilabel(app.FileselectionPanel);
-        app.fsLabel.HorizontalAlignment = 'right';
-        app.fsLabel.FontColor = [0.8 0.8 0.8];
+        app.fsLabel = uilabel(app.mainParametersGrid);
+        app.fsLabel.FontColor = fontColor;
         app.fsLabel.Tooltip = {'Sampling frequency in (kHz)'};
-        app.fsLabel.Position = [6 799 109 22];
-        app.fsLabel.Text = 'sampling frequency';
+        app.fsLabel.Text = 'fs (kHz)';
+        app.fsLabel.HorizontalAlignment = 'center';
+        app.fsLabel.Layout.Row = 3;
+        app.fsLabel.Layout.Column = 1;
 
-        app.fs = uieditfield(app.FileselectionPanel, 'numeric');
+        app.fs = uieditfield(app.mainParametersGrid, 'numeric');
         app.fs.Limits = [0 Inf];
         app.fs.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.fs.FontColor = [0.8 0.8 0.8];
-        app.fs.BackgroundColor = [0.149 0.149 0.149];
-        app.fs.Tooltip = {'Sampling frequency (kHz)'};
-        app.fs.Position = [123 799 100 22];
+        app.fs.FontColor = fontColor;
+        app.fs.BackgroundColor = darkBackgroundColor;
+        app.fs.Tooltip = {'Sampling frequency in (kHz)'};
+        app.fs.Layout.Row = 3;
+        app.fs.Layout.Column = 2;
 
-        app.pixelPitchLabel = uilabel(app.FileselectionPanel);
+        app.pixelPitchLabel = uilabel(app.mainParametersGrid);
         app.pixelPitchLabel.HorizontalAlignment = 'center';
-        app.pixelPitchLabel.FontColor = [0.8 0.8 0.8];
+        app.pixelPitchLabel.FontColor = fontColor;
         app.pixelPitchLabel.Tooltip = {'Camera pixel pitch (distance between spatial sampling points) in (m)'};
-        app.pixelPitchLabel.Position = [45 743 84 22];
         app.pixelPitchLabel.Text = 'pp x y';
+        app.pixelPitchLabel.Layout.Row = 4;
+        app.pixelPitchLabel.Layout.Column = 1;
 
-        app.ppx = uieditfield(app.FileselectionPanel, 'numeric');
+        app.ppx = uieditfield(app.mainParametersGrid, 'numeric');
         app.ppx.Limits = [0 10];
         app.ppx.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.ppx.FontColor = [0.8 0.8 0.8];
-        app.ppx.BackgroundColor = [0.149 0.149 0.149];
-        app.ppx.Position = [122 744 73 22];
+        app.ppx.FontColor = fontColor;
+        app.ppx.BackgroundColor = darkBackgroundColor;
+        app.ppx.Layout.Row = 4;
+        app.ppx.Layout.Column = 2;
 
-        app.ppy = uieditfield(app.FileselectionPanel, 'numeric');
+        app.ppy = uieditfield(app.mainParametersGrid, 'numeric');
         app.ppy.Limits = [0 10];
         app.ppy.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.ppy.FontColor = [0.8 0.8 0.8];
-        app.ppy.BackgroundColor = [0.149 0.149 0.149];
-        app.ppy.Position = [211 744 62 22];
+        app.ppy.FontColor = fontColor;
+        app.ppy.BackgroundColor = darkBackgroundColor;
+        app.ppy.Layout.Row = 4;
+        app.ppy.Layout.Column = 3;
 
-        app.imageSizeLabel = uilabel(app.FileselectionPanel);
+        app.imageSizeLabel = uilabel(app.mainParametersGrid);
         app.imageSizeLabel.HorizontalAlignment = 'center';
-        app.imageSizeLabel.FontColor = [0.8 0.8 0.8];
+        app.imageSizeLabel.FontColor = fontColor;
         app.imageSizeLabel.Tooltip = {'Camera pixel pitch (distance between spatial sampling points) in (m)'};
-        app.imageSizeLabel.Position = [36 712 84 22];
         app.imageSizeLabel.Text = 'Nx Ny';
+        app.imageSizeLabel.Layout.Row = 5;
+        app.imageSizeLabel.Layout.Column = 1;
 
-        app.Nx = uieditfield(app.FileselectionPanel, 'numeric');
+        app.Nx = uieditfield(app.mainParametersGrid, 'numeric');
         app.Nx.Limits = [0 Inf];
         app.Nx.Editable = 'off';
-        app.Nx.FontColor = [0.8 0.8 0.8];
-        app.Nx.BackgroundColor = [0.149 0.149 0.149];
+        app.Nx.FontColor = fontColor;
+        app.Nx.BackgroundColor = darkBackgroundColor;
         app.Nx.Tooltip = {'Width of the recorded interferograms'};
-        app.Nx.Position = [123 712 73 22];
+        app.Nx.Layout.Row = 5;
+        app.Nx.Layout.Column = 2;
 
-        app.Ny = uieditfield(app.FileselectionPanel, 'numeric');
+        app.Ny = uieditfield(app.mainParametersGrid, 'numeric');
         app.Ny.Limits = [0 Inf];
         app.Ny.Editable = 'off';
-        app.Ny.FontColor = [0.8 0.8 0.8];
-        app.Ny.BackgroundColor = [0.149 0.149 0.149];
+        app.Ny.FontColor = fontColor;
+        app.Ny.BackgroundColor = darkBackgroundColor;
         app.Ny.Tooltip = {'Height of the recorded interferograms'};
-        app.Ny.Position = [211 712 62 22];
+        app.Ny.Layout.Row = 5;
+        app.Ny.Layout.Column = 3;
 
-        app.numworkersSpinnerLabel = uilabel(app.FileselectionPanel);
-        app.numworkersSpinnerLabel.HorizontalAlignment = 'right';
-        app.numworkersSpinnerLabel.FontColor = [0.902 0.902 0.902];
-        app.numworkersSpinnerLabel.Position = [26 681 74 22];
+        app.numworkersSpinnerLabel = uilabel(app.mainParametersGrid);
+        app.numworkersSpinnerLabel.HorizontalAlignment = 'center';
+        app.numworkersSpinnerLabel.FontColor = fontColor;
         app.numworkersSpinnerLabel.Text = 'num workers';
+        app.numworkersSpinnerLabel.Layout.Row = 6;
+        app.numworkersSpinnerLabel.Layout.Column = 1;
 
-        app.parfor_arg = uispinner(app.FileselectionPanel);
+        app.parfor_arg = uispinner(app.mainParametersGrid);
         app.parfor_arg.ValueChangingFcn = createCallbackFcn(app, @refreshClass, true);
         app.parfor_arg.Limits = [-1 32];
         app.parfor_arg.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.parfor_arg.FontColor = [0.8 0.8 0.8];
-        app.parfor_arg.BackgroundColor = [0.149 0.149 0.149];
+        app.parfor_arg.FontColor = fontColor;
+        app.parfor_arg.BackgroundColor = darkBackgroundColor;
         app.parfor_arg.Tooltip = {'Number of worker used for the video rendering (depends of the working station)'};
-        app.parfor_arg.Position = [109 681 103 22];
         app.parfor_arg.Value = 10;
+        app.parfor_arg.Layout.Row = 6;
+        app.parfor_arg.Layout.Column = 2;
 
-        app.NotesTextAreaLabel = uilabel(app.FileselectionPanel);
-        app.NotesTextAreaLabel.BackgroundColor = [0.2 0.2 0.2];
-        app.NotesTextAreaLabel.HorizontalAlignment = 'right';
-        app.NotesTextAreaLabel.FontColor = [0.8 0.8 0.8];
-        app.NotesTextAreaLabel.Position = [10 204 37 22];
-        app.NotesTextAreaLabel.Text = 'Notes';
-
-        app.NotesTextArea = uitextarea(app.FileselectionPanel);
-        app.NotesTextArea.FontColor = [0.8 0.8 0.8];
-        app.NotesTextArea.BackgroundColor = [0.149 0.149 0.149];
-        app.NotesTextArea.Position = [10 87 244 119];
-
-        app.positioninfileSliderLabel = uilabel(app.FileselectionPanel);
-        app.positioninfileSliderLabel.HorizontalAlignment = 'right';
-        app.positioninfileSliderLabel.FontColor = [0.902 0.902 0.902];
-        app.positioninfileSliderLabel.Position = [49 18 78 19];
+        app.positioninfileSliderLabel = uilabel(app.mainParametersGrid);
+        app.positioninfileSliderLabel.HorizontalAlignment = 'center';
+        app.positioninfileSliderLabel.FontColor = fontColor;
         app.positioninfileSliderLabel.Text = {'position in file'; ''};
+        app.positioninfileSliderLabel.Layout.Row = 7;
+        app.positioninfileSliderLabel.Layout.Column = 1;
 
-        app.positioninfileSlider = uislider(app.FileselectionPanel);
+        app.positioninfileSlider = uislider(app.mainParametersGrid);
         app.positioninfileSlider.Limits = [0 1];
         app.positioninfileSlider.MajorTicks = [];
         app.positioninfileSlider.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.positioninfileSlider.MinorTicks = [0 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1];
         app.positioninfileSlider.Tooltip = {'Change value to display a different video timestamp in the gui.'};
-        app.positioninfileSlider.Position = [57 53 158 3];
+        app.positioninfileSlider.Layout.Row = 7;
+        app.positioninfileSlider.Layout.Column = [2 3];
 
-        app.framePositionField = uieditfield(app.FileselectionPanel, 'numeric');
+        app.framePositionField = uieditfield(app.mainParametersGrid, 'numeric');
         app.framePositionField.Limits = [0 Inf];
         app.framePositionField.RoundFractionalValues = 'on';
         app.framePositionField.ValueDisplayFormat = '%.0f';
         app.framePositionField.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.framePositionField.FontColor = [0.8 0.8 0.8];
-        app.framePositionField.BackgroundColor = [0.149 0.149 0.149];
+        app.framePositionField.FontColor = fontColor;
+        app.framePositionField.BackgroundColor = darkBackgroundColor;
         app.framePositionField.Tooltip = {''};
-        app.framePositionField.Position = [147 27 65 22];
+        app.framePositionField.Layout.Row = 8;
+        app.framePositionField.Layout.Column = 2;
 
-        app.RefreshAppButton = uibutton(app.FileselectionPanel, 'push');
+        app.RefreshAppButton = uibutton(app.mainParametersGrid, 'push');
         app.RefreshAppButton.ButtonPushedFcn = createCallbackFcn(app, @RefreshAppButtonPushed, true);
-        app.RefreshAppButton.BackgroundColor = [0.502 0.502 0.502];
-        app.RefreshAppButton.FontColor = [0.902 0.902 0.902];
+        app.RefreshAppButton.BackgroundColor = grayButtonColor;
+        app.RefreshAppButton.FontColor = fontColor;
         app.RefreshAppButton.Tooltip = {'Refresh the app'};
-        app.RefreshAppButton.Position = [5 11 31 23];
         app.RefreshAppButton.Text = '👌';
+        app.RefreshAppButton.Layout.Row = 8;
+        app.RefreshAppButton.Layout.Column = 1;
 
-        app.AdvancedButton = uibutton(app.FileselectionPanel, 'push');
+        app.AdvancedButton = uibutton(app.mainParametersGrid, 'push');
         app.AdvancedButton.ButtonPushedFcn = createCallbackFcn(app, @AdvancedButtonPushed, true);
-        app.AdvancedButton.BackgroundColor = [0.502 0.502 0.502];
-        app.AdvancedButton.FontColor = [1 1 1];
+        app.AdvancedButton.BackgroundColor = grayButtonColor;
+        app.AdvancedButton.FontColor = fontColor;
         app.AdvancedButton.Tooltip = {'Advanced settings'};
-        app.AdvancedButton.Position = [5 39 31 23];
-        app.AdvancedButton.Text = '📎';
+        app.AdvancedButton.Text = '📎 Advanced';
+        app.AdvancedButton.Layout.Row = 8;
+        app.AdvancedButton.Layout.Column = 3;
     end
 
     % -----------------------------------------------------------------------
     function createBatchVideoPanel(app)
-        app.BatchselectionparametersandVideoRenderingPanel = uipanel(app.FileselectionPanel);
-        app.BatchselectionparametersandVideoRenderingPanel.ForegroundColor = [0.902 0.902 0.902];
-        app.BatchselectionparametersandVideoRenderingPanel.Title = 'Batch selection parameters and Video Rendering';
-        app.BatchselectionparametersandVideoRenderingPanel.BackgroundColor = [0.2 0.2 0.2];
-        app.BatchselectionparametersandVideoRenderingPanel.Position = [10 237 244 433];
 
-        p = app.BatchselectionparametersandVideoRenderingPanel;
+        backgroundColor = [0.2 0.2 0.2];
+        darkBackgroundColor = [0.15 0.15 0.15];
+        fontColor = [0.9 0.9 0.9];
+        grayButtonColor = [0.5 0.5 0.5];
 
-        app.rephasingCheckBox = uicheckbox(p);
-        app.rephasingCheckBox.Visible = 'off';
-        app.rephasingCheckBox.Text = 'rephasing';
-        app.rephasingCheckBox.FontColor = [0.902 0.902 0.902];
-        app.rephasingCheckBox.Position = [38 106 75 22];
-        app.rephasingCheckBox.Value = true;
+        app.batchPanel = uipanel(app.mainParametersGrid);
+        app.batchPanel.ForegroundColor = fontColor;
+        app.batchPanel.Title = 'Batch parameters';
+        app.batchPanel.BackgroundColor = backgroundColor;
+        app.batchPanel.Layout.Row = 9;
+        app.batchPanel.Layout.Column = [1 3];
 
-        app.phaseregistrationCheckBox = uicheckbox(p);
-        app.phaseregistrationCheckBox.Visible = 'off';
-        app.phaseregistrationCheckBox.Tooltip = {'Activates video registration. Check this if the video is too shaky.'};
-        app.phaseregistrationCheckBox.Text = 'phase registration';
-        app.phaseregistrationCheckBox.FontColor = [0.902 0.902 0.902];
-        app.phaseregistrationCheckBox.Position = [119 106 117 22];
+        app.batchGrid = uigridlayout(app.batchPanel, [11 2]);
+        app.batchGrid.RowHeight = {'1x', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit'};
+        app.batchGrid.ColumnWidth = {'1x', '1x'};
+        app.batchGrid.Padding = [10 10 10 10];
+        app.batchGrid.RowSpacing = 5;
+        app.batchGrid.ColumnSpacing = 5;
+        app.batchGrid.BackgroundColor = backgroundColor;
 
-        app.temporalfilterCheckBox = uicheckbox(p);
-        app.temporalfilterCheckBox.Visible = 'off';
-        app.temporalfilterCheckBox.Text = 'temporal filter';
-        app.temporalfilterCheckBox.FontColor = [0.902 0.902 0.902];
-        app.temporalfilterCheckBox.Position = [38 45 95 22];
+        p = app.batchGrid;
 
-        app.temporalfilterEditField = uieditfield(p, 'numeric');
-        app.temporalfilterEditField.Limits = [1 Inf];
-        app.temporalfilterEditField.FontColor = [0.8 0.8 0.8];
-        app.temporalfilterEditField.BackgroundColor = [0.149 0.149 0.149];
-        app.temporalfilterEditField.Visible = 'off';
-        app.temporalfilterEditField.Tooltip = {'Laser wavelength in nanometers'};
-        app.temporalfilterEditField.Position = [141 44 54 22];
-        app.temporalfilterEditField.Value = 2;
-
-        app.FoldermanagementButton = uibutton(p, 'push');
-        app.FoldermanagementButton.ButtonPushedFcn = createCallbackFcn(app, @FoldermanagementButtonPushed, true);
-        app.FoldermanagementButton.BackgroundColor = [0.502 0.502 0.502];
-        app.FoldermanagementButton.FontColor = [0.902 0.902 0.902];
-        app.FoldermanagementButton.Tooltip = {'Open a window to render all files from different folders with their config files'};
-        app.FoldermanagementButton.Position = [7 171 123 23];
-        app.FoldermanagementButton.Text = 'Folder management';
-
-        app.VideoRenderingButton = uibutton(p, 'push');
-        app.VideoRenderingButton.ButtonPushedFcn = createCallbackFcn(app, @VideoRenderingButtonPushed, true);
-        app.VideoRenderingButton.BackgroundColor = [0.502 0.502 0.502];
-        app.VideoRenderingButton.FontColor = [0.902 0.902 0.902];
-        app.VideoRenderingButton.Tooltip = {'Render ''batch_size'' frame batchs spaced by ''batch_stride'' and output a video of different image types'};
-        app.VideoRenderingButton.Position = [133 171 104 23];
-        app.VideoRenderingButton.Text = 'Video Rendering';
-
-        app.iterativeregistrationCheckBox = uicheckbox(p);
-        app.iterativeregistrationCheckBox.Visible = 'off';
-        app.iterativeregistrationCheckBox.Tooltip = {'''Activates video registration. Check this if the video is too shaky.'''};
-        app.iterativeregistrationCheckBox.Text = 'iterative registration';
-        app.iterativeregistrationCheckBox.FontColor = [0.902 0.902 0.902];
-        app.iterativeregistrationCheckBox.Position = [38 66 131 22];
-
-        app.showrefCheckBox = uicheckbox(p);
-        app.showrefCheckBox.Visible = 'off';
-        app.showrefCheckBox.Text = 'show ref';
-        app.showrefCheckBox.FontColor = [0.902 0.902 0.902];
-        app.showrefCheckBox.Position = [38 25 67 22];
-
-        app.LoadconfigButton = uibutton(p, 'push');
-        app.LoadconfigButton.ButtonPushedFcn = createCallbackFcn(app, @LoadconfigButtonPushed, true);
-        app.LoadconfigButton.BackgroundColor = [0.502 0.502 0.502];
-        app.LoadconfigButton.FontColor = [0.902 0.902 0.902];
-        app.LoadconfigButton.Tooltip = {'Save a configuration for the video rendering of a file'};
-        app.LoadconfigButton.Position = [7 198 100 23];
-        app.LoadconfigButton.Text = 'Load config';
-
-        app.image_registration = uicheckbox(p);
-        app.image_registration.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.image_registration.Tooltip = {'Activate frame to frame translation registration of images'};
-        app.image_registration.Text = 'image registration';
-        app.image_registration.FontColor = [0.902 0.902 0.902];
-        app.image_registration.Position = [35 4 117 22];
-
-        app.batchstrideEditFieldLabel = uilabel(p);
-        app.batchstrideEditFieldLabel.HorizontalAlignment = 'center';
-        app.batchstrideEditFieldLabel.FontColor = [0.8 0.8 0.8];
-        app.batchstrideEditFieldLabel.Position = [7 121 84 22];
-        app.batchstrideEditFieldLabel.Text = 'batch stride';
-
-        app.batch_stride = uieditfield(p, 'numeric');
-        app.batch_stride.Limits = [0 Inf];
-        app.batch_stride.ValueDisplayFormat = '%.0f';
-        app.batch_stride.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.batch_stride.FontColor = [0.8 0.8 0.8];
-        app.batch_stride.BackgroundColor = [0.149 0.149 0.149];
-        app.batch_stride.Tooltip = {'Number of interferograms to skip between two images'};
-        app.batch_stride.Position = [90 121 100 22];
-
-        app.refbatchsizeEditFieldLabel = uilabel(p);
-        app.refbatchsizeEditFieldLabel.HorizontalAlignment = 'center';
-        app.refbatchsizeEditFieldLabel.FontColor = [0.8 0.8 0.8];
-        app.refbatchsizeEditFieldLabel.Position = [7 99 80 22];
-        app.refbatchsizeEditFieldLabel.Text = 'reg batch size';
-
-        app.batch_size_registration = uieditfield(p, 'numeric');
-        app.batch_size_registration.Limits = [0 Inf];
-        app.batch_size_registration.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.batch_size_registration.FontColor = [0.8 0.8 0.8];
-        app.batch_size_registration.BackgroundColor = [0.149 0.149 0.149];
-        app.batch_size_registration.Tooltip = {'Number of interferograms used to compute the image used as reference in registration'};
-        app.batch_size_registration.Position = [90 99 100 22];
-
-        app.registration_disc_ratio = uieditfield(p, 'numeric');
-        app.registration_disc_ratio.Limits = [0 1000];
-        app.registration_disc_ratio.ValueChangedFcn = createCallbackFcn(app, @registration_disc_ratioValueChanged, true);
-        app.registration_disc_ratio.FontColor = [0.8 0.8 0.8];
-        app.registration_disc_ratio.BackgroundColor = [0.149 0.149 0.149];
-        app.registration_disc_ratio.Tooltip = {'Size of a disk centered on the images used to compute the registration shifts (0 is empty and 1 is a disc of the maximum dimension).'};
-        app.registration_disc_ratio.Position = [188 4 54 22];
-
-        app.registrationDiscLabel = uilabel(p);
-        app.registrationDiscLabel.HorizontalAlignment = 'center';
-        app.registrationDiscLabel.FontColor = [0.8 0.8 0.8];
-        app.registrationDiscLabel.Position = [157 4 26 22];
-        app.registrationDiscLabel.Text = 'disk';
-
+        % listBox row 1
         app.Image_typesListBox = uilistbox(p);
         app.Image_typesListBox.Items = {};
         app.Image_typesListBox.Multiselect = 'on';
         app.Image_typesListBox.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.Image_typesListBox.Tooltip = {'Image types output giving extracting different informations from a batch of frames'};
         app.Image_typesListBox.FontColor = [1 1 1];
-        app.Image_typesListBox.BackgroundColor = [0.149 0.149 0.149];
-        app.Image_typesListBox.Position = [16 231 211 178];
+        app.Image_typesListBox.BackgroundColor = darkBackgroundColor;
+        app.Image_typesListBox.Layout.Row = 1;
+        app.Image_typesListBox.Layout.Column = [1 2];
         app.Image_typesListBox.Value = {};
 
-        app.batchsizeLabel = uilabel(p);
-        app.batchsizeLabel.HorizontalAlignment = 'center';
-        app.batchsizeLabel.FontColor = [0.8 0.8 0.8];
-        app.batchsizeLabel.Position = [7 143 84 22];
-        app.batchsizeLabel.Text = 'batch size';
-
-        app.batch_size = uieditfield(p, 'numeric');
-        app.batch_size.Limits = [0 Inf];
-        app.batch_size.ValueDisplayFormat = '%.0f';
-        app.batch_size.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.batch_size.FontColor = [0.8 0.8 0.8];
-        app.batch_size.BackgroundColor = [0.149 0.149 0.149];
-        app.batch_size.Tooltip = {'Number of interferograms used to compute the image'};
-        app.batch_size.Position = [90 143 100 22];
-
-        app.SaveVideoButton = uibutton(p, 'push');
-        app.SaveVideoButton.ButtonPushedFcn = createCallbackFcn(app, @SaveVideoButtonPushed, true);
-        app.SaveVideoButton.BackgroundColor = [0.502 0.502 0.502];
-        app.SaveVideoButton.FontColor = [0.902 0.902 0.902];
-        app.SaveVideoButton.Visible = 'off';
-        app.SaveVideoButton.Position = [138 70 100 23];
-        app.SaveVideoButton.Text = 'Save Video';
-
-        app.VideoRenderingLamp = uilamp(p);
-        app.VideoRenderingLamp.Position = [226 153 12 12];
-
-        app.ShowHistogramButton = uibutton(p, 'push');
-        app.ShowHistogramButton.ButtonPushedFcn = createCallbackFcn(app, @ShowHistogramButtonPushed, true);
-        app.ShowHistogramButton.BackgroundColor = [0.502 0.502 0.502];
-        app.ShowHistogramButton.FontColor = [0.902 0.902 0.902];
-        app.ShowHistogramButton.Tooltip = {'Show the full frame batch histogram'};
-        app.ShowHistogramButton.Position = [9 70 70 23];
-        app.ShowHistogramButton.Text = 'Histogram';
-
-        app.PlayButton = uibutton(p, 'push');
-        app.PlayButton.ButtonPushedFcn = createCallbackFcn(app, @PlayButtonPushed, true);
-        app.PlayButton.BackgroundColor = [0.502 0.502 0.502];
-        app.PlayButton.FontColor = [0.902 0.902 0.902];
-        app.PlayButton.Tooltip = {'Play the video'};
-        app.PlayButton.Position = [214 121 25 23];
-        app.PlayButton.Text = 'l>';
+        % buttons row 2
+        app.LoadconfigButton = uibutton(p, 'push');
+        app.LoadconfigButton.ButtonPushedFcn = createCallbackFcn(app, @LoadconfigButtonPushed, true);
+        app.LoadconfigButton.BackgroundColor = grayButtonColor;
+        app.LoadconfigButton.FontColor = fontColor;
+        app.LoadconfigButton.Tooltip = {'Save a configuration for the video rendering of a file'};
+        app.LoadconfigButton.Layout.Row = 2;
+        app.LoadconfigButton.Layout.Column = 1;
+        app.LoadconfigButton.Text = 'Load config';
 
         app.SaveconfigButton = uibutton(p, 'push');
         app.SaveconfigButton.ButtonPushedFcn = createCallbackFcn(app, @SaveconfigButtonPushed, true);
-        app.SaveconfigButton.BackgroundColor = [0.502 0.502 0.502];
-        app.SaveconfigButton.FontColor = [0.902 0.902 0.902];
+        app.SaveconfigButton.BackgroundColor = grayButtonColor;
+        app.SaveconfigButton.FontColor = fontColor;
         app.SaveconfigButton.Tooltip = {'Save a configuration for the video rendering of a file'};
-        app.SaveconfigButton.Position = [112 197 100 23];
+        app.SaveconfigButton.Layout.Row = 2;
+        app.SaveconfigButton.Layout.Column = 2;
         app.SaveconfigButton.Text = 'Save config';
+
+        % buttons row 3
+        app.FoldermanagementButton = uibutton(p, 'push');
+        app.FoldermanagementButton.ButtonPushedFcn = createCallbackFcn(app, @FoldermanagementButtonPushed, true);
+        app.FoldermanagementButton.BackgroundColor = grayButtonColor;
+        app.FoldermanagementButton.FontColor = fontColor;
+        app.FoldermanagementButton.Tooltip = {'Open a window to render all files from different folders with their config files'};
+        app.FoldermanagementButton.Layout.Row = 3;
+        app.FoldermanagementButton.Layout.Column = 1;
+        app.FoldermanagementButton.Text = 'Folder management';
+
+        app.VideoRenderingButton = uibutton(p, 'push');
+        app.VideoRenderingButton.ButtonPushedFcn = createCallbackFcn(app, @VideoRenderingButtonPushed, true);
+        app.VideoRenderingButton.BackgroundColor = grayButtonColor;
+        app.VideoRenderingButton.FontColor = fontColor;
+        app.VideoRenderingButton.Tooltip = {'Render ''batchSize'' frame batchs spaced by ''batchStride'' and output a video of different image types'};
+        app.VideoRenderingButton.Layout.Row = 3;
+        app.VideoRenderingButton.Layout.Column = 2;
+        app.VideoRenderingButton.Text = 'Video Rendering';
+
+        % Trivia row 4
+
+        app.ShowHistogramButton = uibutton(p, 'push');
+        app.ShowHistogramButton.ButtonPushedFcn = createCallbackFcn(app, @ShowHistogramButtonPushed, true);
+        app.ShowHistogramButton.BackgroundColor = grayButtonColor;
+        app.ShowHistogramButton.FontColor = fontColor;
+        app.ShowHistogramButton.Tooltip = {'Show the full frame batch histogram'};
+        app.ShowHistogramButton.Layout.Row = 4;
+        app.ShowHistogramButton.Layout.Column = 1;
+        app.ShowHistogramButton.Text = 'Histogram';
+
+        app.VideoRenderingLamp = uilamp(p);
+        app.VideoRenderingLamp.Layout.Row = 4;
+        app.VideoRenderingLamp.Layout.Column = 2;
+
+        % sizes row 5 6 7
+        app.batchSizeLabel = uilabel(p);
+        app.batchSizeLabel.HorizontalAlignment = 'center';
+        app.batchSizeLabel.FontColor = fontColor;
+        app.batchSizeLabel.Layout.Row = 5;
+        app.batchSizeLabel.Layout.Column = 1;
+        app.batchSizeLabel.Text = 'batch size';
+
+        app.batchSize = uieditfield(p, 'numeric');
+        app.batchSize.Limits = [0 Inf];
+        app.batchSize.ValueDisplayFormat = '%.0f';
+        app.batchSize.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.batchSize.FontColor = fontColor;
+        app.batchSize.BackgroundColor = darkBackgroundColor;
+        app.batchSize.Tooltip = {'Number of interferograms used to compute the image'};
+        app.batchSize.Layout.Row = 5;
+        app.batchSize.Layout.Column = 2;
+
+        app.batchStrideLabel = uilabel(p);
+        app.batchStrideLabel.HorizontalAlignment = 'center';
+        app.batchStrideLabel.FontColor = fontColor;
+        app.batchStrideLabel.Layout.Row = 6;
+        app.batchStrideLabel.Layout.Column = 1;
+        app.batchStrideLabel.Text = 'batch stride';
+
+        app.batchStride = uieditfield(p, 'numeric');
+        app.batchStride.Limits = [0 Inf];
+        app.batchStride.ValueDisplayFormat = '%.0f';
+        app.batchStride.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.batchStride.FontColor = fontColor;
+        app.batchStride.BackgroundColor = darkBackgroundColor;
+        app.batchStride.Tooltip = {'Number of interferograms to skip between two images'};
+        app.batchStride.Layout.Row = 6;
+        app.batchStride.Layout.Column = 2;
+
+        app.refBatchSizeLabel = uilabel(p);
+        app.refBatchSizeLabel.HorizontalAlignment = 'center';
+        app.refBatchSizeLabel.FontColor = fontColor;
+        app.refBatchSizeLabel.Layout.Row = 7;
+        app.refBatchSizeLabel.Layout.Column = 1;
+        app.refBatchSizeLabel.Text = 'reg batch size';
+
+        app.refBatchSize = uieditfield(p, 'numeric');
+        app.refBatchSize.Limits = [0 Inf];
+        app.refBatchSize.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.refBatchSize.FontColor = fontColor;
+        app.refBatchSize.BackgroundColor = darkBackgroundColor;
+        app.refBatchSize.Tooltip = {'Number of interferograms used to compute the image used as reference in registration'};
+        app.refBatchSize.Layout.Row = 7;
+        app.refBatchSize.Layout.Column = 2;
+
+        % Registration row 8 9 10
+        app.AutofocusFromRef = uicheckbox(p);
+        app.AutofocusFromRef.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.AutofocusFromRef.Tooltip = {'Activate frame to frame translation registration of images'};
+        app.AutofocusFromRef.Text = 'autofocus from ref';
+        app.AutofocusFromRef.FontColor = fontColor;
+        app.AutofocusFromRef.Layout.Row = 8;
+        app.AutofocusFromRef.Layout.Column = 1;
 
         app.applyshackhartmannfromref = uicheckbox(p);
         app.applyshackhartmannfromref.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.applyshackhartmannfromref.Tooltip = {'Activate frame to frame translation registration of images'};
         app.applyshackhartmannfromref.Text = 'refocus from ref (numeric shack hartmann)';
-        app.applyshackhartmannfromref.FontColor = [0.902 0.902 0.902];
-        app.applyshackhartmannfromref.Position = [35 25 251 22];
+        app.applyshackhartmannfromref.FontColor = fontColor;
+        app.applyshackhartmannfromref.Layout.Row = 9;
+        app.applyshackhartmannfromref.Layout.Column = [1 2];
 
-        app.AutofocusFromRef = uicheckbox(p);
-        app.AutofocusFromRef.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.AutofocusFromRef.Tooltip = {'Activate frame to frame translation registration of images'};
-        app.AutofocusFromRef.Text = 'autofocus from ref';
-        app.AutofocusFromRef.FontColor = [0.902 0.902 0.902];
-        app.AutofocusFromRef.Position = [35 45 119 22];
+        app.image_registration = uicheckbox(p);
+        app.image_registration.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.image_registration.Tooltip = {'Activate frame to frame translation registration of images'};
+        app.image_registration.Text = 'image registration';
+        app.image_registration.FontColor = fontColor;
+        app.image_registration.Layout.Row = 10;
+        app.image_registration.Layout.Column = [1 2];
+
+        app.registrationDiscLabel = uilabel(p);
+        app.registrationDiscLabel.HorizontalAlignment = 'center';
+        app.registrationDiscLabel.FontColor = fontColor;
+        app.registrationDiscLabel.Layout.Row = 11;
+        app.registrationDiscLabel.Layout.Column = 1;
+        app.registrationDiscLabel.Text = 'disk';
+
+        app.registration_disc_ratio = uieditfield(p, 'numeric');
+        app.registration_disc_ratio.Limits = [0 1000];
+        app.registration_disc_ratio.ValueChangedFcn = createCallbackFcn(app, @registration_disc_ratioValueChanged, true);
+        app.registration_disc_ratio.FontColor = fontColor;
+        app.registration_disc_ratio.BackgroundColor = darkBackgroundColor;
+        app.registration_disc_ratio.Tooltip = {'Size of a disk centered on the images used to compute the registration shifts (0 is empty and 1 is a disc of the maximum dimension).'};
+        app.registration_disc_ratio.Layout.Row = 11;
+        app.registration_disc_ratio.Layout.Column = 2;
+
     end
 
     % -----------------------------------------------------------------------
@@ -1479,7 +1485,7 @@ methods (Access = private)
         app.svd_threshold.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.svd_threshold.FontColor = [1 1 1];
         app.svd_threshold.BackgroundColor = [0.149 0.149 0.149];
-        app.svd_threshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => time_range(1)/fs * batch_size * 2)'};
+        app.svd_threshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => time_range(1)/fs * batchSize * 2)'};
         app.svd_threshold.Position = [246 236 31 22];
 
         app.time_transformDropDownLabel = uilabel(p);
@@ -1570,28 +1576,28 @@ methods (Access = private)
         app.svdx_threshold.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.svdx_threshold.FontColor = [1 1 1];
         app.svdx_threshold.BackgroundColor = [0.149 0.149 0.149];
-        app.svdx_threshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => time_range(1)/fs * batch_size * 2)'};
+        app.svdx_threshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => time_range(1)/fs * batchSize * 2)'};
         app.svdx_threshold.Position = [246 207 31 22];
 
         app.svdx_t_threshold = uieditfield(p, 'numeric');
         app.svdx_t_threshold.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.svdx_t_threshold.FontColor = [1 1 1];
         app.svdx_t_threshold.BackgroundColor = [0.149 0.149 0.149];
-        app.svdx_t_threshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => time_range(1)/fs * batch_size * 2)'};
+        app.svdx_t_threshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => time_range(1)/fs * batchSize * 2)'};
         app.svdx_t_threshold.Position = [246 182 31 22];
 
         app.svdx_Nsub = uieditfield(p, 'numeric');
         app.svdx_Nsub.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.svdx_Nsub.FontColor = [1 1 1];
         app.svdx_Nsub.BackgroundColor = [0.149 0.149 0.149];
-        app.svdx_Nsub.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => time_range(1)/fs * batch_size * 2)'};
+        app.svdx_Nsub.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => time_range(1)/fs * batchSize * 2)'};
         app.svdx_Nsub.Position = [189 207 31 22];
 
         app.svdx_t_Nsub = uieditfield(p, 'numeric');
         app.svdx_t_Nsub.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.svdx_t_Nsub.FontColor = [1 1 1];
         app.svdx_t_Nsub.BackgroundColor = [0.149 0.149 0.149];
-        app.svdx_t_Nsub.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => time_range(1)/fs * batch_size * 2)'};
+        app.svdx_t_Nsub.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => time_range(1)/fs * batchSize * 2)'};
         app.svdx_t_Nsub.Position = [189 182 31 22];
 
         app.NsubxLabel = uilabel(p);

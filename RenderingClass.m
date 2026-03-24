@@ -128,16 +128,16 @@ methods
         % 1) Apply corrections to interferograms
 
         doFrames = ParamChanged.spatial_filter || ParamChanged.hilbert_filter || ParamChanged.spatial_filter_range || obj.FramesChanged;
-        [Nx, Ny, batch_size] = size(obj.Frames);
+        [Nx, Ny, batchSize] = size(obj.Frames);
 
         if doFrames % change or if the frames changed
 
             if Params.hilbert_filter
                 tmp = obj.Frames;
-                [width, height, batch_size] = size(tmp);
-                tmp = reshape(tmp, width * height, batch_size);
+                [width, height, batchSize] = size(tmp);
+                tmp = reshape(tmp, width * height, batchSize);
                 tmp = hilbert(tmp);
-                obj.Frames = reshape(tmp, width, height, batch_size);
+                obj.Frames = reshape(tmp, width, height, batchSize);
                 clear tmp;
             end
 
@@ -310,7 +310,7 @@ methods
                 case 'ICA'
                     obj.SH = short_time_ICA(obj.H);
                 case 'FFT'
-                    obj.SH = fft(obj.H, [], 3) ./ sqrt(batch_size);
+                    obj.SH = fft(obj.H, [], 3) ./ sqrt(batchSize);
                 case 'Wavelet_Morlet'
                     obj.SH = morlet1D_transform_3rdDim(obj.H, [], 3);
                 case 'autocorrelation'
