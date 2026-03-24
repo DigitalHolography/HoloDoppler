@@ -32,7 +32,6 @@ methods
             obj
             file_path
             opt.params = []; % Optional parameters to force in case the default behavior (finding existing in the folder is not ideal)
-            opt.LoadAll = false; % Optional parameter to Load All the file in memory if possible
         end
 
         % LoadFile
@@ -60,7 +59,7 @@ methods
                 holo_version_threshold = 5; % current is version 7
 
                 try
-                    obj.reader = HoloReader(obj.file.path, opt.LoadAll);
+                    obj.reader = HoloReader(obj.file.path);
                 catch ME
                     obj.file = [];
                     obj.reader = [];
