@@ -383,6 +383,11 @@ methods (Access = private)
     % Sync every widget value into the HD class, then update enable states.
     % Connected to ~50 component ValueChanged callbacks.
     function refreshClass(app, ~)
+        if ~isempty(app.HD.file)
+            app.framePositionField.Value = app.positioninfileSlider.Value;
+        else
+            app.framePositionField.Value = 0;
+        end
         app.syncClassFromGui();
         app.updateTimeTransformControls();
         app.updateSvdxFilterControls();
