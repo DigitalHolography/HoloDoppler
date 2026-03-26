@@ -7,12 +7,9 @@ properties
     power_2_Doppler
     color_Doppler
     directional_Doppler
-    power_01_Doppler
-    pure_PCA
-    spectrogram
     broadening
     SH
-    autocorrelogram
+    SH_avg
     moment_0
     moment_1
     moment_2
@@ -20,7 +17,6 @@ properties
     f_RMS
     buckets
     full_buckets
-    intercorrel0
     FH_modulus_mean
     FH_arg_mean
     SVD_cov
@@ -29,7 +25,6 @@ properties
     ShackHartmann_Phase
     power_Doppler_wiener
     power_adapt
-    pure_phase
     doppler_variance_mod
     doppler_variance_mod_pha
     amplitude_decorrelation
@@ -51,12 +46,9 @@ methods
         obj.power_2_Doppler = ImageType('power2');
         obj.color_Doppler = ImageType('color', struct('freq_low', [], 'freq_high', []));
         obj.directional_Doppler = ImageType('directional', struct('M0_pos', [], 'M0_neg', []));
-        obj.power_01_Doppler = ImageType('power_01_Doppler');
-        obj.pure_PCA = ImageType('PCA');
-        obj.spectrogram = ImageType('spectrogram');
         obj.broadening = ImageType('broadening');
         obj.SH = ImageType('SH', struct('vector', [], 'SH', []));
-        obj.autocorrelogram = ImageType('autocorrelogram');
+        obj.SH_avg = ImageType('SH_avg', struct('SH', []));
         obj.moment_0 = ImageType('M0');
         obj.moment_1 = ImageType('M1');
         obj.moment_2 = ImageType('M2');
@@ -64,7 +56,6 @@ methods
         obj.f_RMS = ImageType('f_RMS');
         obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', [], 'intervals_2', [], 'M0', []));
         obj.full_buckets = ImageType('full_buckets', struct('SH_full', []));
-        obj.intercorrel0 = ImageType('intercorrel0');
         obj.FH_modulus_mean = ImageType('FH_modulus_mean');
         obj.FH_arg_mean = ImageType('FH_arg_mean');
         obj.SVD_cov = ImageType('SVD_cov');
@@ -73,7 +64,6 @@ methods
         obj.ShackHartmann_Phase = ImageType('ShackPhase');
         obj.power_Doppler_wiener = ImageType('power_wiener');
         obj.power_adapt = ImageType('power_adapt');
-        obj.pure_phase = ImageType('pure_phase');
         obj.doppler_variance_mod = ImageType('doppler_variance_mod');
         obj.doppler_variance_mod_pha = ImageType('doppler_variance_mod_pha');
         obj.amplitude_decorrelation = ImageType('amplitude_decorrelation');
@@ -174,9 +164,6 @@ methods
         f1 = Params.timeRange(1);
         f2 = Params.timeRange(2);
 
-        r1 = Params.indexRange(1);
-        r2 = Params.indexRange(2);
-
         [~, ~, batchSize] = size(SHin);
         fs = Params.fs;
         gw = Params.flatfield_gw;
@@ -184,22 +171,6 @@ methods
         % clear phase
         SH_mod = abs(SHin) .^ 2;
         SH_arg = angle(SHin);
-
-        if obj.pure_PCA.is_selected
-
-            if ~(r1 - floor(r1) == 0) && ~(r2 - floor(r2) == 0) % both not integer
-                r1p = floor(r1 * 2 / fs * batchSize);
-                r2p = floor(r2 * 2 / fs * batchSize);
-            else
-                r1p = r1;
-                r2p = r2;
-            end
-
-            r1p = min(max(r1p, 1), batchSize);
-            r2p = min(max(r2p, 1), batchSize);
-            obj.pure_PCA.image = cumulant(SH_mod, r1p, r2p);
-            obj.pure_PCA.image = flat_field_correction(obj.pure_PCA.image, gw);
-        end
 
         if obj.power_Doppler.is_selected % Power Doppler has been chosen
             img = moment0(SH_mod, f1, f2, fs, batchSize, gw);
@@ -227,40 +198,6 @@ methods
             obj.power_2_Doppler.image = img;
         end
 
-        if obj.power_01_Doppler.is_selected % Power Doppler has been chosen
-            img0 = moment0(SH_mod, f1, f2, fs, batchSize, gw);
-            img1 = moment1(SH_mod, f1, f2, fs, batchSize);
-
-            img0 = double(img0);
-            img1 = imgaussfilt(img1, 3);
-
-            img0n = img0 / max(img0(:));
-            rgb = repmat(img0n, [1 1 3]);
-
-            m = max(abs(img1(:)));
-            img1n = abs(img1) / m;
-
-            th = 0.0;
-            w = max(0, (img1n - th) / (1 - th));
-
-            gamma = 1;
-            w = w .^ gamma;
-
-            pos = img1 > m / 16;
-            neg = img1 < -m / 16;
-
-            red = rgb(:, :, 1);
-            blue = rgb(:, :, 3);
-
-            rgb(:, :, 1) = red .* (1 - w .* pos) + w .* pos;
-            rgb(:, :, 3) = blue .* (1 - w .* neg) + w .* neg;
-
-            obj.power_01_Doppler.image = rgb;
-
-            % figure,imshow(rgb)
-
-        end
-
         if obj.color_Doppler.is_selected % Color Doppler has been chosen
 
             if Params.timeRange_extra < 0
@@ -276,28 +213,6 @@ methods
         if obj.directional_Doppler.is_selected % Directional Doppler has been chosen
             [M0_pos, M0_neg] = directional(SH_mod, f1, f2, fs, batchSize, max(gw, 20));
             obj.directional_Doppler.image = construct_directional_image(gather(M0_pos), gather(M0_neg));
-        end
-
-        if obj.spectrogram.is_selected
-
-            try
-                fi = figure("Visible", "off");
-                freqs = ((0:(batchSize - 1)) - batchSize / 2) .* (fs / batchSize);
-                spect = fftshift(abs(squeeze(sum(SH_mod, [1 2]) / (size(SH_mod, 1) * size(SH_mod, 2))) .^ 2));
-
-                plot(freqs, 10 * log10(spect));
-
-                ylim([-60 150]);
-                xlabel('Frequency (kHz)');
-                ylabel('Power Spectrum Density (dB)');
-
-                frame = getframe(fi); % Capture the figure
-                % obj.spectrogram.graph = gca;
-                obj.spectrogram.image = frame.cdata;
-            catch E
-                MEdisp(E);
-            end
-
         end
 
         if obj.broadening.is_selected
@@ -335,38 +250,13 @@ methods
         end
 
         if obj.color_band_ratio.is_selected
-            color_img = color_energy_ratio(SH_mod, f1, f2, 5, 5, fs, batchSize, gw);
+            color_img = color_energy_ratio(SH_mod, f1, f2, 5, 5, fs, batchSize);
             obj.color_band_ratio.image = color_img;
         end
 
         if obj.entropy.is_selected
             img = spectral_entropy(SH_mod, f1, f2, fs, batchSize);
             obj.entropy.image = img;
-        end
-
-        if obj.autocorrelogram.is_selected
-
-            try
-                fi = figure("Visible", "off");
-                indices = ((0:(batchSize - 1)) - batchSize / 2) .* (1 / (fs * 1000));
-                % disc = diskMask(size(SH,1),size(SH,2),0.7)';
-                disc = ones(size(SH_mod, 1), size(SH_mod, 2));
-                spect = squeeze(abs(sum(SH_mod .* disc, [1 2])) / nnz(disc));
-
-                plot(indices, 10 * log10(spect));
-
-                xlim([min(indices), max(indices)]);
-                ylim([-60 180]);
-                xlabel('Time (s)');
-                ylabel('(dB)');
-
-                frame = getframe(fi); % Capture the figure
-                % obj.autocorrelogram.graph = gca;
-                obj.autocorrelogram.image = frame.cdata;
-            catch E
-                MEdisp(E);
-            end
-
         end
 
         if obj.moment_0.is_selected % Moment 0 has been chosen
@@ -392,39 +282,7 @@ methods
         if obj.f_RMS.is_selected
             img_M0 = moment0(SH_mod, f1, f2, fs, batchSize);
             img_M2 = moment2(SH_mod, f1, f2, fs, batchSize);
-            img_fRMS = sqrt(img_M2 ./ mean(img_M0, [1, 2]));
-
-            try
-                fi = figure("Visible", "off");
-                imagesc(img_fRMS);
-                axis off; axis square;
-                title("f_{RMS} (in kHz)")
-                colormap("gray"); colorbar;
-                frame = getframe(fi); % Capture the figure
-                % obj.f_RMS.graph = gca;
-                obj.f_RMS.image = frame.cdata;
-            catch E
-                obj.f_RMS.image = img_fRMS;
-                MEdisp(E);
-            end
-
-            obj.f_RMS.image = sqrt(img_M2 ./ img_M0);
-        end
-
-        if obj.pure_phase.is_selected
-            %
-            if ~(r1 - floor(r1) == 0) && ~(r2 - floor(r2) == 0) %both not integer
-                r1p = floor(r1 * 2 / fs * batchSize);
-                r2p = floor(r2 * 2 / fs * batchSize);
-            else
-                r1p = r1;
-                r2p = r2;
-            end
-
-            r1p = min(max(r1p, 1), batchSize);
-            r2p = min(max(r2p, 1), batchSize);
-            obj.pure_phase.image = cumulant(SH_arg, r1p, r2p);
-            obj.pure_phase.image = flat_field_correction(obj.pure_phase.image, gw);
+            obj.f_RMS.image = sqrt(img_M2 ./ mean(img_M0, [1, 2]));
         end
 
         if obj.doppler_variance_mod.is_selected %
@@ -512,6 +370,7 @@ methods
                 obj.buckets.parameters.intervals_2(:, :, :, freqIdx) = img;
             end
 
+            obj.buckets.image = mean(obj.buckets.parameters.M0, [3 4]);
         end
 
         if obj.full_buckets.is_selected

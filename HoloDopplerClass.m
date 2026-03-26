@@ -441,7 +441,7 @@ methods
         for i = 1:numel(obj.params.image_types)
             image = images{i};
 
-            if ~ismember(obj.params.image_types{i}, {'spectrogram', 'autocorrelogram', 'broadening', 'f_RMS'}) && size(image, 1) ~= size(image, 2) % do not resize the graphs
+            if ~ismember(obj.params.image_types{i}, {'broadening'}) && size(image, 1) ~= size(image, 2) % do not resize the graphs
                 image = imresize(image, [max(size(image, 1), size(image, 2)), max(size(image, 1), size(image, 2))]);
             end
 
@@ -493,7 +493,7 @@ methods
                 continue
             end
 
-            if ~ismember(image_types{i}, {'moment_0', 'moment_1', 'moment_2', 'SVD_cov', 'SVD_U', 'FH_modulus_mean', 'FH_arg_mean', 'ShackHartmann_Cropped_Moments', 'spectrogram', 'broadening', 'f_RMS', 'autocorrelogram'})
+            if ~ismember(image_types{i}, {'moment_0', 'moment_1', 'moment_2', 'SVD_cov', 'SVD_U', 'FH_modulus_mean', 'FH_arg_mean', 'ShackHartmann_Cropped_Moments', 'broadening'})
                 max_dim = max(size(images{i}, 1), size(images{i}, 2));
                 imwrite(toImageSource(imresize(images{i}, [max_dim, max_dim])), fullfile(result_folder_path, strcat(obj.file.name, '_', image_types{i}, '.png')));
             else
@@ -849,10 +849,6 @@ methods
                     generate_video(mat, result_folder_path, strcat('energy_ratio_type'), export_raw = 1, temporalFilter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'power_Doppler')
                     generate_video(mat, result_folder_path, strcat('M0'), temporalFilter = 2, square = params.square);
-                elseif strcmp(image_types{i}, 'spectrogram')
-                    generate_video(mat, result_folder_path, strcat('spectrogram'), temporalFilter = []);
-                elseif strcmp(image_types{i}, 'autocorrelogram')
-                    generate_video(mat, result_folder_path, strcat('autocorrelogram'), temporalFilter = []);
                 elseif strcmp(image_types{i}, 'broadening')
                     generate_video(mat, result_folder_path, strcat('broadening'), temporalFilter = []);
                 elseif strcmp(image_types{i}, 'f_RMS')
@@ -998,7 +994,7 @@ methods
 
         for j = 1:length(obj.params.image_types)
 
-            if ismember(obj.params.image_types{j}, {'broadening', 'autocorrelogram', 'spectrogram', 'fRMS', 'FH_modulus_mean', 'FH_arg_mean', 'FH_arg_mean', 'SVD_cov', 'SVD_U'})
+            if ismember(obj.params.image_types{j}, {'broadening', 'fRMS', 'FH_modulus_mean', 'FH_arg_mean', 'FH_arg_mean', 'SVD_cov', 'SVD_U'})
                 continue
             end
 

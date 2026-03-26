@@ -437,7 +437,7 @@ methods
 
         obj.Render(struct(), {"power_Doppler"});
         obj.Render(struct("spatial_transformation", "angular spectrum"), {"power_Doppler"});
-        obj.Render(struct("time_transform", "PCA"), {"pure_PCA"});
+        obj.Render(struct("time_transform", "PCA"));
         obj.Render(struct(), {"power_Doppler"});
         obj.Render(struct(), {"directional_Doppler"});
         %montage(obj.constructImages({'directional_Doppler'}));
