@@ -143,8 +143,6 @@ methods
 
         end
 
-        obj.Output.construct_image_from_Frames(Params, obj.Frames);
-
         if doFrames % change or if the frames changed
 
             if Params.spatialFilter

@@ -12,7 +12,6 @@ properties
     spectrogram
     broadening
     SH
-    SH_avg
     autocorrelogram
     moment_0
     moment_1
@@ -21,8 +20,6 @@ properties
     f_RMS
     buckets
     full_buckets
-    denoised
-    cluster_projection
     intercorrel0
     FH_modulus_mean
     FH_arg_mean
@@ -40,8 +37,6 @@ properties
     diff_mod_pha
     phase_diff
     phase_variance
-    Quadrants
-    Energy
     cumulative_distribution
     band_ratio
     color_band_ratio
@@ -61,7 +56,6 @@ methods
         obj.spectrogram = ImageType('spectrogram');
         obj.broadening = ImageType('broadening');
         obj.SH = ImageType('SH', struct('vector', [], 'SH', []));
-        obj.SH_avg = ImageType('SH_avg', struct('SH', []));
         obj.autocorrelogram = ImageType('autocorrelogram');
         obj.moment_0 = ImageType('M0');
         obj.moment_1 = ImageType('M1');
@@ -70,8 +64,6 @@ methods
         obj.f_RMS = ImageType('f_RMS');
         obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', [], 'intervals_2', [], 'M0', []));
         obj.full_buckets = ImageType('full_buckets', struct('SH_full', []));
-        obj.denoised = ImageType('denoised');
-        obj.cluster_projection = ImageType('cluster_projection');
         obj.intercorrel0 = ImageType('intercorrel0');
         obj.FH_modulus_mean = ImageType('FH_modulus_mean');
         obj.FH_arg_mean = ImageType('FH_arg_mean');
@@ -89,8 +81,6 @@ methods
         obj.diff_mod_pha = ImageType('diff_mod_pha');
         obj.phase_diff = ImageType('phase_diff');
         obj.phase_variance = ImageType('phase_variance');
-        obj.Quadrants = ImageType('Quadrants');
-        obj.Energy = ImageType('Energy', struct("E_t", [], "E_stdf_t", [], "E_stdq_t", []));
         obj.cumulative_distribution = ImageType('cdf');
         obj.band_ratio = ImageType('energy_ratio');
         obj.color_band_ratio = ImageType('color_energy_ratio');
@@ -542,92 +532,6 @@ methods
 
         end
 
-        if obj.denoised.is_selected
-
-            try
-                SHdenoised = denoiseNGMeet(SH_mod, 'Sigma', 0.01, 'NumIterations', 2);
-                img = moment0(SHdenoised, f1, f2, fs, batchSize, 0);
-                obj.denoised.image = img;
-            catch ME
-                % Display error message and line number
-                fprintf('Error: %s\n', ME.message);
-                fprintf('Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
-                obj.denoised.image = [];
-            end
-
-        end
-
-        if obj.cluster_projection.is_selected
-
-            try
-                % Get the size of the 3D array
-
-                %{
-
-                if 0
-                    [xSize, ySize, zSize] = size(SH_mod(1:4:end, 1:4:end, 1:1:end));
-
-                    % Generate grid coordinates for each voxel
-                    [x, y, z] = ndgrid(1:xSize, 1:ySize, 1:zSize);
-
-                    % Flatten the 3D array into a list of points
-                    points = [64 * x(:), 64 * y(:), z(:)]; % add more weight to the frequency dimension z
-                    values = SH_mod(1:4:end, 1:4:end, 1:1:end); % Flatten values as well
-                    values = values(:);
-                    % Combine spatial and intensity information (optional)
-                    features = [points, values]; % [x, y, z, intensity]
-
-                    % Number of clusters (N)
-                    N = 3;
-
-                    % Apply K-means clustering
-                    [idx, ~] = kmeans(features, N, 'Distance', 'sqeuclidean');
-
-                    % Reshape the cluster labels back to 3D
-                    clusters = reshape(idx, xSize, ySize, zSize);
-
-                    colors = lines(N);
-
-                    image = 0;
-
-                    for i = 1:N
-                        image = image + rescale(sum((clusters == i), 3) .* reshape(colors(i, :), 1, 1, []));
-                    end
-
-                elseif ~1
-                    video = SH_mod(1:4:end, 1:4:end, 1:1:end);
-                    [numX, numY, zSize] = size(video);
-                    video_flat = reshape(video, [numY * numX, zSize]);
-
-                    if true
-                        video_flat = normalize(video_flat, 2);
-                    end
-
-                    N = 3;
-                    [idx] = kmeans(video_flat, N, 'Distance', "cityblock", 'MaxIter', 100);
-                    idx = reshape(idx, [numX, numY]);
-                    image = ind2rgb(idx, lines(N));
-
-                elseif 1
-                    %}
-
-                [~, image] = max(diff(SH_mod(1:1:end, 1:1:end, 1:1:end), 1, 3), [], 3);
-                % image = moment0(diff(SH_mod(1:1:end,1:1:end,1:1:end),1,3), f1, f2 , fs, NT, 0);
-                % image = flat_field_correction(image,gw);
-
-                % end
-
-                obj.cluster_projection.image = image;
-
-            catch ME
-                % Display error message and line number
-                fprintf('Error: %s\n', ME.message);
-                fprintf('Occurred in: %s at line %d\n', ME.stack(1).name, ME.stack(1).line);
-                obj.denoised.image = [];
-            end
-
-        end
-
     end
 
     function construct_image_from_FH(obj, Params, FHin)
@@ -653,43 +557,6 @@ methods
                     obj.FH_arg_mean.image = squeeze((mean(angle(FHin), 3)));
             end
 
-        end
-
-        if obj.Quadrants.is_selected
-
-            Q = RenderQuadrant(FHin, Params);
-            obj.Quadrants.parameters = Q;
-            obj.Quadrants.image = imresize(cat(2, cat(1, Q.Q1_m0, Q.Q2_m0), cat(1, Q.Q4_m0, Q.Q3_m0)), [size(FHin, 1), size(FHin, 2)]);
-
-            fAVG = cell(1, int16(floor(numel(fieldnames(Q)) / 2)));
-            f0 = cell(1, int16(floor(numel(fieldnames(Q)) / 2)));
-
-            for i = 1:int16(floor(numel(fieldnames(Q)) / 2))
-                fAVG{i} = Q.(sprintf("Q%d_m1", i)) ./ mean(Q.(sprintf("Q%d_m0", i)), [1 2]);
-            end
-
-            for i = 1:int16(floor(numel(fieldnames(Q)) / 2))
-                f0{i} = Q.(sprintf("Q%d_m0", i)) ./ mean(Q.(sprintf("Q%d_m0", i)), [1 2]);
-            end
-
-            obj.Quadrants.parameters.QuadrantsM1 = mergeColorChannels(fAVG);
-            obj.Quadrants.parameters.QuadrantsM0 = mergeColorChannels(f0);
-            %obj.Quadrants.parameters.QuadrantsM1 = imresize(cat(2,cat(1,Q.Q1_m1,Q.Q2_m1),cat(1,Q.Q4_m1,Q.Q3_m1)),[size(FHin,1),size(FHin,2)]);
-
-        end
-
-    end
-
-    function construct_image_from_Frames(obj, ~, Frames)
-
-        if isempty(Frames)
-            return
-        end
-
-        if obj.Energy.is_selected
-            obj.Energy.parameters.E_t = sum(abs(Frames) .^ 2, "all");
-            obj.Energy.parameters.E_stdf_t = std(Frames, [], "all");
-            obj.Energy.parameters.E_stdq_t = std(abs(Frames) .^ 2, [], "all");
         end
 
     end

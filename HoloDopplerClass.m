@@ -792,70 +792,12 @@ methods
                 export_h5_video(fullfile(result_folder_path, 'raw', output_filename_h5), "SH_Slices", mat_);
 
                 continue
-            elseif strcmp(image_types{i}, 'Quadrants')
-                fields = fieldnames(tmp{1}.parameters);
-                nn = length(fields);
-
-                for j = 1:length(tmp)
-
-                    for k = 1:nn
-
-                        if ~isempty(tmp{j}.parameters) && ~ismember(fields{k}, {'QuadrantsM1', 'QuadrantsM0'})
-                            Q(:, :, j, k) = tmp{j}.parameters.(fields{k});
-                        end
-
-                    end
-
-                    QM1(:, :, :, j) = tmp{j}.parameters.QuadrantsM1;
-                    QM0(:, :, :, j) = tmp{j}.parameters.QuadrantsM0;
-                end
-
-                for k = 1:(nn - 2)
-                    generate_video(Q(:, :, :, k), result_folder_path, fields{k}, export_raw = 1, temporalFilter = [], square = params.square)
-                end
-
-                generate_video(QM1, result_folder_path, 'QuadrantsM1Composite', export_raw = 0, temporalFilter = 2, square = params.square)
-                generate_video(QM0, result_folder_path, 'QuadrantsM0Composite', export_raw = 0, temporalFilter = 2, square = params.square)
-
-                sz = size(tmp{1}.image);
-
-                if length(sz) == 2
-                    sz = [sz 1];
-                end
-
-                sz = [sz length(tmp)];
-                mat = zeros(sz, 'single');
-
-                for j = 1:length(tmp)
-
-                    if ~isempty(tmp{j}.image)
-                        mat(:, :, :, j) = tmp{j}.image;
-                    end
-
-                end
 
             elseif strcmp(image_types{i}, 'SH_avg')
 
                 if ~isempty(obj.running_averages.running_averages)
                     generate_video(fftshift(obj.running_averages.running_averages.SH, 3), result_folder_path, strcat(image_types{i}), export_raw = 1, temporalFilter = [], square = params.square);
                 end
-
-                mat = [];
-
-            elseif strcmp(image_types{i}, 'Energy')
-                sig_E_t = [];
-                sig_E_stdf_t = [];
-                sig_E_stdq_t = [];
-
-                for j = 1:length(tmp)
-                    sig_E_t = [sig_E_t tmp{j}.parameters.E_t];
-                    sig_E_stdf_t = [sig_E_stdf_t tmp{j}.parameters.E_stdf_t];
-                    sig_E_stdq_t = [sig_E_stdq_t tmp{j}.parameters.E_stdq_t];
-                end
-
-                generate_signal(sig_E_t, result_folder_path, 'Energy_t');
-                generate_signal(sig_E_stdf_t, result_folder_path, 'Energy_t');
-                generate_signal(sig_E_stdq_t, result_folder_path, 'Energy_t');
 
                 mat = [];
 
@@ -1113,8 +1055,6 @@ methods
 
                 continue
 
-            elseif strcmp(obj.params.image_types{j}, 'Quadrants')
-                continue
             end
 
             try % in case of not the same image size
