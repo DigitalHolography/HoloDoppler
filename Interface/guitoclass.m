@@ -4,25 +4,33 @@ function guitoclass(HD, app)
 % Helper function to safely get UI value
 function val = safeGetUIValue(uiComponent, defaultValue)
     val = defaultValue;
+
     try
+
         if isprop(uiComponent, 'Value') && ~isempty(uiComponent.Value)
             val = uiComponent.Value;
         end
+
     catch
         % If anything goes wrong, use default
     end
+
 end
 
 % Helper function to safely get checkbox value
 function val = safeGetCheckbox(uiComponent, defaultValue)
     val = defaultValue;
+
     try
+
         if isprop(uiComponent, 'Value') && islogical(uiComponent.Value) && ~isempty(uiComponent.Value)
             val = uiComponent.Value;
         end
+
     catch
         % If anything goes wrong, use default
     end
+
 end
 
 % Basic parameters
@@ -71,9 +79,11 @@ end
 % Handle image types as a cell array
 if isprop(app, 'Image_typesListBox') && isprop(app.Image_typesListBox, 'Value')
     value = app.Image_typesListBox.Value;
+
     if ~isempty(value)
         HD.params.image_types = value;
     end
+
 end
 
 % Image registration
@@ -82,18 +92,18 @@ if isprop(app, 'image_registration')
 end
 
 % Spatial filtering parameters
-if isprop(app, 'spatial_filter')
-    HD.params.spatial_filter = safeGetCheckbox(app.spatial_filter, false);
+if isprop(app, 'spatialFilter')
+    HD.params.spatialFilter = safeGetCheckbox(app.spatialFilter, false);
 end
 
-if isprop(app, 'hilbert_filter')
-    HD.params.hilbert_filter = safeGetCheckbox(app.hilbert_filter, false);
+if isprop(app, 'hilbertFilter')
+    HD.params.hilbertFilter = safeGetCheckbox(app.hilbertFilter, false);
 end
 
-if isprop(app, 'spatial_filter_range1') && isprop(app, 'spatial_filter_range2')
-    val1 = safeGetUIValue(app.spatial_filter_range1, 0);
-    val2 = safeGetUIValue(app.spatial_filter_range2, 1);
-    HD.params.spatial_filter_range = [val1, val2];
+if isprop(app, 'spatialFilterRange1') && isprop(app, 'spatialFilterRange2')
+    val1 = safeGetUIValue(app.spatialFilterRange1, 0);
+    val2 = safeGetUIValue(app.spatialFilterRange2, 1);
+    HD.params.spatialFilterRange = [val1, val2];
 end
 
 if isprop(app, 'spatial_transformation')
@@ -113,24 +123,24 @@ if isprop(app, 'svd_filter')
     HD.params.svd_filter = safeGetCheckbox(app.svd_filter, false);
 end
 
-if isprop(app, 'svdx_filter')
-    HD.params.svdx_filter = safeGetCheckbox(app.svdx_filter, false);
+if isprop(app, 'svdxFilter')
+    HD.params.svdxFilter = safeGetCheckbox(app.svdxFilter, false);
 end
 
-if isprop(app, 'svdx_t_filter')
-    HD.params.svdx_t_filter = safeGetCheckbox(app.svdx_t_filter, false);
+if isprop(app, 'svdx_tFilter')
+    HD.params.svdx_tFilter = safeGetCheckbox(app.svdx_tFilter, false);
 end
 
-if isprop(app, 'svd_threshold')
-    HD.params.svd_threshold = safeGetUIValue(app.svd_threshold, 0);
+if isprop(app, 'svdThreshold')
+    HD.params.svdThreshold = safeGetUIValue(app.svdThreshold, 0);
 end
 
-if isprop(app, 'svdx_threshold')
-    HD.params.svdx_threshold = safeGetUIValue(app.svdx_threshold, 0);
+if isprop(app, 'svdxThreshold')
+    HD.params.svdxThreshold = safeGetUIValue(app.svdxThreshold, 0);
 end
 
-if isprop(app, 'svdx_t_threshold')
-    HD.params.svdx_t_threshold = safeGetUIValue(app.svdx_t_threshold, 0);
+if isprop(app, 'svdx_tThreshold')
+    HD.params.svdx_tThreshold = safeGetUIValue(app.svdx_tThreshold, 0);
 end
 
 if isprop(app, 'svdx_Nsub')
@@ -146,16 +156,16 @@ if isprop(app, 'time_transform')
     HD.params.time_transform = safeGetUIValue(app.time_transform, 'FFT');
 end
 
-if isprop(app, 'time_range1') && isprop(app, 'time_range2')
-    val1 = safeGetUIValue(app.time_range1, 0);
-    val2 = safeGetUIValue(app.time_range2, 100);
-    HD.params.time_range = [val1, val2];
+if isprop(app, 'timeRange1') && isprop(app, 'timeRange2')
+    val1 = safeGetUIValue(app.timeRange1, 0);
+    val2 = safeGetUIValue(app.timeRange2, 100);
+    HD.params.timeRange = [val1, val2];
 end
 
-if isprop(app, 'index_range1') && isprop(app, 'index_range2')
-    val1 = safeGetUIValue(app.index_range1, 1);
-    val2 = safeGetUIValue(app.index_range2, 100);
-    HD.params.index_range = [val1, val2];
+if isprop(app, 'indexRange1') && isprop(app, 'indexRange2')
+    val1 = safeGetUIValue(app.indexRange1, 1);
+    val2 = safeGetUIValue(app.indexRange2, 100);
+    HD.params.indexRange = [val1, val2];
 end
 
 % Flatfield correction
@@ -187,58 +197,61 @@ end
 
 % Shack-Hartmann correction
 if isprop(app, 'ShackHartmannCheckBox')
+
     if safeGetCheckbox(app.ShackHartmannCheckBox, false)
         % Initialize structure if it doesn't exist
         if ~isfield(HD.params, 'ShackHartmannCorrection') || isempty(HD.params.ShackHartmannCorrection)
             HD.params.ShackHartmannCorrection = struct();
         end
-        
+
         if isprop(app, 'IterativeCheckBox')
             HD.params.ShackHartmannCorrection.iterate = safeGetCheckbox(app.IterativeCheckBox, false);
         end
-        
-        if isprop(app, 'NumberOfIterationEditField')
-            HD.params.ShackHartmannCorrection.N_iterate = safeGetUIValue(app.NumberOfIterationEditField, 3);
+
+        if isprop(app, 'NumberOfIteration')
+            HD.params.ShackHartmannCorrection.N_iterate = safeGetUIValue(app.NumberOfIteration, 3);
         end
-        
+
         if isprop(app, 'ZernikeProjectionCheckBox')
             HD.params.ShackHartmannCorrection.ZernikeProjection = safeGetCheckbox(app.ZernikeProjectionCheckBox, true);
         end
-        
-        if isprop(app, 'shackhartmannzernikeranksEditField')
-            HD.params.ShackHartmannCorrection.zernikeranks = safeGetUIValue(app.shackhartmannzernikeranksEditField, 2);
+
+        if isprop(app, 'shackHartmannZernikeRanks')
+            HD.params.ShackHartmannCorrection.zernikeranks = safeGetUIValue(app.shackHartmannZernikeRanks, 2);
         end
-        
-        if isprop(app, 'subapnumpositionsEditField')
-            HD.params.ShackHartmannCorrection.subapnumpositions = safeGetUIValue(app.subapnumpositionsEditField, 5);
+
+        if isprop(app, 'SubApNumPositions')
+            HD.params.ShackHartmannCorrection.subapnumpositions = safeGetUIValue(app.SubApNumPositions, 5);
         end
-        
-        if isprop(app, 'imagesubapsizeratioEditField')
-            HD.params.ShackHartmannCorrection.imagesubapsizeratio = safeGetUIValue(app.imagesubapsizeratioEditField, 5);
+
+        if isprop(app, 'imageSubApSizeRatio')
+            HD.params.ShackHartmannCorrection.imagesubapsizeratio = safeGetUIValue(app.imageSubApSizeRatio, 5);
         end
-        
-        if isprop(app, 'subaperturemarginEditField')
-            HD.params.ShackHartmannCorrection.subaperturemargin = safeGetUIValue(app.subaperturemarginEditField, 0.15);
+
+        if isprop(app, 'subApMargin')
+            HD.params.ShackHartmannCorrection.subaperturemargin = safeGetUIValue(app.subApMargin, 0.15);
         end
-        
+
         if isprop(app, 'referenceimageDropDown')
             HD.params.ShackHartmannCorrection.referenceimage = safeGetUIValue(app.referenceimageDropDown, 'central subaperture');
         end
-        
-        if isprop(app, 'CalibrationFactorEditField')
-            HD.params.ShackHartmannCorrection.calibrationfactor = safeGetUIValue(app.CalibrationFactorEditField, 60);
+
+        if isprop(app, 'CalibrationFactor')
+            HD.params.ShackHartmannCorrection.calibrationfactor = safeGetUIValue(app.CalibrationFactor, 60);
         end
-        
+
         if isprop(app, 'ConvergenceThreshold')
             HD.params.ShackHartmannCorrection.convergencethreshold = safeGetUIValue(app.ConvergenceThreshold, 0.5);
         end
-        
+
         if isprop(app, 'onlydefocusCheckBox')
             HD.params.ShackHartmannCorrection.onlydefocus = safeGetCheckbox(app.onlydefocusCheckBox, false);
         end
+
     else
         HD.params.ShackHartmannCorrection = [];
     end
+
 end
 
 % Advanced processing parameters
@@ -246,95 +259,106 @@ if isprop(app, 'SVDxCheckBox')
     HD.params.svdx_enable = safeGetCheckbox(app.SVDxCheckBox, false);
 end
 
-if isprop(app, 'SVDx_SubApEditField')
-    HD.params.svdx_subap = safeGetUIValue(app.SVDx_SubApEditField, 3);
+if isprop(app, 'SVDx_SubAp')
+    HD.params.svdx_subap = safeGetUIValue(app.SVDx_SubAp, 3);
 end
 
 if isprop(app, 'SVDThresholdCheckBox')
-    HD.params.svd_threshold_enable = safeGetCheckbox(app.SVDThresholdCheckBox, false);
+    HD.params.svdThreshold_enable = safeGetCheckbox(app.SVDThresholdCheckBox, false);
 end
 
-if isprop(app, 'SVDThresholdEditField')
-    HD.params.svd_threshold_value = safeGetUIValue(app.SVDThresholdEditField, 64);
+if isprop(app, 'SVDThreshold')
+    HD.params.svdThreshold_value = safeGetUIValue(app.SVDThreshold, 64);
 end
 
-if isprop(app, 'SVDStrideEditField')
-    HD.params.svd_stride = safeGetUIValue(app.SVDStrideEditField, 1);
+if isprop(app, 'SVDStride')
+    HD.params.svd_stride = safeGetUIValue(app.SVDStride, 1);
 end
 
 % Local filtering parameters
 if isprop(app, 'spatialCheckBox')
-    HD.params.local_spatial_filter = safeGetCheckbox(app.spatialCheckBox, false);
+    HD.params.local_spatialFilter = safeGetCheckbox(app.spatialCheckBox, false);
 end
 
 if isprop(app, 'temporalCheckBox')
-    HD.params.local_temporal_filter = safeGetCheckbox(app.temporalCheckBox, false);
+    HD.params.local_temporalFilter = safeGetCheckbox(app.temporalCheckBox, false);
 end
 
-if isprop(app, 'phi1EditField')
-    HD.params.local_phi1 = safeGetUIValue(app.phi1EditField, 0);
+if isprop(app, 'phi1')
+    HD.params.local_phi1 = safeGetUIValue(app.phi1, 0);
 end
 
-if isprop(app, 'phi2EditField')
-    HD.params.local_phi2 = safeGetUIValue(app.phi2EditField, 0);
+if isprop(app, 'phi1')
+    HD.params.local_phi2 = safeGetUIValue(app.phi1, 0);
 end
 
-if isprop(app, 'nu1EditField')
-    HD.params.local_nu1 = safeGetUIValue(app.nu1EditField, 0);
+if isprop(app, 'nu1')
+    HD.params.local_nu1 = safeGetUIValue(app.nu1, 0);
 end
 
-if isprop(app, 'nu2EditField')
-    HD.params.local_nu2 = safeGetUIValue(app.nu2EditField, 0);
+if isprop(app, 'nu2')
+    HD.params.local_nu2 = safeGetUIValue(app.nu2, 0);
 end
 
-if isprop(app, 'unitcellsinlatticeEditField')
-    HD.params.unit_cells = safeGetUIValue(app.unitcellsinlatticeEditField, 8);
+if isprop(app, 'unitCellsinLattice')
+    HD.params.unit_cells = safeGetUIValue(app.unitCellsinLattice, 8);
 end
 
-if isprop(app, 'r1EditField')
-    HD.params.r1 = safeGetUIValue(app.r1EditField, 3);
+if isprop(app, 'r1')
+    HD.params.r1 = safeGetUIValue(app.r1, 3);
 end
 
-if isprop(app, 'xystrideEditField')
-    HD.params.xy_stride = safeGetUIValue(app.xystrideEditField, 32);
+if isprop(app, 'xyStride')
+    HD.params.xy_stride = safeGetUIValue(app.xyStride, 32);
 end
 
 % Temporal filter - this was causing the error
 if isprop(app, 'temporalfilterCheckBox')
+
     try
         % Check if the property exists and has a value
         if isprop(app.temporalfilterCheckBox, 'Value')
             val = app.temporalfilterCheckBox.Value;
+
             if ~isempty(val) && islogical(val)
-                HD.params.temporal_filter = val;
+                HD.params.temporalFilter = val;
             else
-                HD.params.temporal_filter = false;
+                HD.params.temporalFilter = false;
             end
+
         else
-            HD.params.temporal_filter = false;
+            HD.params.temporalFilter = false;
         end
+
     catch
-        HD.params.temporal_filter = false;
+        HD.params.temporalFilter = false;
     end
+
 else
-    HD.params.temporal_filter = false;
+    HD.params.temporalFilter = false;
 end
 
-if isprop(app, 'temporalfilterEditField')
+if isprop(app, 'temporalFilter')
+
     try
-        if isprop(app.temporalfilterEditField, 'Value')
-            val = app.temporalfilterEditField.Value;
+
+        if isprop(app.temporalFilter, 'Value')
+            val = app.temporalFilter.Value;
+
             if ~isempty(val)
-                HD.params.temporal_filter_value = val;
+                HD.params.temporalFilter_value = val;
             else
-                HD.params.temporal_filter_value = 0;
+                HD.params.temporalFilter_value = 0;
             end
+
         else
-            HD.params.temporal_filter_value = 0;
+            HD.params.temporalFilter_value = 0;
         end
+
     catch
-        HD.params.temporal_filter_value = 0;
+        HD.params.temporalFilter_value = 0;
     end
+
 end
 
 % Phase registration

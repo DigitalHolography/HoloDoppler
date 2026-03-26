@@ -56,7 +56,7 @@ methods
 
 end
 
-%% MiniBatchable interface
+% MiniBatchable interface
 methods
 
     function tf = supportsMiniBatching(~)
@@ -69,7 +69,7 @@ methods
 
 end
 
-%% Internal logic
+% Internal logic
 methods (Access = private)
 
     function parseHeader(ds)
@@ -151,7 +151,7 @@ end
 
 end
 
-%% helpers
+% helpers
 function out = padAndRotate(ds, img)
 N = ds.FrameWidth;
 out = zeros(N, N, 'single');

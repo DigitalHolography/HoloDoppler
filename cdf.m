@@ -33,7 +33,7 @@ f = linspace(f1, f2, length(n3:n4));
 idx = sum(CDF < floor, 3) + 1;
 cdf_freq = f(idx);
 
-% %% TESTS
+% % TESTS
 % figure, hold on
 %
 % maskArteryChoroid = logical(imread("C:\Users\Michael\Documents\Masks for test\maskArteryChoroid.png"));

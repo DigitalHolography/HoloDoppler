@@ -36,7 +36,7 @@ methods
 
     end
 
-    %% Datastore API
+    % Datastore API
     function tf = hasdata(ds)
         tf = ds.CurrentFrame <= ds.NumFrames;
     end
@@ -59,7 +59,7 @@ methods
         dsNew = copy(ds);
     end
 
-    %% MiniBatchable
+    % MiniBatchable
     function setMiniBatchSize(ds, n)
         ds.MiniBatchSize = n;
     end
@@ -162,7 +162,7 @@ methods (Access = private)
 
 end
 
-%% Static utilities
+% Static utilities
 methods (Static)
 
     function batch = replace_dropped_frames(batch, threshold)

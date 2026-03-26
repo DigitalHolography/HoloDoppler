@@ -25,7 +25,7 @@ methods
     % constructor
     function obj = RawReader(path, endianness, acquisition, ...
             j_win, j_step)
-        %% set parameters
+        % set parameters
         obj.acquisition = acquisition;
         obj.path = path;
         obj.endianness = endianness;
@@ -39,7 +39,7 @@ methods
         obj.acquisition.Nx = final_frame_size;
         obj.acquisition.Ny = final_frame_size;
 
-        %% construct offsets
+        % construct offsets
         n_frames = obj.num_frames();
         num_batches = floor((n_frames - obj.j_win) / obj.j_step);
         pix_per_image = obj.acquisition.Nx * obj.acquisition.Ny;
@@ -67,19 +67,19 @@ methods
 
         if obj.true_frame_width <= obj.true_frame_height
             width_skip = floor(0.5 * (final_frame_size - obj.true_frame_width));
-            width_range = 1 + width_skip:width_skip + obj.true_frame_width;
-            height_range = 1:obj.true_frame_height;
+            widthRange = 1 + width_skip:width_skip + obj.true_frame_width;
+            heightRange = 1:obj.true_frame_height;
         else
             height_skip = floor(0.5 * (final_frame_size - obj.true_frame_height));
-            height_range = 1 + height_skip:height_skip + obj.true_frame_height;
-            width_range = 1:obj.true_frame_width;
+            heightRange = 1 + height_skip:height_skip + obj.true_frame_height;
+            widthRange = 1:obj.true_frame_width;
         end
 
         batch = zeros(ac.Nx, ac.Ny, obj.j_win, 'single');
         fd = fopen(obj.path, 'r');
         fseek(fd, obj.offsets(k), 'bof');
         data = fread(fd, obj.true_frame_width * obj.true_frame_height * obj.j_win, 'uint16=>single', obj.endianness); % big endian
-        batch(width_range, height_range, :) = reshape(data, obj.true_frame_width, obj.true_frame_height, batchSize);
+        batch(widthRange, heightRange, :) = reshape(data, obj.true_frame_width, obj.true_frame_height, batchSize);
         fclose(fd);
         batch = replace_dropped_frames(batch, 0.2);
     end
@@ -91,12 +91,12 @@ methods
 
         if obj.true_frame_width <= obj.true_frame_height
             width_skip = floor(0.5 * (final_frame_size - obj.true_frame_width));
-            width_range = 1 + width_skip:width_skip + obj.true_frame_width;
-            height_range = 1:obj.true_frame_height;
+            widthRange = 1 + width_skip:width_skip + obj.true_frame_width;
+            heightRange = 1:obj.true_frame_height;
         else
             height_skip = floor(0.5 * (final_frame_size - obj.true_frame_height));
-            height_range = 1 + height_skip:height_skip + obj.true_frame_height;
-            width_range = 1:obj.true_frame_width;
+            heightRange = 1 + height_skip:height_skip + obj.true_frame_height;
+            widthRange = 1:obj.true_frame_width;
         end
 
         batch = zeros(ac.Nx, ac.Ny, batchSize, 'single');
@@ -107,7 +107,7 @@ methods
 
         fseek(fd, bytes_offset, 'bof');
         data = fread(fd, obj.true_frame_width * obj.true_frame_height * batchSize, 'uint16=>single', obj.endianness);
-        batch(width_range, height_range, :) = reshape(data, obj.true_frame_width, obj.true_frame_height, batchSize);
+        batch(widthRange, heightRange, :) = reshape(data, obj.true_frame_width, obj.true_frame_height, batchSize);
         fclose(fd);
 
         batch = replace_dropped_frames(batch, 0.2);

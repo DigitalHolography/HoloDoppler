@@ -6,7 +6,7 @@ function generate_video(video, output_path, name, opt)
 % output_path: path of the output directory
 % name: name of the generated video, e.g. M0, not the full file name
 % contrast_enhancement_tol: a parameter to adjust video contrast ([] if not wanted)
-% temporal_filter_sigma: magnitude of temporal gaussian filter ([] if no filter is wanted)
+% temporalFilter_sigma: magnitude of temporal gaussian filter ([] if no filter is wanted)
 % contrast_inversion: if true, contrast of the video will be inverted
 % export_raw: if true, the video is also exported as a raw file in the raw directory
 % export_avg_img: if true, save the temporal average of the video as a png
@@ -16,7 +16,7 @@ arguments
     video
     output_path
     name
-    opt.temporal_filter = []
+    opt.temporalFilter = []
     opt.contrast_inversion = false
     opt.NoIntensity = false
     opt.cornerNorm = false
@@ -59,8 +59,8 @@ if opt.export_raw
 end
 
 % temporal filter
-if ~isempty(opt.temporal_filter)
-    sigma = [0.0001 0.0001 opt.temporal_filter];
+if ~isempty(opt.temporalFilter)
+    sigma = [0.0001 0.0001 opt.temporalFilter];
 
     for c = 1:size(video, 3)
         video(:, :, c, :) = imgaussfilt3(squeeze(video(:, :, c, :)), sigma);

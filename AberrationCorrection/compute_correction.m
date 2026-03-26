@@ -62,7 +62,7 @@ end
 initial_guess = zeros(1, numel(p));
 
 if parfor_arg == Inf
-    %% PARALLEL LOOP
+    % PARALLEL LOOP
     parfor batch_idx = 1:num_batches
         % load interferogram batch
         FH = istream.read_frame_batch(j_win, (batch_idx - 1) * j_step);
@@ -115,7 +115,7 @@ if parfor_arg == Inf
     end
 
 else
-    %% SEQUENTIAL LOOP
+    % SEQUENTIAL LOOP
     %  This code is a duplicate from the loop above except it is sequencial.
     %  We can't just use a conditional parfor here because matlab wouldn't
     %  allow us to update the initial guess in the sequencial case.

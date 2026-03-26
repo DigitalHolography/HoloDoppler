@@ -131,13 +131,13 @@ for idy = 1:((vy - 1) * ky + 1)
         cx = (idx - 1) * stridex + 1 + offsetx;
         cy = (idy - 1) * stridey + 1 + offsety;
 
-        idx_range = cx - floor(Nxx / 2):cx + ceil(Nxx / 2) - 1;
-        idy_range = cy - floor(Nyy / 2):cy + ceil(Nyy / 2) - 1;
+        idxRange = cx - floor(Nxx / 2):cx + ceil(Nxx / 2) - 1;
+        idyRange = cy - floor(Nyy / 2):cy + ceil(Nyy / 2) - 1;
 
-        idx_range = max(1, min(Nx, idx_range));
-        idy_range = max(1, min(Ny, idy_range));
+        idxRange = max(1, min(Nx, idxRange));
+        idyRange = max(1, min(Ny, idyRange));
 
-        fh = pad3DToSquare(FH(idx_range, idy_range, :));
+        fh = pad3DToSquare(FH(idxRange, idyRange, :));
 
         switch Params.spatial_transformation
             case "angular spectrum"
@@ -148,12 +148,12 @@ for idy = 1:((vy - 1) * ky + 1)
                 h = single(fh);
         end
 
-        [h, ~, ~] = svd_filter(h, Params.svd_threshold, Params.time_range(1), ...
+        [h, ~, ~] = svd_filter(h, Params.svdThreshold, Params.timeRange(1), ...
             Params.fs, Params.svd_stride, Params.svd_mean);
 
         sh_mod = abs(fft(h, [], 3)) .^ 2;
 
-        img = moment0(sh_mod, Params.time_range(1), Params.time_range(2), ...
+        img = moment0(sh_mod, Params.timeRange(1), Params.timeRange(2), ...
             Params.fs, Nt, Params.flatfield_gw);
 
         if ~isequal(size(img), [Nxx Nyy])

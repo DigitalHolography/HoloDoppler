@@ -1,5 +1,5 @@
 function [M0_pos, M0_neg] = directional(SH, f1, f2, fs, batchSize, gw)
-%% integration interval
+% integration interval
 % convert frequencies to indices
 n1 = ceil(f1 * batchSize / fs);
 n2 = ceil(f2 * batchSize / fs);
@@ -18,13 +18,13 @@ M0_neg = squeeze(sum(abs(SH(:, :, n3:n4)), 3));
 N_M0_pos = sum(M0_pos(:));
 N_M0_neg = sum(M0_neg(:));
 
-M0_filtered = imgaussfilt(M0_pos + M0_neg, gw);
+M0Filtered = imgaussfilt(M0_pos + M0_neg, gw);
 
-M0_pos = M0_pos ./ M0_filtered;
-N_M0_pos_filtered = sum(M0_pos(:));
-M0_pos = M0_pos * N_M0_pos / N_M0_pos_filtered;
+M0_pos = M0_pos ./ M0Filtered;
+N_M0_posFiltered = sum(M0_pos(:));
+M0_pos = M0_pos * N_M0_pos / N_M0_posFiltered;
 
-M0_neg = M0_neg ./ M0_filtered;
-N_M0_neg_filtered = sum(M0_neg(:));
-M0_neg = M0_neg * N_M0_neg / N_M0_neg_filtered;
+M0_neg = M0_neg ./ M0Filtered;
+N_M0_negFiltered = sum(M0_neg(:));
+M0_neg = M0_neg * N_M0_neg / N_M0_negFiltered;
 end

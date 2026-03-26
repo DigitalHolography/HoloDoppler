@@ -36,25 +36,25 @@ SubAp_idref = ceil(obj.n_SubAp / 2); % Index of reference subaperture for correl
 
 moment_chunks_array = zeros(ac.Nx, ac.Ny); %Stitched PowerDoppler moments in each subaperture
 moment_chunks_crop_array = zeros(ac.Nx, ac.Ny); %Stitched cropped PowerDoppler moments in each subaperture
-SubAp_id_range = [SubAp_idref:obj.n_SubAp 1:SubAp_idref - 1];
+SubAp_idRange = [SubAp_idref:obj.n_SubAp 1:SubAp_idref - 1];
 correlation_chunks_array = zeros((SubAp_end - SubAp_init + floor(ac.Nx / obj.n_SubAp)) * obj.n_SubAp); %Stitched cropped correlations in each subaperture
 
 correlation_coef = zeros(1, obj.n_SubAp ^ 2);
 
-idx_range_ref = (SubAp_idref - 1) * floor(ac.Nx / obj.n_SubAp) + 1:SubAp_idref * floor(ac.Nx / obj.n_SubAp);
-idy_range_ref = (SubAp_idref - 1) * floor(ac.Ny / obj.n_SubAp) + 1:SubAp_idref * floor(ac.Ny / obj.n_SubAp);
+idxRange_ref = (SubAp_idref - 1) * floor(ac.Nx / obj.n_SubAp) + 1:SubAp_idref * floor(ac.Nx / obj.n_SubAp);
+idyRange_ref = (SubAp_idref - 1) * floor(ac.Ny / obj.n_SubAp) + 1:SubAp_idref * floor(ac.Ny / obj.n_SubAp);
 
-for SubAp_idy = SubAp_id_range
+for SubAp_idy = SubAp_idRange
 
-    for SubAp_idx = SubAp_id_range
-        %% Construction of subapertures
+    for SubAp_idx = SubAp_idRange
+        % Construction of subapertures
 
         % get the current index range and reference index ranges
-        idx_range = (SubAp_idx - 1) * floor(ac.Nx / obj.n_SubAp) + 1:SubAp_idx * floor(ac.Nx / obj.n_SubAp);
-        idy_range = (SubAp_idy - 1) * floor(ac.Ny / obj.n_SubAp) + 1:SubAp_idy * floor(ac.Ny / obj.n_SubAp);
+        idxRange = (SubAp_idx - 1) * floor(ac.Nx / obj.n_SubAp) + 1:SubAp_idx * floor(ac.Nx / obj.n_SubAp);
+        idyRange = (SubAp_idy - 1) * floor(ac.Ny / obj.n_SubAp) + 1:SubAp_idy * floor(ac.Ny / obj.n_SubAp);
 
         % get the current image chunk
-        FH_chunk = FH(idy_range, idx_range, :);
+        FH_chunk = FH(idyRange, idxRange, :);
         H_chunk = ifft2(FH_chunk);
 
         % here consider some flat field correction
@@ -153,7 +153,7 @@ colorbar
 %         M(:, i) = M(:, i) ./ squeeze(mean(M(:, i), "all"));
 %     end
 
-%% SVD on subapertures
+% SVD on subapertures
 %     FH_reduced = reshape((FH_reduced), (obj.n_SubAp)^2, []);
 %     COV = FH_reduced*FH_reduced';
 %     [V, S]           = eig(COV);

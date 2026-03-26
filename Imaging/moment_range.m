@@ -1,8 +1,8 @@
-function [n1, n2, n3, n4, f_range, f_range_sym] = moment_range(SH, f1, f2, fs, batchSize)
+function [n1, n2, n3, n4, fRange, fRange_sym] = momentRange(SH, f1, f2, fs, batchSize)
 %MOMENT_RANGE Simply get you the n1 n2 n3 n4 index range to filter a
 %hyperspectral cube resulting from a Fourier transform on the last
 %dimension optionally gives you the frequency ranges
-%% integration interval
+% integration interval
 % convert frequencies to indices
 n1 = ceil(f1 * batchSize / fs);
 n2 = ceil(f2 * batchSize / fs);
@@ -14,6 +14,6 @@ n2 = max(min(n2, ceil(size(SH, 3) / 2)), 1);
 n3 = size(SH, 3) - n2 + 1;
 n4 = size(SH, 3) - n1 + 1;
 
-f_range = (n1:n2) .* (fs / batchSize);
-f_range_sym = (-n2:-n1) .* (fs / batchSize);
+fRange = (n1:n2) .* (fs / batchSize);
+fRange_sym = (-n2:-n1) .* (fs / batchSize);
 end

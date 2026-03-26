@@ -6,7 +6,7 @@ function H = svd_x_t_filter(H, thresh, f1, fs, NbSubAp)
 % fs: sampling frequency
 % NbSubAp : number N of subapertures to divide SVD filtering over NxN zones
 
-%%
+%
 if ~thresh
     % thresh parameter does not exist or is zero, so default it to something
     thresh = ceil(f1 * size(H, 3) / fs * 2);

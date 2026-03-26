@@ -33,28 +33,28 @@ methods
         Params.ppx = 20e-6; % pixel pitch of the camera
         Params.ppy = 20e-6;
 
-        Params.spatial_filter = false;
-        Params.hilbert_filter = false;
-        Params.spatial_filter_range = [0, 1];
+        Params.spatialFilter = false;
+        Params.hilbertFilter = false;
+        Params.spatialFilterRange = [0, 1];
         Params.spatial_transformation = "Fresnel";
         Params.spatial_propagation = 0.5;
         Params.Padding_num = 0;
 
         Params.svd_filter = 1;
-        Params.svdx_filter = false;
-        Params.svdx_t_filter = false;
+        Params.svdxFilter = false;
+        Params.svdx_tFilter = false;
         Params.svdx_Nsub = 32;
         Params.svdx_t_Nsub = 32;
-        Params.svdx_threshold = 10;
-        Params.svdx_t_threshold = 100;
-        Params.svd_threshold = false;
+        Params.svdxThreshold = 10;
+        Params.svdx_tThreshold = 100;
+        Params.svdThreshold = false;
         Params.svd_mean = false;
         Params.svd_stride = [];
         Params.time_transform = "FFT";
-        Params.time_range = [6, 10.5];
-        Params.index_range = [3, 10];
-        Params.time_range_extra = -1;
-        Params.buckets_ranges = [[4; 18.3], [6; 18.3]];
+        Params.timeRange = [6, 10.5];
+        Params.indexRange = [3, 10];
+        Params.timeRange_extra = -1;
+        Params.bucketsRanges = [[4; 18.3], [6; 18.3]];
         Params.buckets_raw = false;
         Params.flatfield_gw = 35;
         Params.flip_y = false;
@@ -127,12 +127,12 @@ methods
 
         % 1) Apply corrections to interferograms
 
-        doFrames = ParamChanged.spatial_filter || ParamChanged.hilbert_filter || ParamChanged.spatial_filter_range || obj.FramesChanged;
+        doFrames = ParamChanged.spatialFilter || ParamChanged.hilbertFilter || ParamChanged.spatialFilterRange || obj.FramesChanged;
         [Nx, Ny, batchSize] = size(obj.Frames);
 
         if doFrames % change or if the frames changed
 
-            if Params.hilbert_filter
+            if Params.hilbertFilter
                 tmp = obj.Frames;
                 [width, height, batchSize] = size(tmp);
                 tmp = reshape(tmp, width * height, batchSize);
@@ -147,11 +147,11 @@ methods
 
         if doFrames % change or if the frames changed
 
-            if Params.spatial_filter
+            if Params.spatialFilter
 
-                if ParamChanged.spatial_filter_range || obj.FramesChanged || isempty(obj.SpatialFilterMask)
+                if ParamChanged.spatialFilterRange || obj.FramesChanged || isempty(obj.SpatialFilterMask)
                     [NY, NX, ~] = size(obj.Frames);
-                    obj.SpatialFilterMask = fftshift(diskMask(NY, NX, Params.spatial_filter_range(1), Params.spatial_filter_range(2)))';
+                    obj.SpatialFilterMask = fftshift(diskMask(NY, NX, Params.spatialFilterRange(1), Params.spatialFilterRange(2)))';
                 end
 
                 obj.Frames = ifft2(fft2(obj.Frames) .* obj.SpatialFilterMask);
@@ -223,7 +223,7 @@ methods
                 if ~Params.applyshackhartmannfromref || isempty(obj.ShackHartmannMask) % in case we apply ShackHartmann from precalculated Mask
 
                     if doFH || ParamChanged.ShackHartmannCorrection || isempty(obj.ShackHartmannMask)
-                        [obj.ShackHartmannMask, obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH, Params.spatial_transformation, Params.spatial_propagation, Params.time_range, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
+                        [obj.ShackHartmannMask, obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH, Params.spatial_transformation, Params.spatial_propagation, Params.timeRange, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
                     end
 
                 end
@@ -240,7 +240,7 @@ methods
 
         obj.Output.construct_image_from_ShackHartmann(Params, obj.moment_chunks_crop_array, obj.ShackHartmannMask);
 
-        doH = doFH || ParamChanged.svd_filter || (Params.svdx_filter && (ParamChanged.svdx_threshold || ParamChanged.svdx_Nsub)) || (Params.svdx_t_filter && (ParamChanged.svdx_t_threshold || ParamChanged.svdx_t_Nsub)) || ParamChanged.svdx_filter || ParamChanged.svdx_t_filter || (Params.svd_threshold == 0 && ParamChanged.time_range) || ParamChanged.svd_threshold || obj.FramesChanged || ~options.cache_intermediate_results;
+        doH = doFH || ParamChanged.svd_filter || (Params.svdxFilter && (ParamChanged.svdxThreshold || ParamChanged.svdx_Nsub)) || (Params.svdx_tFilter && (ParamChanged.svdx_tThreshold || ParamChanged.svdx_t_Nsub)) || ParamChanged.svdxFilter || ParamChanged.svdx_tFilter || (Params.svdThreshold == 0 && ParamChanged.timeRange) || ParamChanged.svdThreshold || obj.FramesChanged || ~options.cache_intermediate_results;
 
         if doH % change or if the frames changed
 
@@ -269,7 +269,7 @@ methods
         if doH
 
             if Params.svd_filter
-                [obj.H, obj.cov, obj.U] = svd_filter(obj.H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride, Params.svd_mean);
+                [obj.H, obj.cov, obj.U] = svd_filter(obj.H, Params.svdThreshold, Params.timeRange(1), Params.fs, Params.svd_stride, Params.svd_mean);
 
             end
 
@@ -284,16 +284,16 @@ methods
 
         if doH
 
-            if Params.svdx_filter
-                obj.H = svd_x_filter(obj.H, Params.svdx_threshold, Params.time_range(1), Params.fs, floor(max(size(obj.H, 1), size(obj.H, 2)) / Params.svdx_Nsub)); % forced
+            if Params.svdxFilter
+                obj.H = svd_x_filter(obj.H, Params.svdxThreshold, Params.timeRange(1), Params.fs, floor(max(size(obj.H, 1), size(obj.H, 2)) / Params.svdx_Nsub)); % forced
             end
 
         end
 
         if doH
 
-            if Params.svdx_t_filter
-                obj.H = svd_x_t_filter(obj.H, Params.svdx_t_threshold, Params.time_range(1), Params.fs, floor(max(size(obj.H, 1), size(obj.H, 2)) / Params.svdx_t_Nsub));
+            if Params.svdx_tFilter
+                obj.H = svd_x_t_filter(obj.H, Params.svdx_tThreshold, Params.timeRange(1), Params.fs, floor(max(size(obj.H, 1), size(obj.H, 2)) / Params.svdx_t_Nsub));
             end
 
         end
@@ -331,7 +331,7 @@ methods
 
         end
 
-        %%% obj.SH = svd_filter(obj.SH, 10);
+        %% obj.SH = svd_filter(obj.SH, 10);
 
         if ~options.cache_intermediate_results
             obj.H = [];

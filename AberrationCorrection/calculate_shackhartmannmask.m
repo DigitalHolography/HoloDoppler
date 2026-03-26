@@ -1,4 +1,4 @@
-function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask(FH, spatial_transformation, spatial_propagation, time_range, fs, gw, ShackHartmannCorrection)
+function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask(FH, spatial_transformation, spatial_propagation, timeRange, fs, gw, ShackHartmannCorrection)
 
 Nx = size(FH, 1);
 Ny = size(FH, 2);
@@ -12,12 +12,12 @@ ref_image = ShackHartmannCorrection.referenceimage;
 calibration_factor = 60;
 corrmap_margin = 0.4;
 
-power_filter_corrector = 1;
-sigma_filter_corrector = 1;
+powerFilter_corrector = 1;
+sigmaFilter_corrector = 1;
 
 % 3D PSF parameters in iterative Shack-Hartmann (unused i think)
 % m = 128;
-% defocus_range = 0.05;
+% defocusRange = 0.05;
 % num_iter = 1;
 % iter_phase = zeros(Ny, Nx, num_iter);
 % psf_3d = zeros(app.Ny, app.Nx, m);
@@ -37,18 +37,18 @@ switch zernike_ranks
         error('Unreachable code was reached. Check value of zernike_ranks');
 end
 
-shack_hartmann = ShackHartmann(image_subapertures_size_ratio, num_subapertures_positions, zernike_indices, calibration_factor, subaperture_margin, corrmap_margin, power_filter_corrector, sigma_filter_corrector, ref_image, spatial_transformation);
+shack_hartmann = ShackHartmann(image_subapertures_size_ratio, num_subapertures_positions, zernike_indices, calibration_factor, subaperture_margin, corrmap_margin, powerFilter_corrector, sigmaFilter_corrector, ref_image, spatial_transformation);
 shack_hartmann.Nx = Nx;
 shack_hartmann.Ny = Ny;
 % Calculate the shifts
 ac.Nx = Nx;
 ac.Ny = Ny;
 ac.fs = fs;
-[shifts, moment_chunks_crop_array, correlation_chunks_array] = shack_hartmann.compute_images_shifts(FH, time_range(1), time_range(2), gw, false, true, ac);
+[shifts, moment_chunks_crop_array, correlation_chunks_array] = shack_hartmann.compute_images_shifts(FH, timeRange(1), timeRange(2), gw, false, true, ac);
 
 if ShackHartmannCorrection.ZernikeProjection % if the phase should be a combination of zernike polynomials
     % Zernike projection
-    [M_aso, ~] = shack_hartmann.construct_M_aso(time_range(1), time_range(2), gw, []);
+    [M_aso, ~] = shack_hartmann.construct_M_aso(timeRange(1), timeRange(2), gw, []);
     Y = cat(1, real(shifts), imag(shifts));
     M_aso_concat = cat(1, real(M_aso), imag(M_aso));
     % solve linear system

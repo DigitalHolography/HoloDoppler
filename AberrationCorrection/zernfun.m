@@ -135,9 +135,7 @@ else
     isnorm = false;
 end
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Compute the Zernike Polynomials
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Determine the required powers of r:
 % -----------------------------------
@@ -187,7 +185,6 @@ for j = 1:length(n)
 end
 
 % END: Compute the Zernike Polynomials
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Compute the Zernike functions:
 % ------------------------------

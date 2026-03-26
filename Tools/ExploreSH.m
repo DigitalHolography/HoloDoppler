@@ -302,9 +302,9 @@ methods
         initial_guess = [1, 0, 1, 0];
 
         % Select data around the peak for fitting (e.g., ±10 frequency points)
-        fit_range = peaks_idx;
-        x_fit = freqs(fit_range);
-        y_fit = normalizedSpectrum(fit_range);
+        fitRange = peaks_idx;
+        x_fit = freqs(fitRange);
+        y_fit = normalizedSpectrum(fitRange);
 
         % Perform the fit
         fit_params = lsqcurvefit(lorentzian, initial_guess, x_fit, y_fit);
@@ -323,9 +323,9 @@ methods
         initial_guess = [1, 0, 1, 0.5, 0];
 
         % Select data around the peak for fitting (e.g., ±10 frequency points)
-        fit_range = peaks_idx;
-        x_fit = freqs(fit_range);
-        y_fit = normalizedSpectrum(fit_range);
+        fitRange = peaks_idx;
+        x_fit = freqs(fitRange);
+        y_fit = normalizedSpectrum(fitRange);
 
         % Perform the fit
         fit_params = lsqcurvefit(voigt, initial_guess, x_fit, y_fit);

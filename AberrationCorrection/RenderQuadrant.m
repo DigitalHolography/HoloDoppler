@@ -16,7 +16,7 @@ for i = 1:4
             H = single(Frames);
     end
 
-    svd_filter(H, Params.svd_threshold, Params.time_range(1), Params.fs, Params.svd_stride);
+    svd_filter(H, Params.svdThreshold, Params.timeRange(1), Params.fs, Params.svd_stride);
 
     switch Params.time_transform
         case 'PCA'
@@ -35,8 +35,8 @@ for i = 1:4
         SH = flip(SH, 2);
     end
 
-    Q.(sprintf("Q%d_m0", i)) = moment0(SH, Params.time_range(1), Params.time_range(2), Params.fs, size(FH, 3), Params.flatfield_gw);
-    Q.(sprintf("Q%d_m1", i)) = moment1(SH, Params.time_range(1), Params.time_range(2), Params.fs, size(FH, 3));
+    Q.(sprintf("Q%d_m0", i)) = moment0(SH, Params.timeRange(1), Params.timeRange(2), Params.fs, size(FH, 3), Params.flatfield_gw);
+    Q.(sprintf("Q%d_m1", i)) = moment1(SH, Params.timeRange(1), Params.timeRange(2), Params.fs, size(FH, 3));
 end
 
 %Q.numQuadrants=4;

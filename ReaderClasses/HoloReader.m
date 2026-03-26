@@ -78,7 +78,7 @@ methods
             %                  p_acc_level: 32
             %                   pixel_size: 12
             %               renorm_enabled: 1
-            %                  time_filter: 1
+            %                  timeFilter: 1
             %                x_acc_enabled: 0
             %                  x_acc_level: 1
             %                y_acc_enabled: 0
@@ -110,8 +110,8 @@ methods
         frame_size = obj.frame_width * obj.frame_height * uint32(obj.bit_depth / 8);
         frame_batch = zeros(obj.frame_width, obj.frame_height, batchSize, 'single');
 
-        width_range = 1:obj.frame_width;
-        height_range = 1:obj.frame_height;
+        widthRange = 1:obj.frame_width;
+        heightRange = 1:obj.frame_height;
 
         %fseek(fd, 64 + uint64(frame_offset) * uint64(frame_size), 'bof');
 
@@ -133,16 +133,16 @@ methods
                 try
 
                     if obj.bit_depth == 8
-                        frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint8=>single', endian), obj.frame_width, obj.frame_height);
+                        frame_batch(widthRange, heightRange, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint8=>single', endian), obj.frame_width, obj.frame_height);
                     elseif obj.bit_depth == 16
-                        frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint16=>single', endian), obj.frame_width, obj.frame_height);
+                        frame_batch(widthRange, heightRange, i) = reshape(fread(fd, obj.frame_width * obj.frame_height, 'uint16=>single', endian), obj.frame_width, obj.frame_height);
                     end
 
                 catch ME
                     retry = true;
                     retrycnt = retrycnt + 1;
                     %MEdisp(ME);
-                    frame_batch(width_range, height_range, i) = NaN;
+                    frame_batch(widthRange, heightRange, i) = NaN;
                     fprintf("Holo file frame in position %d was not found\n", i);
                 end
 
@@ -194,16 +194,16 @@ methods (Static)
         % threshold: mean value to average value ratio under which a
         %            frame is considered dropped
 
-        %% construct image average values and total average value
+        % construct image average values and total average value
         batch_avgs = squeeze(mean(mean(batch, 1), 2));
         batch_avg = mean(batch_avgs);
 
-        %% setup images filter
+        % setup images filter
         to_delete = abs(batch_avgs - batch_avg) > batch_avg * threshold;
         to_delete = to_delete + circshift(to_delete, 1) + circshift(to_delete, 2);
         to_delete = to_delete > 0;
 
-        %% replace the frames
+        % replace the frames
         batch(:, :, to_delete) = batch(:, :, circshift(to_delete, 3));
     end
 

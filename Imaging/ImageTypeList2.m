@@ -181,11 +181,11 @@ methods
     end
 
     function construct_image(obj, Params, SHin)
-        f1 = Params.time_range(1);
-        f2 = Params.time_range(2);
+        f1 = Params.timeRange(1);
+        f2 = Params.timeRange(2);
 
-        r1 = Params.index_range(1);
-        r2 = Params.index_range(2);
+        r1 = Params.indexRange(1);
+        r2 = Params.indexRange(2);
 
         [~, ~, batchSize] = size(SHin);
         fs = Params.fs;
@@ -273,10 +273,10 @@ methods
 
         if obj.color_Doppler.is_selected % Color Doppler has been chosen
 
-            if Params.time_range_extra < 0
+            if Params.timeRange_extra < 0
                 f3 = (f1 + f2) / 2;
             else
-                f3 = Params.time_range_extra;
+                f3 = Params.timeRange_extra;
             end
 
             [freq_low, freq_high] = composite(SH_mod, f1, f3, f2, fs, batchSize, max(gw, 20));
@@ -315,7 +315,7 @@ methods
             try
                 fi = figure("Visible", "off");
                 disc = diskMask(size(SH_mod, 1), size(SH_mod, 2), Params.registration_disc_ratio)';
-                spectrum_ploting(SH_mod(:, :, :), disc, fs, Params.time_range(1), Params.time_range(2));
+                spectrum_ploting(SH_mod(:, :, :), disc, fs, Params.timeRange(1), Params.timeRange(2));
                 % ylim([-0 50])
                 frame = getframe(fi); % Capture the figure
                 % obj.broadening.graph = gca;
@@ -485,7 +485,7 @@ methods
         if obj.buckets.is_selected % buckets has been chosen
             numX = size(SH_mod, 1);
             numY = size(SH_mod, 2);
-            buckranges = reshape(Params.buckets_ranges, [], 2);
+            buckranges = reshape(Params.bucketsRanges, [], 2);
 
             if buckranges(1) == -1
                 disp("special case defining 32 buckets automatically");

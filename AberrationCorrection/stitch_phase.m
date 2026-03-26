@@ -3,7 +3,7 @@ function phase = stitch_phase(shifts, phase_zernike, Nx, Ny, shack_hartmann)
 SubAp_Nx = floor(Nx / shack_hartmann.n_SubAp);
 SubAp_Ny = floor(Ny / shack_hartmann.n_SubAp);
 
-%% Padding when n_subAp_positions > image_to_subap_size_ratio
+% Padding when n_subAp_positions > image_to_subap_size_ratio
 stride = floor((Nx - SubAp_Nx) / (shack_hartmann.n_SubAp_inter - 1));
 
 if stride > SubAp_Nx

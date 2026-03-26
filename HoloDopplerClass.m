@@ -56,7 +56,7 @@ methods
 
         switch ext
             case '.holo'
-                holo_version_threshold = 5; % current is version 7
+                holo_versionThreshold = 5; % current is version 7
 
                 try
                     obj.reader = HoloReader(obj.file.path);
@@ -80,7 +80,7 @@ methods
                 obj.file.Nx = obj.reader.frame_width;
                 obj.file.Ny = obj.reader.frame_height;
 
-                if obj.reader.version >= holo_version_threshold
+                if obj.reader.version >= holo_versionThreshold
                     obj.file.lambda = obj.reader.footer.compute_settings.image_rendering.lambda;
 
                     obj.file.ppx = obj.reader.footer.info.pixel_pitch.x * 1e-6; %given in µm
@@ -155,7 +155,7 @@ methods
             case '.holo'
                 obj.params.spatial_transformation = 'Fresnel';
 
-                if obj.reader.version >= holo_version_threshold
+                if obj.reader.version >= holo_versionThreshold
                     obj.params.spatial_propagation = obj.reader.footer.compute_settings.image_rendering.propagation_distance;
 
                     try
@@ -174,8 +174,8 @@ methods
                 obj.params.spatial_propagation = 1.13; % meters
         end
 
-        obj.params.time_range(1) = obj.view.LastParams.time_range(1); % the default from init value of rendering class
-        obj.params.time_range(2) = obj.params.fs / 2;
+        obj.params.timeRange(1) = obj.view.LastParams.timeRange(1); % the default from init value of rendering class
+        obj.params.timeRange(2) = obj.params.fs / 2;
 
         %2)bis) Set Defaults from the StandardConfig
 
@@ -287,18 +287,18 @@ methods
         obj.params.image_registration = true;
         obj.params.applyshackhartmannfromref = false;
         obj.params.applyautofocusfromref = false;
-        obj.params.autofocus_range = [0.45, 0.52];
+        obj.params.autofocusRange = [0.45, 0.52];
         obj.params.first_frame = 0;
         obj.params.end_frame = 0;
 
         % Initialize missing fields that were causing errors
         obj.params.svdx_enable = false;
         obj.params.svdx_subap = 3;
-        obj.params.svd_threshold_enable = false;
-        obj.params.svd_threshold_value = 64;
+        obj.params.svdThreshold_enable = false;
+        obj.params.svdThreshold_value = 64;
         obj.params.svd_stride = 1;
-        obj.params.local_spatial_filter = false;
-        obj.params.local_temporal_filter = false;
+        obj.params.local_spatialFilter = false;
+        obj.params.local_temporalFilter = false;
         obj.params.local_phi1 = 0;
         obj.params.local_phi2 = 0;
         obj.params.local_nu1 = 0;
@@ -306,8 +306,8 @@ methods
         obj.params.unit_cells = 8;
         obj.params.r1 = 3;
         obj.params.xy_stride = 32;
-        obj.params.temporal_filter = false;
-        obj.params.temporal_filter_value = 0;
+        obj.params.temporalFilter = false;
+        obj.params.temporalFilter_value = 0;
         obj.params.phase_registration = false;
         obj.params.rephasing = false;
         obj.params.iterative_registration = false;
@@ -315,26 +315,26 @@ methods
 
         % Initialize SVD filter parameters
         obj.params.svd_filter = false;
-        obj.params.svdx_filter = false;
-        obj.params.svdx_t_filter = false;
-        obj.params.svd_threshold = 0;
-        obj.params.svdx_threshold = 0;
-        obj.params.svdx_t_threshold = 0;
+        obj.params.svdxFilter = false;
+        obj.params.svdx_tFilter = false;
+        obj.params.svdThreshold = 0;
+        obj.params.svdxThreshold = 0;
+        obj.params.svdx_tThreshold = 0;
         obj.params.svdx_Nsub = 1;
         obj.params.svdx_t_Nsub = 1;
 
         % Initialize spatial filtering parameters
-        obj.params.spatial_filter = false;
-        obj.params.hilbert_filter = false;
-        obj.params.spatial_filter_range = [0, 1];
+        obj.params.spatialFilter = false;
+        obj.params.hilbertFilter = false;
+        obj.params.spatialFilterRange = [0, 1];
         obj.params.spatial_transformation = 'Fresnel';
         obj.params.spatial_propagation = 0;
         obj.params.Padding_num = 0;
 
         % Initialize time transformation parameters
         obj.params.time_transform = 'FFT';
-        obj.params.time_range = [0, 100];
-        obj.params.index_range = [1, 100];
+        obj.params.timeRange = [0, 100];
+        obj.params.indexRange = [1, 100];
 
         % Initialize image transformation parameters
         obj.params.flip_y = false;
@@ -742,12 +742,12 @@ methods
                     mat(:, :, (j - 1) * bs + 1:j * bs) = tmp{j}.parameters.SH;
                 end
 
-                generate_video(mat, result_folder_path, strcat('SH'), export_raw = 1, temporal_filter = 2);
+                generate_video(mat, result_folder_path, strcat('SH'), export_raw = 1, temporalFilter = 2);
                 continue
             elseif strcmp(image_types{i}, 'buckets')
                 sz = size(tmp{1}.parameters.intervals_0);
                 sz(3) = length(tmp);
-                buckranges = reshape(params.buckets_ranges, [], 2);
+                buckranges = reshape(params.bucketsRanges, [], 2);
                 numranges = size(buckranges, 1);
                 mat0 = zeros(sz, 'single');
                 mat1 = zeros(sz, 'single');
@@ -766,10 +766,10 @@ methods
                 end
 
                 for k = 1:numranges
-                    generate_video(mat0(:, :, :, k), result_folder_path, strcat('moment0_', num2str(buckranges(k, 1)), '_', num2str(buckranges(k, 2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
-                    generate_video(mat1(:, :, :, k), result_folder_path, strcat('moment1_', num2str(buckranges(k, 1)), '_', num2str(buckranges(k, 2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
-                    generate_video(mat2(:, :, :, k), result_folder_path, strcat('moment2_', num2str(buckranges(k, 1)), '_', num2str(buckranges(k, 2)), 'kHz'), export_raw = params.buckets_raw, temporal_filter = 2, square = params.square);
-                    generate_video(mat_0(:, :, :, k), result_folder_path, strcat('M0_', num2str(buckranges(k, 1)), '_', num2str(buckranges(k, 2)), 'kHz'), export_raw = 0, temporal_filter = 2, square = params.square);
+                    generate_video(mat0(:, :, :, k), result_folder_path, strcat('moment0_', num2str(buckranges(k, 1)), '_', num2str(buckranges(k, 2)), 'kHz'), export_raw = params.buckets_raw, temporalFilter = 2, square = params.square);
+                    generate_video(mat1(:, :, :, k), result_folder_path, strcat('moment1_', num2str(buckranges(k, 1)), '_', num2str(buckranges(k, 2)), 'kHz'), export_raw = params.buckets_raw, temporalFilter = 2, square = params.square);
+                    generate_video(mat2(:, :, :, k), result_folder_path, strcat('moment2_', num2str(buckranges(k, 1)), '_', num2str(buckranges(k, 2)), 'kHz'), export_raw = params.buckets_raw, temporalFilter = 2, square = params.square);
+                    generate_video(mat_0(:, :, :, k), result_folder_path, strcat('M0_', num2str(buckranges(k, 1)), '_', num2str(buckranges(k, 2)), 'kHz'), export_raw = 0, temporalFilter = 2, square = params.square);
                 end
 
                 continue
@@ -811,11 +811,11 @@ methods
                 end
 
                 for k = 1:(nn - 2)
-                    generate_video(Q(:, :, :, k), result_folder_path, fields{k}, export_raw = 1, temporal_filter = [], square = params.square)
+                    generate_video(Q(:, :, :, k), result_folder_path, fields{k}, export_raw = 1, temporalFilter = [], square = params.square)
                 end
 
-                generate_video(QM1, result_folder_path, 'QuadrantsM1Composite', export_raw = 0, temporal_filter = 2, square = params.square)
-                generate_video(QM0, result_folder_path, 'QuadrantsM0Composite', export_raw = 0, temporal_filter = 2, square = params.square)
+                generate_video(QM1, result_folder_path, 'QuadrantsM1Composite', export_raw = 0, temporalFilter = 2, square = params.square)
+                generate_video(QM0, result_folder_path, 'QuadrantsM0Composite', export_raw = 0, temporalFilter = 2, square = params.square)
 
                 sz = size(tmp{1}.image);
 
@@ -837,7 +837,7 @@ methods
             elseif strcmp(image_types{i}, 'SH_avg')
 
                 if ~isempty(obj.running_averages.running_averages)
-                    generate_video(fftshift(obj.running_averages.running_averages.SH, 3), result_folder_path, strcat(image_types{i}), export_raw = 1, temporal_filter = [], square = params.square);
+                    generate_video(fftshift(obj.running_averages.running_averages.SH, 3), result_folder_path, strcat(image_types{i}), export_raw = 1, temporalFilter = [], square = params.square);
                 end
 
                 mat = [];
@@ -886,53 +886,53 @@ methods
             if ~isempty(mat)
 
                 if strcmp(image_types{i}, 'moment_0') % raw moments are always outputted if they are selected
-                    generate_video(mat, result_folder_path, strcat('moment0'), export_raw = 1, temporal_filter = 2, square = params.square); % three cases just to rename each correctly for PW
+                    generate_video(mat, result_folder_path, strcat('moment0'), export_raw = 1, temporalFilter = 2, square = params.square); % three cases just to rename each correctly for PW
                 elseif strcmp(image_types{i}, 'moment_1')
-                    generate_video(mat, result_folder_path, strcat('moment1'), export_raw = 1, temporal_filter = 2, square = params.square);
+                    generate_video(mat, result_folder_path, strcat('moment1'), export_raw = 1, temporalFilter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'moment_2')
-                    generate_video(mat, result_folder_path, strcat('moment2'), export_raw = 1, temporal_filter = 2, square = params.square);
+                    generate_video(mat, result_folder_path, strcat('moment2'), export_raw = 1, temporalFilter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'moment_0_star') % raw moments are always outputted if they are selected
-                    generate_video(mat, result_folder_path, strcat('moment_0_star'), export_raw = 1, temporal_filter = 2, square = params.square); % three cases just to rename each correctly for PW
+                    generate_video(mat, result_folder_path, strcat('moment_0_star'), export_raw = 1, temporalFilter = 2, square = params.square); % three cases just to rename each correctly for PW
                 elseif strcmp(image_types{i}, 'moment_1_star')
-                    generate_video(mat, result_folder_path, strcat('moment_1_star'), export_raw = 1, temporal_filter = 2, square = params.square);
+                    generate_video(mat, result_folder_path, strcat('moment_1_star'), export_raw = 1, temporalFilter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'moment_2_star')
-                    generate_video(mat, result_folder_path, strcat('moment_2_star'), export_raw = 1, temporal_filter = 2, square = params.square);
+                    generate_video(mat, result_folder_path, strcat('moment_2_star'), export_raw = 1, temporalFilter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'moment_0_logstar') % raw moments are always outputted if they are selected
-                    generate_video(mat, result_folder_path, strcat('moment_0_logstar'), export_raw = 1, temporal_filter = 2, square = params.square); % three cases just to rename each correctly for PW
+                    generate_video(mat, result_folder_path, strcat('moment_0_logstar'), export_raw = 1, temporalFilter = 2, square = params.square); % three cases just to rename each correctly for PW
                 elseif strcmp(image_types{i}, 'moment_1_logstar')
-                    generate_video(mat, result_folder_path, strcat('moment_1_logstar'), export_raw = 1, temporal_filter = 2, square = params.square);
+                    generate_video(mat, result_folder_path, strcat('moment_1_logstar'), export_raw = 1, temporalFilter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'moment_2_logstar')
-                    generate_video(mat, result_folder_path, strcat('moment_2_logstar'), export_raw = 1, temporal_filter = 2, square = params.square);
+                    generate_video(mat, result_folder_path, strcat('moment_2_logstar'), export_raw = 1, temporalFilter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'energy_ratio_type')
-                    generate_video(mat, result_folder_path, strcat('energy_ratio_type'), export_raw = 1, temporal_filter = 2, square = params.square);
+                    generate_video(mat, result_folder_path, strcat('energy_ratio_type'), export_raw = 1, temporalFilter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'power_Doppler')
-                    generate_video(mat, result_folder_path, strcat('M0'), temporal_filter = 2, square = params.square);
+                    generate_video(mat, result_folder_path, strcat('M0'), temporalFilter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'spectrogram')
-                    generate_video(mat, result_folder_path, strcat('spectrogram'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, strcat('spectrogram'), temporalFilter = []);
                 elseif strcmp(image_types{i}, 'autocorrelogram')
-                    generate_video(mat, result_folder_path, strcat('autocorrelogram'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, strcat('autocorrelogram'), temporalFilter = []);
                 elseif strcmp(image_types{i}, 'broadening')
-                    generate_video(mat, result_folder_path, strcat('broadening'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, strcat('broadening'), temporalFilter = []);
                 elseif strcmp(image_types{i}, 'f_RMS')
-                    generate_video(mat, result_folder_path, strcat('f_RMS'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, strcat('f_RMS'), temporalFilter = []);
                 elseif strcmp(image_types{i}, 'FH_modulus_mean')
-                    generate_video(mat, result_folder_path, strcat('FH_modulus_mean'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, strcat('FH_modulus_mean'), temporalFilter = []);
                 elseif strcmp(image_types{i}, 'FH_arg_mean')
-                    generate_video(mat, result_folder_path, strcat('FH_arg_mean'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, strcat('FH_arg_mean'), temporalFilter = []);
                 elseif strcmp(image_types{i}, 'arg_0')
-                    generate_video(mat, result_folder_path, strcat('arg_0'), temporal_filter = [], square = params.square);
+                    generate_video(mat, result_folder_path, strcat('arg_0'), temporalFilter = [], square = params.square);
                 elseif strcmp(image_types{i}, 'SVD_cov')
-                    generate_video(mat, result_folder_path, strcat('SVD_cov'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, strcat('SVD_cov'), temporalFilter = []);
                 elseif strcmp(image_types{i}, 'SVD_U')
-                    generate_video(mat, result_folder_path, strcat('SVD_U'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, strcat('SVD_U'), temporalFilter = []);
                 elseif strcmp(image_types{i}, 'ShackHartmann_Cropped_Moments')
-                    generate_video(mat, result_folder_path, strcat('ShackHartmann_Cropped_Moments'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, strcat('ShackHartmann_Cropped_Moments'), temporalFilter = []);
                 elseif strcmp(image_types{i}, 'ShackHartmann_Phase')
-                    generate_video(mat, result_folder_path, strcat('ShackHartmann_Phase'), temporal_filter = []);
+                    generate_video(mat, result_folder_path, strcat('ShackHartmann_Phase'), temporalFilter = []);
                 elseif strcmp(image_types{i}, 'color_Doppler')
-                    generate_video(mat, result_folder_path, strcat('color_Doppler'), square = params.square, temporal_filter = [], enhance_contrast = true, export_gif = true, gif_freq = 16, gif_Duration = size(mat, 4) * params.batchStride / (obj.params.fs * 1000));
+                    generate_video(mat, result_folder_path, strcat('color_Doppler'), square = params.square, temporalFilter = [], enhance_contrast = true, export_gif = true, gif_freq = 16, gif_Duration = size(mat, 4) * params.batchStride / (obj.params.fs * 1000));
                 else
-                    generate_video(mat, result_folder_path, strcat(image_types{i}), temporal_filter = 2, square = params.square);
+                    generate_video(mat, result_folder_path, strcat(image_types{i}), temporalFilter = 2, square = params.square);
                 end
 
             else
@@ -994,8 +994,8 @@ methods
         %saving a small mat for old versions of PW
         cache.Fs = obj.params.fs * 1000;
         cache.batchStride = obj.params.batchStride;
-        cache.time_transform.f1 = obj.params.time_range(1);
-        cache.time_transform.f2 = obj.params.time_range(2);
+        cache.time_transform.f1 = obj.params.timeRange(1);
+        cache.time_transform.f2 = obj.params.timeRange(2);
         save(fullfile(result_folder_path, 'mat', strcat(obj.file.name, '_HD_', num2str(index + 1), '.mat')), "cache");
 
         fprintf("Video Saving took : %f s\n", toc(VideoSavingTime));

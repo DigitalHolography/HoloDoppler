@@ -50,7 +50,7 @@ properties (Access = public)
     RefreshAppButton matlab.ui.control.Button
     positioninfileSlider matlab.ui.control.Slider
     positioninfileSliderLabel matlab.ui.control.Label
-    framePositionField matlab.ui.control.NumericEditField
+    framePosition matlab.ui.control.NumericEditField
 
     % ---- batch / video rendering sub-panel ----
     batchPanel matlab.ui.container.Panel
@@ -72,7 +72,7 @@ properties (Access = public)
     LoadconfigButton matlab.ui.control.Button
     VideoRenderingButton matlab.ui.control.Button
     FoldermanagementButton matlab.ui.control.Button
-    temporalfilterEditField matlab.ui.control.NumericEditField
+    temporalFilter matlab.ui.control.NumericEditField
     AutofocusFromRef matlab.ui.control.CheckBox
     applyshackhartmannfromref matlab.ui.control.CheckBox
     temporalfilterCheckBox matlab.ui.control.CheckBox
@@ -94,98 +94,98 @@ properties (Access = public)
     NsubxLabel matlab.ui.control.Label
     svdx_t_Nsub matlab.ui.control.NumericEditField
     svdx_Nsub matlab.ui.control.NumericEditField
-    svdx_t_threshold matlab.ui.control.NumericEditField
-    svdx_threshold matlab.ui.control.NumericEditField
-    index_range2 matlab.ui.control.NumericEditField
-    index_range1 matlab.ui.control.NumericEditField
-    index_rangeLabel matlab.ui.control.Label
-    svdx_t_filter matlab.ui.control.CheckBox
+    svdx_tThreshold matlab.ui.control.NumericEditField
+    svdxThreshold matlab.ui.control.NumericEditField
+    indexRange2 matlab.ui.control.NumericEditField
+    indexRange1 matlab.ui.control.NumericEditField
+    indexRangeLabel matlab.ui.control.Label
+    svdx_tFilter matlab.ui.control.CheckBox
     RenderPreviewLamp matlab.ui.control.Lamp
     SavePreviewButton matlab.ui.control.Button
     RenderPreviewButton matlab.ui.control.Button
     flat_field_gw matlab.ui.control.NumericEditField
-    flat_field_gwEditFieldLabel matlab.ui.control.Label
-    time_range2 matlab.ui.control.NumericEditField
-    time_range1 matlab.ui.control.NumericEditField
-    frequency_rangeLabel matlab.ui.control.Label
+    flat_field_gwLabel matlab.ui.control.Label
+    timeRange2 matlab.ui.control.NumericEditField
+    timeRange1 matlab.ui.control.NumericEditField
+    frequencyRangeLabel matlab.ui.control.Label
     time_transform matlab.ui.control.DropDown
     time_transformDropDownLabel matlab.ui.control.Label
-    svd_threshold matlab.ui.control.NumericEditField
-    svdx_filter matlab.ui.control.CheckBox
+    svdThreshold matlab.ui.control.NumericEditField
+    svdxFilter matlab.ui.control.CheckBox
     svd_filter matlab.ui.control.CheckBox
     spatial_propagation matlab.ui.control.NumericEditField
-    spatial_propagationEditFieldLabel matlab.ui.control.Label
+    spatial_propagationLabel matlab.ui.control.Label
     spatial_transformation matlab.ui.control.DropDown
     spatial_transformationDropDownLabel matlab.ui.control.Label
-    spatial_filter_range2 matlab.ui.control.NumericEditField
-    spatial_filter_range1 matlab.ui.control.NumericEditField
-    spatial_filter_range matlab.ui.control.Label
-    hilbert_filter matlab.ui.control.CheckBox
-    spatial_filter matlab.ui.control.CheckBox
-    svd_threshold_reset_button matlab.ui.control.Button
+    spatialFilterRange2 matlab.ui.control.NumericEditField
+    spatialFilterRange1 matlab.ui.control.NumericEditField
+    spatialFilterRange matlab.ui.control.Label
+    hilbertFilter matlab.ui.control.CheckBox
+    spatialFilter matlab.ui.control.CheckBox
+    svdThreshold_reset_button matlab.ui.control.Button
 
     % ---- aberration compensation panel ----
     AberrationcompensationPanel matlab.ui.container.Panel
     onlydefocusCheckBox matlab.ui.control.CheckBox
     ConvergenceThreshold matlab.ui.control.NumericEditField
     calibrationfactorLabel_2 matlab.ui.control.Label
-    CalibrationFactorEditField matlab.ui.control.NumericEditField
+    CalibrationFactor matlab.ui.control.NumericEditField
     calibrationfactorLabel matlab.ui.control.Label
-    NumberOfIterationEditField matlab.ui.control.NumericEditField
+    NumberOfIteration matlab.ui.control.NumericEditField
     numberofiterationLabel matlab.ui.control.Label
-    imagesubapsizeratioEditField matlab.ui.control.NumericEditField
-    imagesubapsizeratioEditFieldLabel matlab.ui.control.Label
-    subapnumpositionsEditField matlab.ui.control.NumericEditField
-    subapnumpositionsEditFieldLabel matlab.ui.control.Label
+    imageSubApSizeRatio matlab.ui.control.NumericEditField
+    imageSubApSizeRatioLabel matlab.ui.control.Label
+    SubApNumPositions matlab.ui.control.NumericEditField
+    SubApNumPositionsLabel matlab.ui.control.Label
     referenceimageDropDown matlab.ui.control.DropDown
     referenceimageDropDownLabel matlab.ui.control.Label
     ZernikeProjectionCheckBox matlab.ui.control.CheckBox
     savecoefsCheckBox matlab.ui.control.CheckBox
-    rangeYEditField matlab.ui.control.NumericEditField
-    rangeYEditFieldLabel matlab.ui.control.Label
-    rangeZEditField matlab.ui.control.NumericEditField
-    rangeZEditFieldLabel matlab.ui.control.Label
-    volumesizeEditField matlab.ui.control.NumericEditField
-    volumesizeEditFieldLabel matlab.ui.control.Label
-    maxSubAp_PCAEditField matlab.ui.control.NumericEditField
-    maxEditField_2Label matlab.ui.control.Label
-    minSubAp_PCAEditField matlab.ui.control.NumericEditField
-    minEditField_2Label matlab.ui.control.Label
+    rangeY matlab.ui.control.NumericEditField
+    rangeYLabel matlab.ui.control.Label
+    rangeZ matlab.ui.control.NumericEditField
+    rangeZLabel matlab.ui.control.Label
+    volumeSize matlab.ui.control.NumericEditField
+    volumeSizeLabel matlab.ui.control.Label
+    maxSubAp_PCA matlab.ui.control.NumericEditField
+    max_2Label matlab.ui.control.Label
+    minSubAp_PCA matlab.ui.control.NumericEditField
+    min_2Label matlab.ui.control.Label
     SubAp_PCACheckBox matlab.ui.control.CheckBox
     aberrationPreviewLabel matlab.ui.control.Label
     IterativeCheckBox matlab.ui.control.CheckBox
-    subaperturemarginEditField matlab.ui.control.NumericEditField
-    subaperturemarginEditFieldLabel matlab.ui.control.Label
-    shackhartmannzernikeranksEditField matlab.ui.control.NumericEditField
-    zernikeranksEditFieldLabel matlab.ui.control.Label
+    subApMargin matlab.ui.control.NumericEditField
+    subApMarginLabel matlab.ui.control.Label
+    shackHartmannZernikeRanks matlab.ui.control.NumericEditField
+    zernikeRanksLabels matlab.ui.control.Label
     ShackHartmannCheckBox matlab.ui.control.CheckBox
     aberrationStatusLabel matlab.ui.control.Label
     UIAxes_aberrationPreview matlab.ui.control.UIAxes
 
     % ---- advanced processing panel ----
     AdvancedProcessingPanel matlab.ui.container.Panel
-    SVDTresholdEditFieldLabel_2 matlab.ui.control.Label
-    SVDStrideEditField matlab.ui.control.NumericEditField
+    SVDTresholdLabel_2 matlab.ui.control.Label
+    SVDStride matlab.ui.control.NumericEditField
     SVDThresholdCheckBox matlab.ui.control.CheckBox
-    SVDTresholdEditFieldLabel matlab.ui.control.Label
-    SVDThresholdEditField matlab.ui.control.NumericEditField
+    SVDThresholdLabel matlab.ui.control.Label
+    SVDThreshold matlab.ui.control.NumericEditField
     SVDxCheckBox matlab.ui.control.CheckBox
-    SVDx_SubApEditField matlab.ui.control.NumericEditField
-    SVDx_SubApEditFieldLabel matlab.ui.control.Label
-    xystrideEditField matlab.ui.control.NumericEditField
-    xystrideEditFieldLabel matlab.ui.control.Label
-    r1EditField matlab.ui.control.NumericEditField
-    r1EditFieldLabel matlab.ui.control.Label
-    unitcellsinlatticeEditField matlab.ui.control.NumericEditField
-    unitcellsinlatticeEditFieldLabel matlab.ui.control.Label
-    nu2EditField matlab.ui.control.NumericEditField
-    nu2EditFieldLabel matlab.ui.control.Label
-    nu1EditField matlab.ui.control.NumericEditField
-    nu1EditFieldLabel matlab.ui.control.Label
-    phi2EditField matlab.ui.control.NumericEditField
-    phi2EditFieldLabel matlab.ui.control.Label
-    phi1EditField matlab.ui.control.NumericEditField
-    phi1EditFieldLabel matlab.ui.control.Label
+    SVDx_SubAp matlab.ui.control.NumericEditField
+    SVDx_SubApLabel matlab.ui.control.Label
+    xyStride matlab.ui.control.NumericEditField
+    xyStrideLabel matlab.ui.control.Label
+    r1 matlab.ui.control.NumericEditField
+    r1Label matlab.ui.control.Label
+    unitCellsinLattice matlab.ui.control.NumericEditField
+    unitCellsinLatticeLabel matlab.ui.control.Label
+    nu2 matlab.ui.control.NumericEditField
+    nu2Label matlab.ui.control.Label
+    nu1 matlab.ui.control.NumericEditField
+    nu1Label matlab.ui.control.Label
+    phi2 matlab.ui.control.NumericEditField
+    phi2Label matlab.ui.control.Label
+    phi1 matlab.ui.control.NumericEditField
+    phi1Label matlab.ui.control.Label
     LocalfilteringLabel matlab.ui.control.Label
     temporalCheckBox matlab.ui.control.CheckBox
     spatialCheckBox matlab.ui.control.CheckBox
@@ -383,11 +383,13 @@ methods (Access = private)
     % Sync every widget value into the HD class, then update enable states.
     % Connected to ~50 component ValueChanged callbacks.
     function refreshClass(app, ~)
+
         if ~isempty(app.HD.file)
-            app.framePositionField.Value = app.positioninfileSlider.Value;
+            app.framePosition.Value = app.positioninfileSlider.Value;
         else
-            app.framePositionField.Value = 0;
+            app.framePosition.Value = 0;
         end
+
         app.syncClassFromGui();
         app.updateTimeTransformControls();
         app.updateSvdxFilterControls();
@@ -460,25 +462,25 @@ methods (Access = private)
         app.HD.view.showFramesHistogram();
     end
 
-    function svd_threshold_reset_buttonPushed(app, ~)
+    function svdThreshold_reset_buttonPushed(app, ~)
 
-        if app.svd_threshold.Value == 0
-            val = ceil(app.time_range1.Value * 2 * app.batchSize.Value / app.fs.Value);
+        if app.svdThreshold.Value == 0
+            val = ceil(app.timeRange1.Value * 2 * app.batchSize.Value / app.fs.Value);
 
             if ~isnan(val)
-                app.svd_threshold.Value = val;
+                app.svdThreshold.Value = val;
             end
 
         else
-            app.svd_threshold.Value = 0;
+            app.svdThreshold.Value = 0;
         end
 
     end
 
-    function time_range2ValueChanged(app, ~)
+    function timeRange2ValueChanged(app, ~)
 
-        if strcmp(app.time_transform, 'FFT') && app.time_range2.Value > app.fs.Value / 2
-            app.time_range2.Value = app.fs.Value / 2;
+        if strcmp(app.time_transform, 'FFT') && app.timeRange2.Value > app.fs.Value / 2
+            app.timeRange2.Value = app.fs.Value / 2;
         end
 
         app.refreshClass();
@@ -522,22 +524,22 @@ methods (Access = private)
 
     function updateTimeTransformControls(app)
         useFreqRange = ismember(app.time_transform.Value, {'FFT', 'autocorrelation', 'intercorrelation'});
-        app.time_range1.Enable = useFreqRange;
-        app.time_range2.Enable = useFreqRange;
-        app.frequency_rangeLabel.Enable = useFreqRange;
-        app.index_range1.Enable = ~useFreqRange;
-        app.index_range2.Enable = ~useFreqRange;
-        app.index_rangeLabel.Enable = ~useFreqRange;
+        app.timeRange1.Enable = useFreqRange;
+        app.timeRange2.Enable = useFreqRange;
+        app.frequencyRangeLabel.Enable = useFreqRange;
+        app.indexRange1.Enable = ~useFreqRange;
+        app.indexRange2.Enable = ~useFreqRange;
+        app.indexRangeLabel.Enable = ~useFreqRange;
     end
 
     function updateSvdxFilterControls(app)
-        en = app.svdx_filter.Value;
-        app.svdx_threshold.Enable = en;
+        en = app.svdxFilter.Value;
+        app.svdxThreshold.Enable = en;
         app.NsubxLabel.Enable = en;
         app.svdx_Nsub.Enable = en;
 
-        ent = app.svdx_t_filter.Value;
-        app.svdx_t_threshold.Enable = ent;
+        ent = app.svdx_tFilter.Value;
+        app.svdx_tThreshold.Enable = ent;
         app.NsubxtLabel.Enable = ent;
         app.svdx_t_Nsub.Enable = ent;
     end
@@ -740,16 +742,16 @@ methods (Access = private)
         app.positioninfileSlider.Layout.Row = 7;
         app.positioninfileSlider.Layout.Column = [2 3];
 
-        app.framePositionField = uieditfield(app.mainParametersGrid, 'numeric');
-        app.framePositionField.Limits = [0 Inf];
-        app.framePositionField.RoundFractionalValues = 'on';
-        app.framePositionField.ValueDisplayFormat = '%.0f';
-        app.framePositionField.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.framePositionField.FontColor = fontColor;
-        app.framePositionField.BackgroundColor = darkBackgroundColor;
-        app.framePositionField.Tooltip = {''};
-        app.framePositionField.Layout.Row = 8;
-        app.framePositionField.Layout.Column = 2;
+        app.framePosition = uieditfield(app.mainParametersGrid, 'numeric');
+        app.framePosition.Limits = [0 Inf];
+        app.framePosition.RoundFractionalValues = 'on';
+        app.framePosition.ValueDisplayFormat = '%.0f';
+        app.framePosition.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.framePosition.FontColor = fontColor;
+        app.framePosition.BackgroundColor = darkBackgroundColor;
+        app.framePosition.Tooltip = {''};
+        app.framePosition.Layout.Row = 8;
+        app.framePosition.Layout.Column = 2;
 
         app.RefreshAppButton = uibutton(app.mainParametersGrid, 'push');
         app.RefreshAppButton.ButtonPushedFcn = createCallbackFcn(app, @RefreshAppButtonPushed, true);
@@ -1020,119 +1022,119 @@ methods (Access = private)
         app.LocalfilteringLabel.Position = [19 285 83 22];
         app.LocalfilteringLabel.Text = 'Local filtering';
 
-        app.phi1EditFieldLabel = uilabel(p);
-        app.phi1EditFieldLabel.HorizontalAlignment = 'right';
-        app.phi1EditFieldLabel.FontColor = [0.8 0.8 0.8];
-        app.phi1EditFieldLabel.Position = [102 258 28 22];
-        app.phi1EditFieldLabel.Text = 'phi1';
+        app.phi1Label = uilabel(p);
+        app.phi1Label.HorizontalAlignment = 'right';
+        app.phi1Label.FontColor = [0.8 0.8 0.8];
+        app.phi1Label.Position = [102 258 28 22];
+        app.phi1Label.Text = 'phi1';
 
-        app.phi1EditField = uieditfield(p, 'numeric');
-        app.phi1EditField.Position = [134 258 21 21];
+        app.phi1 = uieditfield(p, 'numeric');
+        app.phi1.Position = [134 258 21 21];
 
-        app.phi2EditFieldLabel = uilabel(p);
-        app.phi2EditFieldLabel.HorizontalAlignment = 'right';
-        app.phi2EditFieldLabel.FontColor = [0.8 0.8 0.8];
-        app.phi2EditFieldLabel.Position = [173 261 28 22];
-        app.phi2EditFieldLabel.Text = 'phi2';
+        app.phi2Label = uilabel(p);
+        app.phi2Label.HorizontalAlignment = 'right';
+        app.phi2Label.FontColor = [0.8 0.8 0.8];
+        app.phi2Label.Position = [173 261 28 22];
+        app.phi2Label.Text = 'phi2';
 
-        app.phi2EditField = uieditfield(p, 'numeric');
-        app.phi2EditField.Position = [205 261 21 21];
+        app.phi2 = uieditfield(p, 'numeric');
+        app.phi2.Position = [205 261 21 21];
 
-        app.nu1EditFieldLabel = uilabel(p);
-        app.nu1EditFieldLabel.HorizontalAlignment = 'right';
-        app.nu1EditFieldLabel.FontColor = [0.8 0.8 0.8];
-        app.nu1EditFieldLabel.Position = [107 230 26 22];
-        app.nu1EditFieldLabel.Text = 'nu1';
+        app.nu1Label = uilabel(p);
+        app.nu1Label.HorizontalAlignment = 'right';
+        app.nu1Label.FontColor = [0.8 0.8 0.8];
+        app.nu1Label.Position = [107 230 26 22];
+        app.nu1Label.Text = 'nu1';
 
-        app.nu1EditField = uieditfield(p, 'numeric');
-        app.nu1EditField.Position = [135 230 21 21];
+        app.nu1 = uieditfield(p, 'numeric');
+        app.nu1.Position = [135 230 21 21];
 
-        app.nu2EditFieldLabel = uilabel(p);
-        app.nu2EditFieldLabel.HorizontalAlignment = 'right';
-        app.nu2EditFieldLabel.FontColor = [0.8 0.8 0.8];
-        app.nu2EditFieldLabel.Position = [175 230 26 22];
-        app.nu2EditFieldLabel.Text = 'nu2';
+        app.nu2Label = uilabel(p);
+        app.nu2Label.HorizontalAlignment = 'right';
+        app.nu2Label.FontColor = [0.8 0.8 0.8];
+        app.nu2Label.Position = [175 230 26 22];
+        app.nu2Label.Text = 'nu2';
 
-        app.nu2EditField = uieditfield(p, 'numeric');
-        app.nu2EditField.FontColor = [0.149 0.149 0.149];
-        app.nu2EditField.Position = [205 230 21 21];
+        app.nu2 = uieditfield(p, 'numeric');
+        app.nu2.FontColor = [0.149 0.149 0.149];
+        app.nu2.Position = [205 230 21 21];
 
-        app.unitcellsinlatticeEditFieldLabel = uilabel(p);
-        app.unitcellsinlatticeEditFieldLabel.HorizontalAlignment = 'right';
-        app.unitcellsinlatticeEditFieldLabel.FontColor = [0.902 0.902 0.902];
-        app.unitcellsinlatticeEditFieldLabel.Position = [18 170 110 22];
-        app.unitcellsinlatticeEditFieldLabel.Text = '# unit cells in lattice';
+        app.unitCellsinLatticeLabel = uilabel(p);
+        app.unitCellsinLatticeLabel.HorizontalAlignment = 'right';
+        app.unitCellsinLatticeLabel.FontColor = [0.902 0.902 0.902];
+        app.unitCellsinLatticeLabel.Position = [18 170 110 22];
+        app.unitCellsinLatticeLabel.Text = '# unit cells in lattice';
 
-        app.unitcellsinlatticeEditField = uieditfield(p, 'numeric');
-        app.unitcellsinlatticeEditField.Limits = [0 Inf];
-        app.unitcellsinlatticeEditField.Position = [135 170 29 22];
-        app.unitcellsinlatticeEditField.Value = 8;
+        app.unitCellsinLattice = uieditfield(p, 'numeric');
+        app.unitCellsinLattice.Limits = [0 Inf];
+        app.unitCellsinLattice.Position = [135 170 29 22];
+        app.unitCellsinLattice.Value = 8;
 
-        app.r1EditFieldLabel = uilabel(p);
-        app.r1EditFieldLabel.HorizontalAlignment = 'right';
-        app.r1EditFieldLabel.FontColor = [0.902 0.902 0.902];
-        app.r1EditFieldLabel.Position = [102 140 25 22];
-        app.r1EditFieldLabel.Text = 'r1';
+        app.r1Label = uilabel(p);
+        app.r1Label.HorizontalAlignment = 'right';
+        app.r1Label.FontColor = [0.902 0.902 0.902];
+        app.r1Label.Position = [102 140 25 22];
+        app.r1Label.Text = 'r1';
 
-        app.r1EditField = uieditfield(p, 'numeric');
-        app.r1EditField.Limits = [0 Inf];
-        app.r1EditField.Position = [135 138 29 23];
-        app.r1EditField.Value = 3;
+        app.r1 = uieditfield(p, 'numeric');
+        app.r1.Limits = [0 Inf];
+        app.r1.Position = [135 138 29 23];
+        app.r1.Value = 3;
 
-        app.xystrideEditFieldLabel = uilabel(p);
-        app.xystrideEditFieldLabel.HorizontalAlignment = 'right';
-        app.xystrideEditFieldLabel.FontColor = [0.8 0.8 0.8];
-        app.xystrideEditFieldLabel.Position = [59 108 50 22];
-        app.xystrideEditFieldLabel.Text = 'xy stride';
+        app.xyStrideLabel = uilabel(p);
+        app.xyStrideLabel.HorizontalAlignment = 'right';
+        app.xyStrideLabel.FontColor = [0.8 0.8 0.8];
+        app.xyStrideLabel.Position = [59 108 50 22];
+        app.xyStrideLabel.Text = 'xy stride';
 
-        app.xystrideEditField = uieditfield(p, 'numeric');
-        app.xystrideEditField.Position = [124 105 41 27];
-        app.xystrideEditField.Value = 32;
+        app.xyStride = uieditfield(p, 'numeric');
+        app.xyStride.Position = [124 105 41 27];
+        app.xyStride.Value = 32;
 
-        app.SVDx_SubApEditFieldLabel = uilabel(p);
-        app.SVDx_SubApEditFieldLabel.HorizontalAlignment = 'right';
-        app.SVDx_SubApEditFieldLabel.FontColor = [0.902 0.902 0.902];
-        app.SVDx_SubApEditFieldLabel.Position = [160 317 79 22];
-        app.SVDx_SubApEditFieldLabel.Text = 'SVDx_SubAp';
+        app.SVDx_SubApLabel = uilabel(p);
+        app.SVDx_SubApLabel.HorizontalAlignment = 'right';
+        app.SVDx_SubApLabel.FontColor = [0.902 0.902 0.902];
+        app.SVDx_SubApLabel.Position = [160 317 79 22];
+        app.SVDx_SubApLabel.Text = 'SVDx_SubAp';
 
-        app.SVDx_SubApEditField = uieditfield(p, 'numeric');
-        app.SVDx_SubApEditField.Limits = [0 20];
-        app.SVDx_SubApEditField.Position = [247 317 26 22];
-        app.SVDx_SubApEditField.Value = 3;
+        app.SVDx_SubAp = uieditfield(p, 'numeric');
+        app.SVDx_SubAp.Limits = [0 20];
+        app.SVDx_SubAp.Position = [247 317 26 22];
+        app.SVDx_SubAp.Value = 3;
 
         app.SVDxCheckBox = uicheckbox(p);
         app.SVDxCheckBox.Text = 'SVDx';
         app.SVDxCheckBox.FontColor = [0.902 0.902 0.902];
         app.SVDxCheckBox.Position = [85 317 53 22];
 
-        app.SVDThresholdEditField = uieditfield(p, 'numeric');
-        app.SVDThresholdEditField.Limits = [0 Inf];
-        app.SVDThresholdEditField.Enable = 'off';
-        app.SVDThresholdEditField.Position = [247 291 26 22];
-        app.SVDThresholdEditField.Value = 64;
+        app.SVDThreshold = uieditfield(p, 'numeric');
+        app.SVDThreshold.Limits = [0 Inf];
+        app.SVDThreshold.Enable = 'off';
+        app.SVDThreshold.Position = [247 291 26 22];
+        app.SVDThreshold.Value = 64;
 
-        app.SVDTresholdEditFieldLabel = uilabel(p);
-        app.SVDTresholdEditFieldLabel.HorizontalAlignment = 'right';
-        app.SVDTresholdEditFieldLabel.FontColor = [0.902 0.902 0.902];
-        app.SVDTresholdEditFieldLabel.Position = [153 291 86 22];
-        app.SVDTresholdEditFieldLabel.Text = 'SVD Threshold';
+        app.SVDThresholdLabel = uilabel(p);
+        app.SVDThresholdLabel.HorizontalAlignment = 'right';
+        app.SVDThresholdLabel.FontColor = [0.902 0.902 0.902];
+        app.SVDThresholdLabel.Position = [153 291 86 22];
+        app.SVDThresholdLabel.Text = 'SVD Threshold';
 
         app.SVDThresholdCheckBox = uicheckbox(p);
         app.SVDThresholdCheckBox.Text = '';
         app.SVDThresholdCheckBox.FontColor = [0.902 0.902 0.902];
         app.SVDThresholdCheckBox.Position = [137 293 25 22];
 
-        app.SVDStrideEditField = uieditfield(p, 'numeric');
-        app.SVDStrideEditField.Limits = [0 Inf];
-        app.SVDStrideEditField.Tooltip = {'Sub sampling parameter for faster SVD calculations. Defaults to 1 -> full image, 2 -> one pixel on two, ...'};
-        app.SVDStrideEditField.Position = [256 30 26 22];
-        app.SVDStrideEditField.Value = 1;
+        app.SVDStride = uieditfield(p, 'numeric');
+        app.SVDStride.Limits = [0 Inf];
+        app.SVDStride.Tooltip = {'Sub sampling parameter for faster SVD calculations. Defaults to 1 -> full image, 2 -> one pixel on two, ...'};
+        app.SVDStride.Position = [256 30 26 22];
+        app.SVDStride.Value = 1;
 
-        app.SVDTresholdEditFieldLabel_2 = uilabel(p);
-        app.SVDTresholdEditFieldLabel_2.HorizontalAlignment = 'right';
-        app.SVDTresholdEditFieldLabel_2.FontColor = [0.902 0.902 0.902];
-        app.SVDTresholdEditFieldLabel_2.Position = [184 30 64 22];
-        app.SVDTresholdEditFieldLabel_2.Text = 'SVD Stride';
+        app.SVDTresholdLabel_2 = uilabel(p);
+        app.SVDTresholdLabel_2.HorizontalAlignment = 'right';
+        app.SVDTresholdLabel_2.FontColor = [0.902 0.902 0.902];
+        app.SVDTresholdLabel_2.Position = [184 30 64 22];
+        app.SVDTresholdLabel_2.Text = 'SVD Stride';
     end
 
     % -----------------------------------------------------------------------
@@ -1167,38 +1169,38 @@ methods (Access = private)
         app.ShackHartmannCheckBox.FontColor = [0.902 0.902 0.902];
         app.ShackHartmannCheckBox.Position = [12 285 111 22];
 
-        app.zernikeranksEditFieldLabel = uilabel(p);
-        app.zernikeranksEditFieldLabel.HorizontalAlignment = 'center';
-        app.zernikeranksEditFieldLabel.FontColor = [0.8 0.8 0.8];
-        app.zernikeranksEditFieldLabel.Position = [9 230 77 22];
-        app.zernikeranksEditFieldLabel.Text = 'zernike ranks';
+        app.zernikeRanksLabels = uilabel(p);
+        app.zernikeRanksLabels.HorizontalAlignment = 'center';
+        app.zernikeRanksLabels.FontColor = [0.8 0.8 0.8];
+        app.zernikeRanksLabels.Position = [9 230 77 22];
+        app.zernikeRanksLabels.Text = 'zernike ranks';
 
-        app.shackhartmannzernikeranksEditField = uieditfield(p, 'numeric');
-        app.shackhartmannzernikeranksEditField.Limits = [2 6];
-        app.shackhartmannzernikeranksEditField.RoundFractionalValues = 'on';
-        app.shackhartmannzernikeranksEditField.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.shackhartmannzernikeranksEditField.FontColor = [0.8 0.8 0.8];
-        app.shackhartmannzernikeranksEditField.BackgroundColor = [0.149 0.149 0.149];
-        app.shackhartmannzernikeranksEditField.Tooltip = {'Number of zernike ranks to use for aberration correction'};
-        app.shackhartmannzernikeranksEditField.Position = [142 230 43 22];
-        app.shackhartmannzernikeranksEditField.Value = 2;
+        app.shackHartmannZernikeRanks = uieditfield(p, 'numeric');
+        app.shackHartmannZernikeRanks.Limits = [2 6];
+        app.shackHartmannZernikeRanks.RoundFractionalValues = 'on';
+        app.shackHartmannZernikeRanks.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.shackHartmannZernikeRanks.FontColor = [0.8 0.8 0.8];
+        app.shackHartmannZernikeRanks.BackgroundColor = [0.149 0.149 0.149];
+        app.shackHartmannZernikeRanks.Tooltip = {'Number of zernike ranks to use for aberration correction'};
+        app.shackHartmannZernikeRanks.Position = [142 230 43 22];
+        app.shackHartmannZernikeRanks.Value = 2;
 
-        app.subaperturemarginEditFieldLabel = uilabel(p);
-        app.subaperturemarginEditFieldLabel.HorizontalAlignment = 'center';
-        app.subaperturemarginEditFieldLabel.FontColor = [0.8 0.8 0.8];
-        app.subaperturemarginEditFieldLabel.Visible = 'off';
-        app.subaperturemarginEditFieldLabel.Position = [9 161 110 22];
-        app.subaperturemarginEditFieldLabel.Text = 'subaperture margin';
+        app.subApMarginLabel = uilabel(p);
+        app.subApMarginLabel.HorizontalAlignment = 'center';
+        app.subApMarginLabel.FontColor = [0.8 0.8 0.8];
+        app.subApMarginLabel.Visible = 'off';
+        app.subApMarginLabel.Position = [9 161 110 22];
+        app.subApMarginLabel.Text = 'subaperture margin';
 
-        app.subaperturemarginEditField = uieditfield(p, 'numeric');
-        app.subaperturemarginEditField.Limits = [0 Inf];
-        app.subaperturemarginEditField.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.subaperturemarginEditField.FontColor = [0.8 0.8 0.8];
-        app.subaperturemarginEditField.BackgroundColor = [0.149 0.149 0.149];
-        app.subaperturemarginEditField.Visible = 'off';
-        app.subaperturemarginEditField.Tooltip = {'Number of subapertures used for Shack-Hartmann simulation'};
-        app.subaperturemarginEditField.Position = [142 161 43 22];
-        app.subaperturemarginEditField.Value = 0.15;
+        app.subApMargin = uieditfield(p, 'numeric');
+        app.subApMargin.Limits = [0 Inf];
+        app.subApMargin.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.subApMargin.FontColor = [0.8 0.8 0.8];
+        app.subApMargin.BackgroundColor = [0.149 0.149 0.149];
+        app.subApMargin.Visible = 'off';
+        app.subApMargin.Tooltip = {'Number of subapertures used for Shack-Hartmann simulation'};
+        app.subApMargin.Position = [142 161 43 22];
+        app.subApMargin.Value = 0.15;
 
         app.IterativeCheckBox = uicheckbox(p);
         app.IterativeCheckBox.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
@@ -1218,70 +1220,70 @@ methods (Access = private)
         app.SubAp_PCACheckBox.FontColor = [1 1 1];
         app.SubAp_PCACheckBox.Position = [10 337 89 22];
 
-        app.minEditField_2Label = uilabel(p);
-        app.minEditField_2Label.HorizontalAlignment = 'right';
-        app.minEditField_2Label.FontColor = [1 1 1];
-        app.minEditField_2Label.Visible = 'off';
-        app.minEditField_2Label.Position = [9 314 25 22];
-        app.minEditField_2Label.Text = 'min';
+        app.min_2Label = uilabel(p);
+        app.min_2Label.HorizontalAlignment = 'right';
+        app.min_2Label.FontColor = [1 1 1];
+        app.min_2Label.Visible = 'off';
+        app.min_2Label.Position = [9 314 25 22];
+        app.min_2Label.Text = 'min';
 
-        app.minSubAp_PCAEditField = uieditfield(p, 'numeric');
-        app.minSubAp_PCAEditField.Limits = [1 Inf];
-        app.minSubAp_PCAEditField.Visible = 'off';
-        app.minSubAp_PCAEditField.Position = [41 317 24 16];
-        app.minSubAp_PCAEditField.Value = 1;
+        app.minSubAp_PCA = uieditfield(p, 'numeric');
+        app.minSubAp_PCA.Limits = [1 Inf];
+        app.minSubAp_PCA.Visible = 'off';
+        app.minSubAp_PCA.Position = [41 317 24 16];
+        app.minSubAp_PCA.Value = 1;
 
-        app.maxEditField_2Label = uilabel(p);
-        app.maxEditField_2Label.HorizontalAlignment = 'right';
-        app.maxEditField_2Label.FontColor = [1 1 1];
-        app.maxEditField_2Label.Visible = 'off';
-        app.maxEditField_2Label.Position = [73 314 28 22];
-        app.maxEditField_2Label.Text = 'max';
+        app.max_2Label = uilabel(p);
+        app.max_2Label.HorizontalAlignment = 'right';
+        app.max_2Label.FontColor = [1 1 1];
+        app.max_2Label.Visible = 'off';
+        app.max_2Label.Position = [73 314 28 22];
+        app.max_2Label.Text = 'max';
 
-        app.maxSubAp_PCAEditField = uieditfield(p, 'numeric');
-        app.maxSubAp_PCAEditField.Limits = [1 Inf];
-        app.maxSubAp_PCAEditField.Visible = 'off';
-        app.maxSubAp_PCAEditField.Position = [108 317 24 16];
-        app.maxSubAp_PCAEditField.Value = 16;
+        app.maxSubAp_PCA = uieditfield(p, 'numeric');
+        app.maxSubAp_PCA.Limits = [1 Inf];
+        app.maxSubAp_PCA.Visible = 'off';
+        app.maxSubAp_PCA.Position = [108 317 24 16];
+        app.maxSubAp_PCA.Value = 16;
 
-        app.volumesizeEditFieldLabel = uilabel(p);
-        app.volumesizeEditFieldLabel.HorizontalAlignment = 'right';
-        app.volumesizeEditFieldLabel.FontColor = [0.8 0.8 0.8];
-        app.volumesizeEditFieldLabel.Visible = 'off';
-        app.volumesizeEditFieldLabel.Position = [157 53 69 22];
-        app.volumesizeEditFieldLabel.Text = 'volume size';
+        app.volumeSizeLabel = uilabel(p);
+        app.volumeSizeLabel.HorizontalAlignment = 'right';
+        app.volumeSizeLabel.FontColor = [0.8 0.8 0.8];
+        app.volumeSizeLabel.Visible = 'off';
+        app.volumeSizeLabel.Position = [157 53 69 22];
+        app.volumeSizeLabel.Text = 'volume size';
 
-        app.volumesizeEditField = uieditfield(p, 'numeric');
-        app.volumesizeEditField.Limits = [1 Inf];
-        app.volumesizeEditField.Visible = 'off';
-        app.volumesizeEditField.Position = [231 54 31 21];
-        app.volumesizeEditField.Value = 256;
+        app.volumeSize = uieditfield(p, 'numeric');
+        app.volumeSize.Limits = [1 Inf];
+        app.volumeSize.Visible = 'off';
+        app.volumeSize.Position = [231 54 31 21];
+        app.volumeSize.Value = 256;
 
-        app.rangeZEditFieldLabel = uilabel(p);
-        app.rangeZEditFieldLabel.HorizontalAlignment = 'right';
-        app.rangeZEditFieldLabel.FontColor = [0.8 0.8 0.8];
-        app.rangeZEditFieldLabel.Visible = 'off';
-        app.rangeZEditFieldLabel.Position = [180 26 44 22];
-        app.rangeZEditFieldLabel.Text = 'rangeZ';
+        app.rangeZLabel = uilabel(p);
+        app.rangeZLabel.HorizontalAlignment = 'right';
+        app.rangeZLabel.FontColor = [0.8 0.8 0.8];
+        app.rangeZLabel.Visible = 'off';
+        app.rangeZLabel.Position = [180 26 44 22];
+        app.rangeZLabel.Text = 'rangeZ';
 
-        app.rangeZEditField = uieditfield(p, 'numeric');
-        app.rangeZEditField.Limits = [1 Inf];
-        app.rangeZEditField.Visible = 'off';
-        app.rangeZEditField.Position = [232 25 30 22];
-        app.rangeZEditField.Value = 1;
+        app.rangeZ = uieditfield(p, 'numeric');
+        app.rangeZ.Limits = [1 Inf];
+        app.rangeZ.Visible = 'off';
+        app.rangeZ.Position = [232 25 30 22];
+        app.rangeZ.Value = 1;
 
-        app.rangeYEditFieldLabel = uilabel(p);
-        app.rangeYEditFieldLabel.HorizontalAlignment = 'right';
-        app.rangeYEditFieldLabel.FontColor = [0.8 0.8 0.8];
-        app.rangeYEditFieldLabel.Visible = 'off';
-        app.rangeYEditFieldLabel.Position = [14 26 44 22];
-        app.rangeYEditFieldLabel.Text = 'rangeY';
+        app.rangeYLabel = uilabel(p);
+        app.rangeYLabel.HorizontalAlignment = 'right';
+        app.rangeYLabel.FontColor = [0.8 0.8 0.8];
+        app.rangeYLabel.Visible = 'off';
+        app.rangeYLabel.Position = [14 26 44 22];
+        app.rangeYLabel.Text = 'rangeY';
 
-        app.rangeYEditField = uieditfield(p, 'numeric');
-        app.rangeYEditField.Limits = [1 Inf];
-        app.rangeYEditField.Visible = 'off';
-        app.rangeYEditField.Position = [66 25 30 22];
-        app.rangeYEditField.Value = 1;
+        app.rangeY = uieditfield(p, 'numeric');
+        app.rangeY.Limits = [1 Inf];
+        app.rangeY.Visible = 'off';
+        app.rangeY.Position = [66 25 30 22];
+        app.rangeY.Value = 1;
 
         app.savecoefsCheckBox = uicheckbox(p);
         app.savecoefsCheckBox.Visible = 'off';
@@ -1311,35 +1313,35 @@ methods (Access = private)
         app.referenceimageDropDown.Position = [114 135 135 18];
         app.referenceimageDropDown.Value = 'central subaperture';
 
-        app.subapnumpositionsEditFieldLabel = uilabel(p);
-        app.subapnumpositionsEditFieldLabel.FontColor = [0.8 0.8 0.8];
-        app.subapnumpositionsEditFieldLabel.Position = [12 207 115 22];
-        app.subapnumpositionsEditFieldLabel.Text = 'subap num positions';
+        app.SubApNumPositionsLabel = uilabel(p);
+        app.SubApNumPositionsLabel.FontColor = [0.8 0.8 0.8];
+        app.SubApNumPositionsLabel.Position = [12 207 115 22];
+        app.SubApNumPositionsLabel.Text = 'subap num positions';
 
-        app.subapnumpositionsEditField = uieditfield(p, 'numeric');
-        app.subapnumpositionsEditField.Limits = [1 20];
-        app.subapnumpositionsEditField.RoundFractionalValues = 'on';
-        app.subapnumpositionsEditField.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.subapnumpositionsEditField.FontColor = [0.8 0.8 0.8];
-        app.subapnumpositionsEditField.BackgroundColor = [0.149 0.149 0.149];
-        app.subapnumpositionsEditField.Tooltip = {'Number of subapertures used for Shack-Hartmann simulation'};
-        app.subapnumpositionsEditField.Position = [142 207 43 22];
-        app.subapnumpositionsEditField.Value = 5;
+        app.SubApNumPositions = uieditfield(p, 'numeric');
+        app.SubApNumPositions.Limits = [1 20];
+        app.SubApNumPositions.RoundFractionalValues = 'on';
+        app.SubApNumPositions.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.SubApNumPositions.FontColor = [0.8 0.8 0.8];
+        app.SubApNumPositions.BackgroundColor = [0.149 0.149 0.149];
+        app.SubApNumPositions.Tooltip = {'Number of subapertures used for Shack-Hartmann simulation'};
+        app.SubApNumPositions.Position = [142 207 43 22];
+        app.SubApNumPositions.Value = 5;
 
-        app.imagesubapsizeratioEditFieldLabel = uilabel(p);
-        app.imagesubapsizeratioEditFieldLabel.FontColor = [0.8 0.8 0.8];
-        app.imagesubapsizeratioEditFieldLabel.Position = [12 184 125 22];
-        app.imagesubapsizeratioEditFieldLabel.Text = 'image subap size ratio';
+        app.imageSubApSizeRatioLabel = uilabel(p);
+        app.imageSubApSizeRatioLabel.FontColor = [0.8 0.8 0.8];
+        app.imageSubApSizeRatioLabel.Position = [12 184 125 22];
+        app.imageSubApSizeRatioLabel.Text = 'image subap size ratio';
 
-        app.imagesubapsizeratioEditField = uieditfield(p, 'numeric');
-        app.imagesubapsizeratioEditField.Limits = [1 20];
-        app.imagesubapsizeratioEditField.RoundFractionalValues = 'on';
-        app.imagesubapsizeratioEditField.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.imagesubapsizeratioEditField.FontColor = [0.8 0.8 0.8];
-        app.imagesubapsizeratioEditField.BackgroundColor = [0.149 0.149 0.149];
-        app.imagesubapsizeratioEditField.Tooltip = {'Number of subapertures used for Shack-Hartmann simulation'};
-        app.imagesubapsizeratioEditField.Position = [142 184 43 22];
-        app.imagesubapsizeratioEditField.Value = 5;
+        app.imageSubApSizeRatio = uieditfield(p, 'numeric');
+        app.imageSubApSizeRatio.Limits = [1 20];
+        app.imageSubApSizeRatio.RoundFractionalValues = 'on';
+        app.imageSubApSizeRatio.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.imageSubApSizeRatio.FontColor = [0.8 0.8 0.8];
+        app.imageSubApSizeRatio.BackgroundColor = [0.149 0.149 0.149];
+        app.imageSubApSizeRatio.Tooltip = {'Number of subapertures used for Shack-Hartmann simulation'};
+        app.imageSubApSizeRatio.Position = [142 184 43 22];
+        app.imageSubApSizeRatio.Value = 5;
 
         app.numberofiterationLabel = uilabel(p);
         app.numberofiterationLabel.HorizontalAlignment = 'center';
@@ -1347,15 +1349,15 @@ methods (Access = private)
         app.numberofiterationLabel.Position = [149 309 105 22];
         app.numberofiterationLabel.Text = 'number of iteration';
 
-        app.NumberOfIterationEditField = uieditfield(p, 'numeric');
-        app.NumberOfIterationEditField.Limits = [1 Inf];
-        app.NumberOfIterationEditField.RoundFractionalValues = 'on';
-        app.NumberOfIterationEditField.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.NumberOfIterationEditField.FontColor = [0.8 0.8 0.8];
-        app.NumberOfIterationEditField.BackgroundColor = [0.149 0.149 0.149];
-        app.NumberOfIterationEditField.Tooltip = {'Number of zernike ranks to use for aberration correction'};
-        app.NumberOfIterationEditField.Position = [268 309 27 22];
-        app.NumberOfIterationEditField.Value = 3;
+        app.NumberOfIteration = uieditfield(p, 'numeric');
+        app.NumberOfIteration.Limits = [1 Inf];
+        app.NumberOfIteration.RoundFractionalValues = 'on';
+        app.NumberOfIteration.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.NumberOfIteration.FontColor = [0.8 0.8 0.8];
+        app.NumberOfIteration.BackgroundColor = [0.149 0.149 0.149];
+        app.NumberOfIteration.Tooltip = {'Number of zernike ranks to use for aberration correction'};
+        app.NumberOfIteration.Position = [268 309 27 22];
+        app.NumberOfIteration.Value = 3;
 
         app.calibrationfactorLabel = uilabel(p);
         app.calibrationfactorLabel.HorizontalAlignment = 'center';
@@ -1364,15 +1366,15 @@ methods (Access = private)
         app.calibrationfactorLabel.Position = [149 159 93 22];
         app.calibrationfactorLabel.Text = 'calibration factor';
 
-        app.CalibrationFactorEditField = uieditfield(p, 'numeric');
-        app.CalibrationFactorEditField.Limits = [0 Inf];
-        app.CalibrationFactorEditField.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.CalibrationFactorEditField.FontColor = [0.8 0.8 0.8];
-        app.CalibrationFactorEditField.BackgroundColor = [0.149 0.149 0.149];
-        app.CalibrationFactorEditField.Visible = 'off';
-        app.CalibrationFactorEditField.Tooltip = {'Number of zernike ranks to use for aberration correction'};
-        app.CalibrationFactorEditField.Position = [268 158 27 22];
-        app.CalibrationFactorEditField.Value = 60;
+        app.CalibrationFactor = uieditfield(p, 'numeric');
+        app.CalibrationFactor.Limits = [0 Inf];
+        app.CalibrationFactor.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.CalibrationFactor.FontColor = [0.8 0.8 0.8];
+        app.CalibrationFactor.BackgroundColor = [0.149 0.149 0.149];
+        app.CalibrationFactor.Visible = 'off';
+        app.CalibrationFactor.Tooltip = {'Number of zernike ranks to use for aberration correction'};
+        app.CalibrationFactor.Position = [268 158 27 22];
+        app.CalibrationFactor.Value = 60;
 
         app.calibrationfactorLabel_2 = uilabel(p);
         app.calibrationfactorLabel_2.HorizontalAlignment = 'center';
@@ -1408,43 +1410,43 @@ methods (Access = private)
 
         p = app.RenderingparametersPanel;
 
-        app.svd_threshold_reset_button = uibutton(p, 'push');
-        app.svd_threshold_reset_button.ButtonPushedFcn = createCallbackFcn(app, @svd_threshold_reset_buttonPushed, true);
-        app.svd_threshold_reset_button.BackgroundColor = [0.149 0.149 0.149];
-        app.svd_threshold_reset_button.FontColor = [0.9412 0.9412 0.9412];
-        app.svd_threshold_reset_button.Position = [152 235 90 23];
-        app.svd_threshold_reset_button.Text = 'svd_threshold';
+        app.svdThreshold_reset_button = uibutton(p, 'push');
+        app.svdThreshold_reset_button.ButtonPushedFcn = createCallbackFcn(app, @svdThreshold_reset_buttonPushed, true);
+        app.svdThreshold_reset_button.BackgroundColor = [0.149 0.149 0.149];
+        app.svdThreshold_reset_button.FontColor = [0.9412 0.9412 0.9412];
+        app.svdThreshold_reset_button.Position = [152 235 90 23];
+        app.svdThreshold_reset_button.Text = 'svdThreshold';
 
-        app.spatial_filter = uicheckbox(p);
-        app.spatial_filter.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.spatial_filter.Tooltip = {'Filter the spatial frequencies of the interferograms keeping only those between spatial filter range1 and 2 (between 0 and 1-> highest dimension)'};
-        app.spatial_filter.Text = 'spatial_filter';
-        app.spatial_filter.FontColor = [0.9412 0.9412 0.9412];
-        app.spatial_filter.Position = [9 331 86 22];
+        app.spatialFilter = uicheckbox(p);
+        app.spatialFilter.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.spatialFilter.Tooltip = {'Filter the spatial frequencies of the interferograms keeping only those between spatial filter range1 and 2 (between 0 and 1-> highest dimension)'};
+        app.spatialFilter.Text = 'spatialFilter';
+        app.spatialFilter.FontColor = [0.9412 0.9412 0.9412];
+        app.spatialFilter.Position = [9 331 86 22];
 
-        app.hilbert_filter = uicheckbox(p);
-        app.hilbert_filter.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.hilbert_filter.Tooltip = {'Apply a hilbert transformation on the interferogram batch to get an analytical signal of each pixel.'};
-        app.hilbert_filter.Text = 'hilbert_filter';
-        app.hilbert_filter.FontColor = [0.9412 0.9412 0.9412];
-        app.hilbert_filter.Position = [9 307 84 22];
+        app.hilbertFilter = uicheckbox(p);
+        app.hilbertFilter.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.hilbertFilter.Tooltip = {'Apply a hilbert transformation on the interferogram batch to get an analytical signal of each pixel.'};
+        app.hilbertFilter.Text = 'hilbertFilter';
+        app.hilbertFilter.FontColor = [0.9412 0.9412 0.9412];
+        app.hilbertFilter.Position = [9 307 84 22];
 
-        app.spatial_filter_range = uilabel(p);
-        app.spatial_filter_range.FontColor = [0.9412 0.9412 0.9412];
-        app.spatial_filter_range.Position = [94 331 106 22];
-        app.spatial_filter_range.Text = 'spatial_filter_range';
+        app.spatialFilterRange = uilabel(p);
+        app.spatialFilterRange.FontColor = [0.9412 0.9412 0.9412];
+        app.spatialFilterRange.Position = [94 331 106 22];
+        app.spatialFilterRange.Text = 'spatialFilterRange';
 
-        app.spatial_filter_range1 = uieditfield(p, 'numeric');
-        app.spatial_filter_range1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.spatial_filter_range1.FontColor = [1 1 1];
-        app.spatial_filter_range1.BackgroundColor = [0.149 0.149 0.149];
-        app.spatial_filter_range1.Position = [199 331 29 22];
+        app.spatialFilterRange1 = uieditfield(p, 'numeric');
+        app.spatialFilterRange1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.spatialFilterRange1.FontColor = [1 1 1];
+        app.spatialFilterRange1.BackgroundColor = [0.149 0.149 0.149];
+        app.spatialFilterRange1.Position = [199 331 29 22];
 
-        app.spatial_filter_range2 = uieditfield(p, 'numeric');
-        app.spatial_filter_range2.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.spatial_filter_range2.FontColor = [1 1 1];
-        app.spatial_filter_range2.BackgroundColor = [0.149 0.149 0.149];
-        app.spatial_filter_range2.Position = [240 331 28 22];
+        app.spatialFilterRange2 = uieditfield(p, 'numeric');
+        app.spatialFilterRange2.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.spatialFilterRange2.FontColor = [1 1 1];
+        app.spatialFilterRange2.BackgroundColor = [0.149 0.149 0.149];
+        app.spatialFilterRange2.Position = [240 331 28 22];
 
         app.spatial_transformationDropDownLabel = uilabel(p);
         app.spatial_transformationDropDownLabel.HorizontalAlignment = 'right';
@@ -1459,11 +1461,11 @@ methods (Access = private)
         app.spatial_transformation.BackgroundColor = [0.502 0.502 0.502];
         app.spatial_transformation.Position = [147 285 100 22];
 
-        app.spatial_propagationEditFieldLabel = uilabel(p);
-        app.spatial_propagationEditFieldLabel.HorizontalAlignment = 'right';
-        app.spatial_propagationEditFieldLabel.FontColor = [0.9412 0.9412 0.9412];
-        app.spatial_propagationEditFieldLabel.Position = [15 261 110 22];
-        app.spatial_propagationEditFieldLabel.Text = 'spatial_propagation';
+        app.spatial_propagationLabel = uilabel(p);
+        app.spatial_propagationLabel.HorizontalAlignment = 'right';
+        app.spatial_propagationLabel.FontColor = [0.9412 0.9412 0.9412];
+        app.spatial_propagationLabel.Position = [15 261 110 22];
+        app.spatial_propagationLabel.Text = 'spatial_propagation';
 
         app.spatial_propagation = uieditfield(p, 'numeric');
         app.spatial_propagation.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
@@ -1479,19 +1481,19 @@ methods (Access = private)
         app.svd_filter.FontColor = [0.9412 0.9412 0.9412];
         app.svd_filter.Position = [17 236 70 22];
 
-        app.svdx_filter = uicheckbox(p);
-        app.svdx_filter.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.svdx_filter.Tooltip = {'Same filter but decomposition bloc by bloc of frames'};
-        app.svdx_filter.Text = 'svdx_filter';
-        app.svdx_filter.FontColor = [0.9412 0.9412 0.9412];
-        app.svdx_filter.Position = [17 209 76 22];
+        app.svdxFilter = uicheckbox(p);
+        app.svdxFilter.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.svdxFilter.Tooltip = {'Same filter but decomposition bloc by bloc of frames'};
+        app.svdxFilter.Text = 'svdxFilter';
+        app.svdxFilter.FontColor = [0.9412 0.9412 0.9412];
+        app.svdxFilter.Position = [17 209 76 22];
 
-        app.svd_threshold = uieditfield(p, 'numeric');
-        app.svd_threshold.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.svd_threshold.FontColor = [1 1 1];
-        app.svd_threshold.BackgroundColor = [0.149 0.149 0.149];
-        app.svd_threshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => time_range(1)/fs * batchSize * 2)'};
-        app.svd_threshold.Position = [246 236 31 22];
+        app.svdThreshold = uieditfield(p, 'numeric');
+        app.svdThreshold.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.svdThreshold.FontColor = [1 1 1];
+        app.svdThreshold.BackgroundColor = [0.149 0.149 0.149];
+        app.svdThreshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => timeRange(1)/fs * batchSize * 2)'};
+        app.svdThreshold.Position = [246 236 31 22];
 
         app.time_transformDropDownLabel = uilabel(p);
         app.time_transformDropDownLabel.HorizontalAlignment = 'right';
@@ -1506,28 +1508,28 @@ methods (Access = private)
         app.time_transform.BackgroundColor = [0.502 0.502 0.502];
         app.time_transform.Position = [115 155 100 22];
 
-        app.frequency_rangeLabel = uilabel(p);
-        app.frequency_rangeLabel.FontColor = [0.9412 0.9412 0.9412];
-        app.frequency_rangeLabel.Position = [17 130 95 22];
-        app.frequency_rangeLabel.Text = 'frequency_range';
+        app.frequencyRangeLabel = uilabel(p);
+        app.frequencyRangeLabel.FontColor = [0.9412 0.9412 0.9412];
+        app.frequencyRangeLabel.Position = [17 130 95 22];
+        app.frequencyRangeLabel.Text = 'frequencyRange';
 
-        app.time_range1 = uieditfield(p, 'numeric');
-        app.time_range1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.time_range1.FontColor = [1 1 1];
-        app.time_range1.BackgroundColor = [0.149 0.149 0.149];
-        app.time_range1.Position = [122 130 38 22];
+        app.timeRange1 = uieditfield(p, 'numeric');
+        app.timeRange1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.timeRange1.FontColor = [1 1 1];
+        app.timeRange1.BackgroundColor = [0.149 0.149 0.149];
+        app.timeRange1.Position = [122 130 38 22];
 
-        app.time_range2 = uieditfield(p, 'numeric');
-        app.time_range2.ValueChangedFcn = createCallbackFcn(app, @time_range2ValueChanged, true);
-        app.time_range2.FontColor = [1 1 1];
-        app.time_range2.BackgroundColor = [0.149 0.149 0.149];
-        app.time_range2.Position = [177 130 38 22];
+        app.timeRange2 = uieditfield(p, 'numeric');
+        app.timeRange2.ValueChangedFcn = createCallbackFcn(app, @timeRange2ValueChanged, true);
+        app.timeRange2.FontColor = [1 1 1];
+        app.timeRange2.BackgroundColor = [0.149 0.149 0.149];
+        app.timeRange2.Position = [177 130 38 22];
 
-        app.flat_field_gwEditFieldLabel = uilabel(p);
-        app.flat_field_gwEditFieldLabel.HorizontalAlignment = 'right';
-        app.flat_field_gwEditFieldLabel.FontColor = [0.9412 0.9412 0.9412];
-        app.flat_field_gwEditFieldLabel.Position = [17 79 72 22];
-        app.flat_field_gwEditFieldLabel.Text = 'flat_field_gw';
+        app.flat_field_gwLabel = uilabel(p);
+        app.flat_field_gwLabel.HorizontalAlignment = 'right';
+        app.flat_field_gwLabel.FontColor = [0.9412 0.9412 0.9412];
+        app.flat_field_gwLabel.Position = [17 79 72 22];
+        app.flat_field_gwLabel.Text = 'flat_field_gw';
 
         app.flat_field_gw = uieditfield(p, 'numeric');
         app.flat_field_gw.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
@@ -1553,56 +1555,56 @@ methods (Access = private)
         app.RenderPreviewLamp = uilamp(p);
         app.RenderPreviewLamp.Position = [188 48 12 12];
 
-        app.svdx_t_filter = uicheckbox(p);
-        app.svdx_t_filter.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.svdx_t_filter.Tooltip = {'Same filter but decomposition bloc by bloc of frames'};
-        app.svdx_t_filter.Text = 'svd_x_t_filter';
-        app.svdx_t_filter.FontColor = [0.9412 0.9412 0.9412];
-        app.svdx_t_filter.Position = [17 183 93 22];
+        app.svdx_tFilter = uicheckbox(p);
+        app.svdx_tFilter.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.svdx_tFilter.Tooltip = {'Same filter but decomposition bloc by bloc of frames'};
+        app.svdx_tFilter.Text = 'svd_x_t_filter';
+        app.svdx_tFilter.FontColor = [0.9412 0.9412 0.9412];
+        app.svdx_tFilter.Position = [17 183 93 22];
 
-        app.index_rangeLabel = uilabel(p);
-        app.index_rangeLabel.FontColor = [0.9412 0.9412 0.9412];
-        app.index_rangeLabel.Position = [17 105 71 22];
-        app.index_rangeLabel.Text = 'index_range';
+        app.indexRangeLabel = uilabel(p);
+        app.indexRangeLabel.FontColor = [0.9412 0.9412 0.9412];
+        app.indexRangeLabel.Position = [17 105 71 22];
+        app.indexRangeLabel.Text = 'indexRange';
 
-        app.index_range1 = uieditfield(p, 'numeric');
-        app.index_range1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.index_range1.FontColor = [1 1 1];
-        app.index_range1.BackgroundColor = [0.149 0.149 0.149];
-        app.index_range1.Position = [122 105 38 22];
+        app.indexRange1 = uieditfield(p, 'numeric');
+        app.indexRange1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.indexRange1.FontColor = [1 1 1];
+        app.indexRange1.BackgroundColor = [0.149 0.149 0.149];
+        app.indexRange1.Position = [122 105 38 22];
 
-        app.index_range2 = uieditfield(p, 'numeric');
-        app.index_range2.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.index_range2.FontColor = [1 1 1];
-        app.index_range2.BackgroundColor = [0.149 0.149 0.149];
-        app.index_range2.Position = [177 105 38 22];
+        app.indexRange2 = uieditfield(p, 'numeric');
+        app.indexRange2.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.indexRange2.FontColor = [1 1 1];
+        app.indexRange2.BackgroundColor = [0.149 0.149 0.149];
+        app.indexRange2.Position = [177 105 38 22];
 
-        app.svdx_threshold = uieditfield(p, 'numeric');
-        app.svdx_threshold.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.svdx_threshold.FontColor = [1 1 1];
-        app.svdx_threshold.BackgroundColor = [0.149 0.149 0.149];
-        app.svdx_threshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => time_range(1)/fs * batchSize * 2)'};
-        app.svdx_threshold.Position = [246 207 31 22];
+        app.svdxThreshold = uieditfield(p, 'numeric');
+        app.svdxThreshold.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.svdxThreshold.FontColor = [1 1 1];
+        app.svdxThreshold.BackgroundColor = [0.149 0.149 0.149];
+        app.svdxThreshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => timeRange(1)/fs * batchSize * 2)'};
+        app.svdxThreshold.Position = [246 207 31 22];
 
-        app.svdx_t_threshold = uieditfield(p, 'numeric');
-        app.svdx_t_threshold.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.svdx_t_threshold.FontColor = [1 1 1];
-        app.svdx_t_threshold.BackgroundColor = [0.149 0.149 0.149];
-        app.svdx_t_threshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => time_range(1)/fs * batchSize * 2)'};
-        app.svdx_t_threshold.Position = [246 182 31 22];
+        app.svdx_tThreshold = uieditfield(p, 'numeric');
+        app.svdx_tThreshold.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.svdx_tThreshold.FontColor = [1 1 1];
+        app.svdx_tThreshold.BackgroundColor = [0.149 0.149 0.149];
+        app.svdx_tThreshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => timeRange(1)/fs * batchSize * 2)'};
+        app.svdx_tThreshold.Position = [246 182 31 22];
 
         app.svdx_Nsub = uieditfield(p, 'numeric');
         app.svdx_Nsub.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.svdx_Nsub.FontColor = [1 1 1];
         app.svdx_Nsub.BackgroundColor = [0.149 0.149 0.149];
-        app.svdx_Nsub.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => time_range(1)/fs * batchSize * 2)'};
+        app.svdx_Nsub.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => timeRange(1)/fs * batchSize * 2)'};
         app.svdx_Nsub.Position = [189 207 31 22];
 
         app.svdx_t_Nsub = uieditfield(p, 'numeric');
         app.svdx_t_Nsub.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.svdx_t_Nsub.FontColor = [1 1 1];
         app.svdx_t_Nsub.BackgroundColor = [0.149 0.149 0.149];
-        app.svdx_t_Nsub.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => time_range(1)/fs * batchSize * 2)'};
+        app.svdx_t_Nsub.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => timeRange(1)/fs * batchSize * 2)'};
         app.svdx_t_Nsub.Position = [189 182 31 22];
 
         app.NsubxLabel = uilabel(p);

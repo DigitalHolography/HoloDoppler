@@ -10,7 +10,7 @@ properties
     % An array of size 2 x Nt
     % 1st row at pos i: idx of the first frame of the batch used to compute the coefs stored at pos i
     % 2nd row at pos i: idx of the last frame of the batch used to compute the coefs stored at pos i
-    frame_ranges
+    frameRanges
 end
 
 methods
@@ -27,14 +27,14 @@ methods
                       size(obj.aberration_correction.iterative_opt_zernike_coefs, 2)]);
     end
 
-    function obj = compute_frame_ranges(obj)
+    function obj = compute_frameRanges(obj)
         Nt = obj.get_Nt();
 
-        obj.frame_ranges = zeros(2, Nt);
+        obj.frameRanges = zeros(2, Nt);
 
         for i = 1:Nt
-            obj.frame_ranges(1, i) = (i - 1) * obj.batchStride + 1;
-            obj.frame_ranges(2, i) = obj.frame_ranges(1, i) + obj.batchSize;
+            obj.frameRanges(1, i) = (i - 1) * obj.batchStride + 1;
+            obj.frameRanges(2, i) = obj.frameRanges(1, i) + obj.batchSize;
         end
 
     end

@@ -11,16 +11,16 @@ for rephasing_data = rephasing_data
         coefs = zeros(1, num_frames);
 
         for j = 1:length(shifts)
-            coefs(rephasing_data.frame_ranges(1, j):rephasing_data.frame_ranges(2, j)) = shifts(j);
+            coefs(rephasing_data.frameRanges(1, j):rephasing_data.frameRanges(2, j)) = shifts(j);
 
             if j + 1 < length(shifts)
-                coefs(rephasing_data.frame_ranges(2, j):rephasing_data.frame_ranges(1, j + 1)) = (shifts(j) + shifts(j + 1)) / 2;
+                coefs(rephasing_data.frameRanges(2, j):rephasing_data.frameRanges(1, j + 1)) = (shifts(j) + shifts(j + 1)) / 2;
             end
 
         end
 
-        coefs(1:rephasing_data.frame_ranges(1, 1)) = shifts(1);
-        coefs(rephasing_data.frame_ranges(2, length(shifts)):end) = shifts(end);
+        coefs(1:rephasing_data.frameRanges(1, 1)) = shifts(1);
+        coefs(rephasing_data.frameRanges(2, length(shifts)):end) = shifts(end);
 
         % global idx of first/last frames of current batch
         first_frame_idx = frame_offset + 1;

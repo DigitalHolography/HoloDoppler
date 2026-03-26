@@ -124,12 +124,12 @@ methods
         z_step = str2double(obj.IO.editZStep.String);
         z_min = str2double(obj.IO.editZRangeMin.String);
         z_max = str2double(obj.IO.editZRangeMax.String);
-        z_range = z_min:z_step:z_max;
+        zRange = z_min:z_step:z_max;
 
         switch evt.Key
             case 'leftarrow'
                 z_ = obj.z_current - z_step;
-                idx = find(abs(z_range - z_) < 1e-8, 1);
+                idx = find(abs(zRange - z_) < 1e-8, 1);
 
                 if ~isempty(idx) && ~isempty(obj.Z_full)
                     obj.z_current = z_;
@@ -139,7 +139,7 @@ methods
                 obj.updateImageDisplay();
             case 'rightarrow'
                 z_ = obj.z_current + z_step;
-                idx = find(abs(z_range - z_) < 1e-8, 1);
+                idx = find(abs(zRange - z_) < 1e-8, 1);
 
                 if ~isempty(idx) && ~isempty(obj.Z_full)
                     obj.z_current = z_;

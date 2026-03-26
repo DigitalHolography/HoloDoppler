@@ -2,7 +2,7 @@ function J = objective(FH, coefs, zernike_eval, f1, f2, mask, acquisition, gauss
 % appeler cost function
 phase_correction = compute_phase_correction(coefs, zernike_eval);
 
-%% compute corrected hologram
+% compute corrected hologram
 moment = reconstruct_hologram(FH, f1, f2, acquisition, gaussian_width, use_gpu, true, phase_correction);
 moment = mat2gray(abs(ifft2(fft2(moment) .* fftshift(mask))));
 

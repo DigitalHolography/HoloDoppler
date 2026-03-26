@@ -130,7 +130,7 @@ methods
 
     function updateAverageImage(obj)
         % Calculate average image based on current processing
-        obj.avgImage = moment0(abs(obj.SH), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH, 3), 0);
+        obj.avgImage = moment0(abs(obj.SH), obj.Params.timeRange(1), obj.Params.timeRange(2), obj.Params.fs, size(obj.SH, 3), 0);
     end
 
     function updateImageDisplay(obj)
@@ -224,12 +224,12 @@ methods
         miniSH = obj.SH(floor(pos(2)):floor(pos(2) + pos(4) - 1), floor(pos(1)):floor(pos(1) + pos(3) - 1), :);
         minibkg = obj.bkgmask(floor(pos(2)):floor(pos(2) + pos(4) - 1), floor(pos(1)):floor(pos(1) + pos(3) - 1));
         minivess = obj.vesselmask(floor(pos(2)):floor(pos(2) + pos(4) - 1), floor(pos(1)):floor(pos(1) + pos(3) - 1));
-        M0 = moment0(abs(miniSH), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH, 3));
-        M2 = moment2(abs(miniSH), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH, 3));
+        M0 = moment0(abs(miniSH), obj.Params.timeRange(1), obj.Params.timeRange(2), obj.Params.fs, size(obj.SH, 3));
+        M2 = moment2(abs(miniSH), obj.Params.timeRange(1), obj.Params.timeRange(2), obj.Params.fs, size(obj.SH, 3));
         %f_ = sqrt(M2./M0);
         f_ = sqrt(M2 ./ mean(M0, [1, 2]));
-        M0_bkg = moment0(abs(miniSH .* minibkg), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH, 3));
-        M2_bkg = moment2(abs(miniSH .* minibkg), obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.SH, 3));
+        M0_bkg = moment0(abs(miniSH .* minibkg), obj.Params.timeRange(1), obj.Params.timeRange(2), obj.Params.fs, size(obj.SH, 3));
+        M2_bkg = moment2(abs(miniSH .* minibkg), obj.Params.timeRange(1), obj.Params.timeRange(2), obj.Params.fs, size(obj.SH, 3));
         f_bkg = sqrt(M2_bkg ./ M0_bkg);
         d = max(size(miniSH, 1), size(miniSH, 2));
         f_bkg = maskedAverage(f_bkg, d, minibkg, minivess);
@@ -272,12 +272,12 @@ methods
 
         % Plot the spectrum for the selected region
         obj.updateMasks();
-        xline(obj.Params.time_range(1), '--')
-        xline(obj.Params.time_range(2), '--')
-        xline(-obj.Params.time_range(1), '--')
-        xline(-obj.Params.time_range(2), '--')
-        xticks([-obj.Params.time_range(2) -obj.Params.time_range(1) 0 obj.Params.time_range(1) obj.Params.time_range(2)])
-        xticklabels({num2str(round(-obj.Params.time_range(2), 1)), num2str(round(-obj.Params.time_range(1), 1)), '0', num2str(round(obj.Params.time_range(1), 1)), num2str(round(obj.Params.time_range(2), 1))})
+        xline(obj.Params.timeRange(1), '--')
+        xline(obj.Params.timeRange(2), '--')
+        xline(-obj.Params.timeRange(1), '--')
+        xline(-obj.Params.timeRange(2), '--')
+        xticks([-obj.Params.timeRange(2) -obj.Params.timeRange(1) 0 obj.Params.timeRange(1) obj.Params.timeRange(2)])
+        xticklabels({num2str(round(-obj.Params.timeRange(2), 1)), num2str(round(-obj.Params.timeRange(1), 1)), '0', num2str(round(obj.Params.timeRange(1), 1)), num2str(round(obj.Params.timeRange(2), 1))})
         fontsize(gca, 12, "points");
         xlabel('frequency (kHz)', 'FontSize', 14);
         ylabel('log_{10}(S)', 'FontSize', 14);
@@ -291,9 +291,9 @@ methods
         SH_mask = abs(obj.SH) .* local_mask;
 
         spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(local_mask);
-        momentM0 = moment0(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3));
-        momentM1 = moment1(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3));
-        momentM2 = moment2(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3));
+        momentM0 = moment0(obj.SH, obj.Params.timeRange(1), obj.Params.timeRange(2), obj.Params.fs, size(SH_mask, 3));
+        momentM1 = moment1(obj.SH, obj.Params.timeRange(1), obj.Params.timeRange(2), obj.Params.fs, size(SH_mask, 3));
+        momentM2 = moment2(obj.SH, obj.Params.timeRange(1), obj.Params.timeRange(2), obj.Params.fs, size(SH_mask, 3));
         M0 = squeeze(sum(momentM0 .* local_mask, [1 2]) / nnz(local_mask)); % versus mean(momentM0,[1,2])
         M0_full = mean(momentM0, [1, 2]);
         M1 = squeeze(sum(momentM1 .* local_mask, [1 2]) / nnz(local_mask));
@@ -305,7 +305,7 @@ methods
         axis_x = linspace(-obj.Params.fs / 2, obj.Params.fs / 2, size(SH_mask, 3));
         p_mask = plot(axis_x, fftshift(scalingfn(spectrumAVG_mask)), 'Color', 'red', 'LineWidth', 1, 'DisplayName', 'Arteries');
         xlim([-obj.Params.fs / 2 obj.Params.fs / 2])
-        sclingrange = abs(fftshift(axis_x)) > obj.Params.time_range(1);
+        sclingrange = abs(fftshift(axis_x)) > obj.Params.timeRange(1);
 
         if rescale
             yrange = [.99 * scalingfn(min(spectrumAVG_mask(sclingrange))) 1.01 * scalingfn(max(spectrumAVG_mask(sclingrange)))];
@@ -339,9 +339,9 @@ methods
         SH_mask = abs(obj.SH) .* local_mask;
 
         spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(local_mask);
-        momentM0 = moment0(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3));
-        momentM1 = moment1(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3));
-        momentM2 = moment2(obj.SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(SH_mask, 3));
+        momentM0 = moment0(obj.SH, obj.Params.timeRange(1), obj.Params.timeRange(2), obj.Params.fs, size(SH_mask, 3));
+        momentM1 = moment1(obj.SH, obj.Params.timeRange(1), obj.Params.timeRange(2), obj.Params.fs, size(SH_mask, 3));
+        momentM2 = moment2(obj.SH, obj.Params.timeRange(1), obj.Params.timeRange(2), obj.Params.fs, size(SH_mask, 3));
         M0 = squeeze(sum(momentM0 .* local_mask, [1 2]) / nnz(local_mask)); % versus mean(momentM0,[1,2])
         M0_full = mean(momentM0, [1, 2]);
         M1 = squeeze(sum(momentM1 .* local_mask, [1 2]) / nnz(local_mask));
@@ -354,7 +354,7 @@ methods
         axis_x = linspace(-obj.Params.fs / 2, obj.Params.fs / 2, size(SH_mask, 3));
         p_mask = plot(axis_x, fftshift(scalingfn(spectrumAVG_mask)), '--', 'Color', 'black', 'LineWidth', 1, 'DisplayName', 'Arteries');
         xlim([-obj.Params.fs / 2 obj.Params.fs / 2])
-        sclingrange = abs(fftshift(axis_x)) > obj.Params.time_range(1);
+        sclingrange = abs(fftshift(axis_x)) > obj.Params.timeRange(1);
 
         if rescale
             yrange = [.99 * scalingfn(min(spectrumAVG_mask(sclingrange))) 1.01 * scalingfn(max(spectrumAVG_mask(sclingrange)))];

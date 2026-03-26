@@ -58,7 +58,7 @@ label3.Layout.Row = 3;
 label3.Layout.Column = 1;
 
 colorThreshEdit = uieditfield(gl, 'numeric');
-colorThreshEdit.Value = app.HD.view.LastParams.time_range_extra;
+colorThreshEdit.Value = app.HD.view.LastParams.timeRange_extra;
 colorThreshEdit.BackgroundColor = bgColor;
 colorThreshEdit.FontColor = textColor;
 colorThreshEdit.Layout.Row = 4;
@@ -73,7 +73,7 @@ label4.Layout.Row = 3;
 label4.Layout.Column = 2;
 
 bucketsEdit = uieditfield(gl);
-buckranges = app.HD.params.buckets_ranges;
+buckranges = app.HD.params.bucketsRanges;
 % buckranges(:,2) = round(app.HD.params.fs/2,2); % set to half fs the max range by def
 bucketsEdit.Value = mat2str(buckranges);
 bucketsEdit.BackgroundColor = bgColor;
@@ -115,7 +115,7 @@ showSHbtn.BackgroundColor = btnColor;
 showSHbtn.FontColor = textColor;
 showSHbtn.Layout.Row = 5;
 showSHbtn.Layout.Column = 3;
-showSHbtn.ButtonPushedFcn = @(btn, event) ExploreSHbroadening(app.HD.view.SH, app.HD.file.fs, app.HD.params.time_range(1), app.HD.params.time_range(2));
+showSHbtn.ButtonPushedFcn = @(btn, event) ExploreSHbroadening(app.HD.view.SH, app.HD.file.fs, app.HD.params.timeRange(1), app.HD.params.timeRange(2));
 
 % Explore Ap button  - Row 6
 showSHbtn = uibutton(gl, 'push');
@@ -147,13 +147,13 @@ showSHbtn.ButtonPushedFcn = @(btn, event) ExploreZ(app.HD.view, app.HD.params);
 % Set up value change callbacks
 firstFrameEdit.ValueChangedFcn = @(src, event) updateFrameParams(app, src, lastFrameEdit, 'first');
 lastFrameEdit.ValueChangedFcn = @(src, event) updateFrameParams(app, firstFrameEdit, src, 'last');
-colorThreshEdit.ValueChangedFcn = @(src, event) updateParam(app, src, 'time_range_extra');
+colorThreshEdit.ValueChangedFcn = @(src, event) updateParam(app, src, 'timeRange_extra');
 
 function buckEditCallBack(src)
 
     try
-        app.HD.params.buckets_ranges = eval(src.Value);
-        assert(size(app.HD.params.buckets_ranges, 2) == 2);
+        app.HD.params.bucketsRanges = eval(src.Value);
+        assert(size(app.HD.params.bucketsRanges, 2) == 2);
     catch E
         disp("Couldn't get the ranges try to write input frequency ranges like '[[6,18]; [6,25]]' in kHz.")
     end

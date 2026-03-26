@@ -12,22 +12,22 @@
   "parfor_arg": 18,
   "image_registration": true,
   "spatial_transformation": "Fresnel",
-  "time_range": [
+  "timeRange": [
     6,
     18.3
   ],
-  "spatial_filter": false,
-  "hilbert_filter": false,
+  "spatialFilter": false,
+  "hilbertFilter": false,
   "svd_filter": true,
-  "svdx_filter": false,
-  "svdx_t_filter": false,
-  "svd_threshold": 64,
+  "svdxFilter": false,
+  "svdx_tFilter": false,
+  "svdThreshold": 64,
   "svd_stride": [],
   "time_transform": "FFT",
   "flatfield_gw": 35,
   "applyautofocusfromref": false,
   "refBatchSize": 512,
-  "buckets_ranges": [
+  "bucketsRanges": [
     [
       3,
       18.3

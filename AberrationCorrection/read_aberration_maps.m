@@ -45,7 +45,7 @@ for i = 1:coef
     map = data(size_data(1) * (i - 1) + 1:size_data(1) * (i - 1) + size_data(1), 1:size_data(2));
     centerx = ceil(size(map, 1) / 2);
     centery = ceil(size(map, 2) / 2);
-    %     %% remove outliers
+    %     % remove outliers
     %     window_size = floor(0.5 * size(map, 1));
     %     corrected_map = map;
     %     blurred_map = imgaussfilt(map, floor(size(map,1)/4));
@@ -62,7 +62,7 @@ for i = 1:coef
     map = corrected_map;
     map = rmoutliers(map, "mean");
 
-    %% remove offset and normalize
+    % remove offset and normalize
     ref = (abs(map) > 10);
 
     %     norm_map = sqrt(sum(map .* map, "all"));
@@ -73,7 +73,7 @@ for i = 1:coef
     %     map = map - minim;
     %     map(ref) = 0;
 
-    %%  project on the zernike functions
+    %  project on the zernike functions
     projection = zeros(3, 1);
     [~, zern] = zernikePhase([1 2 4], floor(size(map, 1) * sqrt(2)), floor(size(map, 2) .* sqrt(2)));
     NNx = round((size(map, 1)) * (sqrt(2) - 1) / 2);
@@ -85,7 +85,7 @@ for i = 1:coef
         projection(j) = sum(zern(:, :, j) .* map, "all") / nnz(~ref);
     end
 
-    %% display and save
+    % display and save
     disp(projection);
     map = imresize(map, [512 512], 'nearest');
     figure

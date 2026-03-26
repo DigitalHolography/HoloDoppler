@@ -2,8 +2,8 @@ function [correction, stiched_moments_video, shifts_vector, stitched_correlation
     progress_bar, use_gpu, use_multithread, ...
     p, registration_shifts, num_subapertures, num_subapertures_inter, ...
     calibration_factor, subaperture_margin, ...
-    corrmap_margin, power_filter_corrector, ...
-    sigma_filter_corrector, excluded_subapertures, ref_img, varargin)
+    corrmap_margin, powerFilter_corrector, ...
+    sigmaFilter_corrector, excluded_subapertures, ref_img, varargin)
 % Compute an optimal aberration correction given zernike
 % indices.
 %
@@ -103,7 +103,7 @@ parfor (batch_idx = 1:num_batches, parfor_arg)
 
     % FH is now registered and pre-processed, we now proceed to aberation
     % computation
-    shack_hartmann = ShackHartmann(num_subapertures, num_subapertures_inter, p, calibration_factor, subaperture_margin, corrmap_margin, power_filter_corrector, sigma_filter_corrector, ref_img);
+    shack_hartmann = ShackHartmann(num_subapertures, num_subapertures_inter, p, calibration_factor, subaperture_margin, corrmap_margin, powerFilter_corrector, sigmaFilter_corrector, ref_img);
     [M_aso, stiched_moments_M_aso] = shack_hartmann.construct_M_aso(f1, f2, gw, acquisition);
 
     if use_gpu

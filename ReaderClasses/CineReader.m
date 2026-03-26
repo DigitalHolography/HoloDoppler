@@ -28,7 +28,7 @@ methods
     function obj = CineReader(filename)
         obj.filename = filename;
 
-        %% parse header
+        % parse header
         % discard trigger time
         header_mmap = memmapfile(filename, 'Format', ...
             {'uint16', 1, 'type'; ...
@@ -49,7 +49,7 @@ methods
         obj.version = header_mmap.Data.version;
         obj.first_image_no = header_mmap.Data.first_image_no;
 
-        %% jump to bitmap info header
+        % jump to bitmap info header
         bitmap_mmap = memmapfile(filename, ...
             'Offset', header_mmap.Data.off_image_header, 'Format', ...
             {'uint32', 1, 'bi_size'; ...
@@ -80,13 +80,13 @@ methods
             obj.is_packed = false;
         end
 
-        %% read image ptr
+        % read image ptr
         fd = fopen(filename, 'r');
         fseek(fd, header_mmap.Data.off_image_offsets, 'bof');
         obj.image_offsets = fread(fd, obj.num_frames, 'int64');
         fclose(fd);
 
-        %% jump to camera setup structure to read frame rate
+        % jump to camera setup structure to read frame rate
         % Skip additional 768 bytes to access FrameRate in the struct,
         % instead of FrameRate16
         setup_mmap = memmapfile(filename, ...
@@ -96,7 +96,7 @@ methods
          }, 'Repeat', 1);
         obj.frame_rate = setup_mmap.Data.frame_rate;
 
-        %% skip a bunch of fields to access the number of bits per pixel
+        % skip a bunch of fields to access the number of bits per pixel
         % bytes to skip from the begining of the Setup struct:
         % (MAXLENDESCRIPTION_OLD = 121)
         % (OLDMAXFILENAME = 65)
@@ -129,12 +129,12 @@ methods
 
         if obj.true_frame_width <= obj.true_frame_height
             width_skip = floor(0.5 * (final_frame_size - obj.true_frame_width));
-            width_range = 1 + width_skip:width_skip + obj.true_frame_width;
-            height_range = 1:obj.true_frame_height;
+            widthRange = 1 + width_skip:width_skip + obj.true_frame_width;
+            heightRange = 1:obj.true_frame_height;
         else
             height_skip = floor(0.5 * (final_frame_size - obj.true_frame_height));
-            height_range = 1 + height_skip:height_skip + obj.true_frame_height;
-            width_range = 1:obj.true_frame_width;
+            heightRange = 1 + height_skip:height_skip + obj.true_frame_height;
+            widthRange = 1:obj.true_frame_width;
         end
 
         if obj.is_packed
@@ -157,8 +157,8 @@ methods
                 packed_frame = fread(fd, packed_frame_size, 'uint8', 'l');
                 unpacked_frame_zeros = zeros(obj.true_frame_width * obj.true_frame_height, 1, 'double');
                 unpacked_frame = unpack_u12_u10(obj.bi_compression, packed_frame, unpacked_frame_zeros);
-                %                  frame_batch(width_range,height_range,i) = rot90(flipud(reshape(unpacked_frame, obj.frame_width, obj.frame_height)), 2);
-                frame_batch(width_range, height_range, i) = rot90(flipud(reshape(unpacked_frame, obj.true_frame_width, obj.true_frame_height)), 2);
+                %                  frame_batch(widthRange,heightRange,i) = rot90(flipud(reshape(unpacked_frame, obj.frame_width, obj.frame_height)), 2);
+                frame_batch(widthRange, heightRange, i) = rot90(flipud(reshape(unpacked_frame, obj.true_frame_width, obj.true_frame_height)), 2);
             end
 
             frame_batch = CineReader.replace_dropped_frames(frame_batch, 0.2);
@@ -175,9 +175,9 @@ methods
                 fseek(fd, obj.image_offsets(frame_offset + i) + annotation_size, 'bof');
                 %
                 if obj.bits_per_pix == 8 % read 8-bit interferograms
-                    frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.true_frame_width * obj.true_frame_height, 'uint8=>single', 'l'), obj.true_frame_width, obj.true_frame_height);
+                    frame_batch(widthRange, heightRange, i) = reshape(fread(fd, obj.true_frame_width * obj.true_frame_height, 'uint8=>single', 'l'), obj.true_frame_width, obj.true_frame_height);
                 else % read 16-bit interferograms
-                    frame_batch(width_range, height_range, i) = reshape(fread(fd, obj.true_frame_width * obj.true_frame_height, 'uint16=>single', 'l'), obj.true_frame_width, obj.true_frame_height);
+                    frame_batch(widthRange, heightRange, i) = reshape(fread(fd, obj.true_frame_width * obj.true_frame_height, 'uint16=>single', 'l'), obj.true_frame_width, obj.true_frame_height);
                 end
 
             end
@@ -235,8 +235,8 @@ methods
     %            first_frame_idx = frame_offset+1;
     %            last_frame_idx = frame_offset + batchSize;
     %
-    %            indices1 = find(obj.rephasing_data.frame_ranges >= first_frame_idx);
-    %            indices2 = find(obj.rephasing_data.frame_ranges <= last_frame_idx);
+    %            indices1 = find(obj.rephasing_data.frameRanges >= first_frame_idx);
+    %            indices2 = find(obj.rephasing_data.frameRanges <= last_frame_idx);
     %
     %            [~,J1] = ind2sub(2, indices1);
     %            [~,J2] = ind2sub(2, indices2);
@@ -253,10 +253,10 @@ methods
     %               correction = exp(-1i * phase);
     %
     %               % compute last frame to apply phase
-    %               if j ~= size(obj.rephasing_data.frame_ranges,2)
-    %                 last_frame_to_apply_phase_idx = min(obj.rephasing_data.frame_ranges(1,j+1)-1, last_frame_idx);
+    %               if j ~= size(obj.rephasing_data.frameRanges,2)
+    %                 last_frame_to_apply_phase_idx = min(obj.rephasing_data.frameRanges(1,j+1)-1, last_frame_idx);
     %               else
-    %                 last_frame_to_apply_phase_idx = min(obj.rephasing_data.frame_ranges(2,j), last_frame_idx);
+    %                 last_frame_to_apply_phase_idx = min(obj.rephasing_data.frameRanges(2,j), last_frame_idx);
     %               end
     %
     %               % apply correction to FH frames
@@ -279,16 +279,16 @@ methods (Static)
         % threshold: mean value to average value ratio under which a
         %            frame is considered dropped
 
-        %% construct image average values and total average value
+        % construct image average values and total average value
         batch_avgs = squeeze(mean(mean(batch, 1), 2));
         batch_avg = mean(batch_avgs);
 
-        %% setup images filter
+        % setup images filter
         to_delete = abs(batch_avgs - batch_avg) > batch_avg * threshold;
         to_delete = to_delete + circshift(to_delete, 1) + circshift(to_delete, 2);
         to_delete = to_delete > 0;
 
-        %% replace the frames
+        % replace the frames
         batch(:, :, to_delete) = batch(:, :, circshift(to_delete, 3));
     end
 
