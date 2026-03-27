@@ -36,6 +36,8 @@ properties
     band_ratio
     color_band_ratio
     entropy
+    negentropy
+    choro_color_image
 end
 
 methods
@@ -75,6 +77,8 @@ methods
         obj.band_ratio = ImageType('energy_ratio');
         obj.color_band_ratio = ImageType('color_energy_ratio');
         obj.entropy = ImageType('entropy');
+        obj.negentropy = ImageType('negentropy');
+        obj.choro_color_image = ImageType('new_color_image');
     end
 
     function clear(obj, varargin)
@@ -241,26 +245,6 @@ methods
             obj.SH.parameters.vector = zeros(1, batchSize);
         end
 
-        if obj.cumulative_distribution.is_selected
-            img = cdf(SH_mod, f1, f2, fs, 0.5, batchSize);
-            obj.cumulative_distribution.image = img;
-        end
-
-        if obj.band_ratio.is_selected
-            img = energy_ratio(SH_mod, f1, f2, fi1, fi2, fs, batchSize);
-            obj.band_ratio.image = img;
-        end
-
-        if obj.color_band_ratio.is_selected
-            color_img = color_energy_ratio(SH_mod, f1, f2, 5, 5, fs, batchSize);
-            obj.color_band_ratio.image = color_img;
-        end
-
-        if obj.entropy.is_selected
-            img = spectral_entropy(SH_mod, f1, f2, fs, batchSize);
-            obj.entropy.image = img;
-        end
-
         if obj.moment_0.is_selected % Moment 0 has been chosen
             img_M0 = moment0(SH_mod, f1, f2, fs, batchSize);
             obj.moment_0.image = img_M0;
@@ -330,6 +314,36 @@ methods
             M = size(SH_mod, 3);
             img = 1 / (M - 1) * std(diff(SH_arg, 1, 3), [], 3);
             obj.phase_variance.image = img;
+        end
+
+        if obj.cumulative_distribution.is_selected
+            img = cdf(SH_mod, f1, f2, fs, 0.5, batchSize);
+            obj.cumulative_distribution.image = img;
+        end
+
+        if obj.band_ratio.is_selected
+            img = energy_ratio(SH_mod, f1, f2, fi1, fi2, fs, batchSize);
+            obj.band_ratio.image = img;
+        end
+
+        if obj.color_band_ratio.is_selected
+            color_img = color_energy_ratio(SH_mod, f1, f2, fi1, fi2, fs, batchSize);
+            obj.color_band_ratio.image = color_img;
+        end
+
+        if obj.entropy.is_selected
+            img = spectral_entropy(SH_mod, f1, f2, fs, batchSize);
+            obj.entropy.image = img;
+        end
+
+        if obj.negentropy.is_selected
+            img = spectral_negentropy(SH_mod, f1, f2, fs, batchSize);
+            obj.negentropy.image = img;
+        end
+
+        if obj.choro_color_image.is_selected
+            img = new_color_image(SH_mod, f1, f2, fi1, fi2, fs, batchSize);
+            obj.choro_color_image.image = img;
         end
 
         if obj.buckets.is_selected % buckets has been chosen
