@@ -825,42 +825,33 @@ methods
                     generate_video(mat, result_folder_path, strcat('moment1'), export_raw = 1, temporalFilter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'moment_2')
                     generate_video(mat, result_folder_path, strcat('moment2'), export_raw = 1, temporalFilter = 2, square = params.square);
-                elseif strcmp(image_types{i}, 'moment_0_star') % raw moments are always outputted if they are selected
-                    generate_video(mat, result_folder_path, strcat('moment_0_star'), export_raw = 1, temporalFilter = 2, square = params.square); % three cases just to rename each correctly for PW
-                elseif strcmp(image_types{i}, 'moment_1_star')
-                    generate_video(mat, result_folder_path, strcat('moment_1_star'), export_raw = 1, temporalFilter = 2, square = params.square);
-                elseif strcmp(image_types{i}, 'moment_2_star')
-                    generate_video(mat, result_folder_path, strcat('moment_2_star'), export_raw = 1, temporalFilter = 2, square = params.square);
-                elseif strcmp(image_types{i}, 'moment_0_logstar') % raw moments are always outputted if they are selected
-                    generate_video(mat, result_folder_path, strcat('moment_0_logstar'), export_raw = 1, temporalFilter = 2, square = params.square); % three cases just to rename each correctly for PW
-                elseif strcmp(image_types{i}, 'moment_1_logstar')
-                    generate_video(mat, result_folder_path, strcat('moment_1_logstar'), export_raw = 1, temporalFilter = 2, square = params.square);
-                elseif strcmp(image_types{i}, 'moment_2_logstar')
-                    generate_video(mat, result_folder_path, strcat('moment_2_logstar'), export_raw = 1, temporalFilter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'energy_ratio_type')
                     generate_video(mat, result_folder_path, strcat('energy_ratio_type'), export_raw = 1, temporalFilter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'power_Doppler')
                     generate_video(mat, result_folder_path, strcat('M0'), temporalFilter = 2, square = params.square);
                 elseif strcmp(image_types{i}, 'broadening')
-                    generate_video(mat, result_folder_path, strcat('broadening'), temporalFilter = []);
+                    generate_video(mat, result_folder_path, strcat('broadening'));
                 elseif strcmp(image_types{i}, 'f_RMS')
-                    generate_video(mat, result_folder_path, strcat('f_RMS'), temporalFilter = []);
+                    generate_video(mat, result_folder_path, strcat('f_RMS'));
                 elseif strcmp(image_types{i}, 'FH_modulus_mean')
-                    generate_video(mat, result_folder_path, strcat('FH_modulus_mean'), temporalFilter = []);
+                    generate_video(mat, result_folder_path, strcat('FH_modulus_mean'));
                 elseif strcmp(image_types{i}, 'FH_arg_mean')
-                    generate_video(mat, result_folder_path, strcat('FH_arg_mean'), temporalFilter = []);
+                    generate_video(mat, result_folder_path, strcat('FH_arg_mean'));
                 elseif strcmp(image_types{i}, 'arg_0')
-                    generate_video(mat, result_folder_path, strcat('arg_0'), temporalFilter = [], square = params.square);
+                    generate_video(mat, result_folder_path, strcat('arg_0'), square = params.square);
                 elseif strcmp(image_types{i}, 'SVD_cov')
-                    generate_video(mat, result_folder_path, strcat('SVD_cov'), temporalFilter = []);
+                    generate_video(mat, result_folder_path, strcat('SVD_cov'));
                 elseif strcmp(image_types{i}, 'SVD_U')
-                    generate_video(mat, result_folder_path, strcat('SVD_U'), temporalFilter = []);
+                    generate_video(mat, result_folder_path, strcat('SVD_U'));
                 elseif strcmp(image_types{i}, 'ShackHartmann_Cropped_Moments')
-                    generate_video(mat, result_folder_path, strcat('ShackHartmann_Cropped_Moments'), temporalFilter = []);
+                    generate_video(mat, result_folder_path, strcat('ShackHartmann_Cropped_Moments'));
                 elseif strcmp(image_types{i}, 'ShackHartmann_Phase')
-                    generate_video(mat, result_folder_path, strcat('ShackHartmann_Phase'), temporalFilter = []);
+                    generate_video(mat, result_folder_path, strcat('ShackHartmann_Phase'));
                 elseif strcmp(image_types{i}, 'color_Doppler')
-                    generate_video(mat, result_folder_path, strcat('color_Doppler'), square = params.square, temporalFilter = [], enhance_contrast = true, export_gif = true, gif_freq = 16, gif_Duration = size(mat, 4) * params.batchStride / (obj.params.fs * 1000));
+                    generate_video(mat, result_folder_path, strcat('color_Doppler'), square = params.square, enhance_contrast = true, export_gif = true, gif_freq = 16, gif_Duration = size(mat, 4) * params.batchStride / (obj.params.fs * 1000));
+                elseif strcmp(image_types{i}, 'color_band_ratio')
+                    generate_video(mat, result_folder_path, strcat('color_band_ratio'), NoIntensity = 1, ...
+                        square = params.square, enhance_contrast = false);
                 else
                     generate_video(mat, result_folder_path, strcat(image_types{i}), temporalFilter = 2, square = params.square);
                 end
