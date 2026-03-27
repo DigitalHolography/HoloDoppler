@@ -12,17 +12,14 @@
   "parfor_arg": 18,
   "image_registration": true,
   "spatial_transformation": "Fresnel",
-  "timeRange": [
+  "frequencyRange": [
     6,
     18.3
   ],
   "spatialFilter": false,
-  "hilbertFilter": false,
   "svd_filter": true,
-  "svdxFilter": false,
-  "svdx_tFilter": false,
   "svdThreshold": 64,
-  "svd_stride": [],
+  "svdStride": 1,
   "time_transform": "FFT",
   "flatfield_gw": 35,
   "applyautofocusfromref": false,

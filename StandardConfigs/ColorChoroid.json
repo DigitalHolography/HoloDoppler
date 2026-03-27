@@ -24,7 +24,7 @@
   "ppy": 1.9400147441120552E-5,
   "spatial_transformation": "Fresnel",
   "spatial_propagation": 1.25,
-  "timeRange": [
+  "frequencyRange": [
     6,
     18
   ],
@@ -44,5 +44,5 @@
     0,
     1
   ],
-  "timeRange_extra": -1
+  "frequencyRange_extra": -1
 }

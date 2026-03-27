@@ -1,4 +1,4 @@
-function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask(FH, spatial_transformation, spatial_propagation, timeRange, fs, gw, ShackHartmannCorrection)
+function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask(FH, spatial_transformation, spatial_propagation, frequencyRange, fs, gw, ShackHartmannCorrection)
 
 Nx = size(FH, 1);
 Ny = size(FH, 2);
@@ -44,11 +44,11 @@ shack_hartmann.Ny = Ny;
 ac.Nx = Nx;
 ac.Ny = Ny;
 ac.fs = fs;
-[shifts, moment_chunks_crop_array, correlation_chunks_array] = shack_hartmann.compute_images_shifts(FH, timeRange(1), timeRange(2), gw, false, true, ac);
+[shifts, moment_chunks_crop_array, correlation_chunks_array] = shack_hartmann.compute_images_shifts(FH, frequencyRange(1), frequencyRange(2), gw, false, true, ac);
 
 if ShackHartmannCorrection.ZernikeProjection % if the phase should be a combination of zernike polynomials
     % Zernike projection
-    [M_aso, ~] = shack_hartmann.construct_M_aso(timeRange(1), timeRange(2), gw, []);
+    [M_aso, ~] = shack_hartmann.construct_M_aso(frequencyRange(1), frequencyRange(2), gw, []);
     Y = cat(1, real(shifts), imag(shifts));
     M_aso_concat = cat(1, real(M_aso), imag(M_aso));
     % solve linear system

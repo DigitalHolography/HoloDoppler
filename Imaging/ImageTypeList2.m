@@ -161,8 +161,10 @@ methods
     end
 
     function construct_image(obj, Params, SHin)
-        f1 = Params.timeRange(1);
-        f2 = Params.timeRange(2);
+        f1 = Params.frequencyRange(1);
+        f2 = Params.frequencyRange(2);
+        fi1 = Params.frequencyRangeInter(1);
+        fi2 = Params.frequencyRangeInter(2);
 
         [~, ~, batchSize] = size(SHin);
         fs = Params.fs;
@@ -200,10 +202,10 @@ methods
 
         if obj.color_Doppler.is_selected % Color Doppler has been chosen
 
-            if Params.timeRange_extra < 0
+            if Params.frequencyRange_extra < 0
                 f3 = (f1 + f2) / 2;
             else
-                f3 = Params.timeRange_extra;
+                f3 = Params.frequencyRange_extra;
             end
 
             [freq_low, freq_high] = composite(SH_mod, f1, f3, f2, fs, batchSize, max(gw, 20));
@@ -220,7 +222,7 @@ methods
             try
                 fi = figure("Visible", "off");
                 disc = diskMask(size(SH_mod, 1), size(SH_mod, 2), Params.registration_disc_ratio)';
-                spectrum_ploting(SH_mod(:, :, :), disc, fs, Params.timeRange(1), Params.timeRange(2));
+                spectrum_ploting(SH_mod(:, :, :), disc, fs, Params.frequencyRange(1), Params.frequencyRange(2));
                 % ylim([-0 50])
                 frame = getframe(fi); % Capture the figure
                 % obj.broadening.graph = gca;
@@ -245,7 +247,7 @@ methods
         end
 
         if obj.band_ratio.is_selected
-            img = energy_ratio(SH_mod, f1, f2, 5, 5, fs, batchSize);
+            img = energy_ratio(SH_mod, f1, f2, fi1, fi2, fs, batchSize);
             obj.band_ratio.image = img;
         end
 

@@ -58,7 +58,7 @@ label3.Layout.Row = 3;
 label3.Layout.Column = 1;
 
 colorThreshEdit = uieditfield(gl, 'numeric');
-colorThreshEdit.Value = app.HD.view.LastParams.timeRange_extra;
+colorThreshEdit.Value = app.HD.view.LastParams.frequencyRange_extra;
 colorThreshEdit.BackgroundColor = bgColor;
 colorThreshEdit.FontColor = textColor;
 colorThreshEdit.Layout.Row = 4;
@@ -115,7 +115,7 @@ showSHbtn.BackgroundColor = btnColor;
 showSHbtn.FontColor = textColor;
 showSHbtn.Layout.Row = 5;
 showSHbtn.Layout.Column = 3;
-showSHbtn.ButtonPushedFcn = @(btn, event) ExploreSHbroadening(app.HD.view.SH, app.HD.file.fs, app.HD.params.timeRange(1), app.HD.params.timeRange(2));
+showSHbtn.ButtonPushedFcn = @(btn, event) ExploreSHbroadening(app.HD.view.SH, app.HD.file.fs, app.HD.params.frequencyRange(1), app.HD.params.frequencyRange(2));
 
 % Explore Ap button  - Row 6
 showSHbtn = uibutton(gl, 'push');
@@ -147,7 +147,7 @@ showSHbtn.ButtonPushedFcn = @(btn, event) ExploreZ(app.HD.view, app.HD.params);
 % Set up value change callbacks
 firstFrameEdit.ValueChangedFcn = @(src, event) updateFrameParams(app, src, lastFrameEdit, 'first');
 lastFrameEdit.ValueChangedFcn = @(src, event) updateFrameParams(app, firstFrameEdit, src, 'last');
-colorThreshEdit.ValueChangedFcn = @(src, event) updateParam(app, src, 'timeRange_extra');
+colorThreshEdit.ValueChangedFcn = @(src, event) updateParam(app, src, 'frequencyRange_extra');
 
 function buckEditCallBack(src)
 

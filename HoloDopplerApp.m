@@ -101,11 +101,11 @@ properties (Access = public)
     flat_field_gw matlab.ui.control.NumericEditField
     flat_field_gwLabel matlab.ui.control.Label
     frequencyRangeLabel matlab.ui.control.Label
-    timeRange2 matlab.ui.control.NumericEditField
-    timeRange1 matlab.ui.control.NumericEditField
-    timeRangeInterLabel matlab.ui.control.Label
-    timeRangeInter1 matlab.ui.control.NumericEditField
-    timeRangeInter2 matlab.ui.control.NumericEditField
+    frequencyRange2 matlab.ui.control.NumericEditField
+    frequencyRange1 matlab.ui.control.NumericEditField
+    frequencyRangeInterLabel matlab.ui.control.Label
+    frequencyRangeInter1 matlab.ui.control.NumericEditField
+    frequencyRangeInter2 matlab.ui.control.NumericEditField
     time_transform matlab.ui.control.DropDown
     time_transformDropDownLabel matlab.ui.control.Label
     svdThreshold matlab.ui.control.NumericEditField
@@ -160,13 +160,10 @@ properties (Access = public)
     % ---- advanced processing panel ----
     AdvancedProcessingPanel matlab.ui.container.Panel
     SVDTresholdLabel_2 matlab.ui.control.Label
-    SVDStride matlab.ui.control.NumericEditField
+    svdStride matlab.ui.control.NumericEditField
     SVDThresholdCheckBox matlab.ui.control.CheckBox
     SVDThresholdLabel matlab.ui.control.Label
     SVDThreshold matlab.ui.control.NumericEditField
-    SVDxCheckBox matlab.ui.control.CheckBox
-    SVDx_SubAp matlab.ui.control.NumericEditField
-    SVDx_SubApLabel matlab.ui.control.Label
     xyStride matlab.ui.control.NumericEditField
     xyStrideLabel matlab.ui.control.Label
     r1 matlab.ui.control.NumericEditField
@@ -459,7 +456,7 @@ methods (Access = private)
     function svdThreshold_reset_buttonPushed(app, ~)
 
         if app.svdThreshold.Value == 0
-            val = ceil(app.timeRange1.Value * 2 * app.batchSize.Value / app.fs.Value);
+            val = ceil(app.frequencyRange1.Value * 2 * app.batchSize.Value / app.fs.Value);
 
             if ~isnan(val)
                 app.svdThreshold.Value = val;
@@ -469,12 +466,14 @@ methods (Access = private)
             app.svdThreshold.Value = 0;
         end
 
+        app.refreshClass();
+
     end
 
-    function timeRange2ValueChanged(app, ~)
+    function frequencyRange2ValueChanged(app, ~)
 
-        if strcmp(app.time_transform, 'FFT') && app.timeRange2.Value > app.fs.Value / 2
-            app.timeRange2.Value = app.fs.Value / 2;
+        if strcmp(app.time_transform, 'FFT') && app.frequencyRange2.Value > app.fs.Value / 2
+            app.frequencyRange2.Value = app.fs.Value / 2;
         end
 
         app.refreshClass();
@@ -519,11 +518,11 @@ methods (Access = private)
     function updateTimeTransformControls(app)
         useFreqRange = ismember(app.time_transform.Value, {'FFT', 'autocorrelation', 'intercorrelation'});
         app.frequencyRangeLabel.Enable = useFreqRange;
-        app.timeRange1.Enable = useFreqRange;
-        app.timeRange2.Enable = useFreqRange;
-        app.timeRangeInterLabel.Enable = useFreqRange;
-        app.timeRangeInter1.Enable = useFreqRange;
-        app.timeRangeInter2.Enable = useFreqRange;
+        app.frequencyRange1.Enable = useFreqRange;
+        app.frequencyRange2.Enable = useFreqRange;
+        app.frequencyRangeInterLabel.Enable = useFreqRange;
+        app.frequencyRangeInter1.Enable = useFreqRange;
+        app.frequencyRangeInter2.Enable = useFreqRange;
         app.indexRange1.Enable = ~useFreqRange;
         app.indexRange2.Enable = ~useFreqRange;
         app.indexRangeLabel.Enable = ~useFreqRange;
@@ -1076,22 +1075,6 @@ methods (Access = private)
         app.xyStride.Position = [124 105 41 27];
         app.xyStride.Value = 32;
 
-        app.SVDx_SubApLabel = uilabel(p);
-        app.SVDx_SubApLabel.HorizontalAlignment = 'right';
-        app.SVDx_SubApLabel.FontColor = [0.902 0.902 0.902];
-        app.SVDx_SubApLabel.Position = [160 317 79 22];
-        app.SVDx_SubApLabel.Text = 'SVDx_SubAp';
-
-        app.SVDx_SubAp = uieditfield(p, 'numeric');
-        app.SVDx_SubAp.Limits = [0 20];
-        app.SVDx_SubAp.Position = [247 317 26 22];
-        app.SVDx_SubAp.Value = 3;
-
-        app.SVDxCheckBox = uicheckbox(p);
-        app.SVDxCheckBox.Text = 'SVDx';
-        app.SVDxCheckBox.FontColor = [0.902 0.902 0.902];
-        app.SVDxCheckBox.Position = [85 317 53 22];
-
         app.SVDThreshold = uieditfield(p, 'numeric');
         app.SVDThreshold.Limits = [0 Inf];
         app.SVDThreshold.Enable = 'off';
@@ -1109,11 +1092,11 @@ methods (Access = private)
         app.SVDThresholdCheckBox.FontColor = [0.902 0.902 0.902];
         app.SVDThresholdCheckBox.Position = [137 293 25 22];
 
-        app.SVDStride = uieditfield(p, 'numeric');
-        app.SVDStride.Limits = [0 Inf];
-        app.SVDStride.Tooltip = {'Sub sampling parameter for faster SVD calculations. Defaults to 1 -> full image, 2 -> one pixel on two, ...'};
-        app.SVDStride.Position = [256 30 26 22];
-        app.SVDStride.Value = 1;
+        app.svdStride = uieditfield(p, 'numeric');
+        app.svdStride.Limits = [0 Inf];
+        app.svdStride.Tooltip = {'Sub sampling parameter for faster SVD calculations. Defaults to 1 -> full image, 2 -> one pixel on two, ...'};
+        app.svdStride.Position = [256 30 26 22];
+        app.svdStride.Value = 1;
 
         app.SVDTresholdLabel_2 = uilabel(p);
         app.SVDTresholdLabel_2.HorizontalAlignment = 'right';
@@ -1433,7 +1416,7 @@ methods (Access = private)
         app.spatialFilterRange2.Layout.Column = 3;
         app.spatialFilterRange2.Layout.Row = 1;
 
-        % Hilbert filter and Padding row 2
+        % Padding row 2
         app.PaddNLabel = uilabel(p);
         app.PaddNLabel.HorizontalAlignment = 'right';
         app.PaddNLabel.FontColor = fontColor;
@@ -1513,7 +1496,7 @@ methods (Access = private)
         app.svdThreshold.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.svdThreshold.FontColor = fontColor;
         app.svdThreshold.BackgroundColor = darkBackgroundColor;
-        app.svdThreshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => timeRange(1)/fs * batchSize * 2)'};
+        app.svdThreshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => frequencyRange(1)/fs * batchSize * 2)'};
         app.svdThreshold.Layout.Column = 3;
         app.svdThreshold.Layout.Row = 5;
 
@@ -1533,46 +1516,54 @@ methods (Access = private)
         app.time_transform.Layout.Row = 6;
         app.time_transform.Items = {'FFT', 'PCA', 'ICA'};
 
-        % Time range row 7 8 9
+        % Frequency range row 7 8 9
         app.frequencyRangeLabel = uilabel(p);
         app.frequencyRangeLabel.FontColor = fontColor;
         app.frequencyRangeLabel.Text = 'Frequency Range';
         app.frequencyRangeLabel.Layout.Column = 1;
         app.frequencyRangeLabel.Layout.Row = 7;
 
-        app.timeRange1 = uieditfield(p, 'numeric');
-        app.timeRange1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.timeRange1.FontColor = fontColor;
-        app.timeRange1.BackgroundColor = darkBackgroundColor;
-        app.timeRange1.Layout.Column = 2;
-        app.timeRange1.Layout.Row = 7;
+        app.frequencyRange1 = uieditfield(p, 'numeric');
+        app.frequencyRange1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.frequencyRange1.FontColor = fontColor;
+        app.frequencyRange1.BackgroundColor = darkBackgroundColor;
+        app.frequencyRange1.Layout.Column = 2;
+        app.frequencyRange1.Layout.Row = 7;
+        app.frequencyRange1.Tooltip = {'Frequency range to apply the time transformation (if different from time range)'};
+        app.frequencyRange1.Placeholder = 'f1';
 
-        app.timeRange2 = uieditfield(p, 'numeric');
-        app.timeRange2.ValueChangedFcn = createCallbackFcn(app, @timeRange2ValueChanged, true);
-        app.timeRange2.FontColor = fontColor;
-        app.timeRange2.BackgroundColor = darkBackgroundColor;
-        app.timeRange2.Layout.Column = 3;
-        app.timeRange2.Layout.Row = 7;
+        app.frequencyRange2 = uieditfield(p, 'numeric');
+        app.frequencyRange2.ValueChangedFcn = createCallbackFcn(app, @frequencyRange2ValueChanged, true);
+        app.frequencyRange2.FontColor = fontColor;
+        app.frequencyRange2.BackgroundColor = darkBackgroundColor;
+        app.frequencyRange2.Layout.Column = 3;
+        app.frequencyRange2.Layout.Row = 7;
+        app.frequencyRange2.Tooltip = {'Frequency range to apply the time transformation (if different from time range)'};
+        app.frequencyRange2.Placeholder = 'f2';
 
-        app.timeRangeInterLabel = uilabel(p);
-        app.timeRangeInterLabel.FontColor = fontColor;
-        app.timeRangeInterLabel.Text = 'Intermediary Time Range';
-        app.timeRangeInterLabel.Layout.Column = 1;
-        app.timeRangeInterLabel.Layout.Row = 8;
+        app.frequencyRangeInterLabel = uilabel(p);
+        app.frequencyRangeInterLabel.FontColor = fontColor;
+        app.frequencyRangeInterLabel.Text = 'Intermediary Time Range';
+        app.frequencyRangeInterLabel.Layout.Column = 1;
+        app.frequencyRangeInterLabel.Layout.Row = 8;
 
-        app.timeRangeInter1 = uieditfield(p, 'numeric');
-        app.timeRangeInter1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.timeRangeInter1.FontColor = fontColor;
-        app.timeRangeInter1.BackgroundColor = darkBackgroundColor;
-        app.timeRangeInter1.Layout.Column = 2;
-        app.timeRangeInter1.Layout.Row = 8;
+        app.frequencyRangeInter1 = uieditfield(p, 'numeric');
+        app.frequencyRangeInter1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.frequencyRangeInter1.FontColor = fontColor;
+        app.frequencyRangeInter1.BackgroundColor = darkBackgroundColor;
+        app.frequencyRangeInter1.Layout.Column = 2;
+        app.frequencyRangeInter1.Layout.Row = 8;
+        app.frequencyRangeInter1.Tooltip = {'Frequency range to apply the intermediary time transformation (if different from time range)'};
+        app.frequencyRangeInter1.Placeholder = 'fi1';
 
-        app.timeRangeInter2 = uieditfield(p, 'numeric');
-        app.timeRangeInter2.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.timeRangeInter2.FontColor = fontColor;
-        app.timeRangeInter2.BackgroundColor = darkBackgroundColor;
-        app.timeRangeInter2.Layout.Column = 3;
-        app.timeRangeInter2.Layout.Row = 8;
+        app.frequencyRangeInter2 = uieditfield(p, 'numeric');
+        app.frequencyRangeInter2.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.frequencyRangeInter2.FontColor = fontColor;
+        app.frequencyRangeInter2.BackgroundColor = darkBackgroundColor;
+        app.frequencyRangeInter2.Layout.Column = 3;
+        app.frequencyRangeInter2.Layout.Row = 8;
+        app.frequencyRangeInter2.Tooltip = {'Frequency range to apply the intermediary time transformation (if different from time range)'};
+        app.frequencyRangeInter2.Placeholder = 'fi2';
 
         app.indexRangeLabel = uilabel(p);
         app.indexRangeLabel.FontColor = fontColor;

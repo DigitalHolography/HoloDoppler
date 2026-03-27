@@ -148,10 +148,6 @@ if ~isempty(HD) && ~isempty(HD.params)
         safeSetCheckbox(app.spatialFilter, HD.params.spatialFilter);
     end
 
-    if isprop(app, 'hilbertFilter')
-        safeSetCheckbox(app.hilbertFilter, HD.params.hilbertFilter);
-    end
-
     if isprop(app, 'spatialFilterRange1') && isprop(app, 'spatialFilterRange2')
 
         if length(HD.params.spatialFilterRange) >= 2
@@ -181,33 +177,9 @@ if ~isempty(HD) && ~isempty(HD.params)
         safeSetCheckbox(app.svd_filter, HD.params.svd_filter);
     end
 
-    if isprop(app, 'svdxFilter')
-        safeSetCheckbox(app.svdxFilter, HD.params.svdxFilter);
-    end
-
-    if isprop(app, 'svdx_tFilter')
-        safeSetCheckbox(app.svdx_tFilter, HD.params.svdx_tFilter);
-    end
-
     % SVD thresholds
     if isprop(app, 'svdThreshold')
         safeSetNumeric(app.svdThreshold, HD.params.svdThreshold);
-    end
-
-    if isprop(app, 'svdxThreshold')
-        safeSetNumeric(app.svdxThreshold, HD.params.svdxThreshold);
-    end
-
-    if isprop(app, 'svdx_tThreshold')
-        safeSetNumeric(app.svdx_tThreshold, HD.params.svdx_tThreshold);
-    end
-
-    if isprop(app, 'svdx_Nsub')
-        safeSetNumeric(app.svdx_Nsub, HD.params.svdx_Nsub);
-    end
-
-    if isprop(app, 'svdx_t_Nsub')
-        safeSetNumeric(app.svdx_t_Nsub, HD.params.svdx_t_Nsub);
     end
 
     % Time transformation
@@ -217,11 +189,20 @@ if ~isempty(HD) && ~isempty(HD.params)
         safeSetDropdown(app.time_transform, HD.params.time_transform, items);
     end
 
-    if isprop(app, 'timeRange1') && isprop(app, 'timeRange2')
+    if isprop(app, 'frequencyRange1') && isprop(app, 'frequencyRange2')
 
-        if length(HD.params.timeRange) >= 2
-            safeSetNumeric(app.timeRange1, HD.params.timeRange(1));
-            safeSetNumeric(app.timeRange2, HD.params.timeRange(2));
+        if length(HD.params.frequencyRange) >= 2
+            safeSetNumeric(app.frequencyRange1, HD.params.frequencyRange(1));
+            safeSetNumeric(app.frequencyRange2, HD.params.frequencyRange(2));
+        end
+
+    end
+
+    if isprop(app, 'frequencyRangeInter1') && isprop(app, 'frequencyRangeInter2')
+
+        if length(HD.params.frequencyRangeInter) >= 2
+            safeSetNumeric(app.frequencyRangeInter1, HD.params.frequencyRangeInter(1));
+            safeSetNumeric(app.frequencyRangeInter2, HD.params.frequencyRangeInter(2));
         end
 
     end
@@ -317,14 +298,6 @@ if ~isempty(HD) && ~isempty(HD.params)
     end
 
     % Additional advanced processing parameters
-    if isprop(app, 'SVDxCheckBox')
-        safeSetCheckbox(app.SVDxCheckBox, HD.params.svdx_enable);
-    end
-
-    if isprop(app, 'SVDx_SubAp')
-        safeSetNumeric(app.SVDx_SubAp, HD.params.svdx_subap);
-    end
-
     if isprop(app, 'SVDThresholdCheckBox')
         safeSetCheckbox(app.SVDThresholdCheckBox, HD.params.svdThreshold_enable);
     end
@@ -333,8 +306,8 @@ if ~isempty(HD) && ~isempty(HD.params)
         safeSetNumeric(app.SVDThreshold, HD.params.svdThreshold_value);
     end
 
-    if isprop(app, 'SVDStride')
-        safeSetNumeric(app.SVDStride, HD.params.svd_stride);
+    if isprop(app, 'svdStride')
+        safeSetNumeric(app.svdStride, HD.params.svdStride);
     end
 
     % Local filtering parameters
@@ -405,16 +378,6 @@ if ~isempty(HD) && ~isempty(HD.params)
 
         try
             app.updateTimeTransformControls();
-        catch
-            % Silently fail
-        end
-
-    end
-
-    if isprop(app, 'updateSvdxFilterControls')
-
-        try
-            app.updateSvdxFilterControls();
         catch
             % Silently fail
         end

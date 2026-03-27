@@ -75,8 +75,8 @@ properties (Access = public)
     shack_hartmann_ref_image double
 
     num_Freq double
-    SVD_Stride double
-    isSVD_Stride logical
+    svdStride double
+    issvdStride logical
 
 end
 
@@ -144,8 +144,8 @@ methods (Access = public)
         obj.shack_hartmann_ref_image = app.referenceimageDropDown.Value;
 
         obj.num_Freq = app.numFreq.Value;
-        obj.SVD_Stride = app.SVDStride.Value;
-        obj.isSVD_Stride = app.SVDThresholdCheckBox.Value;
+        obj.svdStride = app.svdStride.Value;
+        obj.issvdStride = app.SVDThresholdCheckBox.Value;
 
         % bufferize (and lock during computation) current paremeter values from front end
     end
@@ -196,8 +196,8 @@ methods (Access = public)
             app.compositef3.Value = loadGUIVariable(obj.color_f3);
             app.saverawvideosCheckBox.Value = loadGUIVariable(obj.save_raw);
             app.numFreq.Value = loadGUIVariable(obj.num_Freq);
-            app.SVDStride.Value = loadGUIVariable(obj.SVD_Stride);
-            app.SVDThresholdCheckBox.Value = loadGUIVariable(obj.isSVD_Stride);
+            app.svdStride.Value = loadGUIVariable(obj.svdStride);
+            app.SVDThresholdCheckBox.Value = loadGUIVariable(obj.issvdStride);
 
         catch ME
             MEdisp(ME);

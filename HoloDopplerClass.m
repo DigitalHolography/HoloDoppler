@@ -174,8 +174,8 @@ methods
                 obj.params.spatial_propagation = 1.13; % meters
         end
 
-        obj.params.timeRange(1) = obj.view.LastParams.timeRange(1); % the default from init value of rendering class
-        obj.params.timeRange(2) = obj.params.fs / 2;
+        obj.params.frequencyRange(1) = obj.view.LastParams.frequencyRange(1); % the default from init value of rendering class
+        obj.params.frequencyRange(2) = obj.params.fs / 2;
 
         %2)bis) Set Defaults from the StandardConfig
 
@@ -291,12 +291,10 @@ methods
         obj.params.first_frame = 0;
         obj.params.end_frame = 0;
 
-        % Initialize missing fields that were causing errors
-        obj.params.svdx_enable = false;
-        obj.params.svdx_subap = 3;
+        % Initialize missing fields that were causing errors in the rendering class when not set (as they are used in some of the rendering steps)
         obj.params.svdThreshold_enable = false;
         obj.params.svdThreshold_value = 64;
-        obj.params.svd_stride = 1;
+        obj.params.svdStride = 1;
         obj.params.local_spatialFilter = false;
         obj.params.local_temporalFilter = false;
         obj.params.local_phi1 = 0;
@@ -315,17 +313,10 @@ methods
 
         % Initialize SVD filter parameters
         obj.params.svd_filter = false;
-        obj.params.svdxFilter = false;
-        obj.params.svdx_tFilter = false;
         obj.params.svdThreshold = 0;
-        obj.params.svdxThreshold = 0;
-        obj.params.svdx_tThreshold = 0;
-        obj.params.svdx_Nsub = 1;
-        obj.params.svdx_t_Nsub = 1;
 
         % Initialize spatial filtering parameters
         obj.params.spatialFilter = false;
-        obj.params.hilbertFilter = false;
         obj.params.spatialFilterRange = [0, 1];
         obj.params.spatial_transformation = 'Fresnel';
         obj.params.spatial_propagation = 0;
@@ -333,7 +324,8 @@ methods
 
         % Initialize time transformation parameters
         obj.params.time_transform = 'FFT';
-        obj.params.timeRange = [0, 100];
+        obj.params.frequencyRange = [0, 100];
+        obj.params.frequencyRangeInter = [7, 7];
         obj.params.indexRange = [1, 100];
 
         % Initialize image transformation parameters
@@ -932,8 +924,8 @@ methods
         %saving a small mat for old versions of PW
         cache.Fs = obj.params.fs * 1000;
         cache.batchStride = obj.params.batchStride;
-        cache.time_transform.f1 = obj.params.timeRange(1);
-        cache.time_transform.f2 = obj.params.timeRange(2);
+        cache.time_transform.f1 = obj.params.frequencyRange(1);
+        cache.time_transform.f2 = obj.params.frequencyRange(2);
         save(fullfile(result_folder_path, 'mat', strcat(obj.file.name, '_HD_', num2str(index + 1), '.mat')), "cache");
 
         fprintf("Video Saving took : %f s\n", toc(VideoSavingTime));

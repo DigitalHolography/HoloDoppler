@@ -1,10 +1,22 @@
 function [H, cov, U] = svd_filter(H, thresh, f1, fs, stride_param, true_mean_correction)
-
 % SVD filtering
 %
 % H: an frame batch already propagated to the distance of reconstruction
 % threshold : number of firsts components of the svd decomposition removed
 % f1 fs : thresh frequency and sampling frequency for default behavior
+
+arguments
+    H 
+    thresh 
+    f1 
+    fs 
+    stride_param = 1
+    true_mean_correction = false
+end
+
+if isempty(stride_param)
+    stride_param = 1;
+end
 
 [iwidth, iheight, batchSize] = size(H); % 'i' for initial
 
@@ -16,16 +28,6 @@ if ~thresh
 end
 
 thresh = max(min(thresh, batchSize), 1);
-
-if nargin < 5 || isempty(stride_param)
-    % stride_param doesnt exist so default to 1 (full H)
-    stride_param = 1;
-end
-
-if nargin < 6 || isempty(true_mean_correction)
-    % default to 0 i.e. no mean filtering because the mean is the almost exactly the first eigen vector so no need to sort it separatly
-    true_mean_correction = false;
-end
 
 if true_mean_correction
     % remove the mean value to compute a real covariance matrix slightly

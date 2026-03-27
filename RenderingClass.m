@@ -34,26 +34,20 @@ methods
         Params.ppy = 20e-6;
 
         Params.spatialFilter = false;
-        Params.hilbertFilter = false;
         Params.spatialFilterRange = [0, 1];
         Params.spatial_transformation = "Fresnel";
         Params.spatial_propagation = 0.5;
         Params.Padding_num = 0;
 
         Params.svd_filter = 1;
-        Params.svdxFilter = false;
-        Params.svdx_tFilter = false;
-        Params.svdx_Nsub = 32;
-        Params.svdx_t_Nsub = 32;
-        Params.svdxThreshold = 10;
-        Params.svdx_tThreshold = 100;
         Params.svdThreshold = false;
         Params.svd_mean = false;
-        Params.svd_stride = [];
+        Params.svdStride = 1;
         Params.time_transform = "FFT";
-        Params.timeRange = [6, 10.5];
+        Params.frequencyRange = [6, 10.5];
+        Params.frequencyRangeInter = [7, 7];
         Params.indexRange = [3, 10];
-        Params.timeRange_extra = -1;
+        Params.frequencyRange_extra = -1;
         Params.bucketsRanges = [[4; 18.3], [6; 18.3]];
         Params.buckets_raw = false;
         Params.flatfield_gw = 35;
@@ -127,21 +121,8 @@ methods
 
         % 1) Apply corrections to interferograms
 
-        doFrames = ParamChanged.spatialFilter || ParamChanged.hilbertFilter || ParamChanged.spatialFilterRange || obj.FramesChanged;
+        doFrames = ParamChanged.spatialFilter || ParamChanged.spatialFilterRange || obj.FramesChanged;
         [Nx, Ny, batchSize] = size(obj.Frames);
-
-        if doFrames % change or if the frames changed
-
-            if Params.hilbertFilter
-                tmp = obj.Frames;
-                [width, height, batchSize] = size(tmp);
-                tmp = reshape(tmp, width * height, batchSize);
-                tmp = hilbert(tmp);
-                obj.Frames = reshape(tmp, width, height, batchSize);
-                clear tmp;
-            end
-
-        end
 
         if doFrames % change or if the frames changed
 
@@ -221,7 +202,7 @@ methods
                 if ~Params.applyshackhartmannfromref || isempty(obj.ShackHartmannMask) % in case we apply ShackHartmann from precalculated Mask
 
                     if doFH || ParamChanged.ShackHartmannCorrection || isempty(obj.ShackHartmannMask)
-                        [obj.ShackHartmannMask, obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH, Params.spatial_transformation, Params.spatial_propagation, Params.timeRange, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
+                        [obj.ShackHartmannMask, obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH, Params.spatial_transformation, Params.spatial_propagation, Params.frequencyRange, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
                     end
 
                 end
@@ -238,7 +219,9 @@ methods
 
         obj.Output.construct_image_from_ShackHartmann(Params, obj.moment_chunks_crop_array, obj.ShackHartmannMask);
 
-        doH = doFH || ParamChanged.svd_filter || (Params.svdxFilter && (ParamChanged.svdxThreshold || ParamChanged.svdx_Nsub)) || (Params.svdx_tFilter && (ParamChanged.svdx_tThreshold || ParamChanged.svdx_t_Nsub)) || ParamChanged.svdxFilter || ParamChanged.svdx_tFilter || (Params.svdThreshold == 0 && ParamChanged.timeRange) || ParamChanged.svdThreshold || obj.FramesChanged || ~options.cache_intermediate_results;
+        doH = doFH || ParamChanged.svd_filter || ...
+            (Params.svdThreshold == 0 && ParamChanged.frequencyRange) || ...
+            ParamChanged.svdThreshold || obj.FramesChanged || ~options.cache_intermediate_results;
 
         if doH % change or if the frames changed
 
@@ -267,7 +250,7 @@ methods
         if doH
 
             if Params.svd_filter
-                [obj.H, obj.cov, obj.U] = svd_filter(obj.H, Params.svdThreshold, Params.timeRange(1), Params.fs, Params.svd_stride, Params.svd_mean);
+                [obj.H, obj.cov, obj.U] = svd_filter(obj.H, Params.svdThreshold, Params.frequencyRange(1), Params.fs, Params.svdStride, Params.svd_mean);
 
             end
 
@@ -279,22 +262,6 @@ methods
         end
 
         obj.Output.construct_image_from_SVD(Params, obj.cov, obj.U, size(obj.H));
-
-        if doH
-
-            if Params.svdxFilter
-                obj.H = svd_x_filter(obj.H, Params.svdxThreshold, Params.timeRange(1), Params.fs, floor(max(size(obj.H, 1), size(obj.H, 2)) / Params.svdx_Nsub)); % forced
-            end
-
-        end
-
-        if doH
-
-            if Params.svdx_tFilter
-                obj.H = svd_x_t_filter(obj.H, Params.svdx_tThreshold, Params.timeRange(1), Params.fs, floor(max(size(obj.H, 1), size(obj.H, 2)) / Params.svdx_t_Nsub));
-            end
-
-        end
 
         % 4) Short-time transformation
 
@@ -328,8 +295,6 @@ methods
             end
 
         end
-
-        %% obj.SH = svd_filter(obj.SH, 10);
 
         if ~options.cache_intermediate_results
             obj.H = [];

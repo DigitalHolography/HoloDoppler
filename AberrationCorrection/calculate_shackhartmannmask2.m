@@ -148,12 +148,12 @@ for idy = 1:((vy - 1) * ky + 1)
                 h = single(fh);
         end
 
-        [h, ~, ~] = svd_filter(h, Params.svdThreshold, Params.timeRange(1), ...
-            Params.fs, Params.svd_stride, Params.svd_mean);
+        [h, ~, ~] = svd_filter(h, Params.svdThreshold, Params.frequencyRange(1), ...
+            Params.fs, Params.svdStride, Params.svd_mean);
 
         sh_mod = abs(fft(h, [], 3)) .^ 2;
 
-        img = moment0(sh_mod, Params.timeRange(1), Params.timeRange(2), ...
+        img = moment0(sh_mod, Params.frequencyRange(1), Params.frequencyRange(2), ...
             Params.fs, Nt, Params.flatfield_gw);
 
         if ~isequal(size(img), [Nxx Nyy])

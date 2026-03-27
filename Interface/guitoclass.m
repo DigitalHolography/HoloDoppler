@@ -96,10 +96,6 @@ if isprop(app, 'spatialFilter')
     HD.params.spatialFilter = safeGetCheckbox(app.spatialFilter, false);
 end
 
-if isprop(app, 'hilbertFilter')
-    HD.params.hilbertFilter = safeGetCheckbox(app.hilbertFilter, false);
-end
-
 if isprop(app, 'spatialFilterRange1') && isprop(app, 'spatialFilterRange2')
     val1 = safeGetUIValue(app.spatialFilterRange1, 0);
     val2 = safeGetUIValue(app.spatialFilterRange2, 1);
@@ -123,32 +119,8 @@ if isprop(app, 'svd_filter')
     HD.params.svd_filter = safeGetCheckbox(app.svd_filter, false);
 end
 
-if isprop(app, 'svdxFilter')
-    HD.params.svdxFilter = safeGetCheckbox(app.svdxFilter, false);
-end
-
-if isprop(app, 'svdx_tFilter')
-    HD.params.svdx_tFilter = safeGetCheckbox(app.svdx_tFilter, false);
-end
-
 if isprop(app, 'svdThreshold')
     HD.params.svdThreshold = safeGetUIValue(app.svdThreshold, 0);
-end
-
-if isprop(app, 'svdxThreshold')
-    HD.params.svdxThreshold = safeGetUIValue(app.svdxThreshold, 0);
-end
-
-if isprop(app, 'svdx_tThreshold')
-    HD.params.svdx_tThreshold = safeGetUIValue(app.svdx_tThreshold, 0);
-end
-
-if isprop(app, 'svdx_Nsub')
-    HD.params.svdx_Nsub = safeGetUIValue(app.svdx_Nsub, 1);
-end
-
-if isprop(app, 'svdx_t_Nsub')
-    HD.params.svdx_t_Nsub = safeGetUIValue(app.svdx_t_Nsub, 1);
 end
 
 % Time transformation parameters
@@ -156,10 +128,16 @@ if isprop(app, 'time_transform')
     HD.params.time_transform = safeGetUIValue(app.time_transform, 'FFT');
 end
 
-if isprop(app, 'timeRange1') && isprop(app, 'timeRange2')
-    val1 = safeGetUIValue(app.timeRange1, 0);
-    val2 = safeGetUIValue(app.timeRange2, 100);
-    HD.params.timeRange = [val1, val2];
+if isprop(app, 'frequencyRange1') && isprop(app, 'frequencyRange2')
+    val1 = safeGetUIValue(app.frequencyRange1, 0);
+    val2 = safeGetUIValue(app.frequencyRange2, 100);
+    HD.params.frequencyRange = [val1, val2];
+end
+
+if isprop(app, 'frequencyRangeInter1') && isprop(app, 'frequencyRangeInter2')
+    val1 = safeGetUIValue(app.frequencyRangeInter1, 0);
+    val2 = safeGetUIValue(app.frequencyRangeInter2, 100);
+    HD.params.frequencyRangeInter = [val1, val2];
 end
 
 if isprop(app, 'indexRange1') && isprop(app, 'indexRange2')
@@ -255,13 +233,6 @@ if isprop(app, 'ShackHartmannCheckBox')
 end
 
 % Advanced processing parameters
-if isprop(app, 'SVDxCheckBox')
-    HD.params.svdx_enable = safeGetCheckbox(app.SVDxCheckBox, false);
-end
-
-if isprop(app, 'SVDx_SubAp')
-    HD.params.svdx_subap = safeGetUIValue(app.SVDx_SubAp, 3);
-end
 
 if isprop(app, 'SVDThresholdCheckBox')
     HD.params.svdThreshold_enable = safeGetCheckbox(app.SVDThresholdCheckBox, false);
@@ -271,8 +242,8 @@ if isprop(app, 'SVDThreshold')
     HD.params.svdThreshold_value = safeGetUIValue(app.SVDThreshold, 64);
 end
 
-if isprop(app, 'SVDStride')
-    HD.params.svd_stride = safeGetUIValue(app.SVDStride, 1);
+if isprop(app, 'svdStride')
+    HD.params.svdStride = safeGetUIValue(app.svdStride, 1);
 end
 
 % Local filtering parameters
