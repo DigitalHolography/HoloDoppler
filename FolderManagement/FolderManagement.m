@@ -1,66 +1,117 @@
 function FolderManagement(app)
 % This function creates a dialog for managing folders and files for rendering.
 
-d = dialog('Position', [300, 300, 750, 130 + length(app.HD.drawer_list) * 14], ...
+% Calculate initial height
+initialHeight = 130 + length(app.HD.drawer_list) * 14;
+
+d = uifigure('Position', [300, 300, 750, initialHeight], ...
     'Color', [0.2, 0.2, 0.2], ...
     'Name', 'Folder management', ...
     'Resize', 'on', ...
-    'WindowStyle', 'normal');
+    'WindowStyle', 'modal'); % 'modal' makes it behave like a dialog
 
-txt = uicontrol('Parent', d, ...
-    'Style', 'text', ...
-    'FontName', 'Helvetica', ...
+% Create main grid layout (2 rows, 1 column)
+mainGrid = uigridlayout(d, [2, 1], ...
+    'ColumnWidth', {'1x'}, ...
+    'RowHeight', {'1x', 'fit'}, ...
+    'Padding', [10, 10, 10, 10], ...
+    'BackgroundColor', [0.2, 0.2, 0.2]);
+
+% Create the text area for displaying the list
+% Convert drawer_list to cell array of strings if it's empty
+if isempty(app.HD.drawer_list)
+    displayValue = {''};
+else
+    displayValue = app.HD.drawer_list;
+end
+
+% Create the text area for displaying the list
+txt = uitextarea('Parent', mainGrid, ...
     'BackgroundColor', [0.2, 0.2, 0.2], ...
-    'ForegroundColor', [0.8, 0.8, 0.8], ...
+    'FontColor', [0.8, 0.8, 0.8], ...
     'Position', [20, 90, 710, length(app.HD.drawer_list) * 14], ...
-    'HorizontalAlignment', 'left', ...
-    'String', app.HD.drawer_list);
+    'Value', displayValue, ...
+    'Editable', 'off');
+txt.Layout.Row = 1;
+txt.Layout.Column = 1;
 
-keep_z_distance = uicontrol('Parent', d, ...
-    'Style', 'checkbox', ...
-    'Position', [500, 50, 100, 25], ...
-    'FontName', 'Helvetica', ...
-    'BackgroundColor', [0.5, 0.5, 0.5], ...
-    'FontWeight', 'bold', ...
-    'String', 'Keep z distance', ...
+% Button grid (2 rows, 6 columns)
+buttonGrid = uigridlayout(mainGrid, [2, 6], ...
+    'ColumnWidth', repmat({'1x'}, 1, 6), ...
+    'RowHeight', {'1x', '1x'}, ...
+    'Padding', [5, 5, 5, 5], ...
+    'BackgroundColor', [0.2, 0.2, 0.2]);
+buttonGrid.Layout.Row = 2;
+buttonGrid.Layout.Column = 1;
+
+% Create checkbox
+keep_z_distance = uicheckbox('Parent', buttonGrid, ...
+    'Position', [500, 50, 120, 25], ...
+    'FontColor', [0.9 0.9 0.9], ...
+    'Text', 'Keep z distance', ...
     'Value', 0);
+keep_z_distance.Layout.Row = 2;
+keep_z_distance.Layout.Column = 5;
 
-makeDrawerButton(d, [20, 20], 'Select file', @(~, ~) drawerSelectFile(d, txt));
-makeDrawerButton(d, [20, 50], 'Select Current', @(~, ~) drawerSelectCurrent(d, txt));
-makeDrawerButton(d, [140, 50], 'Select Current Folder', @(~, ~) drawerSelectCurrentFolder(d, txt));
-makeDrawerButton(d, [140, 20], 'Select folder', @(~, ~) drawerSelectFolder(d, txt));
-makeDrawerButton(d, [260, 20], 'Clear list', @(~, ~) drawerClearList(d, txt));
-makeDrawerButton(d, [380, 20], 'Save configs', @(~, ~) drawerSaveConfigs(keep_z_distance));
-makeDrawerButton(d, [380, 50], 'Delete all configs', @(~, ~) drawerDeleteConfigs());
-makeDrawerButton(d, [500, 20], 'Render', @(~, ~) drawerRender());
-makeDrawerButton(d, [620, 20], 'Save to txt', @(~, ~) drawerSaveTxt());
-makeDrawerButton(d, [620, 50], 'Load from txt', @(~, ~) drawerLoadTxt(d, txt));
+% Create buttons using uibutton
+makeDrawerButton(buttonGrid, [1, 1], 'Select file', ...
+    @(~, ~) drawerSelectFile(app, d, txt));
+makeDrawerButton(buttonGrid, [2, 1], 'Select Current', ...
+    @(~, ~) drawerSelectCurrent(app, d, txt));
+makeDrawerButton(buttonGrid, [2, 2], 'Select Current Folder', ...
+    @(~, ~) drawerSelectCurrentFolder(app, d, txt));
+makeDrawerButton(buttonGrid, [1, 2], 'Select folder', ...
+    @(~, ~) drawerSelectFolder(app, d, txt));
+makeDrawerButton(buttonGrid, [1, 3], 'Clear list', ...
+    @(~, ~) drawerClearList(app, d, txt));
+makeDrawerButton(buttonGrid, [1, 4], 'Save configs', ...
+    @(~, ~) drawerSaveConfigs(app, keep_z_distance));
+makeDrawerButton(buttonGrid, [2, 4], 'Delete all configs', ...
+    @(~, ~) drawerDeleteConfigs(app));
+makeDrawerButton(buttonGrid, [1, 5], 'Render', ...
+    @(~, ~) drawerRender(app));
+makeDrawerButton(buttonGrid, [1, 6], 'Save to txt', ...
+    @(~, ~) drawerSaveTxt(app));
+makeDrawerButton(buttonGrid, [2, 6], 'Load from txt', ...
+    @(~, ~) drawerLoadTxt(app, d, txt));
 
 end
 
-function makeDrawerButton(~, parent, pos, label, cb)
-uicontrol('Parent', parent, ...
-    'Position', [pos, 100, 25], ...
-    'FontName', 'Helvetica', ...
+function makeDrawerButton(parent, pos, label, cb)
+Button = uibutton(parent, 'push', ...
     'BackgroundColor', [0.5, 0.5, 0.5], ...
-    'ForegroundColor', [0.9 0.9 0.9], ...
-    'FontWeight', 'bold', ...
-    'String', label, ...
-    'Callback', cb);
+    'FontColor', [0.9, 0.9, 0.9], ...
+    'Text', label, ...
+    'ButtonPushedFcn', cb);
+Button.Layout.Row = pos(1);
+Button.Layout.Column = pos(2);
 end
 
 function updateDrawerDisplay(app, d, txt)
-txt.String = app.HD.drawer_list;
-d.Position(4) = 100 + length(app.HD.drawer_list) * 14;
-txt.Position(4) = length(app.HD.drawer_list) * 14;
+% Convert drawer_list to cell array of strings if it's empty
+if isempty(app.HD.drawer_list)
+    displayValue = {''};
+else
+    displayValue = app.HD.drawer_list;
+end
+
+% Update the text area with the current list
+txt.Value = displayValue;
+
+% Resize the window and text area
+newHeight = 100 + length(app.HD.drawer_list) * 14;
+if newHeight > d.Position(4)
+    d.Position(4) = newHeight;
+end
+
 end
 
 function drawerSelectFile(app, d, txt)
 
 if ~isempty(app.HD.drawer_list)
-    [selected_file, path] = uigetfile(app.HD.drawer_list{end}, 'Select File');
+    [selected_file, path] = uigetfile(app.HD.drawer_list{end}, 'Select File', '*.holo;*.cine');
 else
-    [selected_file, path] = uigetfile('Select File');
+    [selected_file, path] = uigetfile('Select File', '*.holo;*.cine');
 end
 
 if selected_file
@@ -69,18 +120,22 @@ if selected_file
     if ismember(ext, {'.cine', '.holo'})
         app.HD.drawer_list{end + 1} = fullfile(path, selected_file);
     else
-        fprintf("File should be of extension .cine or .holo\n");
+        uialert(d, 'File should be of extension .cine or .holo', 'Invalid File Type');
     end
+
+else
+    return;
 
 end
 
-updateDrawerDisplay(d, txt);
+updateDrawerDisplay(app, d, txt);
 end
 
 function drawerSelectCurrent(app, d, txt)
 
 if isempty(app.HD.file)
-    return
+    uialert(d, 'No current file loaded', 'No File');
+    return;
 end
 
 selected_file = app.HD.file.path;
@@ -89,10 +144,10 @@ selected_file = app.HD.file.path;
 if ismember(ext, {'.cine', '.holo'})
     app.HD.drawer_list{end + 1} = selected_file;
 else
-    fprintf("File should be of extension .cine or .holo\n");
+    uialert(d, 'File should be of extension .cine or .holo', 'Invalid File Type');
 end
 
-updateDrawerDisplay(d, txt);
+updateDrawerDisplay(app, d, txt);
 end
 
 function drawerAddFilesFromFolder(app, folder, d, txt)
@@ -111,16 +166,17 @@ for i = 1:numel(entries)
 
 end
 
-updateDrawerDisplay(d, txt);
+updateDrawerDisplay(app, d, txt);
 end
 
 function drawerSelectCurrentFolder(app, d, txt)
 
 if isempty(app.HD.file)
-    return
+    uialert(d, 'No current file loaded', 'No File');
+    return;
 end
 
-drawerAddFilesFromFolder(app.HD.file.dir, d, txt);
+drawerAddFilesFromFolder(app, app.HD.file.dir, d, txt);
 end
 
 function drawerSelectFolder(app, d, txt)
@@ -134,18 +190,23 @@ end
 selected_folder = uigetdir(last_folder);
 
 if selected_folder
-    drawerAddFilesFromFolder(selected_folder, d, txt);
+    drawerAddFilesFromFolder(app, selected_folder, d, txt);
 end
 
 end
 
 function drawerClearList(app, d, txt)
 app.HD.drawer_list = {};
-updateDrawerDisplay(d, txt);
+updateDrawerDisplay(app, d, txt);
 end
 
 function drawerLoadTxt(app, d, txt)
 [selected_file, path] = uigetfile('*.txt', 'Select File');
+
+if selected_file == 0
+    return;
+end
+
 lines = readlines(fullfile(path, selected_file));
 
 for i = 1:numel(lines)
@@ -167,11 +228,16 @@ for i = 1:numel(lines)
 
 end
 
-updateDrawerDisplay(d, txt);
+updateDrawerDisplay(app, d, txt);
 end
 
 function drawerSaveTxt(app)
 [selected_file, path] = uigetfile('*.txt', 'Select File');
+
+if selected_file == 0
+    return;
+end
+
 writelines(app.HD.drawer_list, fullfile(path, selected_file));
 end
 
@@ -181,19 +247,20 @@ for i = 1:length(app.HD.drawer_list)
     app.HD.saveParams(app.HD.drawer_list{i}, keepZControl.Value);
 end
 
+% Optional: Show confirmation
+% uialert(d, 'Configurations saved successfully', 'Success');
 end
 
 function drawerRender(app)
-fileList = buildDrawerFileList();
+fileList = buildDrawerFileList(app);
 
 for i = 1:length(fileList)
     entry = fileList{i};
 
-    if ~isempty(entry)
-        configs = entry{2};
+    if ~isempty(entry) && ~isempty(entry{2})
 
-        for j = 1:length(configs)
-            app.HD.LoadFile(entry{1}, params = configs{j});
+        for j = 1:length(entry{2})
+            app.HD.LoadFile(entry{1}, params = entry{2}{j});
             app.HD.VideoRendering();
         end
 
@@ -203,8 +270,8 @@ end
 
 end
 
-function drawerDeleteConfigs()
-fileList = buildDrawerFileList();
+function drawerDeleteConfigs(app)
+fileList = buildDrawerFileList(app);
 
 for i = 1:length(fileList)
     entry = fileList{i};
