@@ -37,7 +37,6 @@ properties
     color_band_ratio
     entropy
     negentropy
-    choro_color_image
 end
 
 methods
@@ -78,7 +77,6 @@ methods
         obj.color_band_ratio = ImageType('color_energy_ratio');
         obj.entropy = ImageType('entropy');
         obj.negentropy = ImageType('negentropy');
-        obj.choro_color_image = ImageType('new_color_image');
     end
 
     function clear(obj, varargin)
@@ -339,11 +337,6 @@ methods
         if obj.negentropy.is_selected
             img = spectral_negentropy(SH_mod, f1, f2, fs, batchSize);
             obj.negentropy.image = img;
-        end
-
-        if obj.choro_color_image.is_selected
-            img = new_color_image(SH_mod, f1, f2, fi1, fi2, fs, batchSize);
-            obj.choro_color_image.image = img;
         end
 
         if obj.buckets.is_selected % buckets has been chosen

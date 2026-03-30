@@ -69,13 +69,11 @@ if ~isempty(opt.temporalFilter)
 end
 
 % fix intensity flashes
-
 if ~opt.NoIntensity
-    video = video - mean(mean(video, 2), 1);
+    video = video - mean(video, [1 2]);
 end
 
 % corner normalizations
-
 if opt.cornerNorm > 0
     numX = size(video, 1);
     numY = size(video, 2);
