@@ -1673,7 +1673,7 @@ methods (Access = private)
 
         app.ViewAllMenu = uimenu(app.RightClickImageContextMenu);
         app.ViewAllMenu.MenuSelectedFcn = createCallbackFcn(app, @ViewAllMenuSelected, true);
-        app.ViewAllMenu.Text = 'ViewAll';
+        app.ViewAllMenu.Text = 'View all images';
 
         app.ImageLeft.ContextMenu = app.RightClickImageContextMenu;
     end

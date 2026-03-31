@@ -355,7 +355,13 @@ methods
                 continue % do not set info fields
             end
 
-            obj.params.(fields{i}) = params.(fields{i});
+            if string(fields{i}) == "image_types"
+                possibleItems = fieldnames(ImageTypeList2);
+                validItems = intersect(params.(fields{i}), possibleItems);
+                obj.params.image_types = validItems;
+            else
+                obj.params.(fields{i}) = params.(fields{i});
+            end
         end
 
     end
@@ -453,10 +459,12 @@ methods
 
         for i = 1:length(images)
 
+            maxDim = max(size(images{i}));
+
             if isnumeric(images{i})
-                images_res{i} = rescale(images{i});
+                images_res{i} = imresize(rescale(images{i}), [maxDim maxDim]);
             else
-                images_res{i} = rescale(obj.view.Output.(images_types{i}).image);
+                images_res{i} = imresize(rescale(obj.view.Output.(images_types{i}).image), [maxDim maxDim]);
             end
 
         end

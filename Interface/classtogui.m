@@ -134,11 +134,23 @@ if ~isempty(HD) && ~isempty(HD.params)
         catch
             % If ImageTypeList2 is not available, use default list
             app.Image_typesListBox.Items = {'power_Doppler', 'color_Doppler', 'directional_Doppler', ...
-                                                'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
+                'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
         end
 
         if ~isempty(HD.params.image_types)
-            app.Image_typesListBox.Value = HD.params.image_types;
+            % Get current items in the list box
+            currentItems = app.Image_typesListBox.Items;
+
+            % Find which items exist in both
+            validItems = intersect(HD.params.image_types, currentItems);
+
+            % Set value only if there are valid items
+            if ~isempty(validItems)
+                app.Image_typesListBox.Value = validItems;
+            else
+                % Optional: clear selection or set to empty
+                app.Image_typesListBox.Value = {};
+            end
         end
 
     end
