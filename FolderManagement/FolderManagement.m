@@ -100,6 +100,7 @@ txt.Value = displayValue;
 
 % Resize the window and text area
 newHeight = 100 + length(app.HD.drawer_list) * 14;
+
 if newHeight > d.Position(4)
     d.Position(4) = newHeight;
 end
@@ -217,7 +218,7 @@ for i = 1:numel(lines)
             [~, ~, ext] = fileparts(lines(i));
 
             if ismember(ext, {'.cine', '.holo'})
-                app.HD.drawer_list{end + 1} = lines(i);
+                app.HD.drawer_list{end + 1} = lines{i};
             end
 
         catch e
@@ -271,15 +272,15 @@ end
 end
 
 function drawerDeleteConfigs(app)
-fileList = buildDrawerFileList(app);
+[fileList] = buildDrawerFileList(app);
 
 for i = 1:length(fileList)
     entry = fileList{i};
 
-    if ~isempty(entry) && ~isempty(entry{2})
+    if ~isempty(entry) && ~isempty(entry{3})
 
         for j = 1:length(entry{2})
-            delete(entry{2}{j});
+            delete(entry{3}{j});
         end
 
     end
@@ -292,10 +293,10 @@ function fileList = buildDrawerFileList(app)
 fileList = cell(size(app.HD.drawer_list));
 
 for i = 1:length(app.HD.drawer_list)
-    config_list = get_config_files(app.HD.drawer_list{i});
+    [config_list, path_list] = get_config_files(app.HD.drawer_list{i});
 
     if ~isempty(config_list)
-        fileList{i} = {app.HD.drawer_list{i}, config_list};
+        fileList{i} = {app.HD.drawer_list{i}, config_list, path_list};
     end
 
 end

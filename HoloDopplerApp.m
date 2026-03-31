@@ -1543,7 +1543,7 @@ methods (Access = private)
 
         app.frequencyRangeInterLabel = uilabel(p);
         app.frequencyRangeInterLabel.FontColor = fontColor;
-        app.frequencyRangeInterLabel.Text = 'Intermediary Time Range';
+        app.frequencyRangeInterLabel.Text = 'Inter freq range';
         app.frequencyRangeInterLabel.Layout.Column = 1;
         app.frequencyRangeInterLabel.Layout.Row = 8;
 
@@ -1632,7 +1632,7 @@ methods (Access = private)
         app.RenderPreviewButton.FontColor = fontColor;
         app.RenderPreviewButton.Layout.Column = 2;
         app.RenderPreviewButton.Layout.Row = 12;
-        app.RenderPreviewButton.Text = 'Render';
+        app.RenderPreviewButton.Text = 'Preview';
 
         app.SavePreviewButton = uibutton(p, 'push');
         app.SavePreviewButton.ButtonPushedFcn = createCallbackFcn(app, @SavePreviewButtonPushed, true);
