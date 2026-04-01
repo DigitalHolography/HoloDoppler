@@ -126,30 +126,30 @@ if ~isempty(HD) && ~isempty(HD.params)
     end
 
     % Image types list
-    if isprop(app.Image_typesListBox, 'Items')
+    if isprop(app.imageTypesListBox, 'Items')
         % Get available image types from ImageTypeList2
         try
             imageTypes = properties(ImageTypeList2);
-            app.Image_typesListBox.Items = imageTypes;
+            app.imageTypesListBox.Items = imageTypes;
         catch
             % If ImageTypeList2 is not available, use default list
-            app.Image_typesListBox.Items = {'power_Doppler', 'color_Doppler', 'directional_Doppler', ...
-                                                'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
+            app.imageTypesListBox.Items = {'power_Doppler', 'color_Doppler', 'directional_Doppler', ...
+                                               'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
         end
 
-        if ~isempty(HD.params.image_types)
+        if ~isempty(HD.params.imageTypes)
             % Get current items in the list box
-            currentItems = app.Image_typesListBox.Items;
+            currentItems = app.imageTypesListBox.Items;
 
             % Find which items exist in both
-            validItems = intersect(HD.params.image_types, currentItems);
+            validItems = intersect(HD.params.imageTypes, currentItems);
 
             % Set value only if there are valid items
             if ~isempty(validItems)
-                app.Image_typesListBox.Value = validItems;
+                app.imageTypesListBox.Value = validItems;
             else
                 % Optional: clear selection or set to empty
-                app.Image_typesListBox.Value = {};
+                app.imageTypesListBox.Value = {};
             end
 
         end

@@ -145,7 +145,7 @@ methods
 
     function updateAverageImage(obj)
         % Calculate average image based on current processing
-        obj.avgImage = obj.ren.getImages(obj.Params.image_types(1));
+        obj.avgImage = obj.ren.getImages(obj.Params.imageTypes(1));
         obj.avgImage = obj.avgImage{1};
     end
 
@@ -172,7 +172,7 @@ methods
             obj.z_current = z;
             p = obj.Params;
             p.spatialPropagation = z;
-            obj.ren.Render(p, obj.Params.image_types(1));
+            obj.ren.Render(p, obj.Params.imageTypes(1));
             obj.updateAverageImage();
             obj.updateImageDisplay();
             obj.Z_full(i, :, :) = obj.avgImage;

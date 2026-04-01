@@ -77,11 +77,11 @@ if isprop(app, 'registrationDiskRatio')
 end
 
 % Handle image types as a cell array
-if isprop(app, 'Image_typesListBox') && isprop(app.Image_typesListBox, 'Value')
-    value = app.Image_typesListBox.Value;
+if isprop(app, 'imageTypesListBox') && isprop(app.imageTypesListBox, 'Value')
+    value = app.imageTypesListBox.Value;
 
     if ~isempty(value)
-        HD.params.image_types = value;
+        HD.params.imageTypes = value;
     end
 
 end

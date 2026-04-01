@@ -4,7 +4,7 @@
   "frame_stride": 1,
   "framePosition": 1,
   "registrationDiskRatio": 0.8,
-  "image_types": [
+  "imageTypes": [
     "power_Doppler",
     "power_1_Doppler",
     "power_2_Doppler",

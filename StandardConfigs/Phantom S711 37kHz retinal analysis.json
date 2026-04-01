@@ -3,7 +3,7 @@
   "batchStride": 256,
   "frame_stride": 1,
   "registrationDiskRatio": 0.8,
-  "image_types": [
+  "imageTypes": [
     "power_Doppler",
     "moment_0",
     "moment_1",

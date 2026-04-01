@@ -56,7 +56,7 @@ properties (Access = public)
     % ---- batch / video rendering sub-panel ----
     batchPanel matlab.ui.container.Panel
     batchGrid matlab.ui.container.GridLayout
-    Image_typesListBox matlab.ui.control.ListBox
+    imageTypesListBox matlab.ui.control.ListBox
     LoadConfigButton matlab.ui.control.Button
     SaveConfigButton matlab.ui.control.Button
     FolderManagementButton matlab.ui.control.Button
@@ -188,18 +188,24 @@ methods (Access = private)
         logFile = fullfile(tempdir, ['matlab_log_' char(datetime('now', 'Format', 'yyyyMMdd_HHmmss')) '.txt']);
         diary(logFile);
 
-        if exist("version.txt", 'file')
+        version = 'unknown';
+
+        if exist('version.txt', 'file')
             v = readlines('version.txt');
-            fprintf("============================================\n " + ...
-                "Welcome to HoloDoppler %s\n" + ...
+            version = char(v(1));
+            fprintf("============================================\n" + ...
+                " Welcome to HoloDoppler %s\n" + ...
                 "--------------------------------------------\n" + ...
-                "Developed by the DigitalHolographyFoundation\n" + ...
-                "============================================\n", v(1));
+                " Developed by the DigitalHolographyFoundation\n" + ...
+                "============================================\n", version);
+        else
+            warning('HoloDopplerApp:noVersionFile', 'version.txt not found — version will be shown as unknown.');
         end
 
-        app.HoloDopplerUIFigure.Name = ['HoloDoppler ', char(v(1))];
+        app.HoloDopplerUIFigure.Name = ['HoloDoppler ' version];
 
-        addpath("Tools\"); % for the splashscreen
+        % Use fullfile so the path separator is correct on all platforms
+        addpath(fullfile(fileparts(mfilename('fullpath')), 'Tools'));
         displaySplashScreen();
         app.HD = HoloDopplerClass();
     end
@@ -227,23 +233,23 @@ methods (Access = private)
     % --- File I/O callbacks ------------------------------------------------
 
     function LoadfileButtonPushed(app, ~)
-        % Dummy figure keeps uigetfile from minimising the main GUI
-        f = figure('Position', [-100 -100 0 0]);
+        % Dummy off-screen figure prevents uigetfile from minimising the main GUI
+        f = figure('Position', [-200 -200 1 1], 'Visible', 'off');
+        cleanupObj = onCleanup(@() delete(f));
 
         if isempty(app.HD.file)
             [fname, fpath] = uigetfile('*.raw;*.cine;*.holo');
         else
-            [fname, fpath] = uigetfile(strcat(app.HD.file.path, "*.raw;*.cine;*.holo"));
+            [fname, fpath] = uigetfile(fullfile(app.HD.file.path, '*.raw;*.cine;*.holo'));
         end
 
-        delete(f);
-
-        if fname == 0
+        if isequal(fname, 0)
             return
         end
 
         try
             app.fileLoadedLamp.Color = [1 0.5 0];
+            drawnow;
             app.HD.LoadFile(fullfile(fpath, fname));
             app.syncGuiFromClass();
             app.RenderPreviewButtonPushed();
@@ -252,31 +258,24 @@ methods (Access = private)
         catch ME
             MEdisp(ME);
             app.fileLoadedLamp.Color = [1 0 0];
-            drawnow
+            drawnow;
         end
 
-        app.refreshClass();
     end
 
     function LoadConfigButtonPushed(app, ~)
-        [selected_file, path] = uigetfile('*.json', 'Select File');
+        [selected_file, path] = uigetfile('*.json', 'Select Config File');
 
-        if selected_file
-            [~, ~, ext] = fileparts(selected_file);
+        if isequal(selected_file, 0)
+            return
+        end
 
-            if ismember(ext, {'.json'})
-                app.HD.loadParams(fullfile(path, selected_file));
-
-                try
-                    app.syncGuiFromClass();
-                catch ME
-                    MEdisp(ME);
-                end
-
-            else
-                fprintf("Couldn't load config");
-            end
-
+        try
+            app.HD.loadParams(fullfile(path, selected_file));
+            app.syncGuiFromClass();
+            fprintf('Config loaded from %s\n', fullfile(path, selected_file));
+        catch ME
+            MEdisp(ME);
         end
 
     end
@@ -298,14 +297,15 @@ methods (Access = private)
         app.RenderPreviewLamp.Color = [1 0.5 0];
         drawnow;
 
+        Images = [];
+
         try
             Images = app.HD.PreviewRendering();
             app.RenderPreviewLamp.Color = [0 1 0];
         catch ME
-            Images = [];
             MEdisp(ME);
             app.RenderPreviewLamp.Color = [1 0 0];
-            drawnow
+            drawnow;
         end
 
         if ~isempty(Images)
@@ -315,11 +315,13 @@ methods (Access = private)
             app.ImageLeft.ImageSource = '';
         end
 
-        if ismember("FH_modulus_mean", app.HD.params.image_types)
-            img = app.HD.view.getImages({"FH_modulus_mean"});
+        if ismember('FH_modulus_mean', app.HD.params.imageTypes)
+            img = app.HD.view.getImages({'FH_modulus_mean'});
 
-            if ~isempty(img{1})
-                app.ImageRight.ImageSource = toImageSource(img{1});
+            if ~isempty(img) && ~isempty(img{1})
+                app.ImageRight.ImageSource = toImageSource(img{1}, app);
+            else
+                app.ImageRight.ImageSource = '';
             end
 
         else
@@ -357,14 +359,14 @@ methods (Access = private)
     function RefreshAppButtonPushed(app, ~)
         app.syncGuiFromClass();
 
-        if isempty(app.HD.params.image_types)
+        if isempty(app.HD.params.imageTypes)
             return
         end
 
-        imgs = app.HD.view.getImages(app.HD.params.image_types(1));
+        imgs = app.HD.view.getImages(app.HD.params.imageTypes(1));
 
         if ~isempty(imgs)
-            app.ImageLeft.ImageSource = toImageSource(imgs{randsample(numel(imgs), 1)});
+            app.ImageLeft.ImageSource = toImageSource(imgs{randsample(numel(imgs), 1)}, app);
         else
             app.ImageLeft.ImageSource = '';
         end
@@ -383,7 +385,7 @@ methods (Access = private)
     function changeMenu(app, direction)
 
         idx = app.MenuIndex;
-        imagesTypes = app.HD.params.image_types;
+        imagesTypes = app.HD.params.imageTypes;
 
         if direction == "next"
             num = mod(idx, length(imagesTypes)) + 1;
@@ -396,32 +398,23 @@ methods (Access = private)
     end
 
     function SelectMenu(app, num, ~)
-        imgs = app.HD.view.getImages(app.HD.params.image_types);
+        imgs = app.HD.view.getImages(app.HD.params.imageTypes);
 
-        if ~isempty(imgs)
-
-            image = imgs{num};
-            maxSize = max(size(image));
-
-            if ~ismember(app.HD.params.image_types{num}, {'broadening'}) && ...
-                    size(image, 1) ~= size(image, 2)
-                image = imresize(image, [maxSize, maxSize]);
-            end
-
-            imgs{num} = image;
-
-            if ~isempty(imgs)
-                app.ImageLeft.ImageSource = toImageSource(imgs{num}, app);
-            else
-                app.ImageLeft.ImageSource = '';
-            end
-
-        else
+        if isempty(imgs) || isempty(imgs{num})
             app.ImageLeft.ImageSource = '';
+            return
         end
 
-        app.MenuIndex = num;
+        image = imgs{num};
+        % Resize non-square images (except 'broadening') to square for display
+        if ~ismember(app.HD.params.imageTypes{num}, {'broadening'}) && ...
+                size(image, 1) ~= size(image, 2)
+            maxSize = max(size(image));
+            image = imresize(image, [maxSize, maxSize]);
+        end
 
+        app.ImageLeft.ImageSource = toImageSource(image, app);
+        app.MenuIndex = num;
     end
 
     function ViewAllMenuSelected(app, ~)
@@ -439,7 +432,7 @@ methods (Access = private)
         if app.svdThreshold.Value == 0
             val = ceil(app.frequencyRange1.Value * 2 * app.batchSize.Value / app.fs.Value);
 
-            if ~isnan(val)
+            if isfinite(val) % catches both NaN and Inf
                 app.svdThreshold.Value = val;
             end
 
@@ -448,12 +441,11 @@ methods (Access = private)
         end
 
         app.refreshClass();
-
     end
 
     function frequencyRange2ValueChanged(app, ~)
 
-        if strcmp(app.timeTransform, 'FFT') && app.frequencyRange2.Value > app.fs.Value / 2
+        if strcmp(app.timeTransform.Value, 'FFT') && app.frequencyRange2.Value > app.fs.Value / 2
             app.frequencyRange2.Value = app.fs.Value / 2;
         end
 
@@ -804,16 +796,16 @@ methods (Access = private)
         p = app.batchGrid;
 
         % listBox row 1
-        app.Image_typesListBox = uilistbox(p);
-        app.Image_typesListBox.Items = {};
-        app.Image_typesListBox.Multiselect = 'on';
-        app.Image_typesListBox.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.Image_typesListBox.Tooltip = {'Image types output giving extracting different informations from a batch of frames'};
-        app.Image_typesListBox.FontColor = [1 1 1];
-        app.Image_typesListBox.BackgroundColor = darkBackgroundColor;
-        app.Image_typesListBox.Layout.Row = 1;
-        app.Image_typesListBox.Layout.Column = [1 2];
-        app.Image_typesListBox.Value = {};
+        app.imageTypesListBox = uilistbox(p);
+        app.imageTypesListBox.Items = {};
+        app.imageTypesListBox.Multiselect = 'on';
+        app.imageTypesListBox.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.imageTypesListBox.Tooltip = {'Image types output giving extracting different informations from a batch of frames'};
+        app.imageTypesListBox.FontColor = [1 1 1];
+        app.imageTypesListBox.BackgroundColor = darkBackgroundColor;
+        app.imageTypesListBox.Layout.Row = 1;
+        app.imageTypesListBox.Layout.Column = [1 2];
+        app.imageTypesListBox.Value = {};
 
         % buttons row 2
         app.LoadConfigButton = uibutton(p, 'push');
@@ -1496,15 +1488,15 @@ methods (Access = private)
 
         app.flat_field_gw = uieditfield(p, 'numeric');
         app.flat_field_gw.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.flat_field_gw.FontColor = [1 1 1];
-        app.flat_field_gw.BackgroundColor = [0.149 0.149 0.149];
+        app.flat_field_gw.FontColor = fontColor;
+        app.flat_field_gw.BackgroundColor = darkBackgroundColor;
         app.flat_field_gw.Tooltip = {'flat_filed parameter to apply to some of the output images (gaussian width in pixels to divide the image to correct uneven illumination of images).'};
         app.flat_field_gw.Layout.Column = 2;
         app.flat_field_gw.Layout.Row = 11;
 
         app.flip_y = uicheckbox(p);
         app.flip_y.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.flip_y.Tooltip = {'Same filter but decomposition bloc by bloc of frames'};
+        app.flip_y.Tooltip = {'Flip the output image vertically'};
         app.flip_y.Text = 'Flip y';
         app.flip_y.FontColor = fontColor;
         app.flip_y.Layout.Column = 3;
@@ -1512,7 +1504,7 @@ methods (Access = private)
 
         app.flip_x = uicheckbox(p);
         app.flip_x.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.flip_x.Tooltip = {'Same filter but decomposition bloc by bloc of frames'};
+        app.flip_x.Tooltip = {'Flip the output image horizontally'};
         app.flip_x.Text = 'Flip x';
         app.flip_x.FontColor = fontColor;
         app.flip_x.Layout.Column = 2;
@@ -1520,7 +1512,7 @@ methods (Access = private)
 
         app.square = uicheckbox(p);
         app.square.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.square.Tooltip = {'Same filter but decomposition bloc by bloc of frames'};
+        app.square.Tooltip = {'Crop the output image to a square aspect ratio'};
         app.square.Text = 'Square';
         app.square.FontColor = fontColor;
         app.square.Layout.Column = 1;

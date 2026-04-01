@@ -1,9 +1,9 @@
 function [SH_PSD] = calc_registration_from_views(view, view_ref, params)
 SH_PSD = [];
 
-for i = 1:numel(params.image_types)
+for i = 1:numel(params.imageTypes)
 
-    if ismember(params.image_types{i}, {'SH_avg'})
+    if ismember(params.imageTypes{i}, {'SH_avg'})
         SH_PSD = abs(view.SH) .^ 2;
         M0 = view.Output.power_Doppler.image;
         M0_ref = view_ref.Output.power_Doppler.image;

@@ -19,7 +19,19 @@ methods
         setInitParams(obj);
 
         if ~isdeployed
-            addpath("AberrationCorrection\", "FolderManagement\", "Imaging\", "Interface\", "ReaderClasses\", "Rendering\", "Saving\", "Scripts\", "Saving\Registering\", "Tools\", "StandardConfigs\");
+            root = fileparts(mfilename('fullpath'));
+            addpath( ...
+                fullfile(root, 'AberrationCorrection'), ...
+                fullfile(root, 'FolderManagement'), ...
+                fullfile(root, 'Imaging'), ...
+                fullfile(root, 'Interface'), ...
+                fullfile(root, 'ReaderClasses'), ...
+                fullfile(root, 'Rendering'), ...
+                fullfile(root, 'Saving'), ...
+                fullfile(root, 'Scripts'), ...
+                fullfile(root, 'Saving', 'Registering'), ...
+                fullfile(root, 'Tools'), ...
+                fullfile(root, 'StandardConfigs'));
         end
 
         obj.view = RenderingClass();
@@ -69,7 +81,7 @@ methods
 
                 fields = properties(obj.reader);
 
-                for i = 1:length(fields)
+                for i = 1:numel(fields)
 
                     if ~strcmp(fields{i}, 'filename')
                         obj.file.info.(fields{i}) = obj.reader.(fields{i});
@@ -119,7 +131,7 @@ methods
 
                 fields = properties(obj.reader);
 
-                for i = 1:length(fields)
+                for i = 1:numel(fields)
 
                     if ~strcmp(fields{i}, 'filename') && ~strcmp(fields{i}, 'rephasing_data')
                         obj.file.info.(fields{i}) = obj.reader.(fields{i});
@@ -127,7 +139,7 @@ methods
 
                 end
 
-                obj.file.lambda = 852e-9;
+                obj.file.lambda = 852e-9; % default; cine files do not store wavelength — update manually
                 obj.file.Nx = double(obj.reader.frame_width);
                 obj.file.Ny = double(obj.reader.frame_height);
                 obj.file.ppx = 1 / double(obj.reader.horizontal_pix_per_meter);
@@ -138,7 +150,7 @@ methods
             otherwise
                 obj.file = [];
                 obj.reader = [];
-                fprintf(2, ". %s files are not accepted as correct files", ext)
+                fprintf(2, "Unsupported file extension: %s\n", ext)
         end
 
         % 2) Rendering parameters initialization
@@ -179,12 +191,14 @@ methods
 
         %2)bis) Set Defaults from the StandardConfig
 
-        if isfile(fullfile("StandardConfigs", "CurrentDefault.txt"))
-            DefConfName = readlines(fullfile("StandardConfigs", "CurrentDefault.txt"));
+        stdConfigDir = fullfile(fileparts(mfilename('fullpath')), 'StandardConfigs');
+
+        if isfile(fullfile(stdConfigDir, 'CurrentDefault.txt'))
+            DefConfName = readlines(fullfile(stdConfigDir, 'CurrentDefault.txt'));
 
             if ~isempty(DefConfName)
-                DefConfName = DefConfName(1);
-                paramspath = fullfile("StandardConfigs", sprintf("%s.json", DefConfName));
+                DefConfName = strtrim(DefConfName(1));
+                paramspath = fullfile(stdConfigDir, sprintf('%s.json', DefConfName));
 
                 if isfile(paramspath)
                     obj.loadParams(paramspath);
@@ -198,9 +212,9 @@ methods
 
         % Define the paths for saved preview, video, and config parameters
         last_preview_index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HDPreview'));
-        preview_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HDPreview_', num2str(last_preview_index), '\', obj.file.name, '_HDPreview_', num2str(last_preview_index), '_input_HD_params.json'));
+        preview_params_path = fullfile(obj.file.dir, [obj.file.name '_HDPreview_' num2str(last_preview_index)], [obj.file.name '_HDPreview_' num2str(last_preview_index) '_input_HD_params.json']);
         last_video_index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HD_'));
-        video_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD_', num2str(last_video_index), '\', obj.file.name, '_HD_', num2str(last_video_index), '_input_HD_params.json'));
+        video_params_path = fullfile(obj.file.dir, [obj.file.name '_HD_' num2str(last_video_index)], [obj.file.name '_HD_' num2str(last_video_index) '_input_HD_params.json']);
         last_config_index = get_highest_number_in_files(obj.file.dir, strcat(obj.file.name, '_input_HD_params_'));
         config_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_input_HD_params_', num2str(last_config_index), '.json'));
 
@@ -232,28 +246,22 @@ methods
         % Load saved preview parameters if they exist
         if exist(preview_params_path, 'file')
             fprintf('Loading saved preview parameters from %s\n', preview_params_path);
-            fid = fopen(preview_params_path, 'r');
-            obj.setParams(jsondecode(fread(fid, inf, '*char')'));
-            fclose(fid);
+            obj.loadParams(preview_params_path);
         end
 
         % Load saved video parameters if they exist
         if exist(video_params_path, 'file')
             fprintf('Loading saved video parameters from %s\n', video_params_path);
-            fid = fopen(video_params_path, 'r');
-            obj.setParams(jsondecode(fread(fid, inf, '*char')'));
-            fclose(fid);
+            obj.loadParams(video_params_path);
         end
 
         % Load saved config parameters if they exist (prevails over the last computation)
         if exist(config_params_path, 'file')
             fprintf('Loading saved config from %s\n', config_params_path);
-            fid = fopen(config_params_path, 'r');
-            obj.setParams(jsondecode(fread(fid, inf, '*char')'));
-            fclose(fid);
+            obj.loadParams(config_params_path);
         end
 
-        if ~isempty(opt.params) % if there is optinonal parameters given
+        if ~isempty(opt.params) % if optional parameters were supplied, they take precedence
             obj.setParams(opt.params);
         end
 
@@ -281,7 +289,7 @@ methods
         obj.params.frame_stride = 1;
         obj.params.framePosition = 1;
         obj.params.registrationDiskRatio = 0.8;
-        obj.params.image_types = {'power_Doppler', 'color_Doppler', 'directional_Doppler', 'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
+        obj.params.imageTypes = {'power_Doppler', 'color_Doppler', 'directional_Doppler', 'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
         obj.params.parfor_arg = 10;
         obj.params.refBatchSize = 512;
         obj.params.imageRegistration = true;
@@ -338,14 +346,14 @@ methods
 
         for i = 1:length(fields)
 
-            if ismember(string(fields{i}), ["record_time_stamps_us", "num_frames", "Nx", "Ny", "info"])
+            if ismember(fields{i}, {'record_time_stamps_us', 'num_frames', 'Nx', 'Ny', 'info'})
                 continue % do not set info fields
             end
 
-            if string(fields{i}) == "image_types"
+            if strcmp(fields{i}, 'imageTypes')
                 possibleItems = fieldnames(ImageTypeList2);
                 validItems = intersect(params.(fields{i}), possibleItems);
-                obj.params.image_types = validItems;
+                obj.params.imageTypes = validItems;
             else
                 obj.params.(fields{i}) = params.(fields{i});
             end
@@ -357,8 +365,13 @@ methods
     function loadParams(obj, path)
         fprintf('Loading parameters from %s\n', path);
         fid = fopen(path, 'r');
+
+        if fid == -1
+            error('HoloDopplerClass:loadParams:cannotOpenFile', 'Cannot open file: %s', path);
+        end
+
+        closeFile = onCleanup(@() fclose(fid));
         obj.setParams(jsondecode(fread(fid, inf, '*char')'));
-        fclose(fid);
     end
 
     function outputPath = saveParams(obj, filename, save_z)
@@ -405,9 +418,13 @@ methods
         index = get_highest_number_in_files(dir, strcat(name, '_', 'input_HD_params'));
         outputPath = fullfile(dir, strcat(name, '_', 'input_HD_params_', num2str(index + 1), '.json'));
         fid = fopen(outputPath, 'w');
-        fwrite(fid, jsonencode(parms, "PrettyPrint", true), 'char');
-        fclose(fid);
 
+        if fid == -1
+            error('HoloDopplerClass:saveParams:cannotOpenFile', 'Cannot open file for writing: %s', outputPath);
+        end
+
+        closeFile = onCleanup(@() fclose(fid));
+        fwrite(fid, jsonencode(parms, 'PrettyPrint', true), 'char');
     end
 
     function images = PreviewRendering(obj)
@@ -422,14 +439,15 @@ methods
             obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batchSize, obj.params.framePosition));
         end
 
-        obj.view.Render(obj.params, obj.params.image_types);
-        images = obj.view.getImages(obj.params.image_types);
+        obj.view.Render(obj.params, obj.params.imageTypes);
+        images = obj.view.getImages(obj.params.imageTypes);
 
-        for i = 1:numel(obj.params.image_types)
+        for i = 1:numel(obj.params.imageTypes)
             image = images{i};
 
-            if ~ismember(obj.params.image_types{i}, {'broadening'}) && size(image, 1) ~= size(image, 2) % do not resize the graphs
-                image = imresize(image, [max(size(image, 1), size(image, 2)), max(size(image, 1), size(image, 2))]);
+            if ~ismember(obj.params.imageTypes{i}, {'broadening'}) && size(image, 1) ~= size(image, 2) % do not resize the graphs
+                maxDim = max(size(image, 1), size(image, 2));
+                image = imresize(image, [maxDim, maxDim]);
             end
 
             images{i} = image;
@@ -440,7 +458,7 @@ methods
     function images = showPreviewImages(obj, images_types)
 
         if nargin < 2
-            images_types = obj.params.image_types;
+            images_types = obj.params.imageTypes;
         end
 
         images = obj.view.getImages(images_types);
@@ -461,10 +479,10 @@ methods
         figure(18); montage(images_res);
     end
 
-    function savePreview(obj, image_types)
+    function savePreview(obj, imageTypes)
 
         if nargin < 2
-            image_types = obj.params.image_types;
+            imageTypes = obj.params.imageTypes;
         end
 
         index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HDPreview'));
@@ -474,7 +492,7 @@ methods
             mkdir(result_folder_path);
         end
 
-        images = obj.view.getImages(image_types);
+        images = obj.view.getImages(imageTypes);
 
         for i = 1:numel(images)
 
@@ -482,23 +500,30 @@ methods
                 continue
             end
 
-            if ~ismember(image_types{i}, {'moment_0', 'moment_1', 'moment_2', 'SVD_cov', 'SVD_U', 'FH_modulus_mean', 'FH_arg_mean', 'ShackHartmann_Cropped_Moments', 'broadening'})
+            if ~ismember(imageTypes{i}, {'moment_0', 'moment_1', 'moment_2', 'SVD_cov', 'SVD_U', 'FH_modulus_mean', 'FH_arg_mean', 'ShackHartmann_Cropped_Moments', 'broadening'})
                 max_dim = max(size(images{i}, 1), size(images{i}, 2));
-                imwrite(toImageSource(imresize(images{i}, [max_dim, max_dim])), fullfile(result_folder_path, strcat(obj.file.name, '_', image_types{i}, '.png')));
+                imwrite(toImageSource(imresize(images{i}, [max_dim, max_dim])), fullfile(result_folder_path, strcat(obj.file.name, '_', imageTypes{i}, '.png')));
             else
-                imwrite(toImageSource(images{i}), fullfile(result_folder_path, strcat(obj.file.name, '_', image_types{i}, '.png')));
+                imwrite(toImageSource(images{i}), fullfile(result_folder_path, strcat(obj.file.name, '_', imageTypes{i}, '.png')));
             end
 
         end
 
-        fid = fopen(fullfile(result_folder_path, strcat(obj.file.name, '_HDPreview_', num2str(index + 1), '_', 'input_HD_params.json')), 'w');
-        fwrite(fid, jsonencode(obj.params, "PrettyPrint", true), 'char');
-        fclose(fid);
+        previewParamsPath = fullfile(result_folder_path, [obj.file.name '_HDPreview_' num2str(index + 1) '_input_HD_params.json']);
+        fid = fopen(previewParamsPath, 'w');
+
+        if fid ~= -1
+            closeFile = onCleanup(@() fclose(fid));
+            fwrite(fid, jsonencode(obj.params, 'PrettyPrint', true), 'char');
+        else
+            warning('HoloDopplerClass:savePreview:cannotOpenFile', 'Could not write params to %s', previewParamsPath);
+        end
+
     end
 
     function result_folder_path = VideoRendering(obj)
         %VideoRendering Construct the Video according to the current params
-        close all; % make sure to close  all figs
+        % Close the waitbar from any previous run if it still exists
 
         if isempty(obj.reader)
             error("No file loaded")
@@ -537,13 +562,13 @@ methods
         poolobj = gcp('nocreate'); % check if a pool already exist
         parfor_arg = obj.params.parfor_arg;
 
-        if parfor_arg < 1
-            %
-        elseif isempty(poolobj) || poolobj.NumWorkers ~= parfor_arg
-            delete(poolobj); %close the current pool to create a new one with correct num of workers
-            parpool(parfor_arg);
-        else
-            %
+        if parfor_arg >= 1
+
+            if isempty(poolobj) || poolobj.NumWorkers ~= parfor_arg
+                delete(poolobj); % close current pool to create a new one with correct num of workers
+                parpool(parfor_arg);
+            end
+
         end
 
         VideoRenderingTime = tic;
@@ -593,7 +618,7 @@ methods
 
         % 1) Initialize the video object
 
-        if isempty(obj.video) | numel(obj.video) ~= num_batches
+        if isempty(obj.video) || numel(obj.video) ~= num_batches
             v(1, num_batches) = ImageTypeList2();
             obj.video = v; clear v;
         end
@@ -602,7 +627,7 @@ methods
 
         view_ref = RenderingClass();
         view_ref.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.framePosition));
-        view_ref.Render(obj.params, obj.params.image_types, cache_intermediate_results = false);
+        view_ref.Render(obj.params, obj.params.imageTypes, cache_intermediate_results = false);
 
         if obj.params.applyShackHartmannfromRef
             ShackHartmannMask = view_ref.ShackHartmannMask; % get the mask to apply to each frame here
@@ -621,7 +646,7 @@ methods
             for i = 1:(num_batches)
                 obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batchSize, (i - 1) * obj.params.batchStride + first_frame));
                 obj.view.ShackHartmannMask = ShackHartmannMask;
-                obj.view.Render(obj.params, obj.params.image_types);
+                obj.view.Render(obj.params, obj.params.imageTypes);
                 obj.video(i) = ImageTypeList2();
                 obj.video(i).copy_from(obj.view.Output); % work around against handles
                 SH_PSD = calc_registration_from_views(obj.view, view_ref, obj.params);
@@ -650,7 +675,7 @@ methods
                     l_view = RenderingClass();
                     l_view.setFrames(all_frames(:, :, :, i));
                     l_view.ShackHartmannMask = ShackHartmannMask;
-                    l_view.Render(l_params, l_params.image_types, cache_intermediate_results = false);
+                    l_view.Render(l_params, l_params.imageTypes, cache_intermediate_results = false);
                     l_video(i) = ImageTypeList2();
                     l_video(i).copy_from(l_view.Output);
                     send(D, 0);
@@ -662,9 +687,9 @@ methods
 
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
                     l_view = RenderingClass();
-                    l_view.setFrames(l_reader.read_frame_batch(batchSize, (i - 1) * batchStride + 1));
+                    l_view.setFrames(l_reader.read_frame_batch(batchSize, (i - 1) * batchStride + first_frame));
                     l_view.ShackHartmannMask = ShackHartmannMask;
-                    l_view.Render(l_params, l_params.image_types, cache_intermediate_results = false);
+                    l_view.Render(l_params, l_params.imageTypes, cache_intermediate_results = false);
                     l_video(i) = ImageTypeList2();
                     l_video(i).copy_from(l_view.Output);
                     send(D, 0);
@@ -681,7 +706,7 @@ methods
 
         if obj.params.imageRegistration
 
-            if ismember('power_Doppler', obj.params.image_types)
+            if ismember('power_Doppler', obj.params.imageTypes)
                 obj.CalculateRegistration();
                 obj.ApplyRegistration();
             else
@@ -696,10 +721,10 @@ methods
         result_folder_path = obj.SaveVideo();
     end
 
-    function result_folder_path = SaveVideo(obj, image_types, params)
+    function result_folder_path = SaveVideo(obj, imageTypes, params)
 
         if nargin < 2
-            image_types = obj.params.image_types;
+            imageTypes = obj.params.imageTypes;
         end
 
         if nargin < 3
@@ -721,10 +746,10 @@ methods
             mkdir(fullfile(result_folder_path, 'mat')); % for previous versions of PW
         end
 
-        for i = 1:numel(image_types)
-            tmp = {obj.video.(image_types{i})};
+        for i = 1:numel(imageTypes)
+            tmp = {obj.video.(imageTypes{i})};
 
-            if strcmp(image_types{i}, 'SH') %SH extraction
+            if strcmp(imageTypes{i}, 'SH') %SH extraction
                 sz = size(tmp{1}.parameters.SH);
                 bs = sz(3); % SH binned batchsize
                 sz(3) = bs * length(tmp);
@@ -735,9 +760,9 @@ methods
                     mat(:, :, (j - 1) * bs + 1:j * bs) = tmp{j}.parameters.SH;
                 end
 
-                generate_video(mat, result_folder_path, strcat('SH'), export_raw = 1, temporalFilter = 2);
+                generate_video(mat, result_folder_path, 'SH', export_raw = 1, temporalFilter = 2);
                 continue
-            elseif strcmp(image_types{i}, 'buckets')
+            elseif strcmp(imageTypes{i}, 'buckets')
                 sz = size(tmp{1}.parameters.intervals_0);
                 sz(3) = length(tmp);
                 buckranges = reshape(params.bucketsRanges, [], 2);
@@ -766,15 +791,16 @@ methods
                 end
 
                 continue
-            elseif strcmp(image_types{i}, 'full_buckets')
+            elseif strcmp(imageTypes{i}, 'full_buckets')
                 sz = size(tmp{1}.parameters.SH_full);
-                sz(3) = 32;
+                numSlices = sz(3);
+                sz(3) = numSlices;
                 sz(4) = length(tmp);
                 mat_ = zeros(sz, 'single');
 
                 for j = 1:length(tmp)
 
-                    for k = 1:32
+                    for k = 1:numSlices
                         mat_(:, :, k, j) = tmp{j}.parameters.SH_full(:, :, k);
                     end
 
@@ -786,10 +812,10 @@ methods
 
                 continue
 
-            elseif strcmp(image_types{i}, 'SH_avg')
+            elseif strcmp(imageTypes{i}, 'SH_avg')
 
                 if ~isempty(obj.running_averages.running_averages)
-                    generate_video(fftshift(obj.running_averages.running_averages.SH, 3), result_folder_path, strcat(image_types{i}), export_raw = 1, temporalFilter = [], square = params.square);
+                    generate_video(fftshift(obj.running_averages.running_averages.SH, 3), result_folder_path, strcat(imageTypes{i}), export_raw = 1, temporalFilter = [], square = params.square);
                 end
 
                 mat = [];
@@ -820,45 +846,45 @@ methods
 
             if ~isempty(mat)
 
-                if strcmp(image_types{i}, 'moment_0') % raw moments are always outputted if they are selected
-                    generate_video(mat, result_folder_path, strcat('moment0'), export_raw = 1, temporalFilter = 2, square = params.square); % three cases just to rename each correctly for PW
-                elseif strcmp(image_types{i}, 'moment_1')
-                    generate_video(mat, result_folder_path, strcat('moment1'), export_raw = 1, temporalFilter = 2, square = params.square);
-                elseif strcmp(image_types{i}, 'moment_2')
-                    generate_video(mat, result_folder_path, strcat('moment2'), export_raw = 1, temporalFilter = 2, square = params.square);
-                elseif strcmp(image_types{i}, 'energy_ratio_type')
-                    generate_video(mat, result_folder_path, strcat('energy_ratio_type'), export_raw = 1, temporalFilter = 2, square = params.square);
-                elseif strcmp(image_types{i}, 'power_Doppler')
-                    generate_video(mat, result_folder_path, strcat('M0'), temporalFilter = 2, square = params.square);
-                elseif strcmp(image_types{i}, 'broadening')
-                    generate_video(mat, result_folder_path, strcat('broadening'));
-                elseif strcmp(image_types{i}, 'f_RMS')
-                    generate_video(mat, result_folder_path, strcat('f_RMS'));
-                elseif strcmp(image_types{i}, 'FH_modulus_mean')
-                    generate_video(mat, result_folder_path, strcat('FH_modulus_mean'));
-                elseif strcmp(image_types{i}, 'FH_arg_mean')
-                    generate_video(mat, result_folder_path, strcat('FH_arg_mean'));
-                elseif strcmp(image_types{i}, 'arg_0')
-                    generate_video(mat, result_folder_path, strcat('arg_0'), square = params.square);
-                elseif strcmp(image_types{i}, 'SVD_cov')
-                    generate_video(mat, result_folder_path, strcat('SVD_cov'));
-                elseif strcmp(image_types{i}, 'SVD_U')
-                    generate_video(mat, result_folder_path, strcat('SVD_U'));
-                elseif strcmp(image_types{i}, 'ShackHartmann_Cropped_Moments')
-                    generate_video(mat, result_folder_path, strcat('ShackHartmann_Cropped_Moments'));
-                elseif strcmp(image_types{i}, 'ShackHartmann_Phase')
-                    generate_video(mat, result_folder_path, strcat('ShackHartmann_Phase'));
-                elseif strcmp(image_types{i}, 'color_Doppler')
-                    generate_video(mat, result_folder_path, strcat('color_Doppler'), square = params.square, enhance_contrast = true);
-                elseif strcmp(image_types{i}, 'color_band_ratio')
-                    generate_video(mat, result_folder_path, strcat('color_band_ratio'), NoIntensity = 1, ...
+                if strcmp(imageTypes{i}, 'moment_0') % raw moments are always outputted if they are selected
+                    generate_video(mat, result_folder_path, 'moment0', export_raw = 1, temporalFilter = 2, square = params.square); % three cases just to rename each correctly for PW
+                elseif strcmp(imageTypes{i}, 'moment_1')
+                    generate_video(mat, result_folder_path, 'moment1', export_raw = 1, temporalFilter = 2, square = params.square);
+                elseif strcmp(imageTypes{i}, 'moment_2')
+                    generate_video(mat, result_folder_path, 'moment2', export_raw = 1, temporalFilter = 2, square = params.square);
+                elseif strcmp(imageTypes{i}, 'energy_ratio_type')
+                    generate_video(mat, result_folder_path, 'energy_ratio_type', export_raw = 1, temporalFilter = 2, square = params.square);
+                elseif strcmp(imageTypes{i}, 'power_Doppler')
+                    generate_video(mat, result_folder_path, 'M0', temporalFilter = 2, square = params.square);
+                elseif strcmp(imageTypes{i}, 'broadening')
+                    generate_video(mat, result_folder_path, 'broadening');
+                elseif strcmp(imageTypes{i}, 'f_RMS')
+                    generate_video(mat, result_folder_path, 'f_RMS');
+                elseif strcmp(imageTypes{i}, 'FH_modulus_mean')
+                    generate_video(mat, result_folder_path, 'FH_modulus_mean');
+                elseif strcmp(imageTypes{i}, 'FH_arg_mean')
+                    generate_video(mat, result_folder_path, 'FH_arg_mean');
+                elseif strcmp(imageTypes{i}, 'arg_0')
+                    generate_video(mat, result_folder_path, 'arg_0', square = params.square);
+                elseif strcmp(imageTypes{i}, 'SVD_cov')
+                    generate_video(mat, result_folder_path, 'SVD_cov');
+                elseif strcmp(imageTypes{i}, 'SVD_U')
+                    generate_video(mat, result_folder_path, 'SVD_U');
+                elseif strcmp(imageTypes{i}, 'ShackHartmann_Cropped_Moments')
+                    generate_video(mat, result_folder_path, 'ShackHartmann_Cropped_Moments');
+                elseif strcmp(imageTypes{i}, 'ShackHartmann_Phase')
+                    generate_video(mat, result_folder_path, 'ShackHartmann_Phase');
+                elseif strcmp(imageTypes{i}, 'color_Doppler')
+                    generate_video(mat, result_folder_path, 'color_Doppler', square = params.square, enhance_contrast = true);
+                elseif strcmp(imageTypes{i}, 'color_band_ratio')
+                    generate_video(mat, result_folder_path, 'color_band_ratio', NoIntensity = 1, ...
                         square = params.square, enhance_contrast = false);
                 else
-                    generate_video(mat, result_folder_path, strcat(image_types{i}), temporalFilter = 2, square = params.square);
+                    generate_video(mat, result_folder_path, strcat(imageTypes{i}), temporalFilter = 2, square = params.square);
                 end
 
             else
-                fprintf("%s was not found so it cannot be saved.\n", image_types{i});
+                fprintf("%s was not found so it cannot be saved.\n", imageTypes{i});
             end
 
         end
@@ -890,9 +916,15 @@ methods
             disp("Error while saving the parameters.")
         end
 
-        fid = fopen(fullfile(result_folder_path, strcat(obj.file.name, '_HD_', num2str(index + 1), '_', 'input_HD_params.json')), 'w');
-        fwrite(fid, jsonencode(params, "PrettyPrint", true), 'char');
-        fclose(fid);
+        videoParamsPath = fullfile(result_folder_path, [obj.file.name '_HD_' num2str(index + 1) '_input_HD_params.json']);
+        fid = fopen(videoParamsPath, 'w');
+
+        if fid ~= -1
+            closeFile2 = onCleanup(@() fclose(fid));
+            fwrite(fid, jsonencode(params, 'PrettyPrint', true), 'char');
+        else
+            warning('HoloDopplerClass:SaveVideo:cannotOpenFile', 'Could not write params to %s', videoParamsPath);
+        end
 
         % copy the HD version file
         appRoot = fileparts(mfilename('fullpath'));
@@ -910,11 +942,15 @@ methods
                 strtrim(git_hash), strtrim(git_branch), strtrim(git_log));
             % Write to file
             fid_git = fopen(fullfile(result_folder_path, 'git.txt'), 'w');
-            fwrite(fid_git, git_info);
-            fclose(fid_git);
+
+            if fid_git ~= -1
+                closeGit = onCleanup(@() fclose(fid_git));
+                fwrite(fid_git, git_info, 'char');
+            end
+
         catch ME
             MEdisp(ME);
-            disp('No git git info.');
+            disp('No git info.');
         end
 
         %saving a small mat for old versions of PW
@@ -967,7 +1003,7 @@ methods
         video_M0_reg = video_M0_reg ./ (max(abs(video_M0_reg), [], [1, 2])); % rescaling each frame but keeps mean at zero
 
         obj.view.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.framePosition));
-        obj.view.Render(obj.params, obj.params.image_types);
+        obj.view.Render(obj.params, obj.params.imageTypes);
 
         ref_img = obj.view.Output.power_Doppler.image;
 
@@ -980,13 +1016,13 @@ methods
     function ApplyRegistration(obj)
         num_batches = numel(obj.video);
 
-        for j = 1:length(obj.params.image_types)
+        for j = 1:length(obj.params.imageTypes)
 
-            if ismember(obj.params.image_types{j}, {'broadening', 'fRMS', 'FH_modulus_mean', 'FH_arg_mean', 'FH_arg_mean', 'SVD_cov', 'SVD_U'})
+            if ismember(obj.params.imageTypes{j}, {'broadening', 'fRMS', 'FH_modulus_mean', 'FH_arg_mean', 'SVD_cov', 'SVD_U'})
                 continue
             end
 
-            if strcmp(obj.params.image_types{j}, 'SH') %SH extraction
+            if strcmp(obj.params.imageTypes{j}, 'SH') %SH extraction
                 sz = size(obj.video(1).SH.parameters.SH);
                 bs = sz(3);
                 ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
@@ -1000,7 +1036,7 @@ methods
                 end
 
                 continue
-            elseif strcmp(obj.params.image_types{j}, 'buckets')
+            elseif strcmp(obj.params.imageTypes{j}, 'buckets')
                 sz = size(obj.video(1).buckets.parameters.intervals_0);
 
                 if length(sz) > 3
@@ -1024,7 +1060,7 @@ methods
 
                 continue
 
-            elseif strcmp(obj.params.image_types{j}, 'full_buckets')
+            elseif strcmp(obj.params.imageTypes{j}, 'full_buckets')
                 sz = size(obj.video(1).full_buckets.parameters.SH_full);
 
                 ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
@@ -1042,13 +1078,13 @@ methods
             end
 
             try % in case of not the same image size
-                ratio = [size(obj.video(1).(obj.params.image_types{j}).image, 1) size(obj.video(1).(obj.params.image_types{j}).image, 2)] ./ size(obj.video(1).('power_Doppler').image);
+                ratio = [size(obj.video(1).(obj.params.imageTypes{j}).image, 1) size(obj.video(1).(obj.params.imageTypes{j}).image, 2)] ./ size(obj.video(1).('power_Doppler').image);
             catch
                 ratio = [1 1];
             end
 
             for i = 1:num_batches
-                obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, floor(obj.registration.shifts(:, i) .* ratio'));
+                obj.video(i).(obj.params.imageTypes{j}).image = circshift(obj.video(i).(obj.params.imageTypes{j}).image, floor(obj.registration.shifts(:, i) .* ratio'));
             end
 
         end
@@ -1059,9 +1095,13 @@ methods
 
         num_batches = numel(obj.video);
 
-        for j = 1:length(obj.params.image_types)
+        for j = 1:length(obj.params.imageTypes)
 
-            if strcmp(obj.params.image_types{j}, 'SH') %SH extraction
+            if ismember(obj.params.imageTypes{j}, {'broadening', 'fRMS', 'FH_modulus_mean', 'FH_arg_mean', 'SVD_cov', 'SVD_U'})
+                continue
+            end
+
+            if strcmp(obj.params.imageTypes{j}, 'SH') %SH extraction
                 sz = size(obj.video(1).SH.parameters.SH);
                 bs = sz(3);
                 ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
@@ -1075,7 +1115,7 @@ methods
                 end
 
                 continue
-            elseif strcmp(obj.params.image_types{j}, 'buckets')
+            elseif strcmp(obj.params.imageTypes{j}, 'buckets')
                 sz = size(obj.video(1).buckets.parameters.intervals_0);
                 numF = sz(4);
                 ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
@@ -1095,13 +1135,13 @@ methods
             end
 
             try % in case of not the same image size
-                ratio = [size(obj.video(1).(obj.params.image_types{j}).image, 1) size(obj.video(1).(obj.params.image_types{j}).image, 2)] ./ size(obj.video(1).('power_Doppler').image);
+                ratio = [size(obj.video(1).(obj.params.imageTypes{j}).image, 1) size(obj.video(1).(obj.params.imageTypes{j}).image, 2)] ./ size(obj.video(1).('power_Doppler').image);
             catch
                 ratio = [1 1];
             end
 
             for i = 1:num_batches
-                obj.video(i).(obj.params.image_types{j}).image = circshift(obj.video(i).(obj.params.image_types{j}).image, - floor(obj.registration.shifts(:, i) .* ratio'));
+                obj.video(i).(obj.params.imageTypes{j}).image = circshift(obj.video(i).(obj.params.imageTypes{j}).image, - floor(obj.registration.shifts(:, i) .* ratio'));
             end
 
         end

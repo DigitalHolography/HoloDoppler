@@ -81,16 +81,16 @@ methods
         obj.FramesChanged = true;
     end
 
-    function obj = Render(obj, Params, image_types, options)
+    function obj = Render(obj, Params, imageTypes, options)
 
         arguments
             obj
             Params struct % contains all the parameters required for the rendering
-            image_types cell % list of chars containing the name of the outputs
+            imageTypes cell % list of chars containing the name of the outputs
             options.cache_intermediate_results logical = true
         end
 
-        obj.Output.select(image_types{:});
+        obj.Output.select(imageTypes{:});
 
         % Calculate the parameters difference to prevent recalculations
         fields = fieldnames(Params);
@@ -321,24 +321,24 @@ methods
         obj.LastParams = Params;
     end
 
-    function r = constructImages(obj, image_types)
+    function r = constructImages(obj, imageTypes)
 
         arguments
             obj
-            image_types cell % list of chars image types
+            imageTypes cell % list of chars image types
         end
 
-        r = cell(1, numel(image_types));
+        r = cell(1, numel(imageTypes));
 
-        for i = 1:length(image_types)
+        for i = 1:length(imageTypes)
 
-            if ~isprop(obj.Output, image_types{i})
-                error("%s isnt a known image type try any of [ %s ]", image_types{i}, sprintf("%s,", string(fields(obj.Output))));
+            if ~isprop(obj.Output, imageTypes{i})
+                error("%s isnt a known image type try any of [ %s ]", imageTypes{i}, sprintf("%s,", string(fields(obj.Output))));
             end
 
         end
 
-        obj.Output.select(image_types{:});
+        obj.Output.select(imageTypes{:});
 
         obj.Output.construct_image_from_FH(obj.LastParams, obj.FH);
 
@@ -348,41 +348,41 @@ methods
 
         obj.Output.construct_image(obj.LastParams, obj.SH);
 
-        for i = 1:length(image_types)
+        for i = 1:length(imageTypes)
 
-            if ~isprop(obj.Output, image_types{i})
-                error("%s isnt a known image type try any of [ %s ]", image_types{i}, sprintf("%s,", string(fields(obj.Output))));
+            if ~isprop(obj.Output, imageTypes{i})
+                error("%s isnt a known image type try any of [ %s ]", imageTypes{i}, sprintf("%s,", string(fields(obj.Output))));
             end
 
-            r{i} = mat2gray(obj.Output.(image_types{i}).image);
+            r{i} = mat2gray(obj.Output.(imageTypes{i}).image);
         end
 
     end
 
-    function r = getImages(obj, image_types)
+    function r = getImages(obj, imageTypes)
 
         arguments
             obj
-            image_types cell % list of chars image types
+            imageTypes cell % list of chars image types
         end
 
-        r = cell(1, numel(image_types));
+        r = cell(1, numel(imageTypes));
 
-        for i = 1:length(image_types)
+        for i = 1:length(imageTypes)
 
-            if ~isprop(obj.Output, image_types{i})
-                error("%s isnt a known image type try any of [ %s ]", image_types{i}, sprintf("%s,", string(fields(obj.Output))));
+            if ~isprop(obj.Output, imageTypes{i})
+                error("%s isnt a known image type try any of [ %s ]", imageTypes{i}, sprintf("%s,", string(fields(obj.Output))));
             end
 
-            if isempty(obj.Output.(image_types{i}).image)
+            if isempty(obj.Output.(imageTypes{i}).image)
 
-                if ~ismember(image_types{i}, {'buckets', 'SH'}) % these dont have explicit out images so it is normal for them not to output an image
-                    fprintf("unfortunately %s wasnt outputed \n", image_types{i});
+                if ~ismember(imageTypes{i}, {'buckets', 'SH'}) % these dont have explicit out images so it is normal for them not to output an image
+                    fprintf("unfortunately %s wasnt outputed \n", imageTypes{i});
                 end
 
                 r{i} = [];
             else
-                im = obj.Output.(image_types{i}).image;
+                im = obj.Output.(imageTypes{i}).image;
                 r{i} = mat2gray(im);
             end
 
