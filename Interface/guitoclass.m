@@ -169,69 +169,6 @@ if isprop(app, 'AutofocusFromRef')
     HD.params.applyautofocusfromref = safeGetCheckbox(app.AutofocusFromRef, false);
 end
 
-if isprop(app, 'applyShackHartmannfromRef')
-    HD.params.applyShackHartmannfromRef = safeGetCheckbox(app.applyShackHartmannfromRef, false);
-end
-
-% Shack-Hartmann correction
-if isprop(app, 'ShackHartmannCheckBox')
-
-    if safeGetCheckbox(app.ShackHartmannCheckBox, false)
-        % Initialize structure if it doesn't exist
-        if ~isfield(HD.params, 'ShackHartmannCorrection') || isempty(HD.params.ShackHartmannCorrection)
-            HD.params.ShackHartmannCorrection = struct();
-        end
-
-        if isprop(app, 'IterativeCheckBox')
-            HD.params.ShackHartmannCorrection.iterate = safeGetCheckbox(app.IterativeCheckBox, false);
-        end
-
-        if isprop(app, 'NumberOfIteration')
-            HD.params.ShackHartmannCorrection.N_iterate = safeGetUIValue(app.NumberOfIteration, 3);
-        end
-
-        if isprop(app, 'ZernikeProjectionCheckBox')
-            HD.params.ShackHartmannCorrection.ZernikeProjection = safeGetCheckbox(app.ZernikeProjectionCheckBox, true);
-        end
-
-        if isprop(app, 'shackHartmannZernikeRanks')
-            HD.params.ShackHartmannCorrection.zernikeranks = safeGetUIValue(app.shackHartmannZernikeRanks, 2);
-        end
-
-        if isprop(app, 'SubApNumPositions')
-            HD.params.ShackHartmannCorrection.subapnumpositions = safeGetUIValue(app.SubApNumPositions, 5);
-        end
-
-        if isprop(app, 'imageSubApSizeRatio')
-            HD.params.ShackHartmannCorrection.imagesubapsizeratio = safeGetUIValue(app.imageSubApSizeRatio, 5);
-        end
-
-        if isprop(app, 'subApMargin')
-            HD.params.ShackHartmannCorrection.subaperturemargin = safeGetUIValue(app.subApMargin, 0.15);
-        end
-
-        if isprop(app, 'referenceimageDropDown')
-            HD.params.ShackHartmannCorrection.referenceimage = safeGetUIValue(app.referenceimageDropDown, 'central subaperture');
-        end
-
-        if isprop(app, 'CalibrationFactor')
-            HD.params.ShackHartmannCorrection.calibrationfactor = safeGetUIValue(app.CalibrationFactor, 60);
-        end
-
-        if isprop(app, 'ConvergenceThreshold')
-            HD.params.ShackHartmannCorrection.convergencethreshold = safeGetUIValue(app.ConvergenceThreshold, 0.5);
-        end
-
-        if isprop(app, 'onlydefocusCheckBox')
-            HD.params.ShackHartmannCorrection.onlydefocus = safeGetCheckbox(app.onlydefocusCheckBox, false);
-        end
-
-    else
-        HD.params.ShackHartmannCorrection = [];
-    end
-
-end
-
 % Advanced processing parameters
 
 if isprop(app, 'svdStride')

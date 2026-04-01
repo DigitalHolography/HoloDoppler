@@ -24,6 +24,6 @@ end
 %
 % end
 image = imresize3(image, [max(numX, numY) max(numX, numY), 3]);
-app.ImageLeft.ImageSource = image;
+app.Image.ImageSource = image;
 
 end

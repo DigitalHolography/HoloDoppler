@@ -7,7 +7,6 @@ properties
     SpatialFilterMask logical
     SpatialKernel single
     PhaseFactor single
-    ShackHartmannMask single
     moment_chunks_crop_array single
     FH single
     H single
@@ -54,7 +53,6 @@ methods
         Params.flip_y = false;
         Params.flip_x = false;
         Params.square = true;
-        Params.ShackHartmannCorrection = [];
         obj.LastParams = Params;
 
     end
@@ -140,7 +138,7 @@ methods
 
         % 2) Spatial transformation (from Frames to H)
 
-        doFH = doFrames || ParamChanged.PaddingNum || ParamChanged.spatialTransformation || ParamChanged.spatialPropagation || ParamChanged.ShackHartmannCorrection || obj.FramesChanged || ~options.cache_intermediate_results;
+        doFH = doFrames || ParamChanged.PaddingNum || ParamChanged.spatialTransformation || ParamChanged.spatialPropagation || obj.FramesChanged || ~options.cache_intermediate_results;
 
         if doFH % change or if the frames changed
 
@@ -157,19 +155,11 @@ methods
 
                     if ParamChanged.spatialPropagation || ParamChanged.PaddingNum || ParamChanged.spatialTransformation || isempty(obj.SpatialKernel)
 
-                        if isempty(Params.ShackHartmannCorrection)
-                            obj.SpatialKernel = propagation_kernelAngularSpectrum(ND, ND, Params.spatialPropagation, Params.lambda, Params.ppx, Params.ppy, 0);
-                        else
-                            obj.SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, Params.spatialPropagation, Params.lambda, Params.ppx, Params.ppy, 0);
-                        end
+                        obj.SpatialKernel = propagation_kernelAngularSpectrum(ND, ND, Params.spatialPropagation, Params.lambda, Params.ppx, Params.ppy, 0);
 
                     end
 
-                    if isempty(Params.ShackHartmannCorrection)
-                        obj.FH = fft2(single(pad3DToSquare(obj.Frames, ND))); % zero pading in a square of max(Nx NY) size
-                    else
-                        obj.FH = fft2(single(obj.Frames));
-                    end
+                    obj.FH = fft2(single(pad3DToSquare(obj.Frames, ND))); % zero pading in a square of max(Nx NY) size
 
                     obj.FH = obj.FH .* fftshift(obj.SpatialKernel);
                 case "Fresnel"
@@ -197,27 +187,7 @@ methods
 
             end
 
-            if ~isempty(Params.ShackHartmannCorrection)
-
-                if ~Params.applyShackHartmannfromRef || isempty(obj.ShackHartmannMask) % in case we apply ShackHartmann from precalculated Mask
-
-                    if doFH || ParamChanged.ShackHartmannCorrection || isempty(obj.ShackHartmannMask)
-                        [obj.ShackHartmannMask, obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH, Params.spatialTransformation, Params.spatialPropagation, Params.frequencyRange, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
-                    end
-
-                end
-
-                if ~isempty(obj.ShackHartmannMask)
-                    obj.FH = obj.FH .* obj.ShackHartmannMask;
-                end
-
-            else
-                obj.ShackHartmannMask = [];
-            end
-
         end
-
-        obj.Output.construct_image_from_ShackHartmann(Params, obj.moment_chunks_crop_array, obj.ShackHartmannMask);
 
         doH = doFH || ParamChanged.svd_filter || ...
             (Params.svdThreshold == 0 && ParamChanged.frequencyRange) || ...
@@ -343,8 +313,6 @@ methods
         obj.Output.construct_image_from_FH(obj.LastParams, obj.FH);
 
         obj.Output.construct_image_from_SVD(obj.LastParams, obj.cov, obj.U, size(obj.H));
-
-        obj.Output.construct_image_from_ShackHartmann(obj.LastParams, obj.moment_chunks_crop_array, obj.ShackHartmannMask);
 
         obj.Output.construct_image(obj.LastParams, obj.SH);
 

@@ -256,64 +256,6 @@ if ~isempty(HD) && ~isempty(HD.params)
         safeSetCheckbox(app.AutofocusFromRef, HD.params.applyautofocusfromref);
     end
 
-    if isprop(app, 'applyShackHartmannfromRef')
-        safeSetCheckbox(app.applyShackHartmannfromRef, HD.params.applyShackHartmannfromRef);
-    end
-
-    % Shack-Hartmann correction
-    if isprop(app, 'ShackHartmannCheckBox')
-        safeSetCheckbox(app.ShackHartmannCheckBox, ~isempty(HD.params.ShackHartmannCorrection));
-    end
-
-    if ~isempty(HD.params.ShackHartmannCorrection)
-
-        if isprop(app, 'IterativeCheckBox')
-            safeSetCheckbox(app.IterativeCheckBox, HD.params.ShackHartmannCorrection.iterate);
-        end
-
-        if isprop(app, 'NumberOfIteration')
-            safeSetNumeric(app.NumberOfIteration, HD.params.ShackHartmannCorrection.N_iterate);
-        end
-
-        if isprop(app, 'ZernikeProjectionCheckBox')
-            safeSetCheckbox(app.ZernikeProjectionCheckBox, HD.params.ShackHartmannCorrection.ZernikeProjection);
-        end
-
-        if isprop(app, 'shackHartmannZernikeRanks')
-            safeSetNumeric(app.shackHartmannZernikeRanks, HD.params.ShackHartmannCorrection.zernikeranks);
-        end
-
-        if isprop(app, 'SubApNumPositions')
-            safeSetNumeric(app.SubApNumPositions, HD.params.ShackHartmannCorrection.subapnumpositions);
-        end
-
-        if isprop(app, 'imageSubApSizeRatio')
-            safeSetNumeric(app.imageSubApSizeRatio, HD.params.ShackHartmannCorrection.imagesubapsizeratio);
-        end
-
-        if isprop(app, 'subApMargin')
-            safeSetNumeric(app.subApMargin, HD.params.ShackHartmannCorrection.subaperturemargin);
-        end
-
-        if isprop(app, 'referenceimageDropDown')
-            items = {'central subaperture', 'resized image'};
-            safeSetDropdown(app.referenceimageDropDown, HD.params.ShackHartmannCorrection.referenceimage, items);
-        end
-
-        if isprop(app, 'CalibrationFactor')
-            safeSetNumeric(app.CalibrationFactor, HD.params.ShackHartmannCorrection.calibrationfactor);
-        end
-
-        if isprop(app, 'ConvergenceThreshold')
-            safeSetNumeric(app.ConvergenceThreshold, HD.params.ShackHartmannCorrection.convergencethreshold);
-        end
-
-        if isprop(app, 'onlydefocusCheckBox')
-            safeSetCheckbox(app.onlydefocusCheckBox, HD.params.ShackHartmannCorrection.onlydefocus);
-        end
-
-    end
-
     % Additional advanced processing parameters
 
     % Phase registration

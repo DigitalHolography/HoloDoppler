@@ -19,16 +19,11 @@ properties (Access = public)
     Fs double
     pix_width double
     pix_height double
-    parallelism char
-
-    aberration_compensation logical
-    notes cell
     position_in_file double
     output_videos char
     SVD logical
 
     % video rendering
-
     ref_batch_size double
     batchStride double
     DX double
@@ -48,28 +43,8 @@ properties (Access = public)
     color_f2 double
     color_f3 double
 
-    % iterative optimization parameters
-    iterative_aberration_compensation double
-    optimization_zernike_ranks double
-    mask_num_iter double
-    zernikes_tol double
-    max_constraint double
-
-    % shack-hartmann parameters
-    shack_hartmann_aberration_compensation double
-    shack_hartmann_zernike_ranks double
-    image_subapertures_size_ratio double
-    num_subapertures_positions double
-    subaperture_margin double
-    SubAp_PCA double
-    minSubAp_PCA double
-    maxSubAp_PCA double
-    zernike_projection double
-    shack_hartmann_ref_image double
-
     num_Freq double
     svdStride double
-    issvdStride logical
 
 end
 
@@ -92,11 +67,8 @@ methods (Access = public)
         obj.pix_width = app.pix_width;
         obj.pix_height = app.pix_height;
         obj.registration = app.imageregistrationCheckBox.Value;
-        obj.parallelism = app.ParallelismDropDown.Value;
         obj.registration_via_phase = app.phaseregistrationCheckBox.Value;
-        obj.aberration_compensation = app.IterativeoptimizationCheckBox.Value;
 
-        obj.notes = app.NotesTextArea.Value;
         obj.DX = app.DX;
         obj.DY = app.DY;
         obj.position_in_file = app.positioninfileSlider.Value;
@@ -109,29 +81,8 @@ methods (Access = public)
         obj.color_f2 = app.compositef2.Value;
         obj.color_f3 = app.compositef3.Value;
 
-        % iterative optimization parameters
-        obj.iterative_aberration_compensation = app.IterativeoptimizationCheckBox.Value;
-        obj.optimization_zernike_ranks = app.optimizationzernikeranks.Value;
-        obj.mask_num_iter = app.masknumiter.Value;
-        obj.zernikes_tol = app.zernikestol.Value;
-        obj.max_constraint = app.maxconstraint.Value;
-        obj.iterative_registration = app.iterativeregistrationCheckBox.Value;
-
-        % shack-hartmann parameters
-        obj.shack_hartmann_aberration_compensation = app.ShackHartmannCheckBox.Value;
-        obj.shack_hartmann_zernike_ranks = app.shackhartmannzernikeranks.Value;
-        obj.image_subapertures_size_ratio = app.imagesubapsizeratio.Value;
-        obj.num_subapertures_positions = app.subapnumpositions.Value;
-        obj.subaperture_margin = app.subaperturemargin.Value;
-        obj.SubAp_PCA = app.SubAp_PCACheckBox.Value;
-        obj.minSubAp_PCA = app.minSubAp_PCA.Value;
-        obj.maxSubAp_PCA = app.maxSubAp_PCA.Value;
-        obj.zernike_projection = app.ZernikeProjectionCheckBox.Value;
-        obj.shack_hartmann_ref_image = app.referenceimageDropDown.Value;
-
         obj.num_Freq = app.numFreq.Value;
         obj.svdStride = app.svdStride.Value;
-        obj.issvdStride = app.SVDThresholdCheckBox.Value;
 
         % bufferize (and lock during computation) current paremeter values from front end
     end
@@ -162,27 +113,13 @@ methods (Access = public)
             app.wavelength.Value = loadGUIVariable(obj.wavelength);
             app.outputvideoDropDown.Value = loadGUIVariable(strrep(obj.output_videos, '_', ' '));
             app.rephasingCheckBox.Value = loadGUIVariable(obj.rephasing);
-            app.NotesTextArea.Value = loadGUIVariable(obj.notes);
             app.positioninfileSlider.Value = loadGUIVariable(obj.position_in_file);
-            app.IterativeoptimizationCheckBox.Value = loadGUIVariable(obj.iterative_aberration_compensation);
-            app.masknumiter.Value = loadGUIVariable(obj.mask_num_iter);
-            app.ShackHartmannCheckBox.Value = loadGUIVariable(obj.shack_hartmann_aberration_compensation);
-            app.ZernikeProjectionCheckBox.Value = loadGUIVariable(obj.zernike_projection);
-            app.referenceimageDropDown.Value = loadGUIVariable(obj.shack_hartmann_ref_image);
-            app.shackhartmannzernikeranks.Value = loadGUIVariable(obj.shack_hartmann_zernike_ranks);
-            app.imagesubapsizeratio.Value = loadGUIVariable(obj.image_subapertures_size_ratio);
-            app.subapnumpositions.Value = loadGUIVariable(obj.num_subapertures_positions);
-            app.subaperturemargin.Value = loadGUIVariable(obj.subaperture_margin);
-            app.SubAp_PCACheckBox.Value = loadGUIVariable(obj.SubAp_PCA);
-            app.minSubAp_PCA.Value = loadGUIVariable(obj.minSubAp_PCA);
-            app.maxSubAp_PCA.Value = loadGUIVariable(obj.maxSubAp_PCA);
             app.compositef1.Value = loadGUIVariable(obj.color_f1);
             app.compositef2.Value = loadGUIVariable(obj.color_f2);
             app.compositef3.Value = loadGUIVariable(obj.color_f3);
             app.saverawvideosCheckBox.Value = loadGUIVariable(obj.save_raw);
             app.numFreq.Value = loadGUIVariable(obj.num_Freq);
             app.svdStride.Value = loadGUIVariable(obj.svdStride);
-            app.SVDThresholdCheckBox.Value = loadGUIVariable(obj.issvdStride);
 
         catch ME
             MEdisp(ME);

@@ -9,8 +9,7 @@ properties (Access = public)
     % ---- top-level layout ----
     RootGrid matlab.ui.container.GridLayout
     PanelPlot matlab.ui.container.Panel
-    ImageLeft matlab.ui.control.Image
-    ImageRight matlab.ui.control.Image
+    Image matlab.ui.control.Image
 
     % ---- current-file strip (bottom) ----
     CurrentFileGrid matlab.ui.container.GridLayout
@@ -24,27 +23,18 @@ properties (Access = public)
     mainParametersGrid matlab.ui.container.GridLayout
     LoadfileButton matlab.ui.control.Button
     fileLoadedLamp matlab.ui.control.Lamp
-
     fsLabel matlab.ui.control.Label
     fs matlab.ui.control.NumericEditField
-
     lambdaLabel matlab.ui.control.Label
     lambda matlab.ui.control.NumericEditField
-
     pixelPitchLabel matlab.ui.control.Label
     ppx matlab.ui.control.NumericEditField
     ppy matlab.ui.control.NumericEditField
-
     imageSizeLabel matlab.ui.control.Label
     Nx matlab.ui.control.NumericEditField
     Ny matlab.ui.control.NumericEditField
-
     numworkersSpinnerLabel matlab.ui.control.Label
     parfor_arg matlab.ui.control.Spinner
-
-    NotesTextAreaLabel matlab.ui.control.Label
-    NotesTextArea matlab.ui.control.TextArea
-
     AdvancedButton matlab.ui.control.Button
     RefreshAppButton matlab.ui.control.Button
     positioninfileSlider matlab.ui.control.Slider
@@ -70,7 +60,6 @@ properties (Access = public)
     refBatchSizeLabel matlab.ui.control.Label
     refBatchSize matlab.ui.control.NumericEditField
     AutofocusFromRef matlab.ui.control.CheckBox
-    applyShackHartmannfromRef matlab.ui.control.CheckBox
     imageRegistration matlab.ui.control.CheckBox
     registrationDiskLabel matlab.ui.control.Label
     registrationDiskRatio matlab.ui.control.NumericEditField
@@ -112,46 +101,6 @@ properties (Access = public)
     RenderPreviewLamp matlab.ui.control.Lamp
     RenderPreviewButton matlab.ui.control.Button
     SavePreviewButton matlab.ui.control.Button
-
-    % ---- aberration compensation panel ----
-    AberrationcompensationPanel matlab.ui.container.Panel
-    onlydefocusCheckBox matlab.ui.control.CheckBox
-    ConvergenceThreshold matlab.ui.control.NumericEditField
-    calibrationfactorLabel_2 matlab.ui.control.Label
-    CalibrationFactor matlab.ui.control.NumericEditField
-    calibrationfactorLabel matlab.ui.control.Label
-    NumberOfIteration matlab.ui.control.NumericEditField
-    numberofiterationLabel matlab.ui.control.Label
-    imageSubApSizeRatio matlab.ui.control.NumericEditField
-    imageSubApSizeRatioLabel matlab.ui.control.Label
-    SubApNumPositions matlab.ui.control.NumericEditField
-    SubApNumPositionsLabel matlab.ui.control.Label
-    referenceimageDropDown matlab.ui.control.DropDown
-    referenceimageDropDownLabel matlab.ui.control.Label
-    ZernikeProjectionCheckBox matlab.ui.control.CheckBox
-    savecoefsCheckBox matlab.ui.control.CheckBox
-    rangeY matlab.ui.control.NumericEditField
-    rangeYLabel matlab.ui.control.Label
-    rangeZ matlab.ui.control.NumericEditField
-    rangeZLabel matlab.ui.control.Label
-    volumeSize matlab.ui.control.NumericEditField
-    volumeSizeLabel matlab.ui.control.Label
-    maxSubAp_PCA matlab.ui.control.NumericEditField
-    max_2Label matlab.ui.control.Label
-    minSubAp_PCA matlab.ui.control.NumericEditField
-    min_2Label matlab.ui.control.Label
-    SubAp_PCACheckBox matlab.ui.control.CheckBox
-    aberrationPreviewLabel matlab.ui.control.Label
-    IterativeCheckBox matlab.ui.control.CheckBox
-    subApMargin matlab.ui.control.NumericEditField
-    subApMarginLabel matlab.ui.control.Label
-    shackHartmannZernikeRanks matlab.ui.control.NumericEditField
-    zernikeRanksLabels matlab.ui.control.Label
-    ShackHartmannCheckBox matlab.ui.control.CheckBox
-    aberrationStatusLabel matlab.ui.control.Label
-    UIAxes_aberrationPreview matlab.ui.control.UIAxes
-
-    % ---- advanced processing panel ----
 
     % ---- context menu ----
     RightClickImageContextMenu matlab.ui.container.ContextMenu
@@ -309,23 +258,10 @@ methods (Access = private)
         end
 
         if ~isempty(Images)
-            app.ImageLeft.ImageSource = toImageSource(Images{1}, app);
+            app.Image.ImageSource = toImageSource(Images{1}, app);
             app.MenuIndex = 1;
         else
-            app.ImageLeft.ImageSource = '';
-        end
-
-        if ismember('FH_modulus_mean', app.HD.params.imageTypes)
-            img = app.HD.view.getImages({'FH_modulus_mean'});
-
-            if ~isempty(img) && ~isempty(img{1})
-                app.ImageRight.ImageSource = toImageSource(img{1}, app);
-            else
-                app.ImageRight.ImageSource = '';
-            end
-
-        else
-            app.ImageRight.ImageSource = '';
+            app.Image.ImageSource = '';
         end
 
     end
@@ -366,14 +302,14 @@ methods (Access = private)
         imgs = app.HD.view.getImages(app.HD.params.imageTypes(1));
 
         if ~isempty(imgs)
-            app.ImageLeft.ImageSource = toImageSource(imgs{randsample(numel(imgs), 1)}, app);
+            app.Image.ImageSource = toImageSource(imgs{randsample(numel(imgs), 1)}, app);
         else
-            app.ImageLeft.ImageSource = '';
+            app.Image.ImageSource = '';
         end
 
     end
 
-    function AutofocusButtonPushed2(app, ~)
+    function AutofocusButtonPushed(app, ~)
         zopti = autofocus(app.HD.view, app.HD.params);
         app.HD.params.spatialPropagation = zopti;
         app.syncGuiFromClass();
@@ -401,7 +337,7 @@ methods (Access = private)
         imgs = app.HD.view.getImages(app.HD.params.imageTypes);
 
         if isempty(imgs) || isempty(imgs{num})
-            app.ImageLeft.ImageSource = '';
+            app.Image.ImageSource = '';
             return
         end
 
@@ -413,7 +349,7 @@ methods (Access = private)
             image = imresize(image, [maxSize, maxSize]);
         end
 
-        app.ImageLeft.ImageSource = toImageSource(image, app);
+        app.Image.ImageSource = toImageSource(image, app);
         app.MenuIndex = num;
     end
 
@@ -549,7 +485,6 @@ methods (Access = private)
         app.createFileSelectionPanel();
         app.createBatchVideoPanel();
         app.createCurrentFileStrip();
-        app.createAberrationPanel();
         app.createrenderingParametersPanel();
         app.createImageViewsAndMenus();
 
@@ -559,7 +494,6 @@ methods (Access = private)
     % -----------------------------------------------------------------------
     function createFigureAndRootGrid(app, pathToMLAPP)
         app.HoloDopplerUIFigure = uifigure('Visible', 'off');
-        app.HoloDopplerUIFigure.Color = [0.149 0.149 0.149];
         app.HoloDopplerUIFigure.Position = [210 56 1260 900];
         app.HoloDopplerUIFigure.Name = 'HoloDoppler';
         app.HoloDopplerUIFigure.Icon = fullfile(pathToMLAPP, 'holoDopplerLogo.png');
@@ -567,7 +501,7 @@ methods (Access = private)
         app.HoloDopplerUIFigure.WindowKeyPressFcn = createCallbackFcn(app, @HoloDopplerUIFigureWindowKeyPress, true);
 
         app.RootGrid = uigridlayout(app.HoloDopplerUIFigure);
-        app.RootGrid.ColumnWidth = {'1.2x', '2x', '2x'};
+        app.RootGrid.ColumnWidth = {'1.2x', '2x'};
         app.RootGrid.RowHeight = {'1x', 420};
         app.RootGrid.RowSpacing = 5;
         app.RootGrid.Padding = [0 3.20001220703125 0 3.20001220703125];
@@ -592,7 +526,7 @@ methods (Access = private)
         app.FileselectionPanel.Layout.Column = 1;
 
         app.mainParametersGrid = uigridlayout(app.FileselectionPanel, [10 3]);
-        app.mainParametersGrid.RowHeight = {'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', '1x'};
+        app.mainParametersGrid.RowHeight = repmat({'1x'}, 1, 10);
         app.mainParametersGrid.ColumnWidth = {'1x', '1x', '1x'};
         app.mainParametersGrid.Padding = [10 10 10 10];
         app.mainParametersGrid.RowSpacing = 5;
@@ -917,14 +851,6 @@ methods (Access = private)
         app.AutofocusFromRef.Layout.Row = 8;
         app.AutofocusFromRef.Layout.Column = 1;
 
-        app.applyShackHartmannfromRef = uicheckbox(p);
-        app.applyShackHartmannfromRef.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.applyShackHartmannfromRef.Tooltip = {'Activate frame to frame translation registration of images'};
-        app.applyShackHartmannfromRef.Text = 'refocus from ref (numeric shack hartmann)';
-        app.applyShackHartmannfromRef.FontColor = fontColor;
-        app.applyShackHartmannfromRef.Layout.Row = 9;
-        app.applyShackHartmannfromRef.Layout.Column = [1 2];
-
         app.imageRegistration = uicheckbox(p);
         app.imageRegistration.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.imageRegistration.Tooltip = {'Activate frame to frame translation registration of images'};
@@ -957,7 +883,7 @@ methods (Access = private)
         app.CurrentFileGrid.RowHeight = {'1x'};
         app.CurrentFileGrid.BackgroundColor = [0.2 0.2 0.2];
         app.CurrentFileGrid.Layout.Row = 2;
-        app.CurrentFileGrid.Layout.Column = [2 3];
+        app.CurrentFileGrid.Layout.Column = 2;
 
         app.RenderingGrid = uigridlayout(app.CurrentFileGrid);
         app.RenderingGrid.ColumnWidth = {'1x'};
@@ -974,268 +900,6 @@ methods (Access = private)
         app.RenderingInnerGrid.Layout.Row = 1;
         app.RenderingInnerGrid.Layout.Column = 1;
         app.RenderingInnerGrid.BackgroundColor = [0.2 0.2 0.2];
-    end
-
-    % -----------------------------------------------------------------------
-    function createAberrationPanel(app)
-        app.AberrationcompensationPanel = uipanel(app.CurrentFileGrid);
-        app.AberrationcompensationPanel.ForegroundColor = [0.8 0.8 0.8];
-        app.AberrationcompensationPanel.Title = 'Aberration compensation';
-        app.AberrationcompensationPanel.BackgroundColor = [0.2 0.2 0.2];
-        app.AberrationcompensationPanel.Layout.Row = 1;
-        app.AberrationcompensationPanel.Layout.Column = 2;
-
-        p = app.AberrationcompensationPanel;
-
-        app.UIAxes_aberrationPreview = uiaxes(p);
-        app.UIAxes_aberrationPreview.XColor = [0.129411764705882 0.129411764705882 0.129411764705882];
-        app.UIAxes_aberrationPreview.XTick = [];
-        app.UIAxes_aberrationPreview.YTick = [];
-        app.UIAxes_aberrationPreview.LineWidth = 2;
-        app.UIAxes_aberrationPreview.Color = [0.149 0.149 0.149];
-        app.UIAxes_aberrationPreview.Position = [103 47 88 85];
-
-        app.aberrationStatusLabel = uilabel(p);
-        app.aberrationStatusLabel.VerticalAlignment = 'top';
-        app.aberrationStatusLabel.FontColor = [0.8 0.8 0.8];
-        app.aberrationStatusLabel.Position = [9 332 229 21];
-        app.aberrationStatusLabel.Text = {''; ''};
-
-        app.ShackHartmannCheckBox = uicheckbox(p);
-        app.ShackHartmannCheckBox.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.ShackHartmannCheckBox.Tooltip = {'Perform aberration compensation with Shack Hartmann simulation'};
-        app.ShackHartmannCheckBox.Text = 'Shack Hartmann';
-        app.ShackHartmannCheckBox.FontColor = [0.902 0.902 0.902];
-        app.ShackHartmannCheckBox.Position = [12 285 111 22];
-
-        app.zernikeRanksLabels = uilabel(p);
-        app.zernikeRanksLabels.HorizontalAlignment = 'center';
-        app.zernikeRanksLabels.FontColor = [0.8 0.8 0.8];
-        app.zernikeRanksLabels.Position = [9 230 77 22];
-        app.zernikeRanksLabels.Text = 'zernike ranks';
-
-        app.shackHartmannZernikeRanks = uieditfield(p, 'numeric');
-        app.shackHartmannZernikeRanks.Limits = [2 6];
-        app.shackHartmannZernikeRanks.RoundFractionalValues = 'on';
-        app.shackHartmannZernikeRanks.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.shackHartmannZernikeRanks.FontColor = [0.8 0.8 0.8];
-        app.shackHartmannZernikeRanks.BackgroundColor = [0.149 0.149 0.149];
-        app.shackHartmannZernikeRanks.Tooltip = {'Number of zernike ranks to use for aberration correction'};
-        app.shackHartmannZernikeRanks.Position = [142 230 43 22];
-        app.shackHartmannZernikeRanks.Value = 2;
-
-        app.subApMarginLabel = uilabel(p);
-        app.subApMarginLabel.HorizontalAlignment = 'center';
-        app.subApMarginLabel.FontColor = [0.8 0.8 0.8];
-        app.subApMarginLabel.Visible = 'off';
-        app.subApMarginLabel.Position = [9 161 110 22];
-        app.subApMarginLabel.Text = 'subaperture margin';
-
-        app.subApMargin = uieditfield(p, 'numeric');
-        app.subApMargin.Limits = [0 Inf];
-        app.subApMargin.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.subApMargin.FontColor = [0.8 0.8 0.8];
-        app.subApMargin.BackgroundColor = [0.149 0.149 0.149];
-        app.subApMargin.Visible = 'off';
-        app.subApMargin.Tooltip = {'Number of subapertures used for Shack-Hartmann simulation'};
-        app.subApMargin.Position = [142 161 43 22];
-        app.subApMargin.Value = 0.15;
-
-        app.IterativeCheckBox = uicheckbox(p);
-        app.IterativeCheckBox.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.IterativeCheckBox.Tooltip = {'Activate aberration compensation via image entropy optimization. This might significantly increase the computation time.'};
-        app.IterativeCheckBox.Text = 'Iterative';
-        app.IterativeCheckBox.FontColor = [0.902 0.902 0.902];
-        app.IterativeCheckBox.Position = [149 335 65 22];
-
-        app.aberrationPreviewLabel = uilabel(p);
-        app.aberrationPreviewLabel.FontColor = [0.8 0.8 0.8];
-        app.aberrationPreviewLabel.Position = [17 81 96 42];
-        app.aberrationPreviewLabel.Text = {'astig_1 : 0.0'; 'defocus: 0.0'; 'astig_2 : 0.0'};
-
-        app.SubAp_PCACheckBox = uicheckbox(p);
-        app.SubAp_PCACheckBox.Visible = 'off';
-        app.SubAp_PCACheckBox.Text = 'SubAp_PCA';
-        app.SubAp_PCACheckBox.FontColor = [1 1 1];
-        app.SubAp_PCACheckBox.Position = [10 337 89 22];
-
-        app.min_2Label = uilabel(p);
-        app.min_2Label.HorizontalAlignment = 'right';
-        app.min_2Label.FontColor = [1 1 1];
-        app.min_2Label.Visible = 'off';
-        app.min_2Label.Position = [9 314 25 22];
-        app.min_2Label.Text = 'min';
-
-        app.minSubAp_PCA = uieditfield(p, 'numeric');
-        app.minSubAp_PCA.Limits = [1 Inf];
-        app.minSubAp_PCA.Visible = 'off';
-        app.minSubAp_PCA.Position = [41 317 24 16];
-        app.minSubAp_PCA.Value = 1;
-
-        app.max_2Label = uilabel(p);
-        app.max_2Label.HorizontalAlignment = 'right';
-        app.max_2Label.FontColor = [1 1 1];
-        app.max_2Label.Visible = 'off';
-        app.max_2Label.Position = [73 314 28 22];
-        app.max_2Label.Text = 'max';
-
-        app.maxSubAp_PCA = uieditfield(p, 'numeric');
-        app.maxSubAp_PCA.Limits = [1 Inf];
-        app.maxSubAp_PCA.Visible = 'off';
-        app.maxSubAp_PCA.Position = [108 317 24 16];
-        app.maxSubAp_PCA.Value = 16;
-
-        app.volumeSizeLabel = uilabel(p);
-        app.volumeSizeLabel.HorizontalAlignment = 'right';
-        app.volumeSizeLabel.FontColor = [0.8 0.8 0.8];
-        app.volumeSizeLabel.Visible = 'off';
-        app.volumeSizeLabel.Position = [157 53 69 22];
-        app.volumeSizeLabel.Text = 'volume size';
-
-        app.volumeSize = uieditfield(p, 'numeric');
-        app.volumeSize.Limits = [1 Inf];
-        app.volumeSize.Visible = 'off';
-        app.volumeSize.Position = [231 54 31 21];
-        app.volumeSize.Value = 256;
-
-        app.rangeZLabel = uilabel(p);
-        app.rangeZLabel.HorizontalAlignment = 'right';
-        app.rangeZLabel.FontColor = [0.8 0.8 0.8];
-        app.rangeZLabel.Visible = 'off';
-        app.rangeZLabel.Position = [180 26 44 22];
-        app.rangeZLabel.Text = 'rangeZ';
-
-        app.rangeZ = uieditfield(p, 'numeric');
-        app.rangeZ.Limits = [1 Inf];
-        app.rangeZ.Visible = 'off';
-        app.rangeZ.Position = [232 25 30 22];
-        app.rangeZ.Value = 1;
-
-        app.rangeYLabel = uilabel(p);
-        app.rangeYLabel.HorizontalAlignment = 'right';
-        app.rangeYLabel.FontColor = [0.8 0.8 0.8];
-        app.rangeYLabel.Visible = 'off';
-        app.rangeYLabel.Position = [14 26 44 22];
-        app.rangeYLabel.Text = 'rangeY';
-
-        app.rangeY = uieditfield(p, 'numeric');
-        app.rangeY.Limits = [1 Inf];
-        app.rangeY.Visible = 'off';
-        app.rangeY.Position = [66 25 30 22];
-        app.rangeY.Value = 1;
-
-        app.savecoefsCheckBox = uicheckbox(p);
-        app.savecoefsCheckBox.Visible = 'off';
-        app.savecoefsCheckBox.Text = 'save coefs';
-        app.savecoefsCheckBox.FontColor = [0.8 0.8 0.8];
-        app.savecoefsCheckBox.Position = [14 51 90 22];
-
-        app.ZernikeProjectionCheckBox = uicheckbox(p);
-        app.ZernikeProjectionCheckBox.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.ZernikeProjectionCheckBox.Tooltip = {'Perform aberration compensation with Shack Hartmann simulation'};
-        app.ZernikeProjectionCheckBox.Text = 'Zernike Projection';
-        app.ZernikeProjectionCheckBox.FontColor = [0.902 0.902 0.902];
-        app.ZernikeProjectionCheckBox.Position = [13 255 119 22];
-        app.ZernikeProjectionCheckBox.Value = true;
-
-        app.referenceimageDropDownLabel = uilabel(p);
-        app.referenceimageDropDownLabel.HorizontalAlignment = 'right';
-        app.referenceimageDropDownLabel.FontColor = [0.902 0.902 0.902];
-        app.referenceimageDropDownLabel.Position = [7 135 92 22];
-        app.referenceimageDropDownLabel.Text = 'reference image';
-
-        app.referenceimageDropDown = uidropdown(p);
-        app.referenceimageDropDown.Items = {'central subaperture', 'resized image'};
-        app.referenceimageDropDown.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.referenceimageDropDown.FontColor = [0.9412 0.9412 0.9412];
-        app.referenceimageDropDown.BackgroundColor = [0.502 0.502 0.502];
-        app.referenceimageDropDown.Position = [114 135 135 18];
-        app.referenceimageDropDown.Value = 'central subaperture';
-
-        app.SubApNumPositionsLabel = uilabel(p);
-        app.SubApNumPositionsLabel.FontColor = [0.8 0.8 0.8];
-        app.SubApNumPositionsLabel.Position = [12 207 115 22];
-        app.SubApNumPositionsLabel.Text = 'subap num positions';
-
-        app.SubApNumPositions = uieditfield(p, 'numeric');
-        app.SubApNumPositions.Limits = [1 20];
-        app.SubApNumPositions.RoundFractionalValues = 'on';
-        app.SubApNumPositions.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.SubApNumPositions.FontColor = [0.8 0.8 0.8];
-        app.SubApNumPositions.BackgroundColor = [0.149 0.149 0.149];
-        app.SubApNumPositions.Tooltip = {'Number of subapertures used for Shack-Hartmann simulation'};
-        app.SubApNumPositions.Position = [142 207 43 22];
-        app.SubApNumPositions.Value = 5;
-
-        app.imageSubApSizeRatioLabel = uilabel(p);
-        app.imageSubApSizeRatioLabel.FontColor = [0.8 0.8 0.8];
-        app.imageSubApSizeRatioLabel.Position = [12 184 125 22];
-        app.imageSubApSizeRatioLabel.Text = 'image subap size ratio';
-
-        app.imageSubApSizeRatio = uieditfield(p, 'numeric');
-        app.imageSubApSizeRatio.Limits = [1 20];
-        app.imageSubApSizeRatio.RoundFractionalValues = 'on';
-        app.imageSubApSizeRatio.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.imageSubApSizeRatio.FontColor = [0.8 0.8 0.8];
-        app.imageSubApSizeRatio.BackgroundColor = [0.149 0.149 0.149];
-        app.imageSubApSizeRatio.Tooltip = {'Number of subapertures used for Shack-Hartmann simulation'};
-        app.imageSubApSizeRatio.Position = [142 184 43 22];
-        app.imageSubApSizeRatio.Value = 5;
-
-        app.numberofiterationLabel = uilabel(p);
-        app.numberofiterationLabel.HorizontalAlignment = 'center';
-        app.numberofiterationLabel.FontColor = [0.8 0.8 0.8];
-        app.numberofiterationLabel.Position = [149 309 105 22];
-        app.numberofiterationLabel.Text = 'number of iteration';
-
-        app.NumberOfIteration = uieditfield(p, 'numeric');
-        app.NumberOfIteration.Limits = [1 Inf];
-        app.NumberOfIteration.RoundFractionalValues = 'on';
-        app.NumberOfIteration.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.NumberOfIteration.FontColor = [0.8 0.8 0.8];
-        app.NumberOfIteration.BackgroundColor = [0.149 0.149 0.149];
-        app.NumberOfIteration.Tooltip = {'Number of zernike ranks to use for aberration correction'};
-        app.NumberOfIteration.Position = [268 309 27 22];
-        app.NumberOfIteration.Value = 3;
-
-        app.calibrationfactorLabel = uilabel(p);
-        app.calibrationfactorLabel.HorizontalAlignment = 'center';
-        app.calibrationfactorLabel.FontColor = [0.8 0.8 0.8];
-        app.calibrationfactorLabel.Visible = 'off';
-        app.calibrationfactorLabel.Position = [149 159 93 22];
-        app.calibrationfactorLabel.Text = 'calibration factor';
-
-        app.CalibrationFactor = uieditfield(p, 'numeric');
-        app.CalibrationFactor.Limits = [0 Inf];
-        app.CalibrationFactor.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.CalibrationFactor.FontColor = [0.8 0.8 0.8];
-        app.CalibrationFactor.BackgroundColor = [0.149 0.149 0.149];
-        app.CalibrationFactor.Visible = 'off';
-        app.CalibrationFactor.Tooltip = {'Number of zernike ranks to use for aberration correction'};
-        app.CalibrationFactor.Position = [268 158 27 22];
-        app.CalibrationFactor.Value = 60;
-
-        app.calibrationfactorLabel_2 = uilabel(p);
-        app.calibrationfactorLabel_2.HorizontalAlignment = 'center';
-        app.calibrationfactorLabel_2.FontColor = [0.8 0.8 0.8];
-        app.calibrationfactorLabel_2.Position = [133 284 126 22];
-        app.calibrationfactorLabel_2.Text = 'convergence threshold';
-
-        app.ConvergenceThreshold = uieditfield(p, 'numeric');
-        app.ConvergenceThreshold.Limits = [0 Inf];
-        app.ConvergenceThreshold.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.ConvergenceThreshold.FontColor = [0.8 0.8 0.8];
-        app.ConvergenceThreshold.BackgroundColor = [0.149 0.149 0.149];
-        app.ConvergenceThreshold.Tooltip = {'Number of zernike ranks to use for aberration correction'};
-        app.ConvergenceThreshold.Position = [268 283 27 22];
-        app.ConvergenceThreshold.Value = 0.5;
-
-        app.onlydefocusCheckBox = uicheckbox(p);
-        app.onlydefocusCheckBox.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.onlydefocusCheckBox.Tooltip = {'Activate aberration compensation via image entropy optimization. This might significantly increase the computation time.'};
-        app.onlydefocusCheckBox.Text = 'only defocus';
-        app.onlydefocusCheckBox.FontColor = [0.902 0.902 0.902];
-        app.onlydefocusCheckBox.Position = [149 255 89 22];
     end
 
     % -----------------------------------------------------------------------
@@ -1339,7 +1003,7 @@ methods (Access = private)
         app.spatialPropagation.Layout.Row = 4;
 
         app.AutofocusButton = uibutton(p, 'push');
-        app.AutofocusButton.ButtonPushedFcn = createCallbackFcn(app, @AutofocusButtonPushed2, true);
+        app.AutofocusButton.ButtonPushedFcn = createCallbackFcn(app, @AutofocusButtonPushed, true);
         app.AutofocusButton.BackgroundColor = grayButtonColor;
         app.AutofocusButton.FontColor = fontColor;
         app.AutofocusButton.Layout.Column = 3;
@@ -1543,13 +1207,9 @@ methods (Access = private)
 
     % -----------------------------------------------------------------------
     function createImageViewsAndMenus(app)
-        app.ImageRight = uiimage(app.RootGrid);
-        app.ImageRight.Layout.Row = 1;
-        app.ImageRight.Layout.Column = 3;
-
-        app.ImageLeft = uiimage(app.RootGrid);
-        app.ImageLeft.Layout.Row = 1;
-        app.ImageLeft.Layout.Column = 2;
+        app.Image = uiimage(app.RootGrid);
+        app.Image.Layout.Row = 1;
+        app.Image.Layout.Column = 2;
 
         app.PanelPlot = uipanel(app.RootGrid);
         app.PanelPlot.Title = 'Plot';
@@ -1568,7 +1228,7 @@ methods (Access = private)
         app.ViewAllMenu.MenuSelectedFcn = createCallbackFcn(app, @ViewAllMenuSelected, true);
         app.ViewAllMenu.Text = 'View all images';
 
-        app.ImageLeft.ContextMenu = app.RightClickImageContextMenu;
+        app.Image.ContextMenu = app.RightClickImageContextMenu;
     end
 
 end % createComponents methods block

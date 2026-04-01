@@ -21,7 +21,6 @@ methods
         if ~isdeployed
             root = fileparts(mfilename('fullpath'));
             addpath( ...
-                fullfile(root, 'AberrationCorrection'), ...
                 fullfile(root, 'FolderManagement'), ...
                 fullfile(root, 'Imaging'), ...
                 fullfile(root, 'Interface'), ...
@@ -293,7 +292,6 @@ methods
         obj.params.parfor_arg = 10;
         obj.params.refBatchSize = 512;
         obj.params.imageRegistration = true;
-        obj.params.applyShackHartmannfromRef = false;
         obj.params.applyautofocusfromref = false;
         obj.params.autofocusRange = [0.45, 0.52];
         obj.params.first_frame = 0;
@@ -328,9 +326,6 @@ methods
         obj.params.flip_x = false;
         obj.params.square = false;
         obj.params.flatfield_gw = 0;
-
-        % Initialize Shack-Hartmann correction
-        obj.params.ShackHartmannCorrection = [];
 
         % Initialize other parameters
         obj.params.fs = 0;
@@ -500,7 +495,7 @@ methods
                 continue
             end
 
-            if ~ismember(imageTypes{i}, {'moment_0', 'moment_1', 'moment_2', 'SVD_cov', 'SVD_U', 'FH_modulus_mean', 'FH_arg_mean', 'ShackHartmann_Cropped_Moments', 'broadening'})
+            if ~ismember(imageTypes{i}, {'moment_0', 'moment_1', 'moment_2', 'SVD_cov', 'SVD_U', 'FH_modulus_mean', 'FH_arg_mean', 'broadening'})
                 max_dim = max(size(images{i}, 1), size(images{i}, 2));
                 imwrite(toImageSource(imresize(images{i}, [max_dim, max_dim])), fullfile(result_folder_path, strcat(obj.file.name, '_', imageTypes{i}, '.png')));
             else
@@ -629,12 +624,6 @@ methods
         view_ref.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.framePosition));
         view_ref.Render(obj.params, obj.params.imageTypes, cache_intermediate_results = false);
 
-        if obj.params.applyShackHartmannfromRef
-            ShackHartmannMask = view_ref.ShackHartmannMask; % get the mask to apply to each frame here
-        else
-            ShackHartmannMask = [];
-        end
-
         if obj.params.applyautofocusfromref
             z_opti = autofocus(view_ref, obj.params); % update the z distance
             obj.params.spatialPropagation = z_opti;
@@ -645,7 +634,6 @@ methods
 
             for i = 1:(num_batches)
                 obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batchSize, (i - 1) * obj.params.batchStride + first_frame));
-                obj.view.ShackHartmannMask = ShackHartmannMask;
                 obj.view.Render(obj.params, obj.params.imageTypes);
                 obj.video(i) = ImageTypeList2();
                 obj.video(i).copy_from(obj.view.Output); % work around against handles
@@ -674,7 +662,6 @@ methods
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
                     l_view = RenderingClass();
                     l_view.setFrames(all_frames(:, :, :, i));
-                    l_view.ShackHartmannMask = ShackHartmannMask;
                     l_view.Render(l_params, l_params.imageTypes, cache_intermediate_results = false);
                     l_video(i) = ImageTypeList2();
                     l_video(i).copy_from(l_view.Output);
@@ -688,7 +675,6 @@ methods
                 parfor (i = 1:(num_batches), obj.params.parfor_arg)
                     l_view = RenderingClass();
                     l_view.setFrames(l_reader.read_frame_batch(batchSize, (i - 1) * batchStride + first_frame));
-                    l_view.ShackHartmannMask = ShackHartmannMask;
                     l_view.Render(l_params, l_params.imageTypes, cache_intermediate_results = false);
                     l_video(i) = ImageTypeList2();
                     l_video(i).copy_from(l_view.Output);
@@ -870,10 +856,6 @@ methods
                     generate_video(mat, result_folder_path, 'SVD_cov');
                 elseif strcmp(imageTypes{i}, 'SVD_U')
                     generate_video(mat, result_folder_path, 'SVD_U');
-                elseif strcmp(imageTypes{i}, 'ShackHartmann_Cropped_Moments')
-                    generate_video(mat, result_folder_path, 'ShackHartmann_Cropped_Moments');
-                elseif strcmp(imageTypes{i}, 'ShackHartmann_Phase')
-                    generate_video(mat, result_folder_path, 'ShackHartmann_Phase');
                 elseif strcmp(imageTypes{i}, 'color_Doppler')
                     generate_video(mat, result_folder_path, 'color_Doppler', square = params.square, enhance_contrast = true);
                 elseif strcmp(imageTypes{i}, 'color_band_ratio')

@@ -21,8 +21,6 @@ properties
     FH_arg_mean
     SVD_cov
     SVD_U
-    ShackHartmann_Cropped_Moments
-    ShackHartmann_Phase
     power_Doppler_wiener
     power_adapt
     doppler_variance_mod
@@ -61,8 +59,6 @@ methods
         obj.FH_arg_mean = ImageType('FH_arg_mean');
         obj.SVD_cov = ImageType('SVD_cov');
         obj.SVD_U = ImageType('SVD_U');
-        obj.ShackHartmann_Cropped_Moments = ImageType('ShackMoments');
-        obj.ShackHartmann_Phase = ImageType('ShackPhase');
         obj.power_Doppler_wiener = ImageType('power_wiener');
         obj.power_adapt = ImageType('power_adapt');
         obj.doppler_variance_mod = ImageType('doppler_variance_mod');
@@ -465,24 +461,6 @@ methods
                 obj.SVD_U.image = [];
             end
 
-        end
-
-    end
-
-    function construct_image_from_ShackHartmann(obj, ~, moment_chunks_crop_array, ShackHartmannMask)
-
-        if isempty(ShackHartmannMask)
-            obj.ShackHartmann_Cropped_Moments.image = [];
-            obj.ShackHartmann_Phase.image = [];
-            return
-        end
-
-        if obj.ShackHartmann_Cropped_Moments.is_selected
-            obj.ShackHartmann_Cropped_Moments.image = moment_chunks_crop_array;
-        end
-
-        if obj.ShackHartmann_Phase.is_selected
-            obj.ShackHartmann_Phase.image = angle(ShackHartmannMask);
         end
 
     end

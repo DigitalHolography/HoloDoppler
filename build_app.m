@@ -14,7 +14,6 @@ mkdir('build');
 
 % Prepare Paths for Compilation
 % Add all source folders to the MATLAB path so the compiler can find dependencies
-addpath('AberrationCorrection');
 addpath('FolderManagement');
 addpath('Imaging');
 addpath('Interface');
