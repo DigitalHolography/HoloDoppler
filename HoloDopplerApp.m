@@ -196,6 +196,7 @@ properties (Access = public)
     fileLoaded % was file_loaded
     HD % HoloDopplerClass instance
     drawer_list = {}
+    MenuIndex
 end
 
 % =========================================================================
@@ -245,6 +246,10 @@ methods (Access = private)
                 app.RenderPreviewButtonPushed();
             case 'rightarrow'
                 app.NextMenuSelected();
+            case 'space'
+                app.ViewAllMenuSelected();
+            case 'leftarrow'
+                app.PreviousMenuSelected();
         end
 
     end
@@ -332,6 +337,7 @@ methods (Access = private)
 
         if ~isempty(Images)
             app.ImageLeft.ImageSource = toImageSource(Images{1}, app);
+            app.MenuIndex = 1;
         else
             app.ImageLeft.ImageSource = '';
         end
@@ -413,33 +419,68 @@ methods (Access = private)
     % --- Context menu / image navigation -----------------------------------
 
     function NextMenuSelected(app, ~)
-        imgs = app.HD.view.getImages(app.HD.params.image_types);
+
+        imagesTypes = app.HD.params.image_types;
+        imgs = app.HD.view.getImages(imagesTypes);
+        idx = app.MenuIndex;
 
         if ~isempty(imgs)
-            num = randi(numel(imgs), 1);
+            num = mod(idx, length(imagesTypes)) + 1;
 
-            if isnumeric(imgs{num})
-                image = imgs{num};
+            image = imgs{num};
+            maxSize = max(size(image));
 
-                if ~ismember(app.HD.params.image_types{num}, {'broadening'}) && size(image, 1) ~= size(image, 2)
-                    image = imresize(image, [max(size(image, 1), size(image, 2)), max(size(image, 1), size(image, 2))]);
-                end
+            if ~ismember(app.HD.params.image_types{num}, {'broadening'}) && ...
+                    size(image, 1) ~= size(image, 2)
+                image = imresize(image, [maxSize, maxSize]);
+            end
 
-                imgs{num} = image;
+            imgs{num} = image;
 
-                if ~isempty(imgs)
-                    app.ImageLeft.ImageSource = toImageSource(imgs{num}, app);
-                else
-                    app.ImageLeft.ImageSource = '';
-                end
-
+            if ~isempty(imgs)
+                app.ImageLeft.ImageSource = toImageSource(imgs{num}, app);
             else
-                toImageSource(imgs{randi(numel(imgs), 1)}, app);
+                app.ImageLeft.ImageSource = '';
             end
 
         else
             app.ImageLeft.ImageSource = '';
         end
+
+        app.MenuIndex = num;
+
+    end
+
+    function PreviousMenuSelected(app, ~)
+
+        imagesTypes = app.HD.params.image_types;
+        imgs = app.HD.view.getImages(imagesTypes);
+        idx = app.MenuIndex;
+
+        if ~isempty(imgs)
+            num = mod(idx - 2, length(imagesTypes)) + 1;
+
+            image = imgs{num};
+            maxSize = max(size(image));
+
+            if ~ismember(app.HD.params.image_types{num}, {'broadening'}) && ...
+                    size(image, 1) ~= size(image, 2)
+                image = imresize(image, [maxSize, maxSize]);
+            end
+
+            imgs{num} = image;
+
+            if ~isempty(imgs)
+                app.ImageLeft.ImageSource = toImageSource(imgs{num}, app);
+            else
+                app.ImageLeft.ImageSource = '';
+            end
+
+        else
+            app.ImageLeft.ImageSource = '';
+        end
+
+        app.MenuIndex = num;
 
     end
 

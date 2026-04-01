@@ -362,6 +362,7 @@ methods
             else
                 obj.params.(fields{i}) = params.(fields{i});
             end
+
         end
 
     end
@@ -533,7 +534,12 @@ methods
             num_batches = num_batches - 1;
         end
 
+        % Command Message
+        fprintf("==============================\n");
+        fprintf("Starting Video Rendering\n");
+        fprintf("File: %s\n", obj.file.path);
         fprintf("Rendering %d frames.\n", num_batches);
+        fprintf("==============================\n");
 
         if num_batches == 0
             return
@@ -870,15 +876,19 @@ methods
 
         end
 
-        disp('Saving registration...');
+        if obj.params.image_registration
 
-        try
-            [~, output_dirname] = fileparts(result_folder_path);
-            output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
-            export_h5_video(fullfile(result_folder_path, 'raw', output_filename_h5), "registration", obj.registration.shifts);
-        catch ME
-            MEdisp(ME);
-            disp("Error while saving the registration.")
+            disp('Saving registration...');
+
+            try
+                [~, output_dirname] = fileparts(result_folder_path);
+                output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
+                export_h5_video(fullfile(result_folder_path, 'raw', output_filename_h5), "registration", obj.registration.shifts);
+            catch ME
+                MEdisp(ME);
+                disp("Error while saving the registration.")
+            end
+
         end
 
         disp('Saving parameters...');

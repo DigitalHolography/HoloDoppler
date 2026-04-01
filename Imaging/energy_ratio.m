@@ -37,5 +37,9 @@ HF_psd_avg = mean(SH .* reshape(weightsHF, 1, 1, []), 3);
 high_low_ratio = HF_psd_avg ./ LF_psd_avg;
 
 energy_ratio = gather(high_low_ratio);
-
+[Nx, Ny, ~] = size(SH);
+disk = diskMask(Ny, Nx, 1);
+R0 = ~disk .* energy_ratio;
+R0 = mean(R0, "all");
+energy_ratio = energy_ratio - R0;
 end
