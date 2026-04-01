@@ -13,7 +13,6 @@ properties (Access = public)
     ImageRight matlab.ui.control.Image
 
     % ---- current-file strip (bottom) ----
-    CurrentFilePanel matlab.ui.container.Panel
     CurrentFileGrid matlab.ui.container.GridLayout
     RenderingGrid matlab.ui.container.GridLayout
     RenderingInnerGrid matlab.ui.container.GridLayout
@@ -92,6 +91,8 @@ properties (Access = public)
     svd_filter matlab.ui.control.CheckBox
     svdThresholdResetButton matlab.ui.control.Button
     svdThreshold matlab.ui.control.NumericEditField
+    svdStrideLabel matlab.ui.control.Label
+    svdStride matlab.ui.control.NumericEditField
     timeTransformLabel matlab.ui.control.Label
     timeTransform matlab.ui.control.DropDown
     frequencyRangeLabel matlab.ui.control.Label
@@ -111,7 +112,6 @@ properties (Access = public)
     RenderPreviewLamp matlab.ui.control.Lamp
     RenderPreviewButton matlab.ui.control.Button
     SavePreviewButton matlab.ui.control.Button
-    svdStride matlab.ui.control.NumericEditField
 
     % ---- aberration compensation panel ----
     AberrationcompensationPanel matlab.ui.container.Panel
@@ -253,10 +253,6 @@ methods (Access = private)
             MEdisp(ME);
             app.fileLoadedLamp.Color = [1 0 0];
             drawnow
-        end
-
-        if ~isempty(app.HD.file)
-            app.CurrentFilePanel.Title = ['Current File : ' app.HD.file.path];
         end
 
         app.refreshClass();
@@ -960,32 +956,16 @@ methods (Access = private)
         app.registrationDiskRatio.Layout.Row = 11;
         app.registrationDiskRatio.Layout.Column = 2;
 
-        app.svdStride = uieditfield(p, 'numeric');
-        app.svdStride.Limits = [0 Inf];
-        app.svdStride.Tooltip = {'Sub sampling parameter for faster SVD calculations. Defaults to 1 -> full image, 2 -> one pixel on two, ...'};
-        app.svdStride.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.svdStride.FontColor = fontColor;
-        app.svdStride.BackgroundColor = darkBackgroundColor;
-        app.svdStride.Layout.Row = 12;
-        app.svdStride.Layout.Column = 2;
-        app.svdStride.Value = 1;
-
     end
 
     % -----------------------------------------------------------------------
     function createCurrentFileStrip(app)
-        app.CurrentFilePanel = uipanel(app.RootGrid);
-        app.CurrentFilePanel.Tooltip = {''};
-        app.CurrentFilePanel.ForegroundColor = [0.8 0.8 0.8];
-        app.CurrentFilePanel.Title = 'Current file';
-        app.CurrentFilePanel.BackgroundColor = [0.2 0.2 0.2];
-        app.CurrentFilePanel.Layout.Row = 2;
-        app.CurrentFilePanel.Layout.Column = [2 3];
-
-        app.CurrentFileGrid = uigridlayout(app.CurrentFilePanel);
+        app.CurrentFileGrid = uigridlayout(app.RootGrid);
         app.CurrentFileGrid.ColumnWidth = {'1x', '1x'};
-        app.CurrentFileGrid.RowHeight = {'0.8x'};
+        app.CurrentFileGrid.RowHeight = {'1x'};
         app.CurrentFileGrid.BackgroundColor = [0.2 0.2 0.2];
+        app.CurrentFileGrid.Layout.Row = 2;
+        app.CurrentFileGrid.Layout.Column = [2 3];
 
         app.RenderingGrid = uigridlayout(app.CurrentFileGrid);
         app.RenderingGrid.ColumnWidth = {'1x'};
@@ -1281,8 +1261,8 @@ methods (Access = private)
         app.renderingParametersPanel.Layout.Row = 1;
         app.renderingParametersPanel.Layout.Column = 1;
 
-        app.renderingParametersGrid = uigridlayout(app.renderingParametersPanel, [12 3]);
-        app.renderingParametersGrid.RowHeight = {'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit'};
+        app.renderingParametersGrid = uigridlayout(app.renderingParametersPanel, [13 3]);
+        app.renderingParametersGrid.RowHeight = repmat({'fit'}, 1, 13);
         app.renderingParametersGrid.ColumnWidth = {'fit', '1x', '1x'};
         app.renderingParametersGrid.Padding = [10 10 10 10];
         app.renderingParametersGrid.RowSpacing = 5;
@@ -1334,7 +1314,7 @@ methods (Access = private)
         % Local spatial transformation row 3
 
         app.spatialTransformationLabel = uilabel(p);
-        app.spatialTransformationLabel.HorizontalAlignment = 'left';
+        app.spatialTransformationLabel.HorizontalAlignment = 'right';
         app.spatialTransformationLabel.FontColor = fontColor;
         app.spatialTransformationLabel.Layout.Column = 1;
         app.spatialTransformationLabel.Layout.Row = 3;
@@ -1347,12 +1327,12 @@ methods (Access = private)
         app.spatialTransformation.BackgroundColor = grayButtonColor;
         app.spatialTransformation.Layout.Column = [2 3];
         app.spatialTransformation.Layout.Row = 3;
-        app.spatialTransformation.Items = {'Angular spectrum', 'Fresnel', 'Fraunhofer', 'None'};
+        app.spatialTransformation.Items = {'Angular spectrum', 'Fresnel', 'None'};
 
         % Spatial propagation row 4
 
         app.spatialPropagationLabel = uilabel(p);
-        app.spatialPropagationLabel.HorizontalAlignment = 'left';
+        app.spatialPropagationLabel.HorizontalAlignment = 'right';
         app.spatialPropagationLabel.FontColor = fontColor;
         app.spatialPropagationLabel.Layout.Column = 1;
         app.spatialPropagationLabel.Layout.Row = 4;
@@ -1391,6 +1371,7 @@ methods (Access = private)
         app.svdThresholdResetButton.Layout.Column = 2;
         app.svdThresholdResetButton.Layout.Row = 5;
         app.svdThresholdResetButton.Text = 'Reset';
+
         app.svdThreshold = uieditfield(p, 'numeric');
         app.svdThreshold.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.svdThreshold.FontColor = fontColor;
@@ -1399,12 +1380,30 @@ methods (Access = private)
         app.svdThreshold.Layout.Column = 3;
         app.svdThreshold.Layout.Row = 5;
 
-        % Time transformation row 6
+        app.svdStrideLabel = uilabel(p);
+        app.svdStrideLabel.HorizontalAlignment = 'right';
+        app.svdStrideLabel.FontColor = fontColor;
+        app.svdStrideLabel.Layout.Column = 1;
+        app.svdStrideLabel.Layout.Row = 6;
+        app.svdStrideLabel.Text = 'SVD stride';
+
+        app.svdStride = uieditfield(p, 'numeric');
+        app.svdStride.Limits = [0 Inf];
+        app.svdStride.Tooltip = {'Sub sampling parameter for faster SVD calculations. Defaults to 1 -> full image, 2 -> one pixel on two, ...'};
+        app.svdStride.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.svdStride.FontColor = fontColor;
+        app.svdStride.BackgroundColor = darkBackgroundColor;
+        app.svdStride.Layout.Row = 6;
+        app.svdStride.Layout.Column = 2;
+        app.svdStride.Value = 1;
+
+        % Time transformation row 7
         app.timeTransformLabel = uilabel(p);
         app.timeTransformLabel.FontColor = fontColor;
         app.timeTransformLabel.Layout.Column = 1;
-        app.timeTransformLabel.Layout.Row = 6;
+        app.timeTransformLabel.Layout.Row = 7;
         app.timeTransformLabel.Text = 'Time transform';
+        app.timeTransformLabel.HorizontalAlignment = 'right';
 
         app.timeTransform = uidropdown(p);
         app.timeTransform.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
@@ -1412,22 +1411,23 @@ methods (Access = private)
         app.timeTransform.FontColor = fontColor;
         app.timeTransform.BackgroundColor = grayButtonColor;
         app.timeTransform.Layout.Column = [2 3];
-        app.timeTransform.Layout.Row = 6;
+        app.timeTransform.Layout.Row = 7;
         app.timeTransform.Items = {'FFT', 'PCA', 'ICA'};
 
-        % Frequency range row 7 8 9
+        % Frequency range row 8 9 10
         app.frequencyRangeLabel = uilabel(p);
         app.frequencyRangeLabel.FontColor = fontColor;
         app.frequencyRangeLabel.Text = 'Frequency Range';
         app.frequencyRangeLabel.Layout.Column = 1;
-        app.frequencyRangeLabel.Layout.Row = 7;
+        app.frequencyRangeLabel.Layout.Row = 8;
+        app.frequencyRangeLabel.HorizontalAlignment = 'right';
 
         app.frequencyRange1 = uieditfield(p, 'numeric');
         app.frequencyRange1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.frequencyRange1.FontColor = fontColor;
         app.frequencyRange1.BackgroundColor = darkBackgroundColor;
         app.frequencyRange1.Layout.Column = 2;
-        app.frequencyRange1.Layout.Row = 7;
+        app.frequencyRange1.Layout.Row = 8;
         app.frequencyRange1.Tooltip = {'Frequency range to apply the time transformation (if different from time range)'};
         app.frequencyRange1.Placeholder = 'f1';
 
@@ -1436,22 +1436,23 @@ methods (Access = private)
         app.frequencyRange2.FontColor = fontColor;
         app.frequencyRange2.BackgroundColor = darkBackgroundColor;
         app.frequencyRange2.Layout.Column = 3;
-        app.frequencyRange2.Layout.Row = 7;
+        app.frequencyRange2.Layout.Row = 8;
         app.frequencyRange2.Tooltip = {'Frequency range to apply the time transformation (if different from time range)'};
         app.frequencyRange2.Placeholder = 'f2';
 
         app.frequencyRangeInterLabel = uilabel(p);
         app.frequencyRangeInterLabel.FontColor = fontColor;
         app.frequencyRangeInterLabel.Text = 'Inter freq range';
+        app.frequencyRangeInterLabel.Layout.Row = 9;
         app.frequencyRangeInterLabel.Layout.Column = 1;
-        app.frequencyRangeInterLabel.Layout.Row = 8;
+        app.frequencyRangeInterLabel.HorizontalAlignment = 'right';
 
         app.frequencyRangeInter1 = uieditfield(p, 'numeric');
         app.frequencyRangeInter1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.frequencyRangeInter1.FontColor = fontColor;
         app.frequencyRangeInter1.BackgroundColor = darkBackgroundColor;
         app.frequencyRangeInter1.Layout.Column = 2;
-        app.frequencyRangeInter1.Layout.Row = 8;
+        app.frequencyRangeInter1.Layout.Row = 9;
         app.frequencyRangeInter1.Tooltip = {'Frequency range to apply the intermediary time transformation (if different from time range)'};
         app.frequencyRangeInter1.Placeholder = 'fi1';
 
@@ -1460,7 +1461,7 @@ methods (Access = private)
         app.frequencyRangeInter2.FontColor = fontColor;
         app.frequencyRangeInter2.BackgroundColor = darkBackgroundColor;
         app.frequencyRangeInter2.Layout.Column = 3;
-        app.frequencyRangeInter2.Layout.Row = 8;
+        app.frequencyRangeInter2.Layout.Row = 9;
         app.frequencyRangeInter2.Tooltip = {'Frequency range to apply the intermediary time transformation (if different from time range)'};
         app.frequencyRangeInter2.Placeholder = 'fi2';
 
@@ -1468,30 +1469,30 @@ methods (Access = private)
         app.indexRangeLabel.FontColor = fontColor;
         app.indexRangeLabel.Text = 'Index range';
         app.indexRangeLabel.Layout.Column = 1;
-        app.indexRangeLabel.Layout.Row = 9;
+        app.indexRangeLabel.Layout.Row = 10;
+        app.indexRangeLabel.HorizontalAlignment = 'right';
 
         app.indexRange1 = uieditfield(p, 'numeric');
         app.indexRange1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.indexRange1.FontColor = fontColor;
         app.indexRange1.BackgroundColor = darkBackgroundColor;
         app.indexRange1.Layout.Column = 2;
-        app.indexRange1.Layout.Row = 9;
+        app.indexRange1.Layout.Row = 10;
 
         app.indexRange2 = uieditfield(p, 'numeric');
         app.indexRange2.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.indexRange2.FontColor = fontColor;
         app.indexRange2.BackgroundColor = darkBackgroundColor;
         app.indexRange2.Layout.Column = 3;
-        app.indexRange2.Layout.Row = 9;
+        app.indexRange2.Layout.Row = 10;
 
-        % Other parameters row 10 11 12
-
+        % Other parameters row 11 12 13
         app.flat_field_gwLabel = uilabel(p);
-        app.flat_field_gwLabel.HorizontalAlignment = 'left';
+        app.flat_field_gwLabel.HorizontalAlignment = 'right';
         app.flat_field_gwLabel.FontColor = fontColor;
         app.flat_field_gwLabel.Text = 'Flatfield';
         app.flat_field_gwLabel.Layout.Column = 1;
-        app.flat_field_gwLabel.Layout.Row = 10;
+        app.flat_field_gwLabel.Layout.Row = 11;
 
         app.flat_field_gw = uieditfield(p, 'numeric');
         app.flat_field_gw.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
@@ -1499,7 +1500,7 @@ methods (Access = private)
         app.flat_field_gw.BackgroundColor = [0.149 0.149 0.149];
         app.flat_field_gw.Tooltip = {'flat_filed parameter to apply to some of the output images (gaussian width in pixels to divide the image to correct uneven illumination of images).'};
         app.flat_field_gw.Layout.Column = 2;
-        app.flat_field_gw.Layout.Row = 10;
+        app.flat_field_gw.Layout.Row = 11;
 
         app.flip_y = uicheckbox(p);
         app.flip_y.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
@@ -1507,7 +1508,7 @@ methods (Access = private)
         app.flip_y.Text = 'Flip y';
         app.flip_y.FontColor = fontColor;
         app.flip_y.Layout.Column = 3;
-        app.flip_y.Layout.Row = 11;
+        app.flip_y.Layout.Row = 12;
 
         app.flip_x = uicheckbox(p);
         app.flip_x.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
@@ -1515,7 +1516,7 @@ methods (Access = private)
         app.flip_x.Text = 'Flip x';
         app.flip_x.FontColor = fontColor;
         app.flip_x.Layout.Column = 2;
-        app.flip_x.Layout.Row = 11;
+        app.flip_x.Layout.Row = 12;
 
         app.square = uicheckbox(p);
         app.square.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
@@ -1523,14 +1524,19 @@ methods (Access = private)
         app.square.Text = 'Square';
         app.square.FontColor = fontColor;
         app.square.Layout.Column = 1;
-        app.square.Layout.Row = 11;
+        app.square.Layout.Row = 12;
+
+        app.RenderPreviewLamp = uilamp(p);
+        app.RenderPreviewLamp.Color = [0.8 0.8 0.8];
+        app.RenderPreviewLamp.Layout.Column = 1;
+        app.RenderPreviewLamp.Layout.Row = 13;
 
         app.RenderPreviewButton = uibutton(p, 'push');
         app.RenderPreviewButton.ButtonPushedFcn = createCallbackFcn(app, @RenderPreviewButtonPushed, true);
         app.RenderPreviewButton.BackgroundColor = grayButtonColor;
         app.RenderPreviewButton.FontColor = fontColor;
         app.RenderPreviewButton.Layout.Column = 2;
-        app.RenderPreviewButton.Layout.Row = 12;
+        app.RenderPreviewButton.Layout.Row = 13;
         app.RenderPreviewButton.Text = 'Preview';
 
         app.SavePreviewButton = uibutton(p, 'push');
@@ -1538,13 +1544,9 @@ methods (Access = private)
         app.SavePreviewButton.BackgroundColor = grayButtonColor;
         app.SavePreviewButton.FontColor = fontColor;
         app.SavePreviewButton.Layout.Column = 3;
-        app.SavePreviewButton.Layout.Row = 12;
+        app.SavePreviewButton.Layout.Row = 13;
         app.SavePreviewButton.Text = 'Save';
 
-        app.RenderPreviewLamp = uilamp(p);
-        app.RenderPreviewLamp.Color = [0.8 0.8 0.8];
-        app.RenderPreviewLamp.Layout.Column = 1;
-        app.RenderPreviewLamp.Layout.Row = 12;
     end
 
     % -----------------------------------------------------------------------
