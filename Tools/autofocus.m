@@ -15,7 +15,7 @@ end
 
 cost = @(z) clamp(cost_function(rend, Params, z), z, zmin, zmax);
 
-z00 = Params.spatial_propagation;
+z00 = Params.spatialPropagation;
 %
 % zmin = z0 - 0.05;
 % zmax = z0 + 0.05;
@@ -92,7 +92,7 @@ end
 end
 
 function img = renderM0(rend, Params, z)
-Params.spatial_propagation = z;
+Params.spatialPropagation = z;
 rend.Render(Params, {"power_Doppler"}, cache_intermediate_results = false);
 img = rend.getImages({"power_Doppler"});
 img = img{1};

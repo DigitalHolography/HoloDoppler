@@ -223,8 +223,8 @@ methods
 
             try
                 fi = figure("Visible", "off");
-                disc = diskMask(size(SH_mod, 1), size(SH_mod, 2), Params.registration_disc_ratio)';
-                spectrum_ploting(SH_mod(:, :, :), disc, fs, Params.frequencyRange(1), Params.frequencyRange(2));
+                disk = diskMask(size(SH_mod, 1), size(SH_mod, 2), Params.registrationDiskRatio)';
+                spectrum_ploting(SH_mod(:, :, :), disk, fs, Params.frequencyRange(1), Params.frequencyRange(2));
                 % ylim([-0 50])
                 frame = getframe(fi); % Capture the figure
                 % obj.broadening.graph = gca;
@@ -406,7 +406,7 @@ methods
 
         if obj.FH_modulus_mean.is_selected
 
-            switch Params.spatial_transformation
+            switch Params.spatialTransformation
                 case 'angular spectrum' % log10
                     obj.FH_modulus_mean.image = squeeze(log10(fftshift(mean(abs(FHin), 3))));
                 case 'Fresnel' % no log10
@@ -418,7 +418,7 @@ methods
 
         if obj.FH_arg_mean.is_selected
 
-            switch Params.spatial_transformation
+            switch Params.spatialTransformation
                 case 'angular spectrum' %
                     obj.FH_arg_mean.image = squeeze((fftshift(mean(angle(FHin), 3))));
                 case 'Fresnel'

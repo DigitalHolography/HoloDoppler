@@ -3,7 +3,7 @@
   "batchStride": 512,
   "frame_stride": 1,
   "framePosition": 1,
-  "registration_disc_ratio": 0.8,
+  "registrationDiskRatio": 0.8,
   "image_types": [
     "power_Doppler",
     "power_1_Doppler",
@@ -17,20 +17,20 @@
   ],
   "parfor_arg": 18,
   "refBatchSize": 512,
-  "image_registration": true
+  "imageRegistration": true,
   "lambda": 8.52E-7,
   "fs": 78,
   "ppx": 1.9400147441120552E-5,
   "ppy": 1.9400147441120552E-5,
-  "spatial_transformation": "Fresnel",
-  "spatial_propagation": 1.25,
+  "spatialTransformation": "Fresnel",
+  "spatialPropagation": 1.25,
   "frequencyRange": [
     6,
     18
   ],
   "svd_filter": true,
   "svdThreshold": 10,
-  "time_transform": "FFT",
+  "timeTransform": "FFT",
   "flatfield_gw": 35,
   "bucketsRanges": [
     3,

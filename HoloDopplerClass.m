@@ -153,10 +153,10 @@ methods
 
         switch obj.file.ext
             case '.holo'
-                obj.params.spatial_transformation = 'Fresnel';
+                obj.params.spatialTransformation = 'Fresnel';
 
                 if obj.reader.version >= holo_versionThreshold
-                    obj.params.spatial_propagation = obj.reader.footer.compute_settings.image_rendering.propagation_distance;
+                    obj.params.spatialPropagation = obj.reader.footer.compute_settings.image_rendering.propagation_distance;
 
                     try
                         tmp.first = obj.reader.footer.info.timestamps_us.unix_first;
@@ -170,8 +170,8 @@ methods
                 end
 
             case '.cine'
-                obj.params.spatial_transformation = 'Fresnel';
-                obj.params.spatial_propagation = 1.13; % meters
+                obj.params.spatialTransformation = 'Fresnel';
+                obj.params.spatialPropagation = 1.13; % meters
         end
 
         obj.params.frequencyRange(1) = obj.view.LastParams.frequencyRange(1); % the default from init value of rendering class
@@ -210,15 +210,15 @@ methods
         if ~isempty(GuiCacheObj)
 
             if ~isempty(GuiCacheObj.z)
-                p.spatial_propagation = GuiCacheObj.z;
+                p.spatialPropagation = GuiCacheObj.z;
             end
 
             if ~isempty(GuiCacheObj.z_retina)
-                p.spatial_propagation = GuiCacheObj.z_retina;
+                p.spatialPropagation = GuiCacheObj.z_retina;
             end
 
             if ~isempty(GuiCacheObj.spatialTransformation)
-                p.spatial_transformation = GuiCacheObj.spatialTransformation;
+                p.spatialTransformation = GuiCacheObj.spatialTransformation;
             end
 
             if ~isempty(GuiCacheObj.wavelength)
@@ -280,12 +280,12 @@ methods
         obj.params.batchStride = 512;
         obj.params.frame_stride = 1;
         obj.params.framePosition = 1;
-        obj.params.registration_disc_ratio = 0.8;
+        obj.params.registrationDiskRatio = 0.8;
         obj.params.image_types = {'power_Doppler', 'color_Doppler', 'directional_Doppler', 'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
         obj.params.parfor_arg = 10;
         obj.params.refBatchSize = 512;
-        obj.params.image_registration = true;
-        obj.params.applyshackhartmannfromref = false;
+        obj.params.imageRegistration = true;
+        obj.params.applyShackHartmannfromRef = false;
         obj.params.applyautofocusfromref = false;
         obj.params.autofocusRange = [0.45, 0.52];
         obj.params.first_frame = 0;
@@ -318,12 +318,12 @@ methods
         % Initialize spatial filtering parameters
         obj.params.spatialFilter = false;
         obj.params.spatialFilterRange = [0, 1];
-        obj.params.spatial_transformation = 'Fresnel';
-        obj.params.spatial_propagation = 0;
-        obj.params.Padding_num = 0;
+        obj.params.spatialTransformation = 'Fresnel';
+        obj.params.spatialPropagation = 0;
+        obj.params.PaddingNum = 0;
 
         % Initialize time transformation parameters
-        obj.params.time_transform = 'FFT';
+        obj.params.timeTransform = 'FFT';
         obj.params.frequencyRange = [0, 100];
         obj.params.frequencyRangeInter = [7, 7];
         obj.params.indexRange = [1, 100];
@@ -392,7 +392,7 @@ methods
 
         if ~save_z %&& strcmp(ext,'.holo') % if you dont want to save the z and prefer to take the automatic one
             % only for holo files because cine dont save the z
-            parms = rmfield(parms, 'spatial_propagation');
+            parms = rmfield(parms, 'spatialPropagation');
         end
 
         if isfield(parms, 'record_time_stamps_us')
@@ -617,7 +617,7 @@ methods
         view_ref.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.framePosition));
         view_ref.Render(obj.params, obj.params.image_types, cache_intermediate_results = false);
 
-        if obj.params.applyshackhartmannfromref
+        if obj.params.applyShackHartmannfromRef
             ShackHartmannMask = view_ref.ShackHartmannMask; % get the mask to apply to each frame here
         else
             ShackHartmannMask = [];
@@ -625,7 +625,7 @@ methods
 
         if obj.params.applyautofocusfromref
             z_opti = autofocus(view_ref, obj.params); % update the z distance
-            obj.params.spatial_propagation = z_opti;
+            obj.params.spatialPropagation = z_opti;
         end
 
         % 2) Loop over the batches
@@ -692,7 +692,7 @@ methods
 
         close(h);
 
-        if obj.params.image_registration
+        if obj.params.imageRegistration
 
             if ismember('power_Doppler', obj.params.image_types)
                 obj.CalculateRegistration();
@@ -877,7 +877,7 @@ methods
 
         end
 
-        if obj.params.image_registration
+        if obj.params.imageRegistration
 
             disp('Saving registration...');
 
@@ -934,8 +934,8 @@ methods
         %saving a small mat for old versions of PW
         cache.Fs = obj.params.fs * 1000;
         cache.batchStride = obj.params.batchStride;
-        cache.time_transform.f1 = obj.params.frequencyRange(1);
-        cache.time_transform.f2 = obj.params.frequencyRange(2);
+        cache.timeTransform.f1 = obj.params.frequencyRange(1);
+        cache.timeTransform.f2 = obj.params.frequencyRange(2);
         save(fullfile(result_folder_path, 'mat', strcat(obj.file.name, '_HD_', num2str(index + 1), '.mat')), "cache");
 
         fprintf("Video Saving took : %f s\n", toc(VideoSavingTime));
@@ -965,8 +965,8 @@ methods
         numY = size(video_M0, 1);
         numX = size(video_M0, 2);
 
-        if obj.params.registration_disc_ratio > 0
-            disk_ratio = obj.params.registration_disc_ratio;
+        if obj.params.registrationDiskRatio > 0
+            disk_ratio = obj.params.registrationDiskRatio;
             disk = diskMask(numY, numX, disk_ratio);
 
             if size(disk, 1) ~= size(video_M0, 1)
@@ -977,7 +977,7 @@ methods
             disk = ones([numY, numX]);
         end
 
-        video_M0_reg = video_M0 .* disk - disk .* sum(video_M0 .* disk, [1, 2]) / nnz(disk); % minus the mean in the disc of each frame
+        video_M0_reg = video_M0 .* disk - disk .* sum(video_M0 .* disk, [1, 2]) / nnz(disk); % minus the mean in the disk of each frame
         video_M0_reg = video_M0_reg ./ (max(abs(video_M0_reg), [], [1, 2])); % rescaling each frame but keeps mean at zero
 
         obj.view.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.framePosition));

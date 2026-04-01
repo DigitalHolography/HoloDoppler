@@ -1,4 +1,4 @@
-function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask(FH, spatial_transformation, spatial_propagation, frequencyRange, fs, gw, ShackHartmannCorrection)
+function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask(FH, spatialTransformation, spatialPropagation, frequencyRange, fs, gw, ShackHartmannCorrection)
 
 Nx = size(FH, 1);
 Ny = size(FH, 2);
@@ -37,7 +37,7 @@ switch zernike_ranks
         error('Unreachable code was reached. Check value of zernike_ranks');
 end
 
-shack_hartmann = ShackHartmann(image_subapertures_size_ratio, num_subapertures_positions, zernike_indices, calibration_factor, subaperture_margin, corrmap_margin, powerFilter_corrector, sigmaFilter_corrector, ref_image, spatial_transformation);
+shack_hartmann = ShackHartmann(image_subapertures_size_ratio, num_subapertures_positions, zernike_indices, calibration_factor, subaperture_margin, corrmap_margin, powerFilter_corrector, sigmaFilter_corrector, ref_image, spatialTransformation);
 shack_hartmann.Nx = Nx;
 shack_hartmann.Ny = Ny;
 % Calculate the shifts

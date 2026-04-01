@@ -1,5 +1,5 @@
-function show_ref_disc(app, yesno)
-%Shows the disc ref in trhe preview if it exists
+function show_ref_disk(app, yesno)
+%Shows the disk ref in trhe preview if it exists
 image = app.HD.view.getImages(app.HD.params.image_types);
 image = image{1};
 
@@ -8,7 +8,7 @@ if (size(image, 3) == 1)
 end
 
 [numX, numY, ~] = size(image);
-disk_ratio = app.HD.params.registration_disc_ratio;
+disk_ratio = app.HD.params.registrationDiskRatio;
 
 circle = diskMask(numX, numY, disk_ratio -0.01, disk_ratio)';
 

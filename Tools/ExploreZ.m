@@ -19,12 +19,12 @@ methods
 
         obj.Params = Params;
 
-        if ~isfield(Params, 'spatial_propagation')
+        if ~isfield(Params, 'spatialPropagation')
             error("No spatial propagation yet, open a file first");
             return
         end
 
-        obj.z_current = obj.Params.spatial_propagation;
+        obj.z_current = obj.Params.spatialPropagation;
         obj.ren = view;
 
         % Calculate initial average image
@@ -75,13 +75,13 @@ methods
         % Z Range min edit field
         obj.IO.editZRangeMin = uicontrol('Parent', obj.panel, ...
             'Style', 'edit', ...
-            'String', num2str(obj.Params.spatial_propagation - 10 * 0.01), ...
+            'String', num2str(obj.Params.spatialPropagation - 10 * 0.01), ...
             'Units', 'normalized', ...
             'Position', [0.25, 0.75, 0.2, 0.15]);
         % Z Range max edit field
         obj.IO.editZRangeMax = uicontrol('Parent', obj.panel, ...
             'Style', 'edit', ...
-            'String', num2str(obj.Params.spatial_propagation + 10 * 0.01), ...
+            'String', num2str(obj.Params.spatialPropagation + 10 * 0.01), ...
             'Units', 'normalized', ...
             'Position', [0.47, 0.75, 0.2, 0.15]);
 
@@ -179,7 +179,7 @@ methods
         for z = z_min:z_step:z_max
             obj.z_current = z;
             p = obj.Params;
-            p.spatial_propagation = z;
+            p.spatialPropagation = z;
             obj.ren.Render(p, obj.Params.image_types(1));
             obj.updateAverageImage();
             obj.updateImageDisplay();

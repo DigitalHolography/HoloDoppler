@@ -117,12 +117,12 @@ if ~isempty(HD) && ~isempty(HD.params)
     safeSetNumeric(app.batchStride, HD.params.batchStride);
 
     % Registration parameters
-    if isprop(app, 'registration_disc_ratio')
-        safeSetNumeric(app.registration_disc_ratio, HD.params.registration_disc_ratio);
+    if isprop(app, 'registrationDiskRatio')
+        safeSetNumeric(app.registrationDiskRatio, HD.params.registrationDiskRatio);
     end
 
-    if isprop(app, 'image_registration')
-        safeSetCheckbox(app.image_registration, HD.params.image_registration);
+    if isprop(app, 'imageRegistration')
+        safeSetCheckbox(app.imageRegistration, HD.params.imageRegistration);
     end
 
     % Image types list
@@ -171,18 +171,18 @@ if ~isempty(HD) && ~isempty(HD.params)
     end
 
     % Spatial transformation
-    if isprop(app, 'spatial_transformation')
+    if isprop(app, 'spatialTransformation')
         items = ["Fresnel", "angular spectrum", "twin image removal", "None"];
-        app.spatial_transformation.Items = items;
-        safeSetDropdown(app.spatial_transformation, HD.params.spatial_transformation, items);
+        app.spatialTransformation.Items = items;
+        safeSetDropdown(app.spatialTransformation, HD.params.spatialTransformation, items);
     end
 
-    if isprop(app, 'spatial_propagation')
-        safeSetNumeric(app.spatial_propagation, HD.params.spatial_propagation);
+    if isprop(app, 'spatialPropagation')
+        safeSetNumeric(app.spatialPropagation, HD.params.spatialPropagation);
     end
 
-    if isprop(app, 'Padding_num')
-        safeSetNumeric(app.Padding_num, HD.params.Padding_num);
+    if isprop(app, 'PaddingNum')
+        safeSetNumeric(app.PaddingNum, HD.params.PaddingNum);
     end
 
     % SVD filters
@@ -196,10 +196,10 @@ if ~isempty(HD) && ~isempty(HD.params)
     end
 
     % Time transformation
-    if isprop(app, 'time_transform')
+    if isprop(app, 'timeTransform')
         items = ["FFT", "PCA", "ICA", "Wavelet_Morlet", "autocorrelation", "intercorrelation", "phase difference", "None"];
-        app.time_transform.Items = items;
-        safeSetDropdown(app.time_transform, HD.params.time_transform, items);
+        app.timeTransform.Items = items;
+        safeSetDropdown(app.timeTransform, HD.params.timeTransform, items);
     end
 
     if isprop(app, 'frequencyRange1') && isprop(app, 'frequencyRange2')
@@ -252,8 +252,8 @@ if ~isempty(HD) && ~isempty(HD.params)
         safeSetCheckbox(app.AutofocusFromRef, HD.params.applyautofocusfromref);
     end
 
-    if isprop(app, 'applyshackhartmannfromref')
-        safeSetCheckbox(app.applyshackhartmannfromref, HD.params.applyshackhartmannfromref);
+    if isprop(app, 'applyShackHartmannfromRef')
+        safeSetCheckbox(app.applyShackHartmannfromRef, HD.params.applyShackHartmannfromRef);
     end
 
     % Shack-Hartmann correction

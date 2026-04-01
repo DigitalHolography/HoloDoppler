@@ -35,15 +35,15 @@ methods
 
         Params.spatialFilter = false;
         Params.spatialFilterRange = [0, 1];
-        Params.spatial_transformation = "Fresnel";
-        Params.spatial_propagation = 0.5;
-        Params.Padding_num = 0;
+        Params.spatialTransformation = "Fresnel";
+        Params.spatialPropagation = 0.5;
+        Params.PaddingNum = 0;
 
         Params.svd_filter = 1;
         Params.svdThreshold = false;
         Params.svd_mean = false;
         Params.svdStride = 1;
-        Params.time_transform = "FFT";
+        Params.timeTransform = "FFT";
         Params.frequencyRange = [6, 10.5];
         Params.frequencyRangeInter = [7, 7];
         Params.indexRange = [3, 10];
@@ -140,27 +140,27 @@ methods
 
         % 2) Spatial transformation (from Frames to H)
 
-        doFH = doFrames || ParamChanged.Padding_num || ParamChanged.spatial_transformation || ParamChanged.spatial_propagation || ParamChanged.ShackHartmannCorrection || obj.FramesChanged || ~options.cache_intermediate_results;
+        doFH = doFrames || ParamChanged.PaddingNum || ParamChanged.spatialTransformation || ParamChanged.spatialPropagation || ParamChanged.ShackHartmannCorrection || obj.FramesChanged || ~options.cache_intermediate_results;
 
         if doFH % change or if the frames changed
 
-            switch Params.spatial_transformation
+            switch Params.spatialTransformation
                 case "angular spectrum"
 
                     [NY, NX, ~] = size(obj.Frames);
 
-                    if Params.Padding_num > 0
-                        ND = Params.Padding_num;
+                    if Params.PaddingNum > 0
+                        ND = Params.PaddingNum;
                     else
                         ND = max(NX, NY);
                     end
 
-                    if ParamChanged.spatial_propagation || ParamChanged.Padding_num || ParamChanged.spatial_transformation || isempty(obj.SpatialKernel)
+                    if ParamChanged.spatialPropagation || ParamChanged.PaddingNum || ParamChanged.spatialTransformation || isempty(obj.SpatialKernel)
 
                         if isempty(Params.ShackHartmannCorrection)
-                            obj.SpatialKernel = propagation_kernelAngularSpectrum(ND, ND, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
+                            obj.SpatialKernel = propagation_kernelAngularSpectrum(ND, ND, Params.spatialPropagation, Params.lambda, Params.ppx, Params.ppy, 0);
                         else
-                            obj.SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
+                            obj.SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, Params.spatialPropagation, Params.lambda, Params.ppx, Params.ppy, 0);
                         end
 
                     end
@@ -176,18 +176,18 @@ methods
 
                     [NY, NX, ~] = size(obj.Frames);
 
-                    if Params.Padding_num > 0
-                        NY = Params.Padding_num;
-                        NX = Params.Padding_num;
+                    if Params.PaddingNum > 0
+                        NY = Params.PaddingNum;
+                        NX = Params.PaddingNum;
                     end
 
-                    if ParamChanged.spatial_propagation || ParamChanged.Padding_num || ParamChanged.spatial_transformation || isempty(obj.SpatialKernel)
+                    if ParamChanged.spatialPropagation || ParamChanged.PaddingNum || ParamChanged.spatialTransformation || isempty(obj.SpatialKernel)
 
-                        [obj.SpatialKernel, obj.PhaseFactor] = propagation_kernelFresnel(NX, NY, Params.spatial_propagation, Params.lambda, Params.ppx, Params.ppy, 0);
+                        [obj.SpatialKernel, obj.PhaseFactor] = propagation_kernelFresnel(NX, NY, Params.spatialPropagation, Params.lambda, Params.ppx, Params.ppy, 0);
                     end
 
-                    if Params.Padding_num > 0
-                        obj.FH = single(pad3DToSquare(obj.Frames, Params.Padding_num)) .* obj.SpatialKernel;
+                    if Params.PaddingNum > 0
+                        obj.FH = single(pad3DToSquare(obj.Frames, Params.PaddingNum)) .* obj.SpatialKernel;
                     else
                         obj.FH = single(obj.Frames) .* obj.SpatialKernel;
                     end
@@ -199,10 +199,10 @@ methods
 
             if ~isempty(Params.ShackHartmannCorrection)
 
-                if ~Params.applyshackhartmannfromref || isempty(obj.ShackHartmannMask) % in case we apply ShackHartmann from precalculated Mask
+                if ~Params.applyShackHartmannfromRef || isempty(obj.ShackHartmannMask) % in case we apply ShackHartmann from precalculated Mask
 
                     if doFH || ParamChanged.ShackHartmannCorrection || isempty(obj.ShackHartmannMask)
-                        [obj.ShackHartmannMask, obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH, Params.spatial_transformation, Params.spatial_propagation, Params.frequencyRange, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
+                        [obj.ShackHartmannMask, obj.moment_chunks_crop_array] = calculate_shackhartmannmask(obj.FH, Params.spatialTransformation, Params.spatialPropagation, Params.frequencyRange, Params.fs, Params.flatfield_gw, Params.ShackHartmannCorrection);
                     end
 
                 end
@@ -225,7 +225,7 @@ methods
 
         if doH % change or if the frames changed
 
-            switch Params.spatial_transformation
+            switch Params.spatialTransformation
                 case "angular spectrum"
                     obj.H = ifft2(obj.FH) .* sqrt(Nx * Ny);
                 case "Fresnel"
@@ -265,11 +265,11 @@ methods
 
         % 4) Short-time transformation
 
-        doSH = doH || ParamChanged.time_transform || obj.FramesChanged || ParamChanged.flip_y || ParamChanged.flip_x || ~options.cache_intermediate_results;
+        doSH = doH || ParamChanged.timeTransform || obj.FramesChanged || ParamChanged.flip_y || ParamChanged.flip_x || ~options.cache_intermediate_results;
 
         if doSH
 
-            switch Params.time_transform
+            switch Params.timeTransform
                 case 'PCA'
                     obj.SH = short_time_PCA(obj.H);
                 case 'ICA'
@@ -401,12 +401,12 @@ methods
         obj.setInitParams();
 
         obj.Render(struct(), {"power_Doppler"});
-        obj.Render(struct("spatial_transformation", "angular spectrum"), {"power_Doppler"});
-        obj.Render(struct("time_transform", "PCA"));
+        obj.Render(struct("spatialTransformation", "angular spectrum"), {"power_Doppler"});
+        obj.Render(struct("timeTransform", "PCA"));
         obj.Render(struct(), {"power_Doppler"});
         obj.Render(struct(), {"directional_Doppler"});
         %montage(obj.constructImages({'directional_Doppler'}));
-        obj.Render(struct("time_transform", "ICA"), {"directional_Doppler"});
+        obj.Render(struct("timeTransform", "ICA"), {"directional_Doppler"});
 
     end
 

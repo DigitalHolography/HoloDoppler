@@ -84,7 +84,7 @@ for ind = 1:numel(paths)
         HD.PreviewRendering();
 
         if HD.params.applyautofocusfromref
-            HD.params.spatial_propagation = autofocus(HD.view, HD.params); % Autofocus
+            HD.params.spatialPropagation = autofocus(HD.view, HD.params); % Autofocus
         end
 
         HD.PreviewRendering(); % Render the preview

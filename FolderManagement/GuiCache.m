@@ -12,7 +12,7 @@ properties (Access = public)
     z_retina double
     z_iris double
     z_switch char
-    time_transform struct % object with : type of transformation, f1, f2
+    timeTransform struct % object with : type of transformation, f1, f2
     blur double
     imageChoice char
     wavelength double
@@ -42,8 +42,8 @@ properties (Access = public)
     iterative_registration logical
     temporalFilter_flag logical
     temporalFilter double
-    registration_disc logical
-    registration_disc_ratio double
+    registrationDisk logical
+    registrationDiskRatio double
 
     % color image parameters
     color_f1 double
@@ -91,7 +91,7 @@ methods (Access = public)
         obj.z_switch = app.Switch.Value;
         obj.z_retina = app.zretina.Value;
         obj.z_iris = app.ziris.Value;
-        obj.time_transform = app.time_transform;
+        obj.timeTransform = app.timeTransform;
         obj.blur = app.blur.Value;
         obj.imageChoice = strrep(app.ImageChoiceDropDown.Value, ' ', '_');
         obj.wavelength = app.wavelength.Value;
@@ -111,8 +111,8 @@ methods (Access = public)
         obj.position_in_file = app.positioninfileSlider.Value;
         obj.output_videos = (strrep(app.outputvideoDropDown.Value, ' ', '_'));
         obj.rephasing = app.rephasingCheckBox.Value;
-        obj.registration_disc = app.registrationdiscCheckBox.Value;
-        obj.registration_disc_ratio = app.regDiscRatio.Value;
+        obj.registrationDisk = app.registrationdiskCheckBox.Value;
+        obj.registrationDiskRatio = app.regDiscRatio.Value;
 
         obj.color_f1 = app.compositef1.Value;
         obj.color_f2 = app.compositef2.Value;
@@ -163,15 +163,15 @@ methods (Access = public)
             app.Switch.Value = loadGUIVariable(obj.z_switch);
             app.zretina.Value = loadGUIVariable(obj.z_retina);
             app.ziris.Value = loadGUIVariable(obj.z_iris);
-            app.time_transform = loadGUIVariable(obj.time_transform);
+            app.timeTransform = loadGUIVariable(obj.timeTransform);
             app.blur.Value = loadGUIVariable(obj.blur);
             app.ImageChoiceDropDown.Value = loadGUIVariable(strrep(obj.imageChoice, '_', ' '));
-            app.timetransformDropDown.Value = loadGUIVariable(obj.time_transform.type);
+            app.timetransformDropDown.Value = loadGUIVariable(obj.timeTransform.type);
             app.SVDCheckBox.Value = loadGUIVariable(obj.SVD);
-            app.f1.Value = loadGUIVariable(obj.time_transform.f1);
-            app.f2.Value = loadGUIVariable(obj.time_transform.f2);
-            app.min_PCA.Value = loadGUIVariable(obj.time_transform.min_PCA);
-            app.max_PCA.Value = loadGUIVariable(obj.time_transform.max_PCA);
+            app.f1.Value = loadGUIVariable(obj.timeTransform.f1);
+            app.f2.Value = loadGUIVariable(obj.timeTransform.f2);
+            app.min_PCA.Value = loadGUIVariable(obj.timeTransform.min_PCA);
+            app.max_PCA.Value = loadGUIVariable(obj.timeTransform.max_PCA);
             app.imageregistrationCheckBox.Value = loadGUIVariable(obj.registration);
             app.iterativeregistrationCheckBox.Value = loadGUIVariable(obj.iterative_registration);
             app.wavelength.Value = loadGUIVariable(obj.wavelength);

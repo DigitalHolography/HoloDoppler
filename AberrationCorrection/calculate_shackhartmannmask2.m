@@ -139,7 +139,7 @@ for idy = 1:((vy - 1) * ky + 1)
 
         fh = pad3DToSquare(FH(idxRange, idyRange, :));
 
-        switch Params.spatial_transformation
+        switch Params.spatialTransformation
             case "angular spectrum"
                 h = ifft2(fh) .* sqrt(Nxx * Nyy);
             case "Fresnel"
@@ -184,7 +184,7 @@ shifts = zeros(vx, vy) + 1j * zeros(vx, vy);
 for ix = 1:vx
 
     for jy = 1:vy
-        shift = calculate_image_shift(images_mat(:, :, ix, jy), reference_image, 0); % Here we take registration disc ratio as reticule radius
+        shift = calculate_image_shift(images_mat(:, :, ix, jy), reference_image, 0); % Here we take registration disk ratio as reticule radius
         shifts(ix, jy) = shift;
     end
 

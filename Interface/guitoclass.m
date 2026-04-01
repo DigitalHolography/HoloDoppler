@@ -72,8 +72,8 @@ if isprop(app, 'positioninfileSlider')
 end
 
 % Registration parameters
-if isprop(app, 'registration_disc_ratio')
-    HD.params.registration_disc_ratio = safeGetUIValue(app.registration_disc_ratio, 0.8);
+if isprop(app, 'registrationDiskRatio')
+    HD.params.registrationDiskRatio = safeGetUIValue(app.registrationDiskRatio, 0.8);
 end
 
 % Handle image types as a cell array
@@ -87,8 +87,8 @@ if isprop(app, 'Image_typesListBox') && isprop(app.Image_typesListBox, 'Value')
 end
 
 % Image registration
-if isprop(app, 'image_registration')
-    HD.params.image_registration = safeGetCheckbox(app.image_registration, false);
+if isprop(app, 'imageRegistration')
+    HD.params.imageRegistration = safeGetCheckbox(app.imageRegistration, false);
 end
 
 % Spatial filtering parameters
@@ -102,16 +102,16 @@ if isprop(app, 'spatialFilterRange1') && isprop(app, 'spatialFilterRange2')
     HD.params.spatialFilterRange = [val1, val2];
 end
 
-if isprop(app, 'spatial_transformation')
-    HD.params.spatial_transformation = safeGetUIValue(app.spatial_transformation, 'Fresnel');
+if isprop(app, 'spatialTransformation')
+    HD.params.spatialTransformation = safeGetUIValue(app.spatialTransformation, 'Fresnel');
 end
 
-if isprop(app, 'spatial_propagation')
-    HD.params.spatial_propagation = safeGetUIValue(app.spatial_propagation, 0);
+if isprop(app, 'spatialPropagation')
+    HD.params.spatialPropagation = safeGetUIValue(app.spatialPropagation, 0);
 end
 
-if isprop(app, 'Padding_num')
-    HD.params.Padding_num = safeGetUIValue(app.Padding_num, 0);
+if isprop(app, 'PaddingNum')
+    HD.params.PaddingNum = safeGetUIValue(app.PaddingNum, 0);
 end
 
 % SVD parameters
@@ -124,8 +124,8 @@ if isprop(app, 'svdThreshold')
 end
 
 % Time transformation parameters
-if isprop(app, 'time_transform')
-    HD.params.time_transform = safeGetUIValue(app.time_transform, 'FFT');
+if isprop(app, 'timeTransform')
+    HD.params.timeTransform = safeGetUIValue(app.timeTransform, 'FFT');
 end
 
 if isprop(app, 'frequencyRange1') && isprop(app, 'frequencyRange2')
@@ -169,8 +169,8 @@ if isprop(app, 'AutofocusFromRef')
     HD.params.applyautofocusfromref = safeGetCheckbox(app.AutofocusFromRef, false);
 end
 
-if isprop(app, 'applyshackhartmannfromref')
-    HD.params.applyshackhartmannfromref = safeGetCheckbox(app.applyshackhartmannfromref, false);
+if isprop(app, 'applyShackHartmannfromRef')
+    HD.params.applyShackHartmannfromRef = safeGetCheckbox(app.applyShackHartmannfromRef, false);
 end
 
 % Shack-Hartmann correction

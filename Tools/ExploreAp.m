@@ -204,20 +204,20 @@ methods
 
         SubapI = obj.I(y1:y2, x1:x2, :);
 
-        switch obj.Params.spatial_transformation
+        switch obj.Params.spatialTransformation
             case "angular spectrum"
                 [NY, NX, ~] = size(SubapI);
-                SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, obj.Params.spatial_propagation, obj.Params.lambda, obj.Params.ppx, obj.Params.ppy, 0);
+                SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, obj.Params.spatialPropagation, obj.Params.lambda, obj.Params.ppx, obj.Params.ppy, 0);
                 FH = fft2(single(SubapI)) .* fftshift(SpatialKernel);
             case "Fresnel"
                 [NY, NX, ~] = size(SubapI);
-                [SpatialKernel] = propagation_kernelFresnel(NX, NY, obj.Params.spatial_propagation, obj.Params.lambda, obj.Params.ppx, obj.Params.ppy, 0);
+                [SpatialKernel] = propagation_kernelFresnel(NX, NY, obj.Params.spatialPropagation, obj.Params.lambda, obj.Params.ppx, obj.Params.ppy, 0);
                 FH = single(SubapI) .* SpatialKernel;
             case "None"
                 FH = [];
         end
 
-        switch obj.Params.spatial_transformation
+        switch obj.Params.spatialTransformation
             case "angular spectrum"
                 H = ifft2(FH);
             case "Fresnel"
@@ -230,7 +230,7 @@ methods
             [H] = svd_filter(H, obj.Params.svdThreshold, obj.Params.frequencyRange(1), obj.Params.fs, obj.Params.svdStride);
         end
 
-        switch obj.Params.time_transform
+        switch obj.Params.timeTransform
             case 'FFT'
                 SH = fft(H, [], 3);
             case 'PCA'
@@ -239,7 +239,7 @@ methods
                 SH = H;
         end
 
-        if strcmp(obj.Params.time_transform, 'PCA')
+        if strcmp(obj.Params.timeTransform, 'PCA')
             img = cumulant(SH, obj.Params.indexRange(1), obj.Params.indexRange(2));
         else
             img = moment0(SH, obj.Params.frequencyRange(1), obj.Params.frequencyRange(2), obj.Params.fs, size(obj.I, 3), obj.Params.flatfield_gw);

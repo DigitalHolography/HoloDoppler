@@ -13,7 +13,7 @@ end
 function SHmod = getSHmod(frames)
 r = RenderingClass();
 r.setFrames(frames);
-r.LastParams.svd_filter = 0; r.LastParams.spatial_propagation = 0.4869999885559082;
+r.LastParams.svd_filter = 0; r.LastParams.spatialPropagation = 0.4869999885559082;
 r.Render(r.LastParams, {"power_Doppler"});
 SHmod = abs(r.SH);
 end

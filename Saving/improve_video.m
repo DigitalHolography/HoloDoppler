@@ -44,9 +44,9 @@ if options.cornerNorm > 0
     Nx = size(video, 1);
     Ny = size(video, 2);
     [X, Y] = meshgrid(linspace(-Nx / 2, Nx / 2, Nx), linspace(-Ny / 2, Ny / 2, Ny));
-    disc_ratio = options.cornerNorm;
-    disc = X .^ 2 + Y .^ 2 < (disc_ratio * min(Nx, Ny) / 2) ^ 2;
-    video = video ./ mean(video .* ~disc, [1, 2]);
+    disk_ratio = options.cornerNorm;
+    disk = X .^ 2 + Y .^ 2 < (disk_ratio * min(Nx, Ny) / 2) ^ 2;
+    video = video ./ mean(video .* ~disk, [1, 2]);
 end
 
 % contrast enhancement

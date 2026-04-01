@@ -2,7 +2,7 @@
   "batchSize": 256,
   "batchStride": 256,
   "frame_stride": 1,
-  "registration_disc_ratio": 0.8,
+  "registrationDiskRatio": 0.8,
   "image_types": [
     "power_Doppler",
     "moment_0",
@@ -10,8 +10,8 @@
     "moment_2"
   ],
   "parfor_arg": 18,
-  "image_registration": true,
-  "spatial_transformation": "Fresnel",
+  "imageRegistration": true,
+  "spatialTransformation": "Fresnel",
   "frequencyRange": [
     6,
     18.3
@@ -20,7 +20,7 @@
   "svd_filter": true,
   "svdThreshold": 64,
   "svdStride": 1,
-  "time_transform": "FFT",
+  "timeTransform": "FFT",
   "flatfield_gw": 35,
   "applyautofocusfromref": false,
   "refBatchSize": 512,

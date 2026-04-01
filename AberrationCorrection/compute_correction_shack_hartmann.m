@@ -48,8 +48,8 @@ Nx = istream.get_frame_width();
 Ny = istream.get_frame_height();
 j_win = cache.batchSize;
 j_step = cache.batchStride;
-f1 = cache.time_transform.f1;
-f2 = cache.time_transform.f2;
+f1 = cache.timeTransform.f1;
+f2 = cache.timeTransform.f2;
 acquisition = DopplerAcquisition(Nx, Ny, cache.Fs / 1000, cache.z, cache.z_retina, cache.z_iris, cache.wavelength, cache.DX, cache.DY, cache.pix_width, cache.pix_height);
 % acquisition = DopplerAcquisition(, app.cache.z, app.cache.z_retina, app.cache.z_iris,app.cache.wavelength,app.cache.DX,app.cache.DY,app.cache.pix_width,app.cache.pix_height);
 

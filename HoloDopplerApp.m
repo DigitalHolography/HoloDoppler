@@ -57,69 +57,60 @@ properties (Access = public)
     % ---- batch / video rendering sub-panel ----
     batchPanel matlab.ui.container.Panel
     batchGrid matlab.ui.container.GridLayout
-    SaveconfigButton matlab.ui.control.Button
-    PlayButton matlab.ui.control.Button
+    Image_typesListBox matlab.ui.control.ListBox
+    LoadConfigButton matlab.ui.control.Button
+    SaveConfigButton matlab.ui.control.Button
+    FolderManagementButton matlab.ui.control.Button
+    VideoRenderingButton matlab.ui.control.Button
     ShowHistogramButton matlab.ui.control.Button
     VideoRenderingLamp matlab.ui.control.Lamp
-    SaveVideoButton matlab.ui.control.Button
-    batchSize matlab.ui.control.NumericEditField
     batchSizeLabel matlab.ui.control.Label
-    Image_typesListBox matlab.ui.control.ListBox
-    registrationDiscLabel matlab.ui.control.Label
-    registration_disc_ratio matlab.ui.control.NumericEditField
-    refBatchSize matlab.ui.control.NumericEditField
-    refBatchSizeLabel matlab.ui.control.Label
-    batchStride matlab.ui.control.NumericEditField
+    batchSize matlab.ui.control.NumericEditField
     batchStrideLabel matlab.ui.control.Label
-    LoadconfigButton matlab.ui.control.Button
-    VideoRenderingButton matlab.ui.control.Button
-    FoldermanagementButton matlab.ui.control.Button
-    temporalFilter matlab.ui.control.NumericEditField
+    batchStride matlab.ui.control.NumericEditField
+    refBatchSizeLabel matlab.ui.control.Label
+    refBatchSize matlab.ui.control.NumericEditField
     AutofocusFromRef matlab.ui.control.CheckBox
-    applyshackhartmannfromref matlab.ui.control.CheckBox
-    temporalfilterCheckBox matlab.ui.control.CheckBox
-    phaseregistrationCheckBox matlab.ui.control.CheckBox
-    rephasingCheckBox matlab.ui.control.CheckBox
-    image_registration matlab.ui.control.CheckBox
-    showrefCheckBox matlab.ui.control.CheckBox
-    iterativeregistrationCheckBox matlab.ui.control.CheckBox
+    applyShackHartmannfromRef matlab.ui.control.CheckBox
+    imageRegistration matlab.ui.control.CheckBox
+    registrationDiskLabel matlab.ui.control.Label
+    registrationDiskRatio matlab.ui.control.NumericEditField
 
     % ---- rendering parameters panel ----
-    RenderingParametersPanel matlab.ui.container.Panel
-    RenderingParametersGrid matlab.ui.container.GridLayout
-
-    Padding_num matlab.ui.control.NumericEditField
-    PaddNLabel matlab.ui.control.Label
+    renderingParametersPanel matlab.ui.container.Panel
+    renderingParametersGrid matlab.ui.container.GridLayout
+    spatialFilter matlab.ui.control.CheckBox
+    spatialFilterRange1 matlab.ui.control.NumericEditField
+    spatialFilterRange2 matlab.ui.control.NumericEditField
+    PaddingLabel matlab.ui.control.Label
+    PaddingNum matlab.ui.control.NumericEditField
+    spatialTransformationLabel matlab.ui.control.Label
+    spatialTransformation matlab.ui.control.DropDown
+    spatialPropagationLabel matlab.ui.control.Label
+    spatialPropagation matlab.ui.control.NumericEditField
     AutofocusButton matlab.ui.control.Button
-    square matlab.ui.control.CheckBox
-    flip_x matlab.ui.control.CheckBox
-    flip_y matlab.ui.control.CheckBox
-    indexRange2 matlab.ui.control.NumericEditField
-    indexRange1 matlab.ui.control.NumericEditField
-    indexRangeLabel matlab.ui.control.Label
-    RenderPreviewLamp matlab.ui.control.Lamp
-    SavePreviewButton matlab.ui.control.Button
-    RenderPreviewButton matlab.ui.control.Button
-    flat_field_gw matlab.ui.control.NumericEditField
-    flat_field_gwLabel matlab.ui.control.Label
+    svd_filter matlab.ui.control.CheckBox
+    svdThresholdResetButton matlab.ui.control.Button
+    svdThreshold matlab.ui.control.NumericEditField
+    timeTransformLabel matlab.ui.control.Label
+    timeTransform matlab.ui.control.DropDown
     frequencyRangeLabel matlab.ui.control.Label
-    frequencyRange2 matlab.ui.control.NumericEditField
     frequencyRange1 matlab.ui.control.NumericEditField
+    frequencyRange2 matlab.ui.control.NumericEditField
     frequencyRangeInterLabel matlab.ui.control.Label
     frequencyRangeInter1 matlab.ui.control.NumericEditField
     frequencyRangeInter2 matlab.ui.control.NumericEditField
-    time_transform matlab.ui.control.DropDown
-    time_transformDropDownLabel matlab.ui.control.Label
-    svdThreshold matlab.ui.control.NumericEditField
-    svd_filter matlab.ui.control.CheckBox
-    spatial_propagation matlab.ui.control.NumericEditField
-    spatial_propagationLabel matlab.ui.control.Label
-    spatial_transformation matlab.ui.control.DropDown
-    spatial_transformationDropDownLabel matlab.ui.control.Label
-    spatialFilterRange2 matlab.ui.control.NumericEditField
-    spatialFilterRange1 matlab.ui.control.NumericEditField
-    spatialFilter matlab.ui.control.CheckBox
-    svdThreshold_reset_button matlab.ui.control.Button
+    indexRangeLabel matlab.ui.control.Label
+    indexRange1 matlab.ui.control.NumericEditField
+    indexRange2 matlab.ui.control.NumericEditField
+    flat_field_gwLabel matlab.ui.control.Label
+    flat_field_gw matlab.ui.control.NumericEditField
+    square matlab.ui.control.CheckBox
+    flip_x matlab.ui.control.CheckBox
+    flip_y matlab.ui.control.CheckBox
+    RenderPreviewLamp matlab.ui.control.Lamp
+    RenderPreviewButton matlab.ui.control.Button
+    SavePreviewButton matlab.ui.control.Button
 
     % ---- aberration compensation panel ----
     AberrationcompensationPanel matlab.ui.container.Panel
@@ -294,7 +285,7 @@ methods (Access = private)
         app.refreshClass();
     end
 
-    function LoadconfigButtonPushed(app, ~)
+    function LoadConfigButtonPushed(app, ~)
         [selected_file, path] = uigetfile('*.json', 'Select File');
 
         if selected_file
@@ -317,7 +308,7 @@ methods (Access = private)
 
     end
 
-    function SaveconfigButtonPushed(app, ~)
+    function SaveConfigButtonPushed(app, ~)
 
         try
             outputPath = app.HD.saveParams();
@@ -377,10 +368,6 @@ methods (Access = private)
 
     end
 
-    function SaveVideoButtonPushed(app, ~)
-        app.HD.SaveVideo();
-    end
-
     function SavePreviewButtonPushed(app, ~)
         app.HD.savePreview();
     end
@@ -413,7 +400,7 @@ methods (Access = private)
 
     function AutofocusButtonPushed2(app, ~)
         zopti = autofocus(app.HD.view, app.HD.params);
-        app.HD.params.spatial_propagation = zopti;
+        app.HD.params.spatialPropagation = zopti;
         app.syncGuiFromClass();
         app.RenderPreviewButtonPushed();
     end
@@ -474,7 +461,7 @@ methods (Access = private)
         app.HD.view.showFramesHistogram();
     end
 
-    function svdThreshold_reset_buttonPushed(app, ~)
+    function svdThresholdResetButtonPushed(app, ~)
 
         if app.svdThreshold.Value == 0
             val = ceil(app.frequencyRange1.Value * 2 * app.batchSize.Value / app.fs.Value);
@@ -493,7 +480,7 @@ methods (Access = private)
 
     function frequencyRange2ValueChanged(app, ~)
 
-        if strcmp(app.time_transform, 'FFT') && app.frequencyRange2.Value > app.fs.Value / 2
+        if strcmp(app.timeTransform, 'FFT') && app.frequencyRange2.Value > app.fs.Value / 2
             app.frequencyRange2.Value = app.fs.Value / 2;
         end
 
@@ -504,9 +491,9 @@ methods (Access = private)
         AdvancedPanel(app);
     end
 
-    function registration_disc_ratioValueChanged(app, ~)
+    function registrationDiskRatioValueChanged(app, ~)
         app.refreshClass();
-        show_ref_disc(app, app.image_registration.Value);
+        show_ref_disk(app, app.imageRegistration.Value);
     end
 
     function positioninfileSliderValueChanged(app, ~)
@@ -543,7 +530,7 @@ methods (Access = private)
 
     % --- Folder management -------------------------------------------------
 
-    function FoldermanagementButtonPushed(app, ~)
+    function FolderManagementButtonPushed(app, ~)
         FolderManagement(app);
     end
 
@@ -569,7 +556,7 @@ methods (Access = private)
     % --- refreshClass sub-routines ----------------------------------------
 
     function updateTimeTransformControls(app)
-        useFreqRange = ismember(app.time_transform.Value, {'FFT', 'autocorrelation', 'intercorrelation'});
+        useFreqRange = ismember(app.timeTransform.Value, {'FFT', 'autocorrelation', 'intercorrelation'});
         app.frequencyRangeLabel.Enable = useFreqRange;
         app.frequencyRange1.Enable = useFreqRange;
         app.frequencyRange2.Enable = useFreqRange;
@@ -599,7 +586,7 @@ methods (Access = private)
         app.createCurrentFileStrip();
         app.createAdvancedProcessingPanel();
         app.createAberrationPanel();
-        app.createRenderingParametersPanel();
+        app.createrenderingParametersPanel();
         app.createImageViewsAndMenus();
 
         app.HoloDopplerUIFigure.Visible = 'on';
@@ -857,33 +844,33 @@ methods (Access = private)
         app.Image_typesListBox.Value = {};
 
         % buttons row 2
-        app.LoadconfigButton = uibutton(p, 'push');
-        app.LoadconfigButton.ButtonPushedFcn = createCallbackFcn(app, @LoadconfigButtonPushed, true);
-        app.LoadconfigButton.BackgroundColor = grayButtonColor;
-        app.LoadconfigButton.FontColor = fontColor;
-        app.LoadconfigButton.Tooltip = {'Save a configuration for the video rendering of a file'};
-        app.LoadconfigButton.Layout.Row = 2;
-        app.LoadconfigButton.Layout.Column = 1;
-        app.LoadconfigButton.Text = 'Load config';
+        app.LoadConfigButton = uibutton(p, 'push');
+        app.LoadConfigButton.ButtonPushedFcn = createCallbackFcn(app, @LoadConfigButtonPushed, true);
+        app.LoadConfigButton.BackgroundColor = grayButtonColor;
+        app.LoadConfigButton.FontColor = fontColor;
+        app.LoadConfigButton.Tooltip = {'Save a configuration for the video rendering of a file'};
+        app.LoadConfigButton.Layout.Row = 2;
+        app.LoadConfigButton.Layout.Column = 1;
+        app.LoadConfigButton.Text = 'Load config';
 
-        app.SaveconfigButton = uibutton(p, 'push');
-        app.SaveconfigButton.ButtonPushedFcn = createCallbackFcn(app, @SaveconfigButtonPushed, true);
-        app.SaveconfigButton.BackgroundColor = grayButtonColor;
-        app.SaveconfigButton.FontColor = fontColor;
-        app.SaveconfigButton.Tooltip = {'Save a configuration for the video rendering of a file'};
-        app.SaveconfigButton.Layout.Row = 2;
-        app.SaveconfigButton.Layout.Column = 2;
-        app.SaveconfigButton.Text = 'Save config';
+        app.SaveConfigButton = uibutton(p, 'push');
+        app.SaveConfigButton.ButtonPushedFcn = createCallbackFcn(app, @SaveConfigButtonPushed, true);
+        app.SaveConfigButton.BackgroundColor = grayButtonColor;
+        app.SaveConfigButton.FontColor = fontColor;
+        app.SaveConfigButton.Tooltip = {'Save a configuration for the video rendering of a file'};
+        app.SaveConfigButton.Layout.Row = 2;
+        app.SaveConfigButton.Layout.Column = 2;
+        app.SaveConfigButton.Text = 'Save config';
 
         % buttons row 3
-        app.FoldermanagementButton = uibutton(p, 'push');
-        app.FoldermanagementButton.ButtonPushedFcn = createCallbackFcn(app, @FoldermanagementButtonPushed, true);
-        app.FoldermanagementButton.BackgroundColor = grayButtonColor;
-        app.FoldermanagementButton.FontColor = fontColor;
-        app.FoldermanagementButton.Tooltip = {'Open a window to render all files from different folders with their config files'};
-        app.FoldermanagementButton.Layout.Row = 3;
-        app.FoldermanagementButton.Layout.Column = 1;
-        app.FoldermanagementButton.Text = 'Folder management';
+        app.FolderManagementButton = uibutton(p, 'push');
+        app.FolderManagementButton.ButtonPushedFcn = createCallbackFcn(app, @FolderManagementButtonPushed, true);
+        app.FolderManagementButton.BackgroundColor = grayButtonColor;
+        app.FolderManagementButton.FontColor = fontColor;
+        app.FolderManagementButton.Tooltip = {'Open a window to render all files from different folders with their config files'};
+        app.FolderManagementButton.Layout.Row = 3;
+        app.FolderManagementButton.Layout.Column = 1;
+        app.FolderManagementButton.Text = 'Folder management';
 
         app.VideoRenderingButton = uibutton(p, 'push');
         app.VideoRenderingButton.ButtonPushedFcn = createCallbackFcn(app, @VideoRenderingButtonPushed, true);
@@ -966,36 +953,36 @@ methods (Access = private)
         app.AutofocusFromRef.Layout.Row = 8;
         app.AutofocusFromRef.Layout.Column = 1;
 
-        app.applyshackhartmannfromref = uicheckbox(p);
-        app.applyshackhartmannfromref.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.applyshackhartmannfromref.Tooltip = {'Activate frame to frame translation registration of images'};
-        app.applyshackhartmannfromref.Text = 'refocus from ref (numeric shack hartmann)';
-        app.applyshackhartmannfromref.FontColor = fontColor;
-        app.applyshackhartmannfromref.Layout.Row = 9;
-        app.applyshackhartmannfromref.Layout.Column = [1 2];
+        app.applyShackHartmannfromRef = uicheckbox(p);
+        app.applyShackHartmannfromRef.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.applyShackHartmannfromRef.Tooltip = {'Activate frame to frame translation registration of images'};
+        app.applyShackHartmannfromRef.Text = 'refocus from ref (numeric shack hartmann)';
+        app.applyShackHartmannfromRef.FontColor = fontColor;
+        app.applyShackHartmannfromRef.Layout.Row = 9;
+        app.applyShackHartmannfromRef.Layout.Column = [1 2];
 
-        app.image_registration = uicheckbox(p);
-        app.image_registration.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.image_registration.Tooltip = {'Activate frame to frame translation registration of images'};
-        app.image_registration.Text = 'image registration';
-        app.image_registration.FontColor = fontColor;
-        app.image_registration.Layout.Row = 10;
-        app.image_registration.Layout.Column = [1 2];
+        app.imageRegistration = uicheckbox(p);
+        app.imageRegistration.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.imageRegistration.Tooltip = {'Activate frame to frame translation registration of images'};
+        app.imageRegistration.Text = 'image registration';
+        app.imageRegistration.FontColor = fontColor;
+        app.imageRegistration.Layout.Row = 10;
+        app.imageRegistration.Layout.Column = [1 2];
 
-        app.registrationDiscLabel = uilabel(p);
-        app.registrationDiscLabel.FontColor = fontColor;
-        app.registrationDiscLabel.Layout.Row = 11;
-        app.registrationDiscLabel.Layout.Column = 1;
-        app.registrationDiscLabel.Text = 'Registration disc ratio';
+        app.registrationDiskLabel = uilabel(p);
+        app.registrationDiskLabel.FontColor = fontColor;
+        app.registrationDiskLabel.Layout.Row = 11;
+        app.registrationDiskLabel.Layout.Column = 1;
+        app.registrationDiskLabel.Text = 'Registration disk ratio';
 
-        app.registration_disc_ratio = uieditfield(p, 'numeric');
-        app.registration_disc_ratio.Limits = [0 1000];
-        app.registration_disc_ratio.ValueChangedFcn = createCallbackFcn(app, @registration_disc_ratioValueChanged, true);
-        app.registration_disc_ratio.FontColor = fontColor;
-        app.registration_disc_ratio.BackgroundColor = darkBackgroundColor;
-        app.registration_disc_ratio.Tooltip = {'Size of a disk centered on the images used to compute the registration shifts (0 is empty and 1 is a disc of the maximum dimension).'};
-        app.registration_disc_ratio.Layout.Row = 11;
-        app.registration_disc_ratio.Layout.Column = 2;
+        app.registrationDiskRatio = uieditfield(p, 'numeric');
+        app.registrationDiskRatio.Limits = [0 1000];
+        app.registrationDiskRatio.ValueChangedFcn = createCallbackFcn(app, @registrationDiskRatioValueChanged, true);
+        app.registrationDiskRatio.FontColor = fontColor;
+        app.registrationDiskRatio.BackgroundColor = darkBackgroundColor;
+        app.registrationDiskRatio.Tooltip = {'Size of a disk centered on the images used to compute the registration shifts (0 is empty and 1 is a disk of the maximum dimension).'};
+        app.registrationDiskRatio.Layout.Row = 11;
+        app.registrationDiskRatio.Layout.Column = 2;
 
     end
 
@@ -1427,29 +1414,29 @@ methods (Access = private)
     end
 
     % -----------------------------------------------------------------------
-    function createRenderingParametersPanel(app)
+    function createrenderingParametersPanel(app)
 
         backgroundColor = [0.2 0.2 0.2];
         darkBackgroundColor = [0.15 0.15 0.15];
         fontColor = [0.9 0.9 0.9];
         grayButtonColor = [0.5 0.5 0.5];
 
-        app.RenderingParametersPanel = uipanel(app.RenderingInnerGrid);
-        app.RenderingParametersPanel.ForegroundColor = [0.8 0.8 0.8];
-        app.RenderingParametersPanel.Title = 'Rendering parameters';
-        app.RenderingParametersPanel.BackgroundColor = [0.2 0.2 0.2];
-        app.RenderingParametersPanel.Layout.Row = 1;
-        app.RenderingParametersPanel.Layout.Column = 1;
+        app.renderingParametersPanel = uipanel(app.RenderingInnerGrid);
+        app.renderingParametersPanel.ForegroundColor = [0.8 0.8 0.8];
+        app.renderingParametersPanel.Title = 'Rendering parameters';
+        app.renderingParametersPanel.BackgroundColor = [0.2 0.2 0.2];
+        app.renderingParametersPanel.Layout.Row = 1;
+        app.renderingParametersPanel.Layout.Column = 1;
 
-        app.RenderingParametersGrid = uigridlayout(app.RenderingParametersPanel, [12 3]);
-        app.RenderingParametersGrid.RowHeight = {'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit'};
-        app.RenderingParametersGrid.ColumnWidth = {'fit', '1x', '1x'};
-        app.RenderingParametersGrid.Padding = [10 10 10 10];
-        app.RenderingParametersGrid.RowSpacing = 5;
-        app.RenderingParametersGrid.ColumnSpacing = 5;
-        app.RenderingParametersGrid.BackgroundColor = backgroundColor;
+        app.renderingParametersGrid = uigridlayout(app.renderingParametersPanel, [12 3]);
+        app.renderingParametersGrid.RowHeight = {'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit'};
+        app.renderingParametersGrid.ColumnWidth = {'fit', '1x', '1x'};
+        app.renderingParametersGrid.Padding = [10 10 10 10];
+        app.renderingParametersGrid.RowSpacing = 5;
+        app.renderingParametersGrid.ColumnSpacing = 5;
+        app.renderingParametersGrid.BackgroundColor = backgroundColor;
 
-        p = app.RenderingParametersGrid;
+        p = app.renderingParametersGrid;
 
         % Spatial filtering parameters row 1
 
@@ -1476,55 +1463,55 @@ methods (Access = private)
         app.spatialFilterRange2.Layout.Row = 1;
 
         % Padding row 2
-        app.PaddNLabel = uilabel(p);
-        app.PaddNLabel.HorizontalAlignment = 'right';
-        app.PaddNLabel.FontColor = fontColor;
-        app.PaddNLabel.Layout.Column = 2;
-        app.PaddNLabel.Layout.Row = 2;
-        app.PaddNLabel.Text = 'Padding N';
+        app.PaddingLabel = uilabel(p);
+        app.PaddingLabel.HorizontalAlignment = 'right';
+        app.PaddingLabel.FontColor = fontColor;
+        app.PaddingLabel.Layout.Column = 2;
+        app.PaddingLabel.Layout.Row = 2;
+        app.PaddingLabel.Text = 'Padding N';
 
-        app.Padding_num = uieditfield(p, 'numeric');
-        app.Padding_num.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.Padding_num.FontColor = fontColor;
-        app.Padding_num.BackgroundColor = darkBackgroundColor;
-        app.Padding_num.Tooltip = {'Distance of spatial reconstruction using the preceding calculation scheme in (m) '};
-        app.Padding_num.Layout.Column = 3;
-        app.Padding_num.Layout.Row = 2;
+        app.PaddingNum = uieditfield(p, 'numeric');
+        app.PaddingNum.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.PaddingNum.FontColor = fontColor;
+        app.PaddingNum.BackgroundColor = darkBackgroundColor;
+        app.PaddingNum.Tooltip = {'Distance of spatial reconstruction using the preceding calculation scheme in (m) '};
+        app.PaddingNum.Layout.Column = 3;
+        app.PaddingNum.Layout.Row = 2;
 
         % Local spatial transformation row 3
 
-        app.spatial_transformationDropDownLabel = uilabel(p);
-        app.spatial_transformationDropDownLabel.HorizontalAlignment = 'left';
-        app.spatial_transformationDropDownLabel.FontColor = fontColor;
-        app.spatial_transformationDropDownLabel.Layout.Column = 1;
-        app.spatial_transformationDropDownLabel.Layout.Row = 3;
-        app.spatial_transformationDropDownLabel.Text = 'Spatial transformation';
+        app.spatialTransformationLabel = uilabel(p);
+        app.spatialTransformationLabel.HorizontalAlignment = 'left';
+        app.spatialTransformationLabel.FontColor = fontColor;
+        app.spatialTransformationLabel.Layout.Column = 1;
+        app.spatialTransformationLabel.Layout.Row = 3;
+        app.spatialTransformationLabel.Text = 'Spatial transformation';
 
-        app.spatial_transformation = uidropdown(p);
-        app.spatial_transformation.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.spatial_transformation.Tooltip = {'Type of light propagation calculation to perform (depends of the experimental setup)'};
-        app.spatial_transformation.FontColor = fontColor;
-        app.spatial_transformation.BackgroundColor = grayButtonColor;
-        app.spatial_transformation.Layout.Column = [2 3];
-        app.spatial_transformation.Layout.Row = 3;
-        app.spatial_transformation.Items = {'Angular spectrum', 'Fresnel', 'Fraunhofer', 'None'};
+        app.spatialTransformation = uidropdown(p);
+        app.spatialTransformation.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.spatialTransformation.Tooltip = {'Type of light propagation calculation to perform (depends of the experimental setup)'};
+        app.spatialTransformation.FontColor = fontColor;
+        app.spatialTransformation.BackgroundColor = grayButtonColor;
+        app.spatialTransformation.Layout.Column = [2 3];
+        app.spatialTransformation.Layout.Row = 3;
+        app.spatialTransformation.Items = {'Angular spectrum', 'Fresnel', 'Fraunhofer', 'None'};
 
         % Spatial propagation row 4
 
-        app.spatial_propagationLabel = uilabel(p);
-        app.spatial_propagationLabel.HorizontalAlignment = 'left';
-        app.spatial_propagationLabel.FontColor = fontColor;
-        app.spatial_propagationLabel.Layout.Column = 1;
-        app.spatial_propagationLabel.Layout.Row = 4;
-        app.spatial_propagationLabel.Text = 'Spatial propagation';
+        app.spatialPropagationLabel = uilabel(p);
+        app.spatialPropagationLabel.HorizontalAlignment = 'left';
+        app.spatialPropagationLabel.FontColor = fontColor;
+        app.spatialPropagationLabel.Layout.Column = 1;
+        app.spatialPropagationLabel.Layout.Row = 4;
+        app.spatialPropagationLabel.Text = 'Spatial propagation';
 
-        app.spatial_propagation = uieditfield(p, 'numeric');
-        app.spatial_propagation.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.spatial_propagation.FontColor = fontColor;
-        app.spatial_propagation.BackgroundColor = darkBackgroundColor;
-        app.spatial_propagation.Tooltip = {'Distance of spatial reconstruction using the preceding calculation scheme in (m) '};
-        app.spatial_propagation.Layout.Column = 2;
-        app.spatial_propagation.Layout.Row = 4;
+        app.spatialPropagation = uieditfield(p, 'numeric');
+        app.spatialPropagation.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.spatialPropagation.FontColor = fontColor;
+        app.spatialPropagation.BackgroundColor = darkBackgroundColor;
+        app.spatialPropagation.Tooltip = {'Distance of spatial reconstruction using the preceding calculation scheme in (m) '};
+        app.spatialPropagation.Layout.Column = 2;
+        app.spatialPropagation.Layout.Row = 4;
 
         app.AutofocusButton = uibutton(p, 'push');
         app.AutofocusButton.ButtonPushedFcn = createCallbackFcn(app, @AutofocusButtonPushed2, true);
@@ -1544,13 +1531,13 @@ methods (Access = private)
         app.svd_filter.Layout.Column = 1;
         app.svd_filter.Layout.Row = 5;
 
-        app.svdThreshold_reset_button = uibutton(p, 'push');
-        app.svdThreshold_reset_button.ButtonPushedFcn = createCallbackFcn(app, @svdThreshold_reset_buttonPushed, true);
-        app.svdThreshold_reset_button.BackgroundColor = grayButtonColor;
-        app.svdThreshold_reset_button.FontColor = fontColor;
-        app.svdThreshold_reset_button.Layout.Column = 2;
-        app.svdThreshold_reset_button.Layout.Row = 5;
-        app.svdThreshold_reset_button.Text = 'Reset';
+        app.svdThresholdResetButton = uibutton(p, 'push');
+        app.svdThresholdResetButton.ButtonPushedFcn = createCallbackFcn(app, @svdThresholdResetButtonPushed, true);
+        app.svdThresholdResetButton.BackgroundColor = grayButtonColor;
+        app.svdThresholdResetButton.FontColor = fontColor;
+        app.svdThresholdResetButton.Layout.Column = 2;
+        app.svdThresholdResetButton.Layout.Row = 5;
+        app.svdThresholdResetButton.Text = 'Reset';
         app.svdThreshold = uieditfield(p, 'numeric');
         app.svdThreshold.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.svdThreshold.FontColor = fontColor;
@@ -1560,20 +1547,20 @@ methods (Access = private)
         app.svdThreshold.Layout.Row = 5;
 
         % Time transformation row 6
-        app.time_transformDropDownLabel = uilabel(p);
-        app.time_transformDropDownLabel.FontColor = fontColor;
-        app.time_transformDropDownLabel.Layout.Column = 1;
-        app.time_transformDropDownLabel.Layout.Row = 6;
-        app.time_transformDropDownLabel.Text = 'Time transform';
+        app.timeTransformLabel = uilabel(p);
+        app.timeTransformLabel.FontColor = fontColor;
+        app.timeTransformLabel.Layout.Column = 1;
+        app.timeTransformLabel.Layout.Row = 6;
+        app.timeTransformLabel.Text = 'Time transform';
 
-        app.time_transform = uidropdown(p);
-        app.time_transform.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.time_transform.Tooltip = {'Time tranformation to aggregate the fluctuation hologram. FFT is a frequency domain tranform and pass bad filter, PCA is a projection on intensity ordered eigen vectors, ICA is experimental.'};
-        app.time_transform.FontColor = fontColor;
-        app.time_transform.BackgroundColor = grayButtonColor;
-        app.time_transform.Layout.Column = [2 3];
-        app.time_transform.Layout.Row = 6;
-        app.time_transform.Items = {'FFT', 'PCA', 'ICA'};
+        app.timeTransform = uidropdown(p);
+        app.timeTransform.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.timeTransform.Tooltip = {'Time tranformation to aggregate the fluctuation hologram. FFT is a frequency domain tranform and pass bad filter, PCA is a projection on intensity ordered eigen vectors, ICA is experimental.'};
+        app.timeTransform.FontColor = fontColor;
+        app.timeTransform.BackgroundColor = grayButtonColor;
+        app.timeTransform.Layout.Column = [2 3];
+        app.timeTransform.Layout.Row = 6;
+        app.timeTransform.Items = {'FFT', 'PCA', 'ICA'};
 
         % Frequency range row 7 8 9
         app.frequencyRangeLabel = uilabel(p);
