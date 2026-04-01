@@ -8,13 +8,7 @@ properties (Access = public)
 
     % ---- top-level layout ----
     RootGrid matlab.ui.container.GridLayout
-    PanelPlot matlab.ui.container.Panel
     Image matlab.ui.control.Image
-
-    % ---- current-file strip (bottom) ----
-    CurrentFileGrid matlab.ui.container.GridLayout
-    RenderingGrid matlab.ui.container.GridLayout
-    RenderingInnerGrid matlab.ui.container.GridLayout
 
     % ---- file selection panel (left column) ----
     FileselectionPanel matlab.ui.container.Panel
@@ -258,7 +252,7 @@ methods (Access = private)
         end
 
         if ~isempty(Images)
-            app.Image.ImageSource = toImageSource(Images{1}, app);
+            app.Image.ImageSource = toImageSource(Images{1});
             app.MenuIndex = 1;
         else
             app.Image.ImageSource = '';
@@ -302,7 +296,7 @@ methods (Access = private)
         imgs = app.HD.view.getImages(app.HD.params.imageTypes(1));
 
         if ~isempty(imgs)
-            app.Image.ImageSource = toImageSource(imgs{randsample(numel(imgs), 1)}, app);
+            app.Image.ImageSource = toImageSource(imgs{randsample(numel(imgs), 1)});
         else
             app.Image.ImageSource = '';
         end
@@ -349,7 +343,7 @@ methods (Access = private)
             image = imresize(image, [maxSize, maxSize]);
         end
 
-        app.Image.ImageSource = toImageSource(image, app);
+        app.Image.ImageSource = toImageSource(image);
         app.MenuIndex = num;
     end
 
@@ -484,7 +478,6 @@ methods (Access = private)
         app.createFigureAndRootGrid(pathToMLAPP);
         app.createFileSelectionPanel();
         app.createBatchVideoPanel();
-        app.createCurrentFileStrip();
         app.createrenderingParametersPanel();
         app.createImageViewsAndMenus();
 
@@ -494,17 +487,17 @@ methods (Access = private)
     % -----------------------------------------------------------------------
     function createFigureAndRootGrid(app, pathToMLAPP)
         app.HoloDopplerUIFigure = uifigure('Visible', 'off');
-        app.HoloDopplerUIFigure.Position = [210 56 1260 900];
+        app.HoloDopplerUIFigure.Position = [210 56 900 900];
         app.HoloDopplerUIFigure.Name = 'HoloDoppler';
         app.HoloDopplerUIFigure.Icon = fullfile(pathToMLAPP, 'holoDopplerLogo.png');
         app.HoloDopplerUIFigure.CloseRequestFcn = createCallbackFcn(app, @HoloDopplerUIFigureCloseRequest, true);
         app.HoloDopplerUIFigure.WindowKeyPressFcn = createCallbackFcn(app, @HoloDopplerUIFigureWindowKeyPress, true);
 
-        app.RootGrid = uigridlayout(app.HoloDopplerUIFigure);
-        app.RootGrid.ColumnWidth = {'1.2x', '2x'};
-        app.RootGrid.RowHeight = {'1x', 420};
+        app.RootGrid = uigridlayout(app.HoloDopplerUIFigure, [2 2]);
+        app.RootGrid.ColumnWidth = {'1x', '1x'};
+        app.RootGrid.RowHeight = {'1x', '1x'};
         app.RootGrid.RowSpacing = 5;
-        app.RootGrid.Padding = [0 3.20001220703125 0 3.20001220703125];
+        app.RootGrid.ColumnSpacing = 5;
         app.RootGrid.BackgroundColor = [0.2 0.2 0.2];
     end
 
@@ -526,7 +519,7 @@ methods (Access = private)
         app.FileselectionPanel.Layout.Column = 1;
 
         app.mainParametersGrid = uigridlayout(app.FileselectionPanel, [10 3]);
-        app.mainParametersGrid.RowHeight = repmat({'1x'}, 1, 10);
+        app.mainParametersGrid.RowHeight = {'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', '1x'};
         app.mainParametersGrid.ColumnWidth = {'1x', '1x', '1x'};
         app.mainParametersGrid.Padding = [10 10 10 10];
         app.mainParametersGrid.RowSpacing = 5;
@@ -877,32 +870,6 @@ methods (Access = private)
     end
 
     % -----------------------------------------------------------------------
-    function createCurrentFileStrip(app)
-        app.CurrentFileGrid = uigridlayout(app.RootGrid);
-        app.CurrentFileGrid.ColumnWidth = {'1x', '1x'};
-        app.CurrentFileGrid.RowHeight = {'1x'};
-        app.CurrentFileGrid.BackgroundColor = [0.2 0.2 0.2];
-        app.CurrentFileGrid.Layout.Row = 2;
-        app.CurrentFileGrid.Layout.Column = 2;
-
-        app.RenderingGrid = uigridlayout(app.CurrentFileGrid);
-        app.RenderingGrid.ColumnWidth = {'1x'};
-        app.RenderingGrid.RowHeight = {'1x'};
-        app.RenderingGrid.Padding = [0 0 0 0];
-        app.RenderingGrid.Layout.Row = 1;
-        app.RenderingGrid.Layout.Column = 1;
-        app.RenderingGrid.BackgroundColor = [0.2 0.2 0.2];
-
-        app.RenderingInnerGrid = uigridlayout(app.RenderingGrid);
-        app.RenderingInnerGrid.ColumnWidth = {'1x'};
-        app.RenderingInnerGrid.RowHeight = {'1x'};
-        app.RenderingInnerGrid.Padding = [0 0 0 0];
-        app.RenderingInnerGrid.Layout.Row = 1;
-        app.RenderingInnerGrid.Layout.Column = 1;
-        app.RenderingInnerGrid.BackgroundColor = [0.2 0.2 0.2];
-    end
-
-    % -----------------------------------------------------------------------
     function createrenderingParametersPanel(app)
 
         backgroundColor = [0.2 0.2 0.2];
@@ -910,12 +877,12 @@ methods (Access = private)
         fontColor = [0.9 0.9 0.9];
         grayButtonColor = [0.5 0.5 0.5];
 
-        app.renderingParametersPanel = uipanel(app.RenderingInnerGrid);
+        app.renderingParametersPanel = uipanel(app.RootGrid);
         app.renderingParametersPanel.ForegroundColor = [0.8 0.8 0.8];
         app.renderingParametersPanel.Title = 'Rendering parameters';
         app.renderingParametersPanel.BackgroundColor = [0.2 0.2 0.2];
-        app.renderingParametersPanel.Layout.Row = 1;
-        app.renderingParametersPanel.Layout.Column = 1;
+        app.renderingParametersPanel.Layout.Row = 2;
+        app.renderingParametersPanel.Layout.Column = 2;
 
         app.renderingParametersGrid = uigridlayout(app.renderingParametersPanel, [13 3]);
         app.renderingParametersGrid.RowHeight = repmat({'fit'}, 1, 13);
@@ -1210,13 +1177,6 @@ methods (Access = private)
         app.Image = uiimage(app.RootGrid);
         app.Image.Layout.Row = 1;
         app.Image.Layout.Column = 2;
-
-        app.PanelPlot = uipanel(app.RootGrid);
-        app.PanelPlot.Title = 'Plot';
-        app.PanelPlot.Visible = 'off';
-        app.PanelPlot.BackgroundColor = [1 1 1];
-        app.PanelPlot.Layout.Row = 1;
-        app.PanelPlot.Layout.Column = 3;
 
         app.RightClickImageContextMenu = uicontextmenu(app.HoloDopplerUIFigure);
 
