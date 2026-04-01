@@ -2,7 +2,7 @@
   "batchSize": 512,
   "batchStride": 512,
   "frame_stride": 1,
-  "frame_position": 1,
+  "framePosition": 1,
   "registration_disc_ratio": 0.8,
   "image_types": [
     "power_Doppler",

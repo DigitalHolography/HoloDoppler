@@ -279,7 +279,7 @@ methods
         obj.params.batchSize = 512;
         obj.params.batchStride = 512;
         obj.params.frame_stride = 1;
-        obj.params.frame_position = 1;
+        obj.params.framePosition = 1;
         obj.params.registration_disc_ratio = 0.8;
         obj.params.image_types = {'power_Doppler', 'color_Doppler', 'directional_Doppler', 'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
         obj.params.parfor_arg = 10;
@@ -374,7 +374,7 @@ methods
         fclose(fid);
     end
 
-    function saveParams(obj, filename, save_z)
+    function outputPath = saveParams(obj, filename, save_z)
         % save the params as a configfile for the file filename in the
         % current file directory
         if nargin < 2
@@ -416,7 +416,8 @@ methods
         end
 
         index = get_highest_number_in_files(dir, strcat(name, '_', 'input_HD_params'));
-        fid = fopen(fullfile(dir, strcat(name, '_', 'input_HD_params_', num2str(index + 1), '.json')), 'w');
+        outputPath = fullfile(dir, strcat(name, '_', 'input_HD_params_', num2str(index + 1), '.json'));
+        fid = fopen(outputPath, 'w');
         fwrite(fid, jsonencode(parms, "PrettyPrint", true), 'char');
         fclose(fid);
 
@@ -428,10 +429,10 @@ methods
             error("No file loaded")
         end
 
-        firstframe = obj.reader.read_frame_batch(1, obj.params.frame_position);
+        firstframe = obj.reader.read_frame_batch(1, obj.params.framePosition);
 
         if ~isequal(obj.view.Frames(:, :, 1), firstframe) || obj.params.batchSize ~= size(obj.view.Frames, 3) % if first frame is different of batch sized changed
-            obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batchSize, obj.params.frame_position));
+            obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batchSize, obj.params.framePosition));
         end
 
         obj.view.Render(obj.params, obj.params.image_types);
@@ -613,7 +614,7 @@ methods
         obj.running_averages = RunningAveragesHolder(); %reset this here
 
         view_ref = RenderingClass();
-        view_ref.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.frame_position));
+        view_ref.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.framePosition));
         view_ref.Render(obj.params, obj.params.image_types, cache_intermediate_results = false);
 
         if obj.params.applyshackhartmannfromref
@@ -979,7 +980,7 @@ methods
         video_M0_reg = video_M0 .* disk - disk .* sum(video_M0 .* disk, [1, 2]) / nnz(disk); % minus the mean in the disc of each frame
         video_M0_reg = video_M0_reg ./ (max(abs(video_M0_reg), [], [1, 2])); % rescaling each frame but keeps mean at zero
 
-        obj.view.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.frame_position));
+        obj.view.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.framePosition));
         obj.view.Render(obj.params, obj.params.image_types);
 
         ref_img = obj.view.Output.power_Doppler.image;

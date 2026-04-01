@@ -50,6 +50,8 @@ properties (Access = public)
     RefreshAppButton matlab.ui.control.Button
     positioninfileSlider matlab.ui.control.Slider
     positioninfileSliderLabel matlab.ui.control.Label
+    batchIndexField matlab.ui.control.NumericEditField
+    batchIndexLabel matlab.ui.control.Label
     framePosition matlab.ui.control.NumericEditField
 
     % ---- batch / video rendering sub-panel ----
@@ -244,12 +246,12 @@ methods (Access = private)
         switch event.Key
             case 'return'
                 app.RenderPreviewButtonPushed();
-            case 'rightarrow'
-                app.NextMenuSelected();
             case 'space'
                 app.ViewAllMenuSelected();
             case 'leftarrow'
-                app.PreviousMenuSelected();
+                app.changeMenu('previous');
+            case 'rightarrow'
+                app.changeMenu('next');
         end
 
     end
@@ -316,7 +318,14 @@ methods (Access = private)
     end
 
     function SaveconfigButtonPushed(app, ~)
-        app.HD.saveParams();
+
+        try
+            outputPath = app.HD.saveParams();
+            fprintf("Config saved successfully to %s\n", outputPath);
+        catch ME
+            MEdisp(ME);
+        end
+
     end
 
     % --- Render callbacks --------------------------------------------------
@@ -381,13 +390,6 @@ methods (Access = private)
     % Sync every widget value into the HD class, then update enable states.
     % Connected to ~50 component ValueChanged callbacks.
     function refreshClass(app, ~)
-
-        if ~isempty(app.HD.file)
-            app.framePosition.Value = app.positioninfileSlider.Value;
-        else
-            app.framePosition.Value = 0;
-        end
-
         app.syncClassFromGui();
         app.updateTimeTransformControls();
     end
@@ -418,47 +420,25 @@ methods (Access = private)
 
     % --- Context menu / image navigation -----------------------------------
 
-    function NextMenuSelected(app, ~)
+    function changeMenu(app, direction)
 
-        imagesTypes = app.HD.params.image_types;
-        imgs = app.HD.view.getImages(imagesTypes);
         idx = app.MenuIndex;
+        imagesTypes = app.HD.params.image_types;
 
-        if ~isempty(imgs)
+        if direction == "next"
             num = mod(idx, length(imagesTypes)) + 1;
-
-            image = imgs{num};
-            maxSize = max(size(image));
-
-            if ~ismember(app.HD.params.image_types{num}, {'broadening'}) && ...
-                    size(image, 1) ~= size(image, 2)
-                image = imresize(image, [maxSize, maxSize]);
-            end
-
-            imgs{num} = image;
-
-            if ~isempty(imgs)
-                app.ImageLeft.ImageSource = toImageSource(imgs{num}, app);
-            else
-                app.ImageLeft.ImageSource = '';
-            end
-
-        else
-            app.ImageLeft.ImageSource = '';
+            app.SelectMenu(num);
+        elseif direction == "previous"
+            num = mod(idx - 2, length(imagesTypes)) + 1;
+            app.SelectMenu(num);
         end
-
-        app.MenuIndex = num;
 
     end
 
-    function PreviousMenuSelected(app, ~)
-
-        imagesTypes = app.HD.params.image_types;
-        imgs = app.HD.view.getImages(imagesTypes);
-        idx = app.MenuIndex;
+    function SelectMenu(app, num, ~)
+        imgs = app.HD.view.getImages(app.HD.params.image_types);
 
         if ~isempty(imgs)
-            num = mod(idx - 2, length(imagesTypes)) + 1;
 
             image = imgs{num};
             maxSize = max(size(image));
@@ -527,6 +507,38 @@ methods (Access = private)
     function registration_disc_ratioValueChanged(app, ~)
         app.refreshClass();
         show_ref_disc(app, app.image_registration.Value);
+    end
+
+    function positioninfileSliderValueChanged(app, ~)
+
+        if ~isempty(app.HD.file)
+            app.framePosition.Value = app.positioninfileSlider.Value;
+        else
+            app.framePosition.Value = 1;
+        end
+
+        frame = app.framePosition.Value;
+        stride = app.batchStride.Value;
+        batchIndex = ceil(frame / stride);
+        app.batchIndexField.Value = batchIndex;
+
+        app.refreshClass();
+    end
+
+    function framePositionValueChanged(app, ~)
+
+        if ~isempty(app.HD.file)
+            app.positioninfileSlider.Value = app.framePosition.Value;
+        else
+            app.positioninfileSlider.Value = 0;
+        end
+
+        frame = app.framePosition.Value;
+        stride = app.batchStride.Value;
+        batchIndex = ceil(frame / stride);
+        app.batchIndexField.Value = batchIndex;
+
+        app.refreshClass();
     end
 
     % --- Folder management -------------------------------------------------
@@ -653,7 +665,6 @@ methods (Access = private)
         app.lambdaLabel.FontColor = fontColor;
         app.lambdaLabel.Tooltip = {'Laser''s wavelength for light propagation calculations in (m)'};
         app.lambdaLabel.Text = 'λ (m)';
-        app.lambdaLabel.HorizontalAlignment = 'center';
         app.lambdaLabel.Layout.Row = 2;
         app.lambdaLabel.Layout.Column = 1;
 
@@ -670,7 +681,6 @@ methods (Access = private)
         app.fsLabel.FontColor = fontColor;
         app.fsLabel.Tooltip = {'Sampling frequency in (kHz)'};
         app.fsLabel.Text = 'fs (kHz)';
-        app.fsLabel.HorizontalAlignment = 'center';
         app.fsLabel.Layout.Row = 3;
         app.fsLabel.Layout.Column = 1;
 
@@ -684,10 +694,9 @@ methods (Access = private)
         app.fs.Layout.Column = 2;
 
         app.pixelPitchLabel = uilabel(app.mainParametersGrid);
-        app.pixelPitchLabel.HorizontalAlignment = 'center';
         app.pixelPitchLabel.FontColor = fontColor;
         app.pixelPitchLabel.Tooltip = {'Camera pixel pitch (distance between spatial sampling points) in (m)'};
-        app.pixelPitchLabel.Text = 'pp x y';
+        app.pixelPitchLabel.Text = 'Pixel pitch (m)';
         app.pixelPitchLabel.Layout.Row = 4;
         app.pixelPitchLabel.Layout.Column = 1;
 
@@ -708,10 +717,9 @@ methods (Access = private)
         app.ppy.Layout.Column = 3;
 
         app.imageSizeLabel = uilabel(app.mainParametersGrid);
-        app.imageSizeLabel.HorizontalAlignment = 'center';
         app.imageSizeLabel.FontColor = fontColor;
-        app.imageSizeLabel.Tooltip = {'Camera pixel pitch (distance between spatial sampling points) in (m)'};
-        app.imageSizeLabel.Text = 'Nx Ny';
+        app.imageSizeLabel.Tooltip = {'Size of the recorded interferograms in pixels (width x height)'};
+        app.imageSizeLabel.Text = 'Image size (px)';
         app.imageSizeLabel.Layout.Row = 5;
         app.imageSizeLabel.Layout.Column = 1;
 
@@ -734,15 +742,16 @@ methods (Access = private)
         app.Ny.Layout.Column = 3;
 
         app.numworkersSpinnerLabel = uilabel(app.mainParametersGrid);
-        app.numworkersSpinnerLabel.HorizontalAlignment = 'center';
         app.numworkersSpinnerLabel.FontColor = fontColor;
-        app.numworkersSpinnerLabel.Text = 'num workers';
+        app.numworkersSpinnerLabel.Tooltip = {'Number of worker used for the video rendering (depends of the working station)'};
+        app.numworkersSpinnerLabel.Text = '# Workers';
         app.numworkersSpinnerLabel.Layout.Row = 6;
         app.numworkersSpinnerLabel.Layout.Column = 1;
 
         app.parfor_arg = uispinner(app.mainParametersGrid);
         app.parfor_arg.ValueChangingFcn = createCallbackFcn(app, @refreshClass, true);
-        app.parfor_arg.Limits = [-1 32];
+        maxWorkers = parcluster('local').NumWorkers;
+        app.parfor_arg.Limits = [-1 maxWorkers];
         app.parfor_arg.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.parfor_arg.FontColor = fontColor;
         app.parfor_arg.BackgroundColor = darkBackgroundColor;
@@ -752,26 +761,39 @@ methods (Access = private)
         app.parfor_arg.Layout.Column = 2;
 
         app.positioninfileSliderLabel = uilabel(app.mainParametersGrid);
-        app.positioninfileSliderLabel.HorizontalAlignment = 'center';
         app.positioninfileSliderLabel.FontColor = fontColor;
-        app.positioninfileSliderLabel.Text = {'position in file'; ''};
+        app.positioninfileSliderLabel.Text = {'Position in file'};
         app.positioninfileSliderLabel.Layout.Row = 7;
         app.positioninfileSliderLabel.Layout.Column = 1;
 
         app.positioninfileSlider = uislider(app.mainParametersGrid);
         app.positioninfileSlider.Limits = [0 1];
         app.positioninfileSlider.MajorTicks = [];
-        app.positioninfileSlider.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.positioninfileSlider.ValueChangedFcn = createCallbackFcn(app, @positioninfileSliderValueChanged, true);
         app.positioninfileSlider.MinorTicks = [0 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1];
         app.positioninfileSlider.Tooltip = {'Change value to display a different video timestamp in the gui.'};
         app.positioninfileSlider.Layout.Row = 7;
         app.positioninfileSlider.Layout.Column = [2 3];
 
+        app.batchIndexLabel = uilabel(app.mainParametersGrid);
+        app.batchIndexLabel.FontColor = fontColor;
+        app.batchIndexLabel.Text = {'Batch index'};
+        app.batchIndexLabel.Layout.Row = 8;
+        app.batchIndexLabel.Layout.Column = 1;
+
+        app.batchIndexField = uieditfield(app.mainParametersGrid, 'numeric');
+        app.batchIndexField.Editable = 'off';
+        app.batchIndexField.FontColor = fontColor;
+        app.batchIndexField.BackgroundColor = darkBackgroundColor;
+        app.batchIndexField.ValueDisplayFormat = '%.0f';
+        app.batchIndexField.Layout.Row = 8;
+        app.batchIndexField.Layout.Column = 2;
+
         app.framePosition = uieditfield(app.mainParametersGrid, 'numeric');
         app.framePosition.Limits = [0 Inf];
         app.framePosition.RoundFractionalValues = 'on';
         app.framePosition.ValueDisplayFormat = '%.0f';
-        app.framePosition.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.framePosition.ValueChangedFcn = createCallbackFcn(app, @framePositionValueChanged, true);
         app.framePosition.FontColor = fontColor;
         app.framePosition.BackgroundColor = darkBackgroundColor;
         app.framePosition.Tooltip = {''};
@@ -889,11 +911,10 @@ methods (Access = private)
 
         % sizes row 5 6 7
         app.batchSizeLabel = uilabel(p);
-        app.batchSizeLabel.HorizontalAlignment = 'center';
         app.batchSizeLabel.FontColor = fontColor;
         app.batchSizeLabel.Layout.Row = 5;
         app.batchSizeLabel.Layout.Column = 1;
-        app.batchSizeLabel.Text = 'batch size';
+        app.batchSizeLabel.Text = 'Batch size';
 
         app.batchSize = uieditfield(p, 'numeric');
         app.batchSize.Limits = [0 Inf];
@@ -906,11 +927,10 @@ methods (Access = private)
         app.batchSize.Layout.Column = 2;
 
         app.batchStrideLabel = uilabel(p);
-        app.batchStrideLabel.HorizontalAlignment = 'center';
         app.batchStrideLabel.FontColor = fontColor;
         app.batchStrideLabel.Layout.Row = 6;
         app.batchStrideLabel.Layout.Column = 1;
-        app.batchStrideLabel.Text = 'batch stride';
+        app.batchStrideLabel.Text = 'Batch stride';
 
         app.batchStride = uieditfield(p, 'numeric');
         app.batchStride.Limits = [0 Inf];
@@ -923,11 +943,10 @@ methods (Access = private)
         app.batchStride.Layout.Column = 2;
 
         app.refBatchSizeLabel = uilabel(p);
-        app.refBatchSizeLabel.HorizontalAlignment = 'center';
         app.refBatchSizeLabel.FontColor = fontColor;
         app.refBatchSizeLabel.Layout.Row = 7;
         app.refBatchSizeLabel.Layout.Column = 1;
-        app.refBatchSizeLabel.Text = 'reg batch size';
+        app.refBatchSizeLabel.Text = 'Reference batch size';
 
         app.refBatchSize = uieditfield(p, 'numeric');
         app.refBatchSize.Limits = [0 Inf];
@@ -964,11 +983,10 @@ methods (Access = private)
         app.image_registration.Layout.Column = [1 2];
 
         app.registrationDiscLabel = uilabel(p);
-        app.registrationDiscLabel.HorizontalAlignment = 'center';
         app.registrationDiscLabel.FontColor = fontColor;
         app.registrationDiscLabel.Layout.Row = 11;
         app.registrationDiscLabel.Layout.Column = 1;
-        app.registrationDiscLabel.Text = 'disk';
+        app.registrationDiscLabel.Text = 'Registration disc ratio';
 
         app.registration_disc_ratio = uieditfield(p, 'numeric');
         app.registration_disc_ratio.Limits = [0 1000];

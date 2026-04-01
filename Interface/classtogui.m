@@ -93,8 +93,8 @@ if ~isempty(HD) && ~isempty(HD.params)
         if isfield(HD.file, 'num_frames')
 
             try
-                app.positioninfileSlider.Limits = double([0 HD.file.num_frames]);
-                safeSetNumeric(app.positioninfileSlider, double(HD.params.frame_position));
+                app.positioninfileSlider.Limits = double([1 HD.file.num_frames]);
+                safeSetNumeric(app.positioninfileSlider, double(HD.params.framePosition));
             catch
                 % Silently fail
             end
@@ -103,7 +103,7 @@ if ~isempty(HD) && ~isempty(HD.params)
 
         % Update frame position numeric field if it exists
         if isprop(app, 'framePosition')
-            safeSetNumeric(app.framePosition, double(HD.params.frame_position));
+            safeSetNumeric(app.framePosition, double(HD.params.framePosition));
         end
 
     end
@@ -134,7 +134,7 @@ if ~isempty(HD) && ~isempty(HD.params)
         catch
             % If ImageTypeList2 is not available, use default list
             app.Image_typesListBox.Items = {'power_Doppler', 'color_Doppler', 'directional_Doppler', ...
-                'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
+                                                'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
         end
 
         if ~isempty(HD.params.image_types)
@@ -151,6 +151,7 @@ if ~isempty(HD) && ~isempty(HD.params)
                 % Optional: clear selection or set to empty
                 app.Image_typesListBox.Value = {};
             end
+
         end
 
     end

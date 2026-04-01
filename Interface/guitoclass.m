@@ -68,7 +68,7 @@ end
 
 % Frame position
 if isprop(app, 'positioninfileSlider')
-    HD.params.frame_position = round(safeGetUIValue(app.positioninfileSlider, 1));
+    HD.params.framePosition = round(safeGetUIValue(app.positioninfileSlider, 1));
 end
 
 % Registration parameters

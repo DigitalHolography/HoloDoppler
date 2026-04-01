@@ -96,9 +96,9 @@ methods
 
     end
 
-    function frame_batch = read_frame_batch(obj, batchSize, frame_position)
+    function frame_batch = read_frame_batch(obj, batchSize, framePosition)
 
-        frame_offset = frame_position - 1;
+        frame_offset = framePosition - 1;
 
         if ~isempty(obj.all_frames) % if all frames are loaded in RAM
             frame_batch = obj.all_frames(:, :, frame_offset + 1:frame_offset + batchSize);
@@ -141,7 +141,7 @@ methods
                 catch ME
                     retry = true;
                     retrycnt = retrycnt + 1;
-                    %MEdisp(ME);
+                    MEdisp(ME);
                     frame_batch(widthRange, heightRange, i) = NaN;
                     fprintf("Holo file frame in position %d was not found\n", i);
                 end
@@ -151,14 +151,7 @@ methods
         end
 
         frame_batch = HoloReader.replace_dropped_frames(frame_batch, 0.2);
-        %         if not(obj.frame_width == obj.frame_height)
-        %             frame_batch = HoloReader.replace_dropped_frames((imresize(frame_batch, [obj.frame_width, obj.frame_width])), 0.2);
-        %         else
-        %             frame_batch = HoloReader.replace_dropped_frames(flipud(rot90(frame_batch)), 0.2);
-        %         end
-        %         imagesc(flipud(rot90(frame_batch(:,:,1))));
-        %         peaksnr = psnr(frame_batch(:,:,1), frame_batch(:,:,batchSize));
-        %         peaksnr
+
         fclose(fd);
     end
 
