@@ -195,6 +195,10 @@ if ~isempty(HD) && ~isempty(HD.params)
         safeSetNumeric(app.svdThreshold, HD.params.svdThreshold);
     end
 
+    if isprop(app, 'svdStride')
+        safeSetNumeric(app.svdStride, HD.params.svdStride);
+    end
+
     % Time transformation
     if isprop(app, 'timeTransform')
         items = ["FFT", "PCA", "ICA", "Wavelet_Morlet", "autocorrelation", "intercorrelation", "phase difference", "None"];
@@ -311,63 +315,6 @@ if ~isempty(HD) && ~isempty(HD.params)
     end
 
     % Additional advanced processing parameters
-    if isprop(app, 'SVDThresholdCheckBox')
-        safeSetCheckbox(app.SVDThresholdCheckBox, HD.params.svdThreshold_enable);
-    end
-
-    if isprop(app, 'SVDThreshold')
-        safeSetNumeric(app.SVDThreshold, HD.params.svdThreshold_value);
-    end
-
-    if isprop(app, 'svdStride')
-        safeSetNumeric(app.svdStride, HD.params.svdStride);
-    end
-
-    % Local filtering parameters
-    if isprop(app, 'spatialCheckBox')
-        safeSetCheckbox(app.spatialCheckBox, HD.params.local_spatialFilter);
-    end
-
-    if isprop(app, 'temporalCheckBox')
-        safeSetCheckbox(app.temporalCheckBox, HD.params.local_temporalFilter);
-    end
-
-    if isprop(app, 'phi1')
-        safeSetNumeric(app.phi1, HD.params.local_phi1);
-    end
-
-    if isprop(app, 'phi1')
-        safeSetNumeric(app.phi1, HD.params.local_phi2);
-    end
-
-    if isprop(app, 'nu1')
-        safeSetNumeric(app.nu1, HD.params.local_nu1);
-    end
-
-    if isprop(app, 'nu2')
-        safeSetNumeric(app.nu2, HD.params.local_nu2);
-    end
-
-    if isprop(app, 'unitCellsinLattice')
-        safeSetNumeric(app.unitCellsinLattice, HD.params.unit_cells);
-    end
-
-    if isprop(app, 'r1')
-        safeSetNumeric(app.r1, HD.params.r1);
-    end
-
-    if isprop(app, 'xyStride')
-        safeSetNumeric(app.xyStride, HD.params.xy_stride);
-    end
-
-    % Temporal filter
-    if isprop(app, 'temporalfilterCheckBox')
-        safeSetCheckbox(app.temporalfilterCheckBox, HD.params.temporalFilter);
-    end
-
-    if isprop(app, 'temporalFilter')
-        safeSetNumeric(app.temporalFilter, HD.params.temporalFilter_value);
-    end
 
     % Phase registration
     if isprop(app, 'phaseregistrationCheckBox')

@@ -69,20 +69,7 @@ disk = diskMask(size(I, 2), size(I, 1), 0.35);
 v = -mean(G(disk));
 end
 
-function v = cost_3(I)
-disk = diskMask(size(I, 2), size(I, 1), 0.35);
-vals = I(disk);
-
-G = edge(I, 'sobel');
-edges = G(disk);
-
-contrast = std(double(vals));
-edgeStrength = mean(edges);
-
-v = -contrast - edgeStrength;
-end
-
-function stop = waitbar_update(x, optimValues, state, f)
+function stop = waitbar_update(~, optimValues, state, f)
 stop = false;
 
 if strcmp(state, 'iter')
@@ -103,23 +90,4 @@ img = renderM0(rend, Params, z);
 
 c = cost_2(img);
 % c = entropy(img);
-end
-
-function z_best = newton_1d(costfun, z0, h, max_iter)
-
-z = z0;
-
-for k = 1:max_iter
-    fprintf("Iteration %d: z = %.6f \n", k, z);
-    f0 = costfun(z);
-    f1 = costfun(z + h);
-    f_1 = costfun(z - h);
-    fprintf("Cost: %.6f, %.6f, %.6f \n", f0, f1, f_1);
-    d1 = (f1 - f_1) / (2 * h);
-    d2 = (f1 - 2 * f0 + f_1) / (h ^ 2);
-
-    z = z - d1 / d2;
-end
-
-z_best = z;
 end

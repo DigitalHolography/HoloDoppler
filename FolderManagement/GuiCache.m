@@ -40,8 +40,6 @@ properties (Access = public)
     registration logical
     registration_via_phase logical
     iterative_registration logical
-    temporalFilter_flag logical
-    temporalFilter double
     registrationDisk logical
     registrationDiskRatio double
 
@@ -49,11 +47,6 @@ properties (Access = public)
     color_f1 double
     color_f2 double
     color_f3 double
-
-    % dark field parameters
-    xystride double
-    num_unit_cells_x double
-    r1 double
 
     % iterative optimization parameters
     iterative_aberration_compensation double
@@ -99,11 +92,9 @@ methods (Access = public)
         obj.pix_width = app.pix_width;
         obj.pix_height = app.pix_height;
         obj.registration = app.imageregistrationCheckBox.Value;
-        obj.temporalFilter = app.temporalfilter.Value;
         obj.parallelism = app.ParallelismDropDown.Value;
         obj.registration_via_phase = app.phaseregistrationCheckBox.Value;
         obj.aberration_compensation = app.IterativeoptimizationCheckBox.Value;
-        obj.SVD = app.SVDCheckBox.Value;
 
         obj.notes = app.NotesTextArea.Value;
         obj.DX = app.DX;
@@ -117,11 +108,6 @@ methods (Access = public)
         obj.color_f1 = app.compositef1.Value;
         obj.color_f2 = app.compositef2.Value;
         obj.color_f3 = app.compositef3.Value;
-
-        % dark field parameters
-        obj.xystride = app.xystride.Value;
-        obj.num_unit_cells_x = app.unitcellsinlattice.Value;
-        obj.r1 = app.r1.Value;
 
         % iterative optimization parameters
         obj.iterative_aberration_compensation = app.IterativeoptimizationCheckBox.Value;
@@ -167,7 +153,6 @@ methods (Access = public)
             app.blur.Value = loadGUIVariable(obj.blur);
             app.ImageChoiceDropDown.Value = loadGUIVariable(strrep(obj.imageChoice, '_', ' '));
             app.timetransformDropDown.Value = loadGUIVariable(obj.timeTransform.type);
-            app.SVDCheckBox.Value = loadGUIVariable(obj.SVD);
             app.f1.Value = loadGUIVariable(obj.timeTransform.f1);
             app.f2.Value = loadGUIVariable(obj.timeTransform.f2);
             app.min_PCA.Value = loadGUIVariable(obj.timeTransform.min_PCA);

@@ -108,14 +108,6 @@ methods
             'Position', [0.5, 0.2, 0.45, 0.2], ...
             'Callback', @(src, evt)obj.zsearch());
 
-        % Add pushbutton for makegif
-        uicontrol('Parent', obj.panel, ...
-            'Style', 'pushbutton', ...
-            'String', 'Make a gif', ...
-            'Units', 'normalized', ...
-            'Position', [0.5, 0.0, 0.45, 0.2], ...
-            'Callback', @(src, evt)obj.makegif());
-
         % Initial plot
         %obj.plotting();
     end
@@ -170,9 +162,9 @@ methods
     function zsearch(obj)
         obj.Z_full = [];
 
-        z_step = str2num(obj.IO.editZStep.String);
-        z_min = str2num(obj.IO.editZRangeMin.String);
-        z_max = str2num(obj.IO.editZRangeMax.String);
+        z_step = str2double(obj.IO.editZStep.String);
+        z_min = str2double(obj.IO.editZRangeMin.String);
+        z_max = str2double(obj.IO.editZRangeMax.String);
 
         i = 1;
 
@@ -187,49 +179,6 @@ methods
             i = i + 1;
         end
 
-    end
-
-    function makegif(obj)
-        % Ask user for file location to save the GIF
-        [filename, pathname] = uiputfile({'*.gif'}, 'Save GIF As');
-
-        if isequal(filename, 0) || isequal(pathname, 0)
-            disp('User canceled GIF saving.');
-            return;
-        end
-
-        gifFile = fullfile(pathname, filename);
-
-        % Normalize Z_full for GIF (scale to [0,255])
-        Z = permute(imresize(permute(obj.Z_full, [2 3 1]), [max(size(obj.avgImage)), max(size(obj.avgImage))]), [3 1 2]);
-        Z = squeeze(Z); % Ensure Z is 3D: (frames, height, width)
-
-        if ndims(Z) ~= 3
-            error('Z_full must be a 3D matrix.');
-        end
-
-        Z = double(Z);
-        Z = Z - min(Z(:));
-
-        if max(Z(:)) > 0
-            Z = Z / max(Z(:));
-        end
-
-        Z = uint8(Z * 255);
-
-        % Write frames to GIF
-        for k = 1:size(Z, 1)
-            [A, map] = gray2ind(squeeze(Z(k, :, :)), 256);
-
-            if k == 1
-                imwrite(A, map, gifFile, 'gif', 'LoopCount', Inf, 'DelayTime', 0.1);
-            else
-                imwrite(A, map, gifFile, 'gif', 'WriteMode', 'append', 'DelayTime', 0.1);
-            end
-
-        end
-
-        disp(['GIF saved to: ' gifFile]);
     end
 
     function closeFigure(obj)

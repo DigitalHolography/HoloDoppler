@@ -1,4 +1,4 @@
-function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask(FH, spatialTransformation, spatialPropagation, frequencyRange, fs, gw, ShackHartmannCorrection)
+function [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array] = calculate_shackhartmannmask(FH, spatialTransformation, ~, frequencyRange, fs, gw, ShackHartmannCorrection)
 
 Nx = size(FH, 1);
 Ny = size(FH, 2);
@@ -57,7 +57,7 @@ if ShackHartmannCorrection.ZernikeProjection % if the phase should be a combinat
     % Calculate the phase mask finally
     fprintf("Zernike coefficients : \n");
     disp(coefs);
-    [n_sub_x, n_sub_y, n_sub_z] = size(coefs);
+    % [n_sub_x, n_sub_y, n_sub_z] = size(coefs);
 
     [~, zern] = zernikePhase(zernike_indices, Nx, Ny, 2); % Radius to 2 = full field no diaphragm
     phase = 0;

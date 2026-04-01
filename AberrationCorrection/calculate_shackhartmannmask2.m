@@ -9,7 +9,7 @@ if ShackHartmannCorrection.iterate
 
     for ii = 1:ShackHartmannCorrection.N_iterate
         FH = FH .* IterShackHartmannMask;
-        [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array, coefs] = calculate_shackhartmannmask_once(FH, Params);
+        [ShackHartmannMask, moment_chunks_crop_array, correlation_chunks_array, ~] = calculate_shackhartmannmask_once(FH, Params);
         IterShackHartmannMask = IterShackHartmannMask .* ShackHartmannMask;
     end
 

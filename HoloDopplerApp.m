@@ -111,6 +111,7 @@ properties (Access = public)
     RenderPreviewLamp matlab.ui.control.Lamp
     RenderPreviewButton matlab.ui.control.Button
     SavePreviewButton matlab.ui.control.Button
+    svdStride matlab.ui.control.NumericEditField
 
     % ---- aberration compensation panel ----
     AberrationcompensationPanel matlab.ui.container.Panel
@@ -151,30 +152,6 @@ properties (Access = public)
     UIAxes_aberrationPreview matlab.ui.control.UIAxes
 
     % ---- advanced processing panel ----
-    AdvancedProcessingPanel matlab.ui.container.Panel
-    SVDTresholdLabel_2 matlab.ui.control.Label
-    svdStride matlab.ui.control.NumericEditField
-    SVDThresholdCheckBox matlab.ui.control.CheckBox
-    SVDThresholdLabel matlab.ui.control.Label
-    SVDThreshold matlab.ui.control.NumericEditField
-    xyStride matlab.ui.control.NumericEditField
-    xyStrideLabel matlab.ui.control.Label
-    r1 matlab.ui.control.NumericEditField
-    r1Label matlab.ui.control.Label
-    unitCellsinLattice matlab.ui.control.NumericEditField
-    unitCellsinLatticeLabel matlab.ui.control.Label
-    nu2 matlab.ui.control.NumericEditField
-    nu2Label matlab.ui.control.Label
-    nu1 matlab.ui.control.NumericEditField
-    nu1Label matlab.ui.control.Label
-    phi2 matlab.ui.control.NumericEditField
-    phi2Label matlab.ui.control.Label
-    phi1 matlab.ui.control.NumericEditField
-    phi1Label matlab.ui.control.Label
-    LocalfilteringLabel matlab.ui.control.Label
-    temporalCheckBox matlab.ui.control.CheckBox
-    spatialCheckBox matlab.ui.control.CheckBox
-    SVDCheckBox matlab.ui.control.CheckBox
 
     % ---- context menu ----
     RightClickImageContextMenu matlab.ui.container.ContextMenu
@@ -584,7 +561,6 @@ methods (Access = private)
         app.createFileSelectionPanel();
         app.createBatchVideoPanel();
         app.createCurrentFileStrip();
-        app.createAdvancedProcessingPanel();
         app.createAberrationPanel();
         app.createrenderingParametersPanel();
         app.createImageViewsAndMenus();
@@ -984,6 +960,16 @@ methods (Access = private)
         app.registrationDiskRatio.Layout.Row = 11;
         app.registrationDiskRatio.Layout.Column = 2;
 
+        app.svdStride = uieditfield(p, 'numeric');
+        app.svdStride.Limits = [0 Inf];
+        app.svdStride.Tooltip = {'Sub sampling parameter for faster SVD calculations. Defaults to 1 -> full image, 2 -> one pixel on two, ...'};
+        app.svdStride.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.svdStride.FontColor = fontColor;
+        app.svdStride.BackgroundColor = darkBackgroundColor;
+        app.svdStride.Layout.Row = 12;
+        app.svdStride.Layout.Column = 2;
+        app.svdStride.Value = 1;
+
     end
 
     % -----------------------------------------------------------------------
@@ -997,7 +983,7 @@ methods (Access = private)
         app.CurrentFilePanel.Layout.Column = [2 3];
 
         app.CurrentFileGrid = uigridlayout(app.CurrentFilePanel);
-        app.CurrentFileGrid.ColumnWidth = {'1x', '1x', '1x'};
+        app.CurrentFileGrid.ColumnWidth = {'1x', '1x'};
         app.CurrentFileGrid.RowHeight = {'0.8x'};
         app.CurrentFileGrid.BackgroundColor = [0.2 0.2 0.2];
 
@@ -1019,146 +1005,13 @@ methods (Access = private)
     end
 
     % -----------------------------------------------------------------------
-    function createAdvancedProcessingPanel(app)
-        app.AdvancedProcessingPanel = uipanel(app.CurrentFileGrid);
-        app.AdvancedProcessingPanel.ForegroundColor = [0.902 0.902 0.902];
-        app.AdvancedProcessingPanel.Title = 'Advanced Processing';
-        app.AdvancedProcessingPanel.Visible = 'off';
-        app.AdvancedProcessingPanel.BackgroundColor = [0.2 0.2 0.2];
-        app.AdvancedProcessingPanel.Layout.Row = 1;
-        app.AdvancedProcessingPanel.Layout.Column = 2;
-
-        p = app.AdvancedProcessingPanel;
-
-        app.SVDCheckBox = uicheckbox(p);
-        app.SVDCheckBox.Tooltip = {'Enable SVD hologram filtering in hologram construction'};
-        app.SVDCheckBox.Text = 'SVD';
-        app.SVDCheckBox.FontColor = [0.902 0.902 0.902];
-        app.SVDCheckBox.Position = [21 317 47 22];
-        app.SVDCheckBox.Value = true;
-
-        app.spatialCheckBox = uicheckbox(p);
-        app.spatialCheckBox.Text = 'spatial';
-        app.spatialCheckBox.FontColor = [0.8 0.8 0.8];
-        app.spatialCheckBox.Position = [19 234 92 22];
-
-        app.temporalCheckBox = uicheckbox(p);
-        app.temporalCheckBox.Text = 'temporal';
-        app.temporalCheckBox.FontColor = [0.8 0.8 0.8];
-        app.temporalCheckBox.Position = [19 261 87 23];
-
-        app.LocalfilteringLabel = uilabel(p);
-        app.LocalfilteringLabel.FontColor = [0.8 0.8 0.8];
-        app.LocalfilteringLabel.Position = [19 285 83 22];
-        app.LocalfilteringLabel.Text = 'Local filtering';
-
-        app.phi1Label = uilabel(p);
-        app.phi1Label.HorizontalAlignment = 'right';
-        app.phi1Label.FontColor = [0.8 0.8 0.8];
-        app.phi1Label.Position = [102 258 28 22];
-        app.phi1Label.Text = 'phi1';
-
-        app.phi1 = uieditfield(p, 'numeric');
-        app.phi1.Position = [134 258 21 21];
-
-        app.phi2Label = uilabel(p);
-        app.phi2Label.HorizontalAlignment = 'right';
-        app.phi2Label.FontColor = [0.8 0.8 0.8];
-        app.phi2Label.Position = [173 261 28 22];
-        app.phi2Label.Text = 'phi2';
-
-        app.phi2 = uieditfield(p, 'numeric');
-        app.phi2.Position = [205 261 21 21];
-
-        app.nu1Label = uilabel(p);
-        app.nu1Label.HorizontalAlignment = 'right';
-        app.nu1Label.FontColor = [0.8 0.8 0.8];
-        app.nu1Label.Position = [107 230 26 22];
-        app.nu1Label.Text = 'nu1';
-
-        app.nu1 = uieditfield(p, 'numeric');
-        app.nu1.Position = [135 230 21 21];
-
-        app.nu2Label = uilabel(p);
-        app.nu2Label.HorizontalAlignment = 'right';
-        app.nu2Label.FontColor = [0.8 0.8 0.8];
-        app.nu2Label.Position = [175 230 26 22];
-        app.nu2Label.Text = 'nu2';
-
-        app.nu2 = uieditfield(p, 'numeric');
-        app.nu2.FontColor = [0.149 0.149 0.149];
-        app.nu2.Position = [205 230 21 21];
-
-        app.unitCellsinLatticeLabel = uilabel(p);
-        app.unitCellsinLatticeLabel.HorizontalAlignment = 'right';
-        app.unitCellsinLatticeLabel.FontColor = [0.902 0.902 0.902];
-        app.unitCellsinLatticeLabel.Position = [18 170 110 22];
-        app.unitCellsinLatticeLabel.Text = '# unit cells in lattice';
-
-        app.unitCellsinLattice = uieditfield(p, 'numeric');
-        app.unitCellsinLattice.Limits = [0 Inf];
-        app.unitCellsinLattice.Position = [135 170 29 22];
-        app.unitCellsinLattice.Value = 8;
-
-        app.r1Label = uilabel(p);
-        app.r1Label.HorizontalAlignment = 'right';
-        app.r1Label.FontColor = [0.902 0.902 0.902];
-        app.r1Label.Position = [102 140 25 22];
-        app.r1Label.Text = 'r1';
-
-        app.r1 = uieditfield(p, 'numeric');
-        app.r1.Limits = [0 Inf];
-        app.r1.Position = [135 138 29 23];
-        app.r1.Value = 3;
-
-        app.xyStrideLabel = uilabel(p);
-        app.xyStrideLabel.HorizontalAlignment = 'right';
-        app.xyStrideLabel.FontColor = [0.8 0.8 0.8];
-        app.xyStrideLabel.Position = [59 108 50 22];
-        app.xyStrideLabel.Text = 'xy stride';
-
-        app.xyStride = uieditfield(p, 'numeric');
-        app.xyStride.Position = [124 105 41 27];
-        app.xyStride.Value = 32;
-
-        app.SVDThreshold = uieditfield(p, 'numeric');
-        app.SVDThreshold.Limits = [0 Inf];
-        app.SVDThreshold.Enable = 'off';
-        app.SVDThreshold.Position = [247 291 26 22];
-        app.SVDThreshold.Value = 64;
-
-        app.SVDThresholdLabel = uilabel(p);
-        app.SVDThresholdLabel.HorizontalAlignment = 'right';
-        app.SVDThresholdLabel.FontColor = [0.902 0.902 0.902];
-        app.SVDThresholdLabel.Position = [153 291 86 22];
-        app.SVDThresholdLabel.Text = 'SVD Threshold';
-
-        app.SVDThresholdCheckBox = uicheckbox(p);
-        app.SVDThresholdCheckBox.Text = '';
-        app.SVDThresholdCheckBox.FontColor = [0.902 0.902 0.902];
-        app.SVDThresholdCheckBox.Position = [137 293 25 22];
-
-        app.svdStride = uieditfield(p, 'numeric');
-        app.svdStride.Limits = [0 Inf];
-        app.svdStride.Tooltip = {'Sub sampling parameter for faster SVD calculations. Defaults to 1 -> full image, 2 -> one pixel on two, ...'};
-        app.svdStride.Position = [256 30 26 22];
-        app.svdStride.Value = 1;
-
-        app.SVDTresholdLabel_2 = uilabel(p);
-        app.SVDTresholdLabel_2.HorizontalAlignment = 'right';
-        app.SVDTresholdLabel_2.FontColor = [0.902 0.902 0.902];
-        app.SVDTresholdLabel_2.Position = [184 30 64 22];
-        app.SVDTresholdLabel_2.Text = 'SVD Stride';
-    end
-
-    % -----------------------------------------------------------------------
     function createAberrationPanel(app)
         app.AberrationcompensationPanel = uipanel(app.CurrentFileGrid);
         app.AberrationcompensationPanel.ForegroundColor = [0.8 0.8 0.8];
         app.AberrationcompensationPanel.Title = 'Aberration compensation';
         app.AberrationcompensationPanel.BackgroundColor = [0.2 0.2 0.2];
         app.AberrationcompensationPanel.Layout.Row = 1;
-        app.AberrationcompensationPanel.Layout.Column = 3;
+        app.AberrationcompensationPanel.Layout.Column = 2;
 
         p = app.AberrationcompensationPanel;
 
@@ -1466,7 +1319,7 @@ methods (Access = private)
         app.PaddingLabel = uilabel(p);
         app.PaddingLabel.HorizontalAlignment = 'right';
         app.PaddingLabel.FontColor = fontColor;
-        app.PaddingLabel.Layout.Column = 2;
+        app.PaddingLabel.Layout.Column = 1;
         app.PaddingLabel.Layout.Row = 2;
         app.PaddingLabel.Text = 'Padding N';
 
@@ -1475,7 +1328,7 @@ methods (Access = private)
         app.PaddingNum.FontColor = fontColor;
         app.PaddingNum.BackgroundColor = darkBackgroundColor;
         app.PaddingNum.Tooltip = {'Distance of spatial reconstruction using the preceding calculation scheme in (m) '};
-        app.PaddingNum.Layout.Column = 3;
+        app.PaddingNum.Layout.Column = 2;
         app.PaddingNum.Layout.Row = 2;
 
         % Local spatial transformation row 3

@@ -22,9 +22,6 @@ arguments
     opt.cornerNorm = false
     opt.export_raw = false
     opt.export_avg_img = true
-    opt.export_gif = false
-    opt.gif_freq = 16
-    opt.gif_Duration = 3.5
     opt.enhance_contrast = false
     opt.square = false
 end
@@ -32,7 +29,7 @@ end
 [~, output_dirname] = fileparts(output_path);
 output_filename = sprintf('%s_%s.%s', output_dirname, name, 'avi');
 
-if size(size(video)) == [1, 3] % if not colored
+if size(video, 3) == 1 % if not colored
     video = reshape(video, size(video, 1), size(video, 2), 1, size(video, 3));
 end
 
@@ -101,21 +98,10 @@ end
 
 close(w)
 
-if opt.export_gif
-    output_filename_gif = sprintf('%s_%s.%s', output_dirname, name, 'gif');
-    writeGifOnDisc2(video, sprintf('%s\\gif\\%s', output_path, output_filename_gif), opt.gif_freq, opt.gif_Duration);
-end
-
-% contrast enhancement for the gif
 if opt.enhance_contrast
 
     for f = 1:numFrames
         video(:, :, :, f) = imadjust(video(:, :, :, f), stretchlim(video(:, :, :, f)));
-    end
-
-    if opt.export_gif
-        output_filename_gif_enhanced = sprintf('%s_%s_enhanced.%s', output_dirname, name, 'gif');
-        writeGifOnDisc2(video, sprintf('%s\\gif\\%s', output_path, output_filename_gif_enhanced), opt.gif_freq, opt.gif_Duration);
     end
 
 end

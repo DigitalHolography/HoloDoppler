@@ -292,20 +292,7 @@ methods
         obj.params.end_frame = 0;
 
         % Initialize missing fields that were causing errors in the rendering class when not set (as they are used in some of the rendering steps)
-        obj.params.svdThreshold_enable = false;
-        obj.params.svdThreshold_value = 64;
         obj.params.svdStride = 1;
-        obj.params.local_spatialFilter = false;
-        obj.params.local_temporalFilter = false;
-        obj.params.local_phi1 = 0;
-        obj.params.local_phi2 = 0;
-        obj.params.local_nu1 = 0;
-        obj.params.local_nu2 = 0;
-        obj.params.unit_cells = 8;
-        obj.params.r1 = 3;
-        obj.params.xy_stride = 32;
-        obj.params.temporalFilter = false;
-        obj.params.temporalFilter_value = 0;
         obj.params.phase_registration = false;
         obj.params.rephasing = false;
         obj.params.iterative_registration = false;
@@ -731,7 +718,6 @@ methods
             mkdir(fullfile(result_folder_path, 'avi'));
             mkdir(fullfile(result_folder_path, 'raw'));
             mkdir(fullfile(result_folder_path, 'png'));
-            mkdir(fullfile(result_folder_path, 'gif'));
             mkdir(fullfile(result_folder_path, 'mat')); % for previous versions of PW
         end
 
@@ -863,7 +849,7 @@ methods
                 elseif strcmp(image_types{i}, 'ShackHartmann_Phase')
                     generate_video(mat, result_folder_path, strcat('ShackHartmann_Phase'));
                 elseif strcmp(image_types{i}, 'color_Doppler')
-                    generate_video(mat, result_folder_path, strcat('color_Doppler'), square = params.square, enhance_contrast = true, export_gif = true, gif_freq = 16, gif_Duration = size(mat, 4) * params.batchStride / (obj.params.fs * 1000));
+                    generate_video(mat, result_folder_path, strcat('color_Doppler'), square = params.square, enhance_contrast = true);
                 elseif strcmp(image_types{i}, 'color_band_ratio')
                     generate_video(mat, result_folder_path, strcat('color_band_ratio'), NoIntensity = 1, ...
                         square = params.square, enhance_contrast = false);
