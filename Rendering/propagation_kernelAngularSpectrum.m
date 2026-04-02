@@ -1,10 +1,10 @@
-function kernel = propagation_kernelAngularSpectrum(Nx, Ny, z, lambda, x_step, y_step, use_double_precision)
+function kernel = propagation_kernelAngularSpectrum(Nx, Ny, z, lambda, ppx, ppy, use_double_precision)
 Nx = double(Nx);
 Ny = double(Ny);
-x_step = double(x_step);
-y_step = double(y_step);
-u_step = 1.0 / (Nx * x_step);
-v_step = 1.0 / (Ny * y_step);
+ppx = double(ppx);
+ppy = double(ppy);
+u_step = 1.0 / (Nx * ppx);
+v_step = 1.0 / (Ny * ppy);
 u = ((1:Nx) - 1 - round(Nx / 2)) * u_step;
 v = ((1:Ny) - 1 - round(Ny / 2)) * v_step;
 a = 1;

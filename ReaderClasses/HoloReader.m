@@ -10,8 +10,6 @@ properties
     bit_depth
     endianness
     footer % matlab JSON object
-
-    all_frames % 3D array of all frames in case there is enough memory to load all frames
 end
 
 methods
@@ -100,11 +98,6 @@ methods
 
         frame_offset = framePosition - 1;
 
-        if ~isempty(obj.all_frames) % if all frames are loaded in RAM
-            frame_batch = obj.all_frames(:, :, frame_offset + 1:frame_offset + batchSize);
-            return
-        end
-
         fd = fopen(obj.filename, 'r');
 
         frame_size = obj.frame_width * obj.frame_height * uint32(obj.bit_depth / 8);
@@ -161,17 +154,6 @@ methods
 
     function height = get_frame_height(obj)
         height = obj.frame_height;
-    end
-
-    function frame_batches = read_all_frames(obj, batchSize, batchStride)
-
-        num_batches = floor((obj.num_frames - batchSize) / batchStride);
-        frame_batches = zeros(obj.frame_width, obj.frame_height, batchSize, num_batches);
-
-        for batchIdx = 1:num_batches
-            frame_batches(:, :, :, batchIdx) = int32(obj.read_frame_batch(batchSize, (batchIdx - 1) * batchStride));
-        end
-
     end
 
 end

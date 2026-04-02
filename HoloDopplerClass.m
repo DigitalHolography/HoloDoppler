@@ -10,6 +10,7 @@ properties
     video % ImageTypeList % store all the output images classes rendered at the end of a cycle
     running_averages %  cumulative average over time
     registration % store the shifts calculated to register images at the end (so that it can be reversed)
+    poolManager % ParallelPoolManager object to manage the parallel pool for the video rendering
 end
 
 methods
@@ -243,19 +244,19 @@ methods
         end
 
         % Load saved preview parameters if they exist
-        if exist(preview_params_path, 'file')
+        if isfile(preview_params_path)
             fprintf('Loading saved preview parameters from %s\n', preview_params_path);
             obj.loadParams(preview_params_path);
         end
 
         % Load saved video parameters if they exist
-        if exist(video_params_path, 'file')
+        if isfile(video_params_path)
             fprintf('Loading saved video parameters from %s\n', video_params_path);
             obj.loadParams(video_params_path);
         end
 
         % Load saved config parameters if they exist (prevails over the last computation)
-        if exist(config_params_path, 'file')
+        if isfile(config_params_path)
             fprintf('Loading saved config from %s\n', config_params_path);
             obj.loadParams(config_params_path);
         end
@@ -524,25 +525,27 @@ methods
         %VideoRendering Construct the Video according to the current params
         % Close the waitbar from any previous run if it still exists
 
+        p = obj.params; % to avoid too many obj.params in the code below
+
         if isempty(obj.reader)
             error("No file loaded")
         end
 
-        if ~obj.params.first_frame
+        if ~p.first_frame
             first_frame = 1;
         else
-            first_frame = obj.params.first_frame;
+            first_frame = p.first_frame;
         end
 
-        if ~obj.params.end_frame
+        if ~p.end_frame
             end_frame = obj.file.num_frames;
         else
-            end_frame = obj.params.end_frame;
+            end_frame = p.end_frame;
         end
 
-        num_batches = floor((end_frame - first_frame + 1) / obj.params.batchStride);
+        num_batches = floor((end_frame - first_frame + 1) / p.batchStride);
 
-        if num_batches * obj.params.batchStride + obj.params.batchSize > end_frame
+        if num_batches * p.batchStride + p.batchSize > end_frame
             num_batches = num_batches - 1;
         end
 
@@ -557,24 +560,29 @@ methods
             return
         end
 
-        % Create parallel pool
-        poolobj = gcp('nocreate'); % check if a pool already exist
-        parforArg = obj.params.parforArg;
+        % === Gestion optimisée du pool ===
+        if p.parforArg > 0
 
-        if parforArg >= 1
-
-            if isempty(poolobj) || poolobj.NumWorkers ~= parforArg
-                delete(poolobj); % close current pool to create a new one with correct num of workers
-                parpool(parforArg);
+            if isempty(obj.poolManager)
+                obj.poolManager = ParallelPoolManager(p.parforArg);
             end
 
+            obj.poolManager.acquire();
+            cleanupPool = onCleanup(@() obj.poolManager.release());
+            pool = obj.poolManager.Pool;
+            numWorkers = pool.NumWorkers;
+        else
+            numWorkers = 0;
         end
 
+        fprintf("Using %d workers for parallel processing.\n", numWorkers);
+
+        % === Préparation des données ===
         VideoRenderingTime = tic;
 
         h = waitbar(0, '');
         N = double(num_batches - 1);
-        p = 1;
+        progress = 1;
 
         function update_waitbar(sig)
             % signal table
@@ -583,39 +591,24 @@ methods
             % 2 => reset for stage 2 (video_M0 computation)
             switch sig
                 case 0
-                    waitbar(p / N, h);
-                    p = p + 1;
+                    waitbar(progress / N, h);
+                    progress = progress + 1;
                 case -1
-                    waitbar(0, h, 'Registration...');
-                    p = 1;
-                    disp('Registration...')
+                    waitbar(0, h, 'Registration computation...');
+                    progress = 1;
+                    disp('Registration computation...')
                 case -2
-                    waitbar(0, h, 'Image rendering...');
-                    p = 1;
-                    disp('Image rendering...')
-                case 1
-                    waitbar(0, h, 'Optimizing defocus...');
-                    p = 1;
-                    disp('Optimizing defocus...')
-                case 2
-                    waitbar(0, h, 'Optimizing astigmatism...');
-                    p = 1;
-                    disp('Optimizing astigmatism...')
-                case 3
-                    waitbar(0, h, 'Shack-Hartmann...')
-                    p = 1;
-                    disp('Shack-Hartmann...')
-                otherwise
-                    waitbar(0, h, 'Iterative optimization...');
-                    p = 1;
-                    disp('Iterative optimization')
+                    waitbar(0, h, 'Video rendering...');
+                    progress = 1;
+                    disp('Video rendering...')
             end
 
         end
 
-        update_waitbar(-2);
+        % 1) First compute the reference for registration and autofocus if needed, and initialize the video storage
 
-        % 1) Initialize the video object
+        % Waitbar update for registration computation
+        update_waitbar(-1);
 
         if isempty(obj.video) || numel(obj.video) ~= num_batches
             v(1, num_batches) = ImageTypeList();
@@ -625,67 +618,66 @@ methods
         obj.running_averages = RunningAveragesHolder(); %reset this here
 
         view_ref = RenderingClass();
-        view_ref.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.framePosition));
-        view_ref.Render(obj.params, obj.params.imageTypes, cache_intermediate_results = false);
+        view_ref.setFrames(obj.reader.read_frame_batch(p.refBatchSize, p.framePosition));
+        view_ref.Render(p, p.imageTypes, cache_intermediate_results = false);
 
-        if obj.params.applyautofocusfromref
-            z_opti = autofocus(view_ref, obj.params); % update the z distance
-            obj.params.spatialPropagation = z_opti;
+        if p.applyautofocusfromref
+            z_opti = autofocus(view_ref, p); % update the z distance
+            p.spatialPropagation = z_opti;
         end
 
-        % 2) Loop over the batches
-        if obj.params.parforArg == 0
+        % 2) Then compute the video frames in batches, and update the registration
+        % running average after each batch to speed up the convergence of the registration (especially for long videos)
+
+        % Waitbar update for video rendering
+        update_waitbar(-2);
+
+        if p.parforArg == 0
 
             for i = 1:(num_batches)
-                obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batchSize, (i - 1) * obj.params.batchStride + first_frame));
-                obj.view.Render(obj.params, obj.params.imageTypes);
+                obj.view.setFrames(obj.reader.read_frame_batch(p.batchSize, (i - 1) * p.batchStride + first_frame));
+                obj.view.Render(p, p.imageTypes);
                 obj.video(i) = ImageTypeList();
                 obj.video(i).copy_from(obj.view.Output); % work around against handles
-                SH_PSD = calc_registration_from_views(obj.view, view_ref, obj.params);
-                obj.running_averages.update(SH_PSD, i, obj.params);
+                SH_PSD = calc_registration_from_views(obj.view, view_ref, p);
+                obj.running_averages.update(SH_PSD, i, p);
+
+                % update waitbar after each batch
                 update_waitbar(0);
             end
 
         else
+
             D = parallel.pool.DataQueue;
             afterEach(D, @update_waitbar);
             dq = parallel.pool.DataQueue;
 
-            l_params = obj.params;
             l_video = obj.video;
-            afterEach(dq, @(data) obj.running_averages.update(data{1}, data{2}, l_params));
+            afterEach(dq, @(data) obj.running_averages.update(data{1}, data{2}, p));
             l_reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
 
             % parameters
-            batchSize = l_params.batchSize;
-            batchStride = l_params.batchStride;
+            batchSize = p.batchSize;
+            batchStride = p.batchStride;
+            imageTypes = p.imageTypes;
 
-            if isprop(l_reader, "all_frames") && ~isempty(l_reader.all_frames)
-                all_frames = reshape(l_reader.all_frames, size(l_reader.all_frames, 1), size(l_reader.all_frames, 2), batchSize, []);
+            spatialKernel = generate_spatial_kernel( ...
+                obj.file.Nx, ...
+                obj.file.Ny, ...
+                p.spatialTransformation, ...
+                p.spatialPropagation, ...
+                p.lambda, p.ppx, p.ppy);
 
-                parfor (i = 1:(num_batches), obj.params.parforArg)
-                    l_view = RenderingClass();
-                    l_view.setFrames(all_frames(:, :, :, i));
-                    l_view.Render(l_params, l_params.imageTypes, cache_intermediate_results = false);
-                    l_video(i) = ImageTypeList();
-                    l_video(i).copy_from(l_view.Output);
-                    send(D, 0);
-                    SH_PSD = calc_registration_from_views(l_view, view_ref, l_params);
-                    send(dq, {SH_PSD, i});
-                end
+            parfor (i = 1:num_batches, numWorkers) % Utiliser numWorkers du pool manager
 
-            else
-
-                parfor (i = 1:(num_batches), obj.params.parforArg)
-                    l_view = RenderingClass();
-                    l_view.setFrames(l_reader.read_frame_batch(batchSize, (i - 1) * batchStride + first_frame));
-                    l_view.Render(l_params, l_params.imageTypes, cache_intermediate_results = false);
-                    l_video(i) = ImageTypeList();
-                    l_video(i).copy_from(l_view.Output);
-                    send(D, 0);
-                    SH_PSD = calc_registration_from_views(l_view, view_ref, l_params);
-                    send(dq, {SH_PSD, i});
-                end
+                l_view = RenderingClass(precomputeSpatialKernel = spatialKernel);
+                l_view.setFrames(l_reader.read_frame_batch(batchSize, (i - 1) * batchStride + first_frame));
+                l_view.Render(p, imageTypes, cache_intermediate_results = false);
+                l_video(i) = ImageTypeList();
+                l_video(i).copy_from(l_view.Output);
+                send(D, 0);
+                SH_PSD = calc_registration_from_views(l_view, view_ref, p);
+                send(dq, {SH_PSD, i});
 
             end
 
@@ -694,9 +686,9 @@ methods
 
         close(h);
 
-        if obj.params.imageRegistration
+        if p.imageRegistration
 
-            if ismember('power_Doppler', obj.params.imageTypes)
+            if ismember('power_Doppler', p.imageTypes)
                 obj.CalculateRegistration();
                 obj.ApplyRegistration();
             else
@@ -713,12 +705,14 @@ methods
 
     function result_folder_path = SaveVideo(obj, imageTypes, params)
 
+        p = obj.params; % to avoid too many obj.params in the code below
+
         if nargin < 2
-            imageTypes = obj.params.imageTypes;
+            imageTypes = p.imageTypes;
         end
 
         if nargin < 3
-            params = obj.params;
+            params = p;
         end
 
         VideoSavingTime = tic;
@@ -875,7 +869,7 @@ methods
 
         end
 
-        if obj.params.imageRegistration
+        if p.imageRegistration
 
             disp('Saving registration...');
 
@@ -940,10 +934,10 @@ methods
         end
 
         %saving a small mat for old versions of PW
-        cache.Fs = obj.params.fs * 1000;
-        cache.batchStride = obj.params.batchStride;
-        cache.timeTransform.f1 = obj.params.frequencyRange1;
-        cache.timeTransform.f2 = obj.params.frequencyRange2;
+        cache.Fs = p.fs * 1000;
+        cache.batchStride = p.batchStride;
+        cache.timeTransform.f1 = p.frequencyRange1;
+        cache.timeTransform.f2 = p.frequencyRange2;
         save(fullfile(result_folder_path, 'mat', strcat(obj.file.name, '_HD_', num2str(index + 1), '.mat')), "cache");
 
         fprintf("Video Saving took : %f s\n", toc(VideoSavingTime));
@@ -1152,6 +1146,20 @@ methods
 
     end
 
+end
+
+end
+
+function spatialKernel = generate_spatial_kernel(Nx, Ny, transformation, z, lambda, ppx, ppy)
+
+switch transformation
+    case 'Fresnel'
+        [spatialKernel, ~] = propagation_kernelFresnel(Nx, Ny, z, lambda, ppx, ppy, 0);
+    case 'angular spectrum'
+        Nd = max(Nx, Ny);
+        spatialKernel = propagation_kernelAngularSpectrum(Nd, Nd, z, lambda, ppx, ppy, 0);
+    otherwise
+        error('Unknown spatial transformation: %s', transformation);
 end
 
 end

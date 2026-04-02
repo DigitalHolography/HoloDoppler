@@ -59,7 +59,7 @@ methods
         % First try to load the image as an icon
         fullname = iMakeFullName(imagename);
 
-        if exist(fullname, 'file') ~= 2
+        if isfile(fullname) ~= 2
             % Try on the path
             fullname = which(imagename);
 

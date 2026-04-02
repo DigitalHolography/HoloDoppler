@@ -134,7 +134,7 @@ methods (Access = private)
 
         version = 'unknown';
 
-        if exist('version.txt', 'file')
+        if isfile(fullfile(fileparts(mfilename('fullpath')), 'version.txt'))
             v = readlines('version.txt');
             version = char(v(1));
             fprintf("============================================\n" + ...

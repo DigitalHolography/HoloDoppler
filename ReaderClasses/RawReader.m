@@ -121,17 +121,6 @@ methods
         height = obj.acquisition.Ny;
     end
 
-    function frame_batches = read_all_frames(obj, batchSize, batchStride)
-
-        num_batches = floor((obj.num_frames - batchSize) / batchStride);
-        frame_batches = zeros(obj.j_win, obj.j_step, batchSize, num_batches);
-
-        for batchIdx = 1:num_batches
-            frame_batches(:, :, :, batchIdx) = int32(obj.read_frame_batch(batchSize, (batchIdx - 1) * batchStride));
-        end
-
-    end
-
 end
 
 end

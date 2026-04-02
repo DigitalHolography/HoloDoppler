@@ -53,7 +53,7 @@ if ~isempty(HD.file)
     if isfield(HD.file, 'num_frames')
 
         try
-            app.positioninfileSlider.Limits = double([1 HD.file.num_frames]);
+            app.positioninfileSlider.Limits = double([1 HD.file.num_frames - HD.params.batchSize + 1]);
             setNumeric(app.positioninfileSlider, double(HD.params.framePosition));
         catch
         end

@@ -24,9 +24,23 @@ end
 % -----------------------------------------------------------------------
 methods
 
-    function obj = RenderingClass()
+    function obj = RenderingClass(options)
+        % Constructeur avec options d'initialisation
+        %
+        % Options:
+        %   precomputeKernel - struct avec les paramètres du kernel (lambda, ppx, ppy, etc.)
+
+        arguments
+            options.precomputeSpatialKernel single = []
+        end
+
         obj.Output = ImageTypeList();
         obj.setInitParams();
+
+        if ~isempty(options.precomputeSpatialKernel)
+            obj.SpatialKernel = options.precomputeSpatialKernel;
+        end
+
     end
 
     % ------------------------------------------------------------------
