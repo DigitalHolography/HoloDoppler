@@ -9,13 +9,11 @@
     "moment_1",
     "moment_2"
   ],
-  "parfor_arg": 18,
+  "parforArg": 18,
   "imageRegistration": true,
   "spatialTransformation": "Fresnel",
-  "frequencyRange": [
-    6,
-    18.3
-  ],
+  "frequencyRange1": 6,
+  "frequencyRange2": 18.3,
   "spatialFilter": false,
   "svd_filter": true,
   "svdThreshold": 64,

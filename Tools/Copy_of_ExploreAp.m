@@ -228,7 +228,7 @@ methods
         end
 
         if obj.Params.svd_filter
-            [H] = svd_filter(H, obj.Params.svdThreshold, obj.Params.frequencyRange(1), obj.Params.fs, obj.Params.svdStride);
+            [H] = svd_filter(H, obj.Params.svdThreshold, obj.Params.frequencyRange1, obj.Params.fs, obj.Params.svdStride);
         end
 
         switch obj.Params.timeTransform
@@ -238,7 +238,7 @@ methods
                 SH = H;
         end
 
-        img = moment0(SH, obj.Params.frequencyRange(1), obj.Params.frequencyRange(2), obj.Params.fs, size(obj.I, 3), obj.Params.flatfield_gw);
+        img = moment0(SH, obj.Params.frequencyRange1, obj.Params.frequencyRange2, obj.Params.fs, size(obj.I, 3), obj.Params.flatfield_gw);
 
         % Plot
         axes(obj.axPlot);

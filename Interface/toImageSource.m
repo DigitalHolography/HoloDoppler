@@ -1,5 +1,11 @@
-function [image] = toImageSource(image)
-%toImageSource rescales and add dimensions if grayscale image
+function [image] = toImageSource(image, app)
+%toImageSource rescales and adds dimensions if grayscale image
+
+if app.ImproveContrast.Value
+    image = rescale(image);
+    % Improve contrast by imadjust
+    image = imadjustn(image, stretchlim(image(:), [0.01, 0.99]));
+end
 
 if isnumeric(image)
 

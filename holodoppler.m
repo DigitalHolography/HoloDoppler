@@ -1,4 +1,4 @@
-classdef HoloDopplerApp < matlab.apps.AppBase
+classdef holodoppler < matlab.apps.AppBase
 
 % =========================================================================
 % UI component handles — required public by App Designer / registerApp
@@ -28,7 +28,7 @@ properties (Access = public)
     Nx matlab.ui.control.NumericEditField
     Ny matlab.ui.control.NumericEditField
     numworkersSpinnerLabel matlab.ui.control.Label
-    parfor_arg matlab.ui.control.Spinner
+    parforArg matlab.ui.control.Spinner
     AdvancedButton matlab.ui.control.Button
     RefreshAppButton matlab.ui.control.Button
     positioninfileSlider matlab.ui.control.Slider
@@ -95,6 +95,7 @@ properties (Access = public)
     RenderPreviewLamp matlab.ui.control.Lamp
     RenderPreviewButton matlab.ui.control.Button
     SavePreviewButton matlab.ui.control.Button
+    ImproveContrast matlab.ui.control.CheckBox
 
     % ---- context menu ----
     RightClickImageContextMenu matlab.ui.container.ContextMenu
@@ -142,7 +143,7 @@ methods (Access = private)
                 " Developed by the DigitalHolographyFoundation\n" + ...
                 "============================================\n", version);
         else
-            warning('HoloDopplerApp:noVersionFile', 'version.txt not found — version will be shown as unknown.');
+            warning('holodoppler:noVersionFile', 'version.txt not found — version will be shown as unknown.');
         end
 
         app.HoloDopplerUIFigure.Name = ['HoloDoppler ' version];
@@ -151,6 +152,8 @@ methods (Access = private)
         addpath(fullfile(fileparts(mfilename('fullpath')), 'Tools'));
         displaySplashScreen();
         app.HD = HoloDopplerClass();
+
+        app.updateButtonStates();
     end
 
     function HoloDopplerUIFigureCloseRequest(app, ~)
@@ -200,10 +203,12 @@ methods (Access = private)
             app.fileLoadedLamp.Color = [0 1 0];
         catch ME
             MEdisp(ME);
+            app.fileLoaded = 0;
             app.fileLoadedLamp.Color = [1 0 0];
             drawnow;
         end
 
+        app.updateButtonStates();
     end
 
     function LoadConfigButtonPushed(app, ~)
@@ -237,7 +242,9 @@ methods (Access = private)
     % --- Render callbacks --------------------------------------------------
 
     function RenderPreviewButtonPushed(app, ~)
+
         app.RenderPreviewLamp.Color = [1 0.5 0];
+        app.refreshClass();
         drawnow;
 
         Images = [];
@@ -252,12 +259,14 @@ methods (Access = private)
         end
 
         if ~isempty(Images)
-            app.Image.ImageSource = toImageSource(Images{1});
+            app.Image.ImageSource = toImageSource(Images{1}, app);
             app.MenuIndex = 1;
         else
             app.Image.ImageSource = '';
         end
 
+        % A successful render means we can now save the preview
+        app.updateButtonStates();
     end
 
     function VideoRenderingButtonPushed(app, ~)
@@ -296,7 +305,7 @@ methods (Access = private)
         imgs = app.HD.view.getImages(app.HD.params.imageTypes(1));
 
         if ~isempty(imgs)
-            app.Image.ImageSource = toImageSource(imgs{randsample(numel(imgs), 1)});
+            app.Image.ImageSource = toImageSource(imgs{randsample(numel(imgs), 1)}, app);
         else
             app.Image.ImageSource = '';
         end
@@ -343,7 +352,7 @@ methods (Access = private)
             image = imresize(image, [maxSize, maxSize]);
         end
 
-        app.Image.ImageSource = toImageSource(image);
+        app.Image.ImageSource = toImageSource(image, app);
         app.MenuIndex = num;
     end
 
@@ -423,6 +432,29 @@ methods (Access = private)
         app.refreshClass();
     end
 
+    function registrationCheckBoxValueChanged(app, ~)
+        % Toggling registration enables/disables the disk ratio field
+        app.registrationDiskRatio.Enable = app.imageRegistration.Value;
+        app.registrationDiskLabel.Enable = app.imageRegistration.Value;
+        app.refreshClass();
+    end
+
+    function spatialFilterCheckBoxValueChanged(app, ~)
+        % Toggling spatial filter enables/disables its range fields
+        app.spatialFilterRange1.Enable = app.spatialFilter.Value;
+        app.spatialFilterRange2.Enable = app.spatialFilter.Value;
+        app.refreshClass();
+    end
+
+    function svdFilterCheckBoxValueChanged(app, ~)
+        % Toggling SVD filter enables/disables its threshold and stride fields
+        app.svdThreshold.Enable = app.svd_filter.Value;
+        app.svdThresholdResetButton.Enable = app.svd_filter.Value;
+        app.svdStride.Enable = app.svd_filter.Value;
+        app.svdStrideLabel.Enable = app.svd_filter.Value;
+        app.refreshClass();
+    end
+
     % --- Folder management -------------------------------------------------
 
     function FolderManagementButtonPushed(app, ~)
@@ -446,6 +478,100 @@ methods (Access = private)
     % Pull all HD values into widgets (was external classtogui)
     function syncGuiFromClass(app)
         classtogui(app.HD, app);
+    end
+
+    % --- Enable / disable controls based on application state -------------
+    %
+    % Three tiers of availability:
+    %   (A) always available  — LoadfileButton, LoadConfigButton,
+    %                           FolderManagementButton, AdvancedButton
+    %   (B) file loaded       — everything that reads from obj.reader
+    %   (C) preview rendered  — SavePreviewButton, image navigation
+
+    function updateButtonStates(app)
+        fileReady = ~isempty(app.HD) && ~isempty(app.HD.file);
+        previewReady = fileReady && ~isempty(app.HD.view) && ...
+            ~isempty(app.HD.view.Output);
+
+        % ---- (B) require a loaded file ------------------------------------
+        fileControls = { ...
+                            app.SaveConfigButton, ...
+                            app.VideoRenderingButton, ...
+                            app.ShowHistogramButton, ...
+                            app.RefreshAppButton, ...
+                            app.RenderPreviewButton, ...
+                            app.AutofocusButton, ...
+                            app.AutofocusFromRef, ...
+                            app.imageRegistration, ...
+                            app.registrationDiskRatio, ...
+                            app.positioninfileSlider, ...
+                            app.framePosition, ...
+                            app.batchSize, ...
+                            app.batchStride, ...
+                            app.refBatchSize, ...
+                            app.fs, ...
+                            app.lambda, ...
+                            app.ppx, ...
+                            app.ppy, ...
+                            app.spatialFilter, ...
+                            app.spatialFilterRange1, ...
+                            app.spatialFilterRange2, ...
+                            app.PaddingNum, ...
+                            app.spatialTransformation, ...
+                            app.spatialPropagation, ...
+                            app.svd_filter, ...
+                            app.svdThreshold, ...
+                            app.svdThresholdResetButton, ...
+                            app.svdStride, ...
+                            app.timeTransform, ...
+                            app.frequencyRange1, ...
+                            app.frequencyRange2, ...
+                            app.frequencyRangeInter1, ...
+                            app.frequencyRangeInter2, ...
+                            app.indexRange1, ...
+                            app.indexRange2, ...
+                            app.flat_field_gw, ...
+                            app.square, ...
+                            app.flip_x, ...
+                            app.flip_y, ...
+                            app.parforArg, ...
+                        };
+
+        for k = 1:numel(fileControls)
+            fileControls{k}.Enable = fileReady;
+        end
+
+        % ---- (C) require a rendered preview --------------------------------
+        app.SavePreviewButton.Enable = previewReady;
+        app.NextMenu.Enable = previewReady;
+        app.ViewAllMenu.Enable = previewReady;
+
+        % ---- frequency / index range: also respect the transform type ------
+        % (only meaningful once a file is loaded; skip otherwise)
+        if fileReady
+            app.updateTimeTransformControls();
+        end
+
+        % ---- registration disk ratio: only when registration is on ---------
+        if fileReady
+            app.registrationDiskRatio.Enable = app.imageRegistration.Value;
+            app.registrationDiskLabel.Enable = app.imageRegistration.Value;
+        end
+
+        % ---- SVD sub-controls: only when SVD filter is checked -------------
+        if fileReady
+            app.svdThreshold.Enable = app.svd_filter.Value;
+            app.svdThresholdResetButton.Enable = app.svd_filter.Value;
+            app.svdStride.Enable = app.svd_filter.Value;
+            app.svdStrideLabel.Enable = app.svd_filter.Value;
+        end
+
+        % ---- Spatial filter ranges: only when spatial filter is checked ----
+        if fileReady
+            app.spatialFilterRange1.Enable = app.spatialFilter.Value;
+            app.spatialFilterRange2.Enable = app.spatialFilter.Value;
+        end
+
     end
 
     % --- refreshClass sub-routines ----------------------------------------
@@ -626,17 +752,17 @@ methods (Access = private)
         app.numworkersSpinnerLabel.Layout.Row = 6;
         app.numworkersSpinnerLabel.Layout.Column = 1;
 
-        app.parfor_arg = uispinner(app.mainParametersGrid);
-        app.parfor_arg.ValueChangingFcn = createCallbackFcn(app, @refreshClass, true);
+        app.parforArg = uispinner(app.mainParametersGrid);
+        app.parforArg.ValueChangingFcn = createCallbackFcn(app, @refreshClass, true);
         maxWorkers = parcluster('local').NumWorkers;
-        app.parfor_arg.Limits = [-1 maxWorkers];
-        app.parfor_arg.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.parfor_arg.FontColor = fontColor;
-        app.parfor_arg.BackgroundColor = darkBackgroundColor;
-        app.parfor_arg.Tooltip = {'Number of worker used for the video rendering (depends of the working station)'};
-        app.parfor_arg.Value = 10;
-        app.parfor_arg.Layout.Row = 6;
-        app.parfor_arg.Layout.Column = 2;
+        app.parforArg.Limits = [-1 maxWorkers];
+        app.parforArg.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.parforArg.FontColor = fontColor;
+        app.parforArg.BackgroundColor = darkBackgroundColor;
+        app.parforArg.Tooltip = {'Number of worker used for the video rendering (depends of the working station)'};
+        app.parforArg.Value = 10;
+        app.parforArg.Layout.Row = 6;
+        app.parforArg.Layout.Column = 2;
 
         app.positioninfileSliderLabel = uilabel(app.mainParametersGrid);
         app.positioninfileSliderLabel.FontColor = fontColor;
@@ -683,7 +809,7 @@ methods (Access = private)
         app.RefreshAppButton.BackgroundColor = grayButtonColor;
         app.RefreshAppButton.FontColor = fontColor;
         app.RefreshAppButton.Tooltip = {'Refresh the app'};
-        app.RefreshAppButton.Text = '👌';
+        app.RefreshAppButton.Text = '👌 Refresh app';
         app.RefreshAppButton.Layout.Row = 9;
         app.RefreshAppButton.Layout.Column = 2;
 
@@ -773,7 +899,6 @@ methods (Access = private)
         app.VideoRenderingButton.Text = 'Video Rendering';
 
         % Trivia row 4
-
         app.ShowHistogramButton = uibutton(p, 'push');
         app.ShowHistogramButton.ButtonPushedFcn = createCallbackFcn(app, @ShowHistogramButtonPushed, true);
         app.ShowHistogramButton.BackgroundColor = grayButtonColor;
@@ -845,7 +970,7 @@ methods (Access = private)
         app.AutofocusFromRef.Layout.Column = 1;
 
         app.imageRegistration = uicheckbox(p);
-        app.imageRegistration.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.imageRegistration.ValueChangedFcn = createCallbackFcn(app, @registrationCheckBoxValueChanged, true);
         app.imageRegistration.Tooltip = {'Activate frame to frame translation registration of images'};
         app.imageRegistration.Text = 'image registration';
         app.imageRegistration.FontColor = fontColor;
@@ -884,8 +1009,8 @@ methods (Access = private)
         app.renderingParametersPanel.Layout.Row = 2;
         app.renderingParametersPanel.Layout.Column = 2;
 
-        app.renderingParametersGrid = uigridlayout(app.renderingParametersPanel, [13 3]);
-        app.renderingParametersGrid.RowHeight = repmat({'fit'}, 1, 13);
+        app.renderingParametersGrid = uigridlayout(app.renderingParametersPanel, [14 3]);
+        app.renderingParametersGrid.RowHeight = repmat({'fit'}, 1, 14);
         app.renderingParametersGrid.ColumnWidth = {'fit', '1x', '1x'};
         app.renderingParametersGrid.Padding = [10 10 10 10];
         app.renderingParametersGrid.RowSpacing = 5;
@@ -897,7 +1022,7 @@ methods (Access = private)
         % Spatial filtering parameters row 1
 
         app.spatialFilter = uicheckbox(p);
-        app.spatialFilter.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.spatialFilter.ValueChangedFcn = createCallbackFcn(app, @spatialFilterCheckBoxValueChanged, true);
         app.spatialFilter.Tooltip = {'Filter the spatial frequencies of the interferograms keeping only those between spatial filter range1 and 2 (between 0 and 1-> highest dimension)'};
         app.spatialFilter.Text = 'Spatial filter';
         app.spatialFilter.FontColor = fontColor;
@@ -977,10 +1102,10 @@ methods (Access = private)
         app.AutofocusButton.Layout.Row = 4;
         app.AutofocusButton.Text = 'Autofocus';
 
-        % SVD filtering row 5 6 7
+        % SVD filtering row 5 6
 
         app.svd_filter = uicheckbox(p);
-        app.svd_filter.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.svd_filter.ValueChangedFcn = createCallbackFcn(app, @svdFilterCheckBoxValueChanged, true);
         app.svd_filter.Tooltip = {'Filter to remove intense time correlated feature images of the output fluctuation hologram using eigenvalue decomposition of the correlation matrix of frames.'};
         app.svd_filter.Text = 'SVD Filter';
         app.svd_filter.FontColor = fontColor;
@@ -999,7 +1124,7 @@ methods (Access = private)
         app.svdThreshold.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.svdThreshold.FontColor = fontColor;
         app.svdThreshold.BackgroundColor = darkBackgroundColor;
-        app.svdThreshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => frequencyRange(1)/fs * batchSize * 2)'};
+        app.svdThreshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => frequencyRange1/fs * batchSize * 2)'};
         app.svdThreshold.Layout.Column = 3;
         app.svdThreshold.Layout.Row = 5;
 
@@ -1149,17 +1274,25 @@ methods (Access = private)
         app.square.Layout.Column = 1;
         app.square.Layout.Row = 12;
 
+        app.ImproveContrast = uicheckbox(p);
+        app.ImproveContrast.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.ImproveContrast.Tooltip = {'Improve the contrast by rescaling the previewed frame'};
+        app.ImproveContrast.Text = 'Improve frame contrast';
+        app.ImproveContrast.FontColor = fontColor;
+        app.ImproveContrast.Layout.Column = 1;
+        app.ImproveContrast.Layout.Row = 13;
+
         app.RenderPreviewLamp = uilamp(p);
         app.RenderPreviewLamp.Color = [0.8 0.8 0.8];
         app.RenderPreviewLamp.Layout.Column = 1;
-        app.RenderPreviewLamp.Layout.Row = 13;
+        app.RenderPreviewLamp.Layout.Row = 14;
 
         app.RenderPreviewButton = uibutton(p, 'push');
         app.RenderPreviewButton.ButtonPushedFcn = createCallbackFcn(app, @RenderPreviewButtonPushed, true);
         app.RenderPreviewButton.BackgroundColor = grayButtonColor;
         app.RenderPreviewButton.FontColor = fontColor;
         app.RenderPreviewButton.Layout.Column = 2;
-        app.RenderPreviewButton.Layout.Row = 13;
+        app.RenderPreviewButton.Layout.Row = 14;
         app.RenderPreviewButton.Text = 'Preview';
 
         app.SavePreviewButton = uibutton(p, 'push');
@@ -1167,7 +1300,7 @@ methods (Access = private)
         app.SavePreviewButton.BackgroundColor = grayButtonColor;
         app.SavePreviewButton.FontColor = fontColor;
         app.SavePreviewButton.Layout.Column = 3;
-        app.SavePreviewButton.Layout.Row = 13;
+        app.SavePreviewButton.Layout.Row = 14;
         app.SavePreviewButton.Text = 'Save';
 
     end
@@ -1198,7 +1331,7 @@ end % createComponents methods block
 % =========================================================================
 methods (Access = public)
 
-    function app = HoloDopplerApp
+    function app = holodoppler
         createComponents(app)
         registerApp(app, app.HoloDopplerUIFigure)
         runStartupFcn(app, @startupFcn)

@@ -7,7 +7,7 @@ properties
     reader % class obj to read new parts of the file
     view % RenderingClass
     params % rendering parameters
-    video % ImageTypeList2 % store all the output images classes rendered at the end of a cycle
+    video % ImageTypeList % store all the output images classes rendered at the end of a cycle
     running_averages %  cumulative average over time
     registration % store the shifts calculated to register images at the end (so that it can be reversed)
 end
@@ -185,8 +185,8 @@ methods
                 obj.params.spatialPropagation = 1.13; % meters
         end
 
-        obj.params.frequencyRange(1) = obj.view.LastParams.frequencyRange(1); % the default from init value of rendering class
-        obj.params.frequencyRange(2) = obj.params.fs / 2;
+        obj.params.frequencyRange1 = obj.view.LastParams.frequencyRange1; % the default from init value of rendering class
+        obj.params.frequencyRange2 = obj.params.fs / 2;
 
         %2)bis) Set Defaults from the StandardConfig
 
@@ -289,7 +289,7 @@ methods
         obj.params.framePosition = 1;
         obj.params.registrationDiskRatio = 0.8;
         obj.params.imageTypes = {'power_Doppler', 'color_Doppler', 'directional_Doppler', 'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
-        obj.params.parfor_arg = 10;
+        obj.params.parforArg = 10;
         obj.params.refBatchSize = 512;
         obj.params.imageRegistration = true;
         obj.params.applyautofocusfromref = false;
@@ -310,16 +310,20 @@ methods
 
         % Initialize spatial filtering parameters
         obj.params.spatialFilter = false;
-        obj.params.spatialFilterRange = [0, 1];
+        obj.params.spatialFilterRange1 = 0;
+        obj.params.spatialFilterRange2 = 1;
         obj.params.spatialTransformation = 'Fresnel';
         obj.params.spatialPropagation = 0;
         obj.params.PaddingNum = 0;
 
         % Initialize time transformation parameters
         obj.params.timeTransform = 'FFT';
-        obj.params.frequencyRange = [0, 100];
-        obj.params.frequencyRangeInter = [7, 7];
-        obj.params.indexRange = [1, 100];
+        obj.params.frequencyRange1 = 0;
+        obj.params.frequencyRange2 = 100;
+        obj.params.frequencyRangeInter1 = 7;
+        obj.params.frequencyRangeInter2 = 7;
+        obj.params.indexRange1 = 1;
+        obj.params.indexRange2 = 100;
 
         % Initialize image transformation parameters
         obj.params.flip_y = false;
@@ -346,7 +350,7 @@ methods
             end
 
             if strcmp(fields{i}, 'imageTypes')
-                possibleItems = fieldnames(ImageTypeList2);
+                possibleItems = fieldnames(ImageTypeList);
                 validItems = intersect(params.(fields{i}), possibleItems);
                 obj.params.imageTypes = validItems;
             else
@@ -555,13 +559,13 @@ methods
 
         % Create parallel pool
         poolobj = gcp('nocreate'); % check if a pool already exist
-        parfor_arg = obj.params.parfor_arg;
+        parforArg = obj.params.parforArg;
 
-        if parfor_arg >= 1
+        if parforArg >= 1
 
-            if isempty(poolobj) || poolobj.NumWorkers ~= parfor_arg
+            if isempty(poolobj) || poolobj.NumWorkers ~= parforArg
                 delete(poolobj); % close current pool to create a new one with correct num of workers
-                parpool(parfor_arg);
+                parpool(parforArg);
             end
 
         end
@@ -614,7 +618,7 @@ methods
         % 1) Initialize the video object
 
         if isempty(obj.video) || numel(obj.video) ~= num_batches
-            v(1, num_batches) = ImageTypeList2();
+            v(1, num_batches) = ImageTypeList();
             obj.video = v; clear v;
         end
 
@@ -630,12 +634,12 @@ methods
         end
 
         % 2) Loop over the batches
-        if obj.params.parfor_arg == 0
+        if obj.params.parforArg == 0
 
             for i = 1:(num_batches)
                 obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batchSize, (i - 1) * obj.params.batchStride + first_frame));
                 obj.view.Render(obj.params, obj.params.imageTypes);
-                obj.video(i) = ImageTypeList2();
+                obj.video(i) = ImageTypeList();
                 obj.video(i).copy_from(obj.view.Output); % work around against handles
                 SH_PSD = calc_registration_from_views(obj.view, view_ref, obj.params);
                 obj.running_averages.update(SH_PSD, i, obj.params);
@@ -659,11 +663,11 @@ methods
             if isprop(l_reader, "all_frames") && ~isempty(l_reader.all_frames)
                 all_frames = reshape(l_reader.all_frames, size(l_reader.all_frames, 1), size(l_reader.all_frames, 2), batchSize, []);
 
-                parfor (i = 1:(num_batches), obj.params.parfor_arg)
+                parfor (i = 1:(num_batches), obj.params.parforArg)
                     l_view = RenderingClass();
                     l_view.setFrames(all_frames(:, :, :, i));
                     l_view.Render(l_params, l_params.imageTypes, cache_intermediate_results = false);
-                    l_video(i) = ImageTypeList2();
+                    l_video(i) = ImageTypeList();
                     l_video(i).copy_from(l_view.Output);
                     send(D, 0);
                     SH_PSD = calc_registration_from_views(l_view, view_ref, l_params);
@@ -672,11 +676,11 @@ methods
 
             else
 
-                parfor (i = 1:(num_batches), obj.params.parfor_arg)
+                parfor (i = 1:(num_batches), obj.params.parforArg)
                     l_view = RenderingClass();
                     l_view.setFrames(l_reader.read_frame_batch(batchSize, (i - 1) * batchStride + first_frame));
                     l_view.Render(l_params, l_params.imageTypes, cache_intermediate_results = false);
-                    l_video(i) = ImageTypeList2();
+                    l_video(i) = ImageTypeList();
                     l_video(i).copy_from(l_view.Output);
                     send(D, 0);
                     SH_PSD = calc_registration_from_views(l_view, view_ref, l_params);
@@ -938,8 +942,8 @@ methods
         %saving a small mat for old versions of PW
         cache.Fs = obj.params.fs * 1000;
         cache.batchStride = obj.params.batchStride;
-        cache.timeTransform.f1 = obj.params.frequencyRange(1);
-        cache.timeTransform.f2 = obj.params.frequencyRange(2);
+        cache.timeTransform.f1 = obj.params.frequencyRange1;
+        cache.timeTransform.f2 = obj.params.frequencyRange2;
         save(fullfile(result_folder_path, 'mat', strcat(obj.file.name, '_HD_', num2str(index + 1), '.mat')), "cache");
 
         fprintf("Video Saving took : %f s\n", toc(VideoSavingTime));

@@ -1,302 +1,162 @@
 function classtogui(HD, app)
-% handles all command transfer from HD to app
+% classtogui  Push all HD.params values into the app UI.
+%
+% Driven entirely by HDParamSchema — add a parameter there, not here.
 
-% Helper function to safely set numeric edit field values
-function safeSetNumeric(uiField, value)
+if isempty(HD) || isempty(HD.params)
+    return
+end
 
-    try
+schema = HDParamSchema();
 
-        if isprop(uiField, 'Value') && ~isempty(uiField)
+for k = 1:numel(schema)
+    e = schema(k);
 
-            if isempty(value)
-                value = 0; % Default value for empty
+    % Skip entries whose widget doesn't exist on this app
+    if ~widgetExists(app, e.widget)
+        continue
+    end
+
+    % Read param value (fall back to schema default if absent)
+    value = getParam(HD.params, e.param, e.default);
+
+    switch e.type
+        case 'numeric'
+            setNumeric(app.(e.widget), value);
+
+        case 'checkbox'
+            setCheckbox(app.(e.widget), value);
+
+        case 'dropdown'
+            setDropdown(app.(e.widget), value);
+
+        case 'range2'
+            % e.param is the HD field (1x2 vector); e.widget is a 2-element cell
+            if numel(value) >= 2
+                setNumeric(app.(e.widget{1}), value(1));
+                setNumeric(app.(e.widget{2}), value(2));
             end
 
-            uiField.Value = value;
-        end
-
-    catch ME
-        % Silently fail - don't crash the GUI
-        % fprintf('Warning: Could not set value for %s\n', inputname(1));
+        case 'listbox'
+            setListbox(app.(e.widget), value);
     end
 
 end
 
-% Helper function to safely set checkbox values
-function safeSetCheckbox(uiCheckbox, value)
+% ---- things that need special logic beyond the schema -------------------
 
-    try
+% Image dimensions come from HD.file, not HD.params
+if ~isempty(HD.file)
+    setNumeric(app.Nx, double(HD.file.Nx));
+    setNumeric(app.Ny, double(HD.file.Ny));
 
-        if isprop(uiCheckbox, 'Value') && ~isempty(uiCheckbox)
+    if isfield(HD.file, 'num_frames')
 
-            if isempty(value)
-                value = false;
-            end
-
-            uiCheckbox.Value = logical(value);
+        try
+            app.positioninfileSlider.Limits = double([1 HD.file.num_frames]);
+            setNumeric(app.positioninfileSlider, double(HD.params.framePosition));
+        catch
         end
 
-    catch
-        % Silently fail
     end
 
 end
 
-% Helper function to safely set dropdown values
-function safeSetDropdown(uiDropdown, value, items)
+end
 
-    try
+% ===========================================================================
+% Private helpers
+% ===========================================================================
 
-        if isprop(uiDropdown, 'Value') && ~isempty(uiDropdown)
+function tf = widgetExists(app, widget)
+% True when the widget name is a non-empty string and app has that property.
+if isempty(widget) || (iscell(widget) && any(cellfun(@isempty, widget)))
+    tf = false;
+    return
+end
 
-            if isempty(value)
-
-                if nargin >= 3 && ~isempty(items)
-                    value = items{1};
-                else
-                    value = '';
-                end
-
-            end
-
-            % Check if value is in the items list
-            if isprop(uiDropdown, 'Items') && ~isempty(uiDropdown.Items)
-
-                if ~ismember(value, uiDropdown.Items)
-                    value = uiDropdown.Items{1};
-                end
-
-            end
-
-            uiDropdown.Value = value;
-        end
-
-    catch
-        % Silently fail
-    end
+if iscell(widget)
+    tf = all(cellfun(@(w) isprop(app, w), widget));
+else
+    tf = isprop(app, widget);
+end
 
 end
 
-% Basic parameters
-if ~isempty(HD) && ~isempty(HD.params)
-    safeSetNumeric(app.fs, HD.params.fs);
-    safeSetNumeric(app.lambda, HD.params.lambda);
-    safeSetNumeric(app.ppx, HD.params.ppx);
-    safeSetNumeric(app.ppy, HD.params.ppy);
+function value = getParam(params, name, default)
+% Return params.(name) if it exists and is non-empty, otherwise default.
+if isfield(params, name) && ~isempty(params.(name))
+    value = params.(name);
+else
+    value = default;
+end
 
-    % Image dimensions (if file is loaded)
-    if ~isempty(HD.file)
-        safeSetNumeric(app.Nx, double(HD.file.Nx));
-        safeSetNumeric(app.Ny, double(HD.file.Ny));
+end
 
-        % Update slider limits and value
-        if isfield(HD.file, 'num_frames')
+function setNumeric(field, value)
 
-            try
-                app.positioninfileSlider.Limits = double([1 HD.file.num_frames]);
-                safeSetNumeric(app.positioninfileSlider, double(HD.params.framePosition));
-            catch
-                % Silently fail
-            end
+if isempty(value) || ~isnumeric(value)
+    value = 0;
+end
 
-        end
+try
+    field.Value = double(value(1));
+catch ME
+    warning('classtogui:setNumeric', 'Could not set numeric field: %s', ME.message);
+end
 
-        % Update frame position numeric field if it exists
-        if isprop(app, 'framePosition')
-            safeSetNumeric(app.framePosition, double(HD.params.framePosition));
-        end
+end
 
+function setCheckbox(field, value)
+
+if isempty(value)
+    value = false;
+end
+
+try
+    field.Value = logical(value);
+catch ME
+    warning('classtogui:setCheckbox', 'Could not set checkbox: %s', ME.message);
+end
+
+end
+
+function setDropdown(field, value)
+
+if isempty(value)
+    value = field.Items{1};
+end
+
+try
+
+    if ismember(value, field.Items)
+        field.Value = value;
+    else
+        warning('classtogui:setDropdown', ...
+            'Value "%s" not in dropdown items — keeping current value.', value);
     end
 
-    % Parallel processing
-    safeSetNumeric(app.parfor_arg, HD.params.parfor_arg);
+catch ME
+    warning('classtogui:setDropdown', 'Could not set dropdown: %s', ME.message);
+end
 
-    % Batch parameters
-    safeSetNumeric(app.batchSize, HD.params.batchSize);
-    safeSetNumeric(app.refBatchSize, HD.params.refBatchSize);
-    safeSetNumeric(app.batchStride, HD.params.batchStride);
+end
 
-    % Registration parameters
-    if isprop(app, 'registrationDiskRatio')
-        safeSetNumeric(app.registrationDiskRatio, HD.params.registrationDiskRatio);
-    end
+function setListbox(field, value)
+% Populate Items from ImageTypeList then select the active ones.
+try
+    allTypes = properties(ImageTypeList);
+catch
+    allTypes = {'power_Doppler', 'color_Doppler', 'directional_Doppler', ...
+                    'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
+end
 
-    if isprop(app, 'imageRegistration')
-        safeSetCheckbox(app.imageRegistration, HD.params.imageRegistration);
-    end
+field.Items = allTypes;
 
-    % Image types list
-    if isprop(app.imageTypesListBox, 'Items')
-        % Get available image types from ImageTypeList2
-        try
-            imageTypes = properties(ImageTypeList2);
-            app.imageTypesListBox.Items = imageTypes;
-        catch
-            % If ImageTypeList2 is not available, use default list
-            app.imageTypesListBox.Items = {'power_Doppler', 'color_Doppler', 'directional_Doppler', ...
-                                               'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
-        end
-
-        if ~isempty(HD.params.imageTypes)
-            % Get current items in the list box
-            currentItems = app.imageTypesListBox.Items;
-
-            % Find which items exist in both
-            validItems = intersect(HD.params.imageTypes, currentItems);
-
-            % Set value only if there are valid items
-            if ~isempty(validItems)
-                app.imageTypesListBox.Value = validItems;
-            else
-                % Optional: clear selection or set to empty
-                app.imageTypesListBox.Value = {};
-            end
-
-        end
-
-    end
-
-    % Spatial filtering
-    if isprop(app, 'spatialFilter')
-        safeSetCheckbox(app.spatialFilter, HD.params.spatialFilter);
-    end
-
-    if isprop(app, 'spatialFilterRange1') && isprop(app, 'spatialFilterRange2')
-
-        if length(HD.params.spatialFilterRange) >= 2
-            safeSetNumeric(app.spatialFilterRange1, HD.params.spatialFilterRange(1));
-            safeSetNumeric(app.spatialFilterRange2, HD.params.spatialFilterRange(2));
-        end
-
-    end
-
-    % Spatial transformation
-    if isprop(app, 'spatialTransformation')
-        items = ["Fresnel", "angular spectrum", "twin image removal", "None"];
-        app.spatialTransformation.Items = items;
-        safeSetDropdown(app.spatialTransformation, HD.params.spatialTransformation, items);
-    end
-
-    if isprop(app, 'spatialPropagation')
-        safeSetNumeric(app.spatialPropagation, HD.params.spatialPropagation);
-    end
-
-    if isprop(app, 'PaddingNum')
-        safeSetNumeric(app.PaddingNum, HD.params.PaddingNum);
-    end
-
-    % SVD filters
-    if isprop(app, 'svd_filter')
-        safeSetCheckbox(app.svd_filter, HD.params.svd_filter);
-    end
-
-    % SVD thresholds
-    if isprop(app, 'svdThreshold')
-        safeSetNumeric(app.svdThreshold, HD.params.svdThreshold);
-    end
-
-    if isprop(app, 'svdStride')
-        safeSetNumeric(app.svdStride, HD.params.svdStride);
-    end
-
-    % Time transformation
-    if isprop(app, 'timeTransform')
-        items = ["FFT", "PCA", "ICA", "Wavelet_Morlet", "autocorrelation", "intercorrelation", "phase difference", "None"];
-        app.timeTransform.Items = items;
-        safeSetDropdown(app.timeTransform, HD.params.timeTransform, items);
-    end
-
-    if isprop(app, 'frequencyRange1') && isprop(app, 'frequencyRange2')
-
-        if length(HD.params.frequencyRange) >= 2
-            safeSetNumeric(app.frequencyRange1, HD.params.frequencyRange(1));
-            safeSetNumeric(app.frequencyRange2, HD.params.frequencyRange(2));
-        end
-
-    end
-
-    if isprop(app, 'frequencyRangeInter1') && isprop(app, 'frequencyRangeInter2')
-
-        if length(HD.params.frequencyRangeInter) >= 2
-            safeSetNumeric(app.frequencyRangeInter1, HD.params.frequencyRangeInter(1));
-            safeSetNumeric(app.frequencyRangeInter2, HD.params.frequencyRangeInter(2));
-        end
-
-    end
-
-    if isprop(app, 'indexRange1') && isprop(app, 'indexRange2')
-
-        if length(HD.params.indexRange) >= 2
-            safeSetNumeric(app.indexRange1, HD.params.indexRange(1));
-            safeSetNumeric(app.indexRange2, HD.params.indexRange(2));
-        end
-
-    end
-
-    % Flat field correction
-    if isprop(app, 'flat_field_gw')
-        safeSetNumeric(app.flat_field_gw, HD.params.flatfield_gw);
-    end
-
-    % Image transformations
-    if isprop(app, 'flip_y')
-        safeSetCheckbox(app.flip_y, HD.params.flip_y);
-    end
-
-    if isprop(app, 'flip_x')
-        safeSetCheckbox(app.flip_x, HD.params.flip_x);
-    end
-
-    if isprop(app, 'square')
-        safeSetCheckbox(app.square, HD.params.square);
-    end
-
-    % Registration options
-    if isprop(app, 'AutofocusFromRef')
-        safeSetCheckbox(app.AutofocusFromRef, HD.params.applyautofocusfromref);
-    end
-
-    % Additional advanced processing parameters
-
-    % Phase registration
-    if isprop(app, 'phaseregistrationCheckBox')
-        safeSetCheckbox(app.phaseregistrationCheckBox, HD.params.phase_registration);
-    end
-
-    if isprop(app, 'rephasingCheckBox')
-        safeSetCheckbox(app.rephasingCheckBox, HD.params.rephasing);
-    end
-
-    if isprop(app, 'iterativeregistrationCheckBox')
-        safeSetCheckbox(app.iterativeregistrationCheckBox, HD.params.iterative_registration);
-    end
-
-    if isprop(app, 'showrefCheckBox')
-        safeSetCheckbox(app.showrefCheckBox, HD.params.show_ref);
-    end
-
-    % Update UI enable states based on current settings
-    if isprop(app, 'updateTimeTransformControls')
-
-        try
-            app.updateTimeTransformControls();
-        catch
-            % Silently fail
-        end
-
-    end
-
-    % Update current file panel title if file is loaded
-    if ~isempty(HD.file) && isfield(HD.file, 'path') && isprop(app, 'CurrentFilePanel')
-
-        try
-            app.CurrentFilePanel.Title = ['Current File : ' HD.file.path];
-        catch
-            % Silently fail
-        end
-
-    end
-
+if ~isempty(value)
+    field.Value = intersect(value, allTypes, 'stable');
+else
+    field.Value = {};
 end
 
 end

@@ -115,7 +115,7 @@ showSHbtn.BackgroundColor = btnColor;
 showSHbtn.FontColor = textColor;
 showSHbtn.Layout.Row = 5;
 showSHbtn.Layout.Column = 3;
-showSHbtn.ButtonPushedFcn = @(btn, event) ExploreSHbroadening(app.HD.view.SH, app.HD.file.fs, app.HD.params.frequencyRange(1), app.HD.params.frequencyRange(2));
+showSHbtn.ButtonPushedFcn = @(btn, event) ExploreSHbroadening(app.HD.view.SH, app.HD.file.fs, app.HD.params.frequencyRange1, app.HD.params.frequencyRange2);
 
 % Explore Ap button  - Row 6
 showSHbtn = uibutton(gl, 'push');

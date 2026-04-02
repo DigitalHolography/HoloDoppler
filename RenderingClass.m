@@ -1,356 +1,410 @@
 classdef RenderingClass < handle
-% handles rendering
+% Handles holographic rendering: spatial propagation → SVD filtering → time transform.
+
 properties
     LastParams struct
-    Frames
-    FramesChanged logical
+    Frames single
+    FramesChanged logical = false
+
+    % Cached intermediate results
     SpatialFilterMask logical
     SpatialKernel single
     PhaseFactor single
-    moment_chunks_crop_array single
-    FH single
-    H single
-    SH single
-    cov single
-    U single
-    Output ImageTypeList2
+    FH single % Fourier-domain hologram
+    H single % Reconstructed complex field
+    SH single % Short-time transformed field
+    cov single % SVD covariance
+    U single % SVD left singular vectors
+
+    Output ImageTypeList
 end
 
+% -----------------------------------------------------------------------
+%  Public interface
+% -----------------------------------------------------------------------
 methods
 
     function obj = RenderingClass()
-        obj.Output = ImageTypeList2();
+        obj.Output = ImageTypeList();
         obj.setInitParams();
     end
 
+    % ------------------------------------------------------------------
     function setInitParams(obj)
-        % set the initial parameters for all the parameters used in this class
+        % Default pipeline parameters.
+        p = struct();
 
-        Params = struct();
-        Params.fs = 1; % camera frame rate
-        Params.lambda = 852e-9;
-        Params.ppx = 20e-6; % pixel pitch of the camera
-        Params.ppy = 20e-6;
+        % Acquisition
+        p.fs = 1; % Camera frame rate (Hz)
+        p.lambda = 852e-9; % Illumination wavelength (m)
+        p.ppx = 20e-6; % Pixel pitch x (m)
+        p.ppy = 20e-6; % Pixel pitch y (m)
 
-        Params.spatialFilter = false;
-        Params.spatialFilterRange = [0, 1];
-        Params.spatialTransformation = "Fresnel";
-        Params.spatialPropagation = 0.5;
-        Params.PaddingNum = 0;
+        % Spatial filter (step 1)
+        p.spatialFilter = false;
+        p.spatialFilterRange1 = 0;
+        p.spatialFilterRange2 = 1;
 
-        Params.svd_filter = 1;
-        Params.svdThreshold = false;
-        Params.svd_mean = false;
-        Params.svdStride = 1;
-        Params.timeTransform = "FFT";
-        Params.frequencyRange = [6, 10.5];
-        Params.frequencyRangeInter = [7, 7];
-        Params.indexRange = [3, 10];
-        Params.frequencyRange_extra = -1;
-        Params.bucketsRanges = [[4; 18.3], [6; 18.3]];
-        Params.buckets_raw = false;
-        Params.flatfield_gw = 35;
-        Params.flip_y = false;
-        Params.flip_x = false;
-        Params.square = true;
-        obj.LastParams = Params;
+        % Spatial propagation (step 2)
+        p.spatialTransformation = "Fresnel";
+        p.spatialPropagation = 0.5;
+        p.PaddingNum = 0;
 
+        % SVD filter (step 3)
+        p.svd_filter = 1;
+        p.svdThreshold = false;
+        p.svdStride = 1;
+        p.frequencyRange1 = 6;
+        p.frequencyRange2 = 10.5;
+
+        % Short-time transform (step 4)
+        p.timeTransform = "FFT";
+        p.frequencyRangeInter1 = 7;
+        p.frequencyRangeInter2 = 7;
+        p.indexRange1 = 3;
+        p.indexRange2 = 10;
+        p.frequencyRange_extra = -1;
+        p.bucketsRanges = [[4; 18.3], [6; 18.3]];
+        p.buckets_raw = false;
+        p.flatfield_gw = 35;
+
+        % Output orientation
+        p.flip_y = false;
+        p.flip_x = false;
+        p.square = true;
+
+        obj.LastParams = p;
     end
 
-    function obj = setFrames(obj, frames)
-        obj.Frames = frames;
+    % ------------------------------------------------------------------
+    function setFrames(obj, frames)
+        obj.Frames = single(frames);
         obj.FramesChanged = true;
     end
 
+    % ------------------------------------------------------------------
     function showFramesHistogram(obj)
+        FIGURE_ID = 45;
 
         try
-            figure(45); histogram((obj.Frames)); title('Frames histogram');
+            figure(FIGURE_ID);
+            histogram(obj.Frames, ...
+                'BinLimits', [min(obj.Frames(:)), max(obj.Frames(:))], ...
+                'BinMethod', 'integers');
+            title('Frames histogram');
         catch
-            close(45);
+            close(FIGURE_ID);
         end
 
     end
 
-    function obj = freeCache(obj)
+    % ------------------------------------------------------------------
+    function freeCache(obj)
         obj.FH = [];
         obj.H = [];
         obj.SH = [];
+        obj.cov = [];
+        obj.U = [];
         obj.FramesChanged = true;
     end
 
-    function obj = Render(obj, Params, imageTypes, options)
+    % ------------------------------------------------------------------
+    function Render(obj, Params, imageTypes, options)
+        % Execute the full rendering pipeline and populate obj.Output.
+        %
+        %   Params      – struct of pipeline parameters (merged with defaults)
+        %   imageTypes  – cell array of output names, e.g. {"power_Doppler"}
+        %   options.cache_intermediate_results – keep FH/H between calls (default true)
 
         arguments
             obj
-            Params struct % contains all the parameters required for the rendering
-            imageTypes cell % list of chars containing the name of the outputs
+            Params struct
+            imageTypes cell = {}
             options.cache_intermediate_results logical = true
         end
 
         obj.Output.select(imageTypes{:});
 
-        % Calculate the parameters difference to prevent recalculations
-        fields = fieldnames(Params);
+        % Merge caller params with last params; detect what changed.
+        [Params, changed] = obj.mergeAndDiff(Params);
 
-        for i = 1:numel(fields)
-
-            if isfield(obj.LastParams, fields{i})
-                ParamChanged.(fields{i}) = ~isequal(Params.(fields{i}), obj.LastParams.(fields{i}));
-                % if the parameter was different
-                % there is need to recalculate
-            else
-                ParamChanged.(fields{i}) = true; % need to recalculate
-            end
-
-        end
-
-        %Fill with the last output params if none given
-        fields = fieldnames(obj.LastParams);
-
-        for i = 1:numel(fields)
-
-            if ~isfield(Params, fields{i})
-                ParamChanged.(fields{i}) = false; % by default user should not need to calculate
-                Params.(fields{i}) = obj.LastParams.(fields{i});
-            end
-
-        end
-
-        % 1) Apply corrections to interferograms
-
-        doFrames = ParamChanged.spatialFilter || ParamChanged.spatialFilterRange || obj.FramesChanged;
         [Nx, Ny, batchSize] = size(obj.Frames);
 
-        if doFrames % change or if the frames changed
+        % --- Step 1: Spatial filter -------------------------------------
+        obj.applySpatialFilter(Params, changed, Nx, Ny);
 
-            if Params.spatialFilter
+        % --- Step 2: Spatial propagation --------------------------------
+        doFH = obj.FramesChanged || changed.PaddingNum || ...
+            changed.spatialTransformation || changed.spatialPropagation || ...
+            ~options.cache_intermediate_results;
 
-                if ParamChanged.spatialFilterRange || obj.FramesChanged || isempty(obj.SpatialFilterMask)
-                    [NY, NX, ~] = size(obj.Frames);
-                    obj.SpatialFilterMask = fftshift(diskMask(NY, NX, Params.spatialFilterRange(1), Params.spatialFilterRange(2)))';
-                end
-
-                obj.Frames = ifft2(fft2(obj.Frames) .* obj.SpatialFilterMask);
-            end
-
-        end
-
-        % 2) Spatial transformation (from Frames to H)
-
-        doFH = doFrames || ParamChanged.PaddingNum || ParamChanged.spatialTransformation || ParamChanged.spatialPropagation || obj.FramesChanged || ~options.cache_intermediate_results;
-
-        if doFH % change or if the frames changed
-
-            switch Params.spatialTransformation
-                case "angular spectrum"
-
-                    [NY, NX, ~] = size(obj.Frames);
-
-                    if Params.PaddingNum > 0
-                        ND = Params.PaddingNum;
-                    else
-                        ND = max(NX, NY);
-                    end
-
-                    if ParamChanged.spatialPropagation || ParamChanged.PaddingNum || ParamChanged.spatialTransformation || isempty(obj.SpatialKernel)
-
-                        obj.SpatialKernel = propagation_kernelAngularSpectrum(ND, ND, Params.spatialPropagation, Params.lambda, Params.ppx, Params.ppy, 0);
-
-                    end
-
-                    obj.FH = fft2(single(pad3DToSquare(obj.Frames, ND))); % zero pading in a square of max(Nx NY) size
-
-                    obj.FH = obj.FH .* fftshift(obj.SpatialKernel);
-                case "Fresnel"
-
-                    [NY, NX, ~] = size(obj.Frames);
-
-                    if Params.PaddingNum > 0
-                        NY = Params.PaddingNum;
-                        NX = Params.PaddingNum;
-                    end
-
-                    if ParamChanged.spatialPropagation || ParamChanged.PaddingNum || ParamChanged.spatialTransformation || isempty(obj.SpatialKernel)
-
-                        [obj.SpatialKernel, obj.PhaseFactor] = propagation_kernelFresnel(NX, NY, Params.spatialPropagation, Params.lambda, Params.ppx, Params.ppy, 0);
-                    end
-
-                    if Params.PaddingNum > 0
-                        obj.FH = single(pad3DToSquare(obj.Frames, Params.PaddingNum)) .* obj.SpatialKernel;
-                    else
-                        obj.FH = single(obj.Frames) .* obj.SpatialKernel;
-                    end
-
-                case "None"
-                    obj.FH = [];
-
-            end
-
-        end
-
-        doH = doFH || ParamChanged.svd_filter || ...
-            (Params.svdThreshold == 0 && ParamChanged.frequencyRange) || ...
-            ParamChanged.svdThreshold || obj.FramesChanged || ~options.cache_intermediate_results;
-
-        if doH % change or if the frames changed
-
-            switch Params.spatialTransformation
-                case "angular spectrum"
-                    obj.H = ifft2(obj.FH) .* sqrt(Nx * Ny);
-                case "Fresnel"
-                    obj.H = fftshift(fftshift(fft2(obj.FH), 1), 2) ./ sqrt(Nx * Ny); %.*obj.PhaseFactor;
-                case "twin image removal"
-                    obj.H = twin_image_removal_(single(obj.Frames), [], ParamChanged, Params);
-                case "None"
-                    obj.H = single(obj.Frames);
-            end
-
-        end
-
-        % obj.H = abs(obj.H); % nothing is in the phase so doing this is ok
-        obj.Output.construct_image_from_FH(obj.LastParams, obj.FH);
+        obj.applySpatialTransform(Params, changed, doFH, Nx, Ny);
+        obj.Output.construct_image_from_FH(Params, obj.FH);
 
         if ~options.cache_intermediate_results
             obj.FH = [];
         end
 
-        % 3) H fluctuation batch filtering
+        % --- Step 3: SVD / temporal filter ------------------------------
+        doSVD = doFH || changed.svd_filter || changed.svdThreshold || ...
+            changed.frequencyRange1 || changed.frequencyRange2 || ...
+            changed.svdStride || ~options.cache_intermediate_results;
 
-        if doH
-
-            if Params.svd_filter
-                [obj.H, obj.cov, obj.U] = svd_filter(obj.H, Params.svdThreshold, Params.frequencyRange(1), Params.fs, Params.svdStride, Params.svd_mean);
-
-            end
-
-        end
-
-        if ~Params.svd_filter
-            obj.cov = [];
-            obj.U = [];
-        end
-
+        obj.applySvdFilter(Params, doSVD);
         obj.Output.construct_image_from_SVD(Params, obj.cov, obj.U, size(obj.H));
 
-        % 4) Short-time transformation
+        % --- Step 4: Short-time transform -------------------------------
+        doSH = doFH || changed.timeTransform || changed.flip_y || ...
+            changed.flip_x || ~options.cache_intermediate_results;
 
-        doSH = doH || ParamChanged.timeTransform || obj.FramesChanged || ParamChanged.flip_y || ParamChanged.flip_x || ~options.cache_intermediate_results;
-
-        if doSH
-
-            switch Params.timeTransform
-                case 'PCA'
-                    obj.SH = short_time_PCA(obj.H);
-                case 'ICA'
-                    obj.SH = short_time_ICA(obj.H);
-                case 'FFT'
-                    obj.SH = fft(obj.H, [], 3) ./ sqrt(batchSize);
-                case 'Wavelet_Morlet'
-                    obj.SH = morlet1D_transform_3rdDim(obj.H, [], 3);
-                case 'autocorrelation'
-                    [a, b, c] = size(obj.H);
-                    tmp = reshape(obj.H, a * b, c);
-                    out = arrayfun(@(lm) xcorr(tmp(lm, :), 'normalized'), (1:a * b), 'UniformOutput', false);
-
-                    obj.SH = permute(reshape(cell2mat(out), [], a, b), [2 3 1]);
-                    %obj.SH = obj.SH(:,:,c/2:(c/2+c-1));
-                case 'intercorrelation'
-                    obj.SH = intercorrel(obj.H, 3); %TODO Replace template 3
-                case 'phase difference'
-                    a = angle(obj.H);
-                    obj.SH = a; %(:, :, 1:2:end) -a(:, :, 2:2:end);
-                case 'None'
-                    obj.SH = obj.H;
-            end
-
-        end
+        obj.applyTimeTransform(Params, doSH, batchSize);
 
         if ~options.cache_intermediate_results
             obj.H = [];
         end
 
         if doSH
-
-            obj.SH = flip(permute(obj.SH, [2 1 3]), 2); % x<->-y transpose due to the lens imaging
-
-            if Params.flip_y
-                obj.SH = flip(obj.SH, 1);
-            end
-
-            if Params.flip_x
-                obj.SH = flip(obj.SH, 2);
-            end
-
+            obj.orientOutput(Params);
         end
 
         obj.Output.construct_image(Params, obj.SH);
 
-        obj.FramesChanged = false; % reset
-
+        % Finalise
+        obj.FramesChanged = false;
         obj.LastParams = Params;
     end
 
+    % ------------------------------------------------------------------
     function r = constructImages(obj, imageTypes)
-
-        arguments
-            obj
-            imageTypes cell % list of chars image types
-        end
-
-        r = cell(1, numel(imageTypes));
-
-        for i = 1:length(imageTypes)
-
-            if ~isprop(obj.Output, imageTypes{i})
-                error("%s isnt a known image type try any of [ %s ]", imageTypes{i}, sprintf("%s,", string(fields(obj.Output))));
-            end
-
-        end
-
+        % Re-construct images from cached intermediates.
+        obj.validateImageTypes(imageTypes);
         obj.Output.select(imageTypes{:});
-
         obj.Output.construct_image_from_FH(obj.LastParams, obj.FH);
-
         obj.Output.construct_image_from_SVD(obj.LastParams, obj.cov, obj.U, size(obj.H));
-
         obj.Output.construct_image(obj.LastParams, obj.SH);
+        r = obj.collectImages(imageTypes);
+    end
 
-        for i = 1:length(imageTypes)
+    % ------------------------------------------------------------------
+    function r = getImages(obj, imageTypes)
+        % Return normalised images for requested types without recomputing.
+        obj.validateImageTypes(imageTypes);
+        r = obj.collectImages(imageTypes);
+    end
 
-            if ~isprop(obj.Output, imageTypes{i})
-                error("%s isnt a known image type try any of [ %s ]", imageTypes{i}, sprintf("%s,", string(fields(obj.Output))));
+    % ------------------------------------------------------------------
+    function selfTesting(obj)
+        obj.freeCache();
+        obj.setFrames(rescale(rand(10, 20, 30, 'single')));
+        obj.setInitParams();
+
+        obj.Render(struct(), {"power_Doppler"});
+        obj.Render(struct("spatialTransformation", "angular spectrum"), {"power_Doppler"});
+        obj.Render(struct("timeTransform", "PCA"), {"power_Doppler"});
+        obj.Render(struct(), {"power_Doppler"});
+        obj.Render(struct(), {"directional_Doppler"});
+        obj.Render(struct("timeTransform", "ICA"), {"directional_Doppler"});
+    end
+
+end % public methods
+
+% -----------------------------------------------------------------------
+%  Private helpers
+% -----------------------------------------------------------------------
+methods (Access = private)
+
+    function [Params, changed] = mergeAndDiff(obj, Params)
+        % Detect changed fields and fill missing ones from LastParams.
+        fields = fieldnames(obj.LastParams);
+
+        for i = 1:numel(fields)
+            f = fields{i};
+
+            if isfield(Params, f)
+                changed.(f) = ~isequal(Params.(f), obj.LastParams.(f));
+            else
+                changed.(f) = false;
+                Params.(f) = obj.LastParams.(f);
             end
 
-            r{i} = mat2gray(obj.Output.(imageTypes{i}).image);
+        end
+
+        % Handle fields present in Params but not in LastParams.
+        newFields = setdiff(fieldnames(Params), fields);
+
+        for i = 1:numel(newFields)
+            changed.(newFields{i}) = true;
         end
 
     end
 
-    function r = getImages(obj, imageTypes)
+    % ------------------------------------------------------------------
+    function applySpatialFilter(obj, Params, changed, Nx, Ny)
+        filterParamsChanged = changed.spatialFilter || ...
+            changed.spatialFilterRange1 || ...
+            changed.spatialFilterRange2;
 
-        arguments
-            obj
-            imageTypes cell % list of chars image types
+        if ~(filterParamsChanged || obj.FramesChanged) || ~Params.spatialFilter
+            return
         end
 
-        r = cell(1, numel(imageTypes));
+        if filterParamsChanged || obj.FramesChanged || isempty(obj.SpatialFilterMask)
+            obj.SpatialFilterMask = fftshift( ...
+                diskMask(Nx, Ny, Params.spatialFilterRange1, Params.spatialFilterRange2))';
+        end
 
-        for i = 1:length(imageTypes)
+        obj.Frames = ifft2(fft2(obj.Frames) .* obj.SpatialFilterMask);
+    end
+
+    % ------------------------------------------------------------------
+    function applySpatialTransform(obj, Params, changed, doFH, Nx, Ny)
+        if ~doFH, return, end
+
+        kernelChanged = changed.spatialPropagation || changed.PaddingNum || ...
+            changed.spatialTransformation;
+
+        switch Params.spatialTransformation
+
+            case "angular spectrum"
+                ND = max([Params.PaddingNum, Nx, Ny]); % PaddingNum=0 → use data size
+
+                if kernelChanged || isempty(obj.SpatialKernel)
+                    obj.SpatialKernel = propagation_kernelAngularSpectrum( ...
+                        ND, ND, Params.spatialPropagation, ...
+                        Params.lambda, Params.ppx, Params.ppy, 0);
+                end
+
+                obj.FH = fft2(single(pad3DToSquare(obj.Frames, ND)));
+                obj.FH = obj.FH .* fftshift(obj.SpatialKernel);
+                obj.H = ifft2(obj.FH) .* sqrt(Nx * Ny);
+
+            case "Fresnel"
+                NxP = max(Params.PaddingNum, Nx);
+                NyP = max(Params.PaddingNum, Ny);
+
+                if kernelChanged || isempty(obj.SpatialKernel)
+                    [obj.SpatialKernel, obj.PhaseFactor] = propagation_kernelFresnel( ...
+                        NyP, NxP, Params.spatialPropagation, ...
+                        Params.lambda, Params.ppx, Params.ppy, 0);
+                end
+
+                if Params.PaddingNum > 0
+                    padded = single(pad3DToSquare(obj.Frames, Params.PaddingNum));
+                else
+                    padded = single(obj.Frames);
+                end
+
+                obj.FH = padded .* obj.SpatialKernel;
+                obj.H = fftshift(fftshift(fft2(obj.FH), 1), 2) ./ sqrt(NxP * NyP);
+
+            case "None"
+                obj.FH = [];
+                obj.H = single(obj.Frames);
+
+            case "twin image removal"
+                obj.FH = [];
+                obj.H = twin_image_removal_(single(obj.Frames), [], changed, Params);
+
+            otherwise
+                error("RenderingClass: unknown spatialTransformation '%s'", ...
+                    Params.spatialTransformation);
+        end
+
+    end
+
+    % ------------------------------------------------------------------
+    function applySvdFilter(obj, Params, doSVD)
+        if ~doSVD, return, end
+
+        if Params.svd_filter
+            [obj.H, obj.cov, obj.U] = svd_filter( ...
+                obj.H, Params.svdThreshold, Params.frequencyRange1, ...
+                Params.fs, Params.svdStride);
+        else
+            obj.cov = [];
+            obj.U = [];
+        end
+
+    end
+
+    % ------------------------------------------------------------------
+    function applyTimeTransform(obj, Params, doSH, batchSize)
+        if ~doSH, return, end
+
+        [a, b, ~] = size(obj.H);
+
+        switch Params.timeTransform
+            case 'PCA'
+                obj.SH = short_time_PCA(obj.H);
+            case 'ICA'
+                obj.SH = short_time_ICA(obj.H);
+            case 'FFT'
+                obj.SH = fft(obj.H, [], 3) ./ sqrt(batchSize);
+            case 'Wavelet_Morlet'
+                obj.SH = morlet1D_transform_3rdDim(obj.H, [], 3);
+            case 'autocorrelation'
+                tmp = reshape(obj.H, a * b, []);
+                out = arrayfun(@(k) xcorr(tmp(k, :), 'normalized'), ...
+                    1:a * b, 'UniformOutput', false);
+                obj.SH = permute(reshape(cell2mat(out), [], a, b), [2 3 1]);
+            case 'intercorrelation'
+                obj.SH = intercorrel(obj.H, 3);
+            case 'phase difference'
+                obj.SH = angle(obj.H);
+            case 'None'
+                obj.SH = obj.H;
+            otherwise
+                error("RenderingClass: unknown timeTransform '%s'", Params.timeTransform);
+        end
+
+    end
+
+    % ------------------------------------------------------------------
+    function orientOutput(obj, Params)
+        % Lens transpose: x ↔ −y
+        obj.SH = flip(permute(obj.SH, [2 1 3]), 2);
+
+        if Params.flip_y
+            obj.SH = flip(obj.SH, 1);
+        end
+
+        if Params.flip_x
+            obj.SH = flip(obj.SH, 2);
+        end
+
+    end
+
+    % ------------------------------------------------------------------
+    function validateImageTypes(obj, imageTypes)
+
+        for i = 1:numel(imageTypes)
 
             if ~isprop(obj.Output, imageTypes{i})
-                error("%s isnt a known image type try any of [ %s ]", imageTypes{i}, sprintf("%s,", string(fields(obj.Output))));
+                known = sprintf('%s, ', string(fieldnames(obj.Output)));
+                error("'%s' is not a known image type. Available: [%s]", ...
+                    imageTypes{i}, known);
             end
 
-            if isempty(obj.Output.(imageTypes{i}).image)
+        end
 
-                if ~ismember(imageTypes{i}, {'buckets', 'SH'}) % these dont have explicit out images so it is normal for them not to output an image
-                    fprintf("unfortunately %s wasnt outputed \n", imageTypes{i});
+    end
+
+    % ------------------------------------------------------------------
+    function r = collectImages(obj, imageTypes)
+        silent = {'buckets', 'SH'}; % types without a rasterised image
+        r = cell(1, numel(imageTypes));
+
+        for i = 1:numel(imageTypes)
+            im = obj.Output.(imageTypes{i}).image;
+
+            if isempty(im)
+
+                if ~ismember(imageTypes{i}, silent)
+                    fprintf("Warning: '%s' produced no image.\n", imageTypes{i});
                 end
 
                 r{i} = [];
             else
-                im = obj.Output.(imageTypes{i}).image;
                 r{i} = mat2gray(im);
             end
 
@@ -358,26 +412,6 @@ methods
 
     end
 
-    function showFirstFrame(obj)
-        figure(1); imshow(rescale(obj.Frames(:, :, 1)));
-    end
+end % private methods
 
-    function selfTesting(obj)
-        obj.freeCache();
-        obj.setFrames(rescale(rand(10, 20, 30, 'single')));
-
-        obj.setInitParams();
-
-        obj.Render(struct(), {"power_Doppler"});
-        obj.Render(struct("spatialTransformation", "angular spectrum"), {"power_Doppler"});
-        obj.Render(struct("timeTransform", "PCA"));
-        obj.Render(struct(), {"power_Doppler"});
-        obj.Render(struct(), {"directional_Doppler"});
-        %montage(obj.constructImages({'directional_Doppler'}));
-        obj.Render(struct("timeTransform", "ICA"), {"directional_Doppler"});
-
-    end
-
-end
-
-end
+end % classdef

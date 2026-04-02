@@ -227,7 +227,7 @@ methods
         end
 
         if obj.Params.svd_filter
-            [H] = svd_filter(H, obj.Params.svdThreshold, obj.Params.frequencyRange(1), obj.Params.fs, obj.Params.svdStride);
+            [H] = svd_filter(H, obj.Params.svdThreshold, obj.Params.frequencyRange1, obj.Params.fs, obj.Params.svdStride);
         end
 
         switch obj.Params.timeTransform
@@ -240,9 +240,9 @@ methods
         end
 
         if strcmp(obj.Params.timeTransform, 'PCA')
-            img = cumulant(SH, obj.Params.indexRange(1), obj.Params.indexRange(2));
+            img = cumulant(SH, obj.Params.indexRange1, obj.Params.indexRange2);
         else
-            img = moment0(SH, obj.Params.frequencyRange(1), obj.Params.frequencyRange(2), obj.Params.fs, size(obj.I, 3), obj.Params.flatfield_gw);
+            img = moment0(SH, obj.Params.frequencyRange1, obj.Params.frequencyRange2, obj.Params.fs, size(obj.I, 3), obj.Params.flatfield_gw);
         end
 
         % Plot

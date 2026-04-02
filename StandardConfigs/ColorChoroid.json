@@ -15,7 +15,7 @@
     "power_Doppler_wiener",
     "power_adapt"
   ],
-  "parfor_arg": 18,
+  "parforArg": 18,
   "refBatchSize": 512,
   "imageRegistration": true,
   "lambda": 8.52E-7,
@@ -24,10 +24,8 @@
   "ppy": 1.9400147441120552E-5,
   "spatialTransformation": "Fresnel",
   "spatialPropagation": 1.25,
-  "frequencyRange": [
-    6,
-    18
-  ],
+  "frequencyRange1": 6,
+  "frequencyRange2": 18,
   "svd_filter": true,
   "svdThreshold": 10,
   "timeTransform": "FFT",
