@@ -225,14 +225,15 @@ methods
 
         % --- Color / directional Doppler --------------------------------
         if obj.color_Doppler.is_selected
-            f3 = obj.midOrExtra(f1, f2, Params.frequencyRange_extra);
-            [freq_low, freq_high] = composite(SH_mod, f1, f3, f2, fs, batchSize, max(gw, 20));
-            obj.color_Doppler.image = construct_colored_image(gather(freq_low), gather(freq_high));
+            f3 = obj.midOrExtra(fi1, fi2, Params.frequencyRange_extra);
+            M0 = moment0(SH_mod, f1, f2, fs, batchSize, gw);
+            [M0_low, M0_high] = composite(SH_mod, f1, f3, f2, fs, batchSize, gw);
+            obj.color_Doppler.image = construct_colored_image(M0, M0_low, M0_high);
         end
 
         if obj.directional_Doppler.is_selected
             [M0_pos, M0_neg] = directional(SH_mod, f1, f2, fs, batchSize, max(gw, 20));
-            obj.directional_Doppler.image = construct_directional_image(gather(M0_pos), gather(M0_neg));
+            obj.directional_Doppler.image = construct_directional_image(M0_pos, M0_neg);
         end
 
         % --- Spectral broadening plot -----------------------------------
@@ -242,12 +243,12 @@ methods
 
         % --- Raw SH output ---------------------------------------------
         if obj.SH.is_selected
-            obj.SH.parameters.SH = gather(SH_mod); % full-res, no binning
+            obj.SH.parameters.SH = SH_mod; % full-res, no binning
             obj.SH.parameters.vector = zeros(1, batchSize);
         end
 
         if obj.SH_avg.is_selected
-            obj.SH_avg.parameters.SH = mean(gather(SH_mod), 3);
+            obj.SH_avg.parameters.SH = mean(SH_mod, 3);
         end
 
         % --- Spectral moments ------------------------------------------
@@ -325,7 +326,7 @@ methods
         end
 
         if obj.color_band_ratio.is_selected
-            obj.color_band_ratio.image = color_energy_ratio(SH_mod, f1, f2, fi1, fi2, fs, batchSize);
+            obj.color_band_ratio.image = color_energy_ratio(SH_mod, f1, f2, fi1, fi2, fs, batchSize, gw);
         end
 
         if obj.entropy.is_selected

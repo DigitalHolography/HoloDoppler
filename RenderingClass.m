@@ -405,7 +405,7 @@ methods (Access = private)
 
     % ------------------------------------------------------------------
     function r = collectImages(obj, imageTypes)
-        silent = {'buckets', 'SH'}; % types without a rasterised image
+        silent = {'buckets', 'full_buckets', 'SH', 'SH_avg'}; % types without a rasterised image
         r = cell(1, numel(imageTypes));
 
         for i = 1:numel(imageTypes)

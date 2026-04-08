@@ -1,25 +1,40 @@
-function [img, img_low, img_high] = construct_colored_image(M_freq_low, M_freq_high)
+function [img] = construct_colored_image(M0, M_freq_low, M_freq_high)
 % Constructs a colored image from hologram stacks made with different
 % frequency bands
 %
 % M_freq_low: hologram stack made with a low frequency band
 % M_freq_high: hologram stack made with a high frequency band
 
-M_freq_low = squeeze(M_freq_low);
-M_freq_high = squeeze(M_freq_high);
+[height, width] = size(M0);
+Lab = zeros(height, width, 3); % initialize Lab image
 
-avg_M0_low = mean(M_freq_low, 3);
-avg_M0_high = mean(M_freq_high, 3);
+% M0 will be used for the L of the Lab colorspace
+Lab (:, :, 1) = rescale(M0, 0, 100); % rescale to [0, 100]
 
-avg_M0_low = mat2gray(avg_M0_low);
-avg_M0_high = mat2gray(avg_M0_high);
+% M_freq_low and M_freq_high will be used for the a and b channels, respectively
+% Manual rescaling, the mean should be 0 and the range should be at most[-128, 127]
 
-img_low = avg_M0_low; %(interp2(avg_M0_low, 1));
-img_high = avg_M0_high; %(interp2(avg_M0_high, 1));
+a = M_freq_high;
+b = M_freq_low;
+
+mean_a = mean(a(:));
+mean_b = mean(b(:));
+
+a_center = a - mean_a;
+b_center = b - mean_b;
+
+boundary_a = max(abs(a_center(:)));
+boundary_b = max(abs(b_center(:)));
+
+rescaled_a = a_center * 127 / boundary_a; % rescale to [-127, 127]
+rescaled_b = b_center * 127 / boundary_b; % rescale to [-127, 127]
+
+Lab (:, :, 2) = rescaled_a - rescaled_b * 0.7; % rescale to [-127, 127]
+Lab (:, :, 3) = rescaled_b * 0.3 - rescaled_b; % rescale to [-127, 127]
 
 % composite generation
-multiband_img = cat(3, img_high, cat(3, img_low, img_low));
-DCR_imgs = decorrstretch(multiband_img);
-img = DCR_imgs;
+img = lab2rgb(Lab);
 
+img(img > 255) = 255;
+img(img < 0) = 0;
 end

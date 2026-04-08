@@ -84,11 +84,11 @@ for ind = 1:numel(paths)
         HD.PreviewRendering();
 
         if HD.params.applyautofocusfromref
-            HD.params.spatialPropagation = autofocus(HD.view, HD.params); % Autofocus
+            HD.params.spatialPropagation = autofocus(HD.render, HD.params); % Autofocus
         end
 
         HD.PreviewRendering(); % Render the preview
-        img = HD.view.getImages({"power_Doppler"});
+        img = HD.render.getImages({"power_Doppler"});
         imgs{ind} = img{1};
     catch ME
         fprintf("Error processing %s: %s\n", currentPath, ME.message);

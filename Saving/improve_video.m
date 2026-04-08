@@ -16,7 +16,7 @@ arguments
     contrast_enhancement_tol
     temporalFilter_sigma
     contrast_inversion
-    options.NoIntensity = false
+    options.substractFlash = true
     options.cornerNorm = false
 end
 
@@ -34,7 +34,7 @@ end
 
 % fix intensity flashes
 
-if ~options.NoIntensity
+if options.substractFlash
     video = video - mean(mean(video, 2), 1);
 end
 

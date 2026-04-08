@@ -18,7 +18,7 @@ arguments
     name
     opt.temporalFilter = []
     opt.contrast_inversion = false
-    opt.NoIntensity = false
+    opt.substractFlash = true
     opt.cornerNorm = false
     opt.export_raw = false
     opt.export_avg_img = true
@@ -66,7 +66,7 @@ if ~isempty(opt.temporalFilter)
 end
 
 % fix intensity flashes
-if ~opt.NoIntensity
+if opt.substractFlash
     video = video - mean(video, [1 2]);
 end
 

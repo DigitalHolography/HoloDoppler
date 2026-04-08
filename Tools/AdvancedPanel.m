@@ -58,7 +58,7 @@ label3.Layout.Row = 3;
 label3.Layout.Column = 1;
 
 colorThreshEdit = uieditfield(gl, 'numeric');
-colorThreshEdit.Value = app.HD.view.LastParams.frequencyRange_extra;
+colorThreshEdit.Value = app.HD.render.LastParams.frequencyRange_extra;
 colorThreshEdit.BackgroundColor = bgColor;
 colorThreshEdit.FontColor = textColor;
 colorThreshEdit.Layout.Row = 4;
@@ -115,7 +115,7 @@ showSHbtn.BackgroundColor = btnColor;
 showSHbtn.FontColor = textColor;
 showSHbtn.Layout.Row = 5;
 showSHbtn.Layout.Column = 3;
-showSHbtn.ButtonPushedFcn = @(btn, event) ExploreSHbroadening(app.HD.view.SH, app.HD.file.fs, app.HD.params.frequencyRange1, app.HD.params.frequencyRange2);
+showSHbtn.ButtonPushedFcn = @(btn, event) ExploreSHbroadening(app.HD.render.SH, app.HD.file.fs, app.HD.params.frequencyRange1, app.HD.params.frequencyRange2);
 
 % Explore Ap button  - Row 6
 showSHbtn = uibutton(gl, 'push');
@@ -124,7 +124,7 @@ showSHbtn.BackgroundColor = btnColor;
 showSHbtn.FontColor = textColor;
 showSHbtn.Layout.Row = 6;
 showSHbtn.Layout.Column = 1;
-showSHbtn.ButtonPushedFcn = @(btn, event) ExploreAp(app.HD.view.Frames, app.HD.params);
+showSHbtn.ButtonPushedFcn = @(btn, event) ExploreAp(app.HD.render.Frames, app.HD.params);
 
 % Explore Quant - Row 6
 showSHbtn = uibutton(gl, 'push');
@@ -142,7 +142,7 @@ showSHbtn.BackgroundColor = btnColor;
 showSHbtn.FontColor = textColor;
 showSHbtn.Layout.Row = 6;
 showSHbtn.Layout.Column = 3;
-showSHbtn.ButtonPushedFcn = @(btn, event) ExploreZ(app.HD.view, app.HD.params);
+showSHbtn.ButtonPushedFcn = @(btn, event) ExploreZ(app.HD.render, app.HD.params);
 
 % Set up value change callbacks
 firstFrameEdit.ValueChangedFcn = @(src, event) updateFrameParams(app, src, lastFrameEdit, 'first');

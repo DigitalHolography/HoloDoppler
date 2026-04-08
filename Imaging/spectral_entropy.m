@@ -29,5 +29,4 @@ safe_log(nonzero) = log(p(nonzero)); % natural log
 
 spectral_entropy = -sum(p .* safe_log, 3); % (batch x channels)
 
-spectral_entropy = gather(spectral_entropy);
 end

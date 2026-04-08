@@ -22,7 +22,7 @@ methods
 
     function obj = ExploreQuant(HDClass)
         % Constructor - initialize the application
-        obj.SH = abs(HDClass.view.SH .^ 2);
+        obj.SH = abs(HDClass.render.SH .^ 2);
         obj.Params = HDClass.params;
 
         % Calculate initial average image

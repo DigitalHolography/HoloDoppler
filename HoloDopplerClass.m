@@ -5,7 +5,7 @@ properties
     file % stores main file information : path, camera pixel pitches, dimensions, wavelength used, frame rate etc
     drawer_list cell % stores the path of files to be processed % TODO remove
     reader % class obj to read new parts of the file
-    view % RenderingClass
+    render % RenderingClass
     params % rendering parameters
     video % ImageTypeList % store all the output images classes rendered at the end of a cycle
     running_averages %  cumulative average over time
@@ -17,7 +17,6 @@ methods
 
     function obj = HoloDopplerClass()
         %HoloDopplerClass Construct an instance of this class
-        setInitParams(obj);
 
         if ~isdeployed
             root = fileparts(mfilename('fullpath'));
@@ -34,7 +33,7 @@ methods
                 fullfile(root, 'StandardConfigs'));
         end
 
-        obj.view = RenderingClass();
+        obj.render = RenderingClass();
         set(0, 'defaultfigurecolor', [1 1 1]); % background of figures in white
     end
 
@@ -51,11 +50,10 @@ methods
         % 0) Reset the reader and the file
         obj.reader = [];
         obj.file = [];
-        obj.view = RenderingClass();
+        obj.render = RenderingClass();
         obj.video = [];
         obj.running_averages = RunningAveragesHolder();
         obj.registration = [];
-        obj.setInitParams();
 
         % file_path path of the file .holo or .cine
         [dir, name, ext] = fileparts(file_path);
@@ -99,10 +97,10 @@ methods
                     obj.file.ppy = obj.reader.footer.info.pixel_pitch.y * 1e-6; %given in µm
                 else
                     fprintf("Old version of Holovibes detected, using default parameters.\n")
-                    obj.file.lambda = obj.view.LastParams.lambda;
+                    obj.file.lambda = obj.render.LastParams.lambda;
 
-                    obj.file.ppx = obj.view.LastParams.ppx;
-                    obj.file.ppy = obj.view.LastParams.ppy;
+                    obj.file.ppx = obj.render.LastParams.ppx;
+                    obj.file.ppy = obj.render.LastParams.ppy;
                 end
 
                 try
@@ -112,7 +110,7 @@ methods
                     try
                         obj.file.fs = obj.reader.footer.info.input_fps / 1000; %conversion in kHz;
                     catch
-                        obj.file.fs = obj.view.LastParams.fs; % default value if nothing at all found
+                        obj.file.fs = obj.render.LastParams.fs; % default value if nothing at all found
                     end
 
                 end
@@ -186,7 +184,7 @@ methods
                 obj.params.spatialPropagation = 1.13; % meters
         end
 
-        obj.params.frequencyRange1 = obj.view.LastParams.frequencyRange1; % the default from init value of rendering class
+        obj.params.frequencyRange1 = obj.render.LastParams.frequencyRange1; % the default from init value of rendering class
         obj.params.frequencyRange2 = obj.params.fs / 2;
 
         %2)bis) Set Defaults from the StandardConfig
@@ -211,15 +209,17 @@ methods
         % 3) Look for config or last computation params
 
         % Define the paths for saved preview, video, and config parameters
-        last_preview_index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HDPreview'));
-        preview_params_path = fullfile(obj.file.dir, [obj.file.name '_HDPreview_' num2str(last_preview_index)], [obj.file.name '_HDPreview_' num2str(last_preview_index) '_input_HD_params.json']);
-        last_video_index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HD_'));
-        video_params_path = fullfile(obj.file.dir, [obj.file.name '_HD_' num2str(last_video_index)], [obj.file.name '_HD_' num2str(last_video_index) '_input_HD_params.json']);
-        last_config_index = get_highest_number_in_files(obj.file.dir, strcat(obj.file.name, '_input_HD_params_'));
-        config_params_path = fullfile(obj.file.dir, strcat(obj.file.name, '_input_HD_params_', num2str(last_config_index), '.json'));
+        filename = obj.file.name;
+        filedir = obj.file.dir;
+        last_preview_index = get_highest_number_in_directories(filedir, sprintf('%s_HDPreview', filename));
+        preview_params_path = fullfile(filedir, sprintf('%s_HDPreview_%d', filename, last_preview_index), sprintf('%s_HDPreview_%d_input_HD_params.json', filename, last_preview_index));
+        last_video_index = get_highest_number_in_directories(filedir, sprintf('%s_HD', filename));
+        video_params_path = fullfile(filedir, sprintf('%s_HD_%d', filename, last_video_index), sprintf('%s_HD_%d_input_HD_params.json', filename, last_video_index));
+        last_config_index = get_highest_number_in_files(filedir, sprintf('%s_input_HD_params_', filename));
+        config_params_path = fullfile(filedir, sprintf('%s_input_HD_params_%d.json', filename, last_config_index));
 
         % Look for old .mat config files existing in the current folder
-        [GuiCacheObj, old_mat_path] = findGUICache(obj.file.dir, obj.file.name);
+        [GuiCacheObj, old_mat_path] = findGUICache(filedir, filename);
 
         if ~isempty(GuiCacheObj)
 
@@ -267,76 +267,15 @@ methods
 
         % 4) Add last params from the default init
 
-        fields = fieldnames(obj.view.LastParams);
+        fields = fieldnames(obj.render.LastParams);
 
         for i = 1:numel(fields)
 
             if ~isfield(obj.params, fields{i})
-                obj.params.(fields{i}) = obj.view.LastParams.(fields{i});
+                obj.params.(fields{i}) = obj.render.LastParams.(fields{i});
             end
 
         end
-
-    end
-
-    function setInitParams(obj)
-        % reset the initial parameters for all the parameters used in this class
-
-        obj.params = [];
-
-        obj.params.batchSize = 512;
-        obj.params.batchStride = 512;
-        obj.params.frame_stride = 1;
-        obj.params.framePosition = 1;
-        obj.params.registrationDiskRatio = 0.8;
-        obj.params.imageTypes = {'power_Doppler', 'color_Doppler', 'directional_Doppler', 'moment_0', 'moment_1', 'moment_2', 'FH_modulus_mean'};
-        obj.params.parforArg = 10;
-        obj.params.refBatchSize = 512;
-        obj.params.imageRegistration = true;
-        obj.params.applyautofocusfromref = false;
-        obj.params.autofocusRange = [0.45, 0.52];
-        obj.params.first_frame = 0;
-        obj.params.end_frame = 0;
-
-        % Initialize missing fields that were causing errors in the rendering class when not set (as they are used in some of the rendering steps)
-        obj.params.svdStride = 1;
-        obj.params.phase_registration = false;
-        obj.params.rephasing = false;
-        obj.params.iterative_registration = false;
-        obj.params.show_ref = false;
-
-        % Initialize SVD filter parameters
-        obj.params.svd_filter = false;
-        obj.params.svdThreshold = 0;
-
-        % Initialize spatial filtering parameters
-        obj.params.spatialFilter = false;
-        obj.params.spatialFilterRange1 = 0;
-        obj.params.spatialFilterRange2 = 1;
-        obj.params.spatialTransformation = 'Fresnel';
-        obj.params.spatialPropagation = 0;
-        obj.params.PaddingNum = 0;
-
-        % Initialize time transformation parameters
-        obj.params.timeTransform = 'FFT';
-        obj.params.frequencyRange1 = 0;
-        obj.params.frequencyRange2 = 100;
-        obj.params.frequencyRangeInter1 = 7;
-        obj.params.frequencyRangeInter2 = 7;
-        obj.params.indexRange1 = 1;
-        obj.params.indexRange2 = 100;
-
-        % Initialize image transformation parameters
-        obj.params.flip_y = false;
-        obj.params.flip_x = false;
-        obj.params.square = false;
-        obj.params.flatfield_gw = 0;
-
-        % Initialize other parameters
-        obj.params.fs = 0;
-        obj.params.lambda = 0;
-        obj.params.ppx = 0;
-        obj.params.ppy = 0;
 
     end
 
@@ -435,12 +374,12 @@ methods
 
         firstframe = obj.reader.read_frame_batch(1, obj.params.framePosition);
 
-        if ~isequal(obj.view.Frames(:, :, 1), firstframe) || obj.params.batchSize ~= size(obj.view.Frames, 3) % if first frame is different of batch sized changed
-            obj.view.setFrames(obj.reader.read_frame_batch(obj.params.batchSize, obj.params.framePosition));
+        if ~isequal(obj.render.Frames(:, :, 1), firstframe) || obj.params.batchSize ~= size(obj.render.Frames, 3) % if first frame is different of batch sized changed
+            obj.render.setFrames(obj.reader.read_frame_batch(obj.params.batchSize, obj.params.framePosition));
         end
 
-        obj.view.Render(obj.params, obj.params.imageTypes);
-        images = obj.view.getImages(obj.params.imageTypes);
+        obj.render.Render(obj.params, obj.params.imageTypes);
+        images = obj.render.getImages(obj.params.imageTypes);
 
         for i = 1:numel(obj.params.imageTypes)
             image = images{i};
@@ -461,17 +400,19 @@ methods
             images_types = obj.params.imageTypes;
         end
 
-        images = obj.view.getImages(images_types);
+        images = obj.render.getImages(images_types);
         images_res = cell(1, length(images));
 
         for i = 1:length(images)
 
             maxDim = max(size(images{i}));
 
-            if isnumeric(images{i})
+            if isnumeric(images{i}) & ~isempty(images{i})
                 images_res{i} = imresize(rescale(images{i}), [maxDim maxDim]);
+            elseif isempty(images{i})
+                images_res{i} = zeros(maxDim);
             else
-                images_res{i} = imresize(rescale(obj.view.Output.(images_types{i}).image), [maxDim maxDim]);
+                images_res{i} = imresize(rescale(obj.render.Output.(images_types{i}).image), [maxDim maxDim]);
             end
 
         end
@@ -492,7 +433,7 @@ methods
             mkdir(result_folder_path);
         end
 
-        images = obj.view.getImages(imageTypes);
+        images = obj.render.getImages(imageTypes);
 
         for i = 1:numel(images)
 
@@ -635,11 +576,11 @@ methods
         if p.parforArg == 0
 
             for i = 1:(num_batches)
-                obj.view.setFrames(obj.reader.read_frame_batch(p.batchSize, (i - 1) * p.batchStride + first_frame));
-                obj.view.Render(p, p.imageTypes);
+                obj.render.setFrames(obj.reader.read_frame_batch(p.batchSize, (i - 1) * p.batchStride + first_frame));
+                obj.render.Render(p, p.imageTypes);
                 obj.video(i) = ImageTypeList();
-                obj.video(i).copy_from(obj.view.Output); % work around against handles
-                SH_PSD = calc_registration_from_views(obj.view, view_ref, p);
+                obj.video(i).copy_from(obj.render.Output); % work around against handles
+                SH_PSD = calc_registration_from_views(obj.render, view_ref, p);
                 obj.running_averages.update(SH_PSD, i, p);
 
                 % update waitbar after each batch
@@ -799,7 +740,8 @@ methods
             elseif strcmp(imageTypes{i}, 'SH_avg')
 
                 if ~isempty(obj.running_averages.running_averages)
-                    generate_video(fftshift(obj.running_averages.running_averages.SH, 3), result_folder_path, strcat(imageTypes{i}), export_raw = 1, temporalFilter = [], square = params.square);
+                    generate_video(fftshift(obj.running_averages.running_averages.SH, 3), ...
+                        result_folder_path, strcat(imageTypes{i}), export_raw = 1, temporalFilter = [], square = params.square);
                 end
 
                 mat = [];
@@ -857,7 +799,7 @@ methods
                 elseif strcmp(imageTypes{i}, 'color_Doppler')
                     generate_video(mat, result_folder_path, 'color_Doppler', square = params.square, enhance_contrast = true);
                 elseif strcmp(imageTypes{i}, 'color_band_ratio')
-                    generate_video(mat, result_folder_path, 'color_band_ratio', NoIntensity = 1, ...
+                    generate_video(mat, result_folder_path, 'color_band_ratio', cornerNorm = 1.2, substractFlash = false, ...
                         square = params.square, enhance_contrast = false);
                 else
                     generate_video(mat, result_folder_path, strcat(imageTypes{i}), temporalFilter = 2, square = params.square);
@@ -982,10 +924,10 @@ methods
         video_M0_reg = video_M0 .* disk - disk .* sum(video_M0 .* disk, [1, 2]) / nnz(disk); % minus the mean in the disk of each frame
         video_M0_reg = video_M0_reg ./ (max(abs(video_M0_reg), [], [1, 2])); % rescaling each frame but keeps mean at zero
 
-        obj.view.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.framePosition));
-        obj.view.Render(obj.params, obj.params.imageTypes);
+        obj.render.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.framePosition));
+        obj.render.Render(obj.params, obj.params.imageTypes);
 
-        ref_img = obj.view.Output.power_Doppler.image;
+        ref_img = obj.render.Output.power_Doppler.image;
 
         ref_img = ref_img .* disk - disk .* sum(ref_img .* disk, [1, 2]) / nnz(disk); % minus the mean
         ref_img = ref_img ./ (max(abs(ref_img), [], [1, 2])); % rescaling but keeps mean at zero
@@ -1131,7 +1073,7 @@ methods
     function show_SH(obj)
 
         try
-            sha = abs(obj.view.SH);
+            sha = abs(obj.render.SH);
             implay(rescale(sha, InputMin = min(sha, [], [1, 2]), InputMax = max(sha, [], [1, 2])));
         catch ME
             MEdisp(ME);
@@ -1141,7 +1083,6 @@ methods
 
     function SelfTesting(obj)
         %SelfTesting Run the self testing of the class
-        obj.setInitParams();
         obj.VideoRendering();
 
     end

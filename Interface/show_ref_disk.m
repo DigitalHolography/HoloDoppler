@@ -1,6 +1,6 @@
 function show_ref_disk(app, yesno)
-%Shows the disk ref in trhe preview if it exists
-image = app.HD.view.getImages(app.HD.params.imageTypes);
+% Shows the disk ref in true preview if it exists
+image = app.HD.render.getImages(app.HD.params.imageTypes);
 image = image{1};
 
 if (size(image, 3) == 1)

@@ -18,8 +18,8 @@ methods
 
     function obj = ExploreSH(app)
         % Constructor - initialize the application
-        obj.SH = app.HD.view.SH;
-        obj.SH_processed = app.HD.view.SH; % Start with original data
+        obj.SH = app.HD.render.SH;
+        obj.SH_processed = app.HD.render.SH; % Start with original data
         obj.params = app.HD.params;
 
         % Calculate initial average image

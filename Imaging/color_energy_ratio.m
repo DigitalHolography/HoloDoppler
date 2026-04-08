@@ -1,28 +1,18 @@
-function [RGB] = color_energy_ratio(SH, f1, f2, fi1, fi2, fs, batchSize)
-
-arguments
-    SH
-    f1
-    f2
-    fi1
-    fi2
-    fs
-    batchSize
-end
+function [RGB] = color_energy_ratio(SH, f1, f2, fi1, fi2, fs, batchSize, gw)
 
 [Ny, Nx, ~] = size(SH);
 mask = diskMask(Nx, Ny, 1); % DISK
 
 [I] = energy_ratio(SH, f1, f2, fi1, fi2, fs, batchSize);
-I = I ./ imgaussfilt(I, 35);
+I = I ./ imgaussfilt(I, gw);
 I(~mask) = NaN;
 I = rescale(I, 0, 1);
 
 cmap = cmapLAB(256, [0 0 0], 0, [1 0 0], 1/2, [1 1 0], 3/4, [1 1 1], 1);
 
 RGB = setcmap(I, ones(Ny, Nx), cmap);
-RGB(RGB<0) = 0;
-RGB(RGB>1) = 1;
+RGB(RGB < 0) = 0;
+RGB(RGB > 1) = 1;
 
 mask3D = repmat(mask, [1 1 3]);
 RGB(~mask3D) = 0;
@@ -55,6 +45,7 @@ mappedIm = reshape(mappedIm, [size(Im, 1), size(Im, 2), 3]);
 % Apply the mask to the output image
 outIm = mappedIm .* mask;
 end
+
 function [cmap] = cmapLAB(n, color_n, pos_n)
 
 arguments

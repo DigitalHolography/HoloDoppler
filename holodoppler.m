@@ -302,7 +302,7 @@ methods (Access = private)
             return
         end
 
-        imgs = app.HD.view.getImages(app.HD.params.imageTypes(1));
+        imgs = app.HD.render.getImages(app.HD.params.imageTypes(1));
 
         if ~isempty(imgs)
             app.Image.ImageSource = toImageSource(imgs{randsample(numel(imgs), 1)}, app);
@@ -313,7 +313,7 @@ methods (Access = private)
     end
 
     function AutofocusButtonPushed(app, ~)
-        zopti = autofocus(app.HD.view, app.HD.params);
+        zopti = autofocus(app.HD.render, app.HD.params);
         app.HD.params.spatialPropagation = zopti;
         app.syncGuiFromClass();
         app.RenderPreviewButtonPushed();
@@ -337,7 +337,7 @@ methods (Access = private)
     end
 
     function SelectMenu(app, num, ~)
-        imgs = app.HD.view.getImages(app.HD.params.imageTypes);
+        imgs = app.HD.render.getImages(app.HD.params.imageTypes);
 
         if isempty(imgs) || isempty(imgs{num})
             app.Image.ImageSource = '';
@@ -363,7 +363,7 @@ methods (Access = private)
     % --- Misc callbacks ----------------------------------------------------
 
     function ShowHistogramButtonPushed(app, ~)
-        app.HD.view.showFramesHistogram();
+        app.HD.render.showFramesHistogram();
     end
 
     function svdThresholdResetButtonPushed(app, ~)
@@ -490,8 +490,8 @@ methods (Access = private)
 
     function updateButtonStates(app)
         fileReady = ~isempty(app.HD) && ~isempty(app.HD.file);
-        previewReady = fileReady && ~isempty(app.HD.view) && ...
-            ~isempty(app.HD.view.Output);
+        previewReady = fileReady && ~isempty(app.HD.render) && ...
+            ~isempty(app.HD.render.Output);
 
         % ---- (B) require a loaded file ------------------------------------
         fileControls = { ...
@@ -607,23 +607,36 @@ methods (Access = private)
         app.createrenderingParametersPanel();
         app.createImageViewsAndMenus();
 
+        fontname(app.HoloDopplerUIFigure, 'Arial');
+        fontsize(app.HoloDopplerUIFigure, 12, "points");
+
         app.HoloDopplerUIFigure.Visible = 'on';
     end
 
     % -----------------------------------------------------------------------
     function createFigureAndRootGrid(app, pathToMLAPP)
+
+        % Computer screen Window Size
+        screenSize = get(0, 'ScreenSize');
+        % Set the app window position to be centered
+        appWidth = 800;
+        appHeight = 800;
+        appX = (screenSize(3) - appWidth) / 2;
+        appY = (screenSize(4) - appHeight) / 2;
+
         app.HoloDopplerUIFigure = uifigure('Visible', 'off');
-        app.HoloDopplerUIFigure.Position = [210 56 900 900];
+        app.HoloDopplerUIFigure.Position = [appX appY appWidth appHeight];
         app.HoloDopplerUIFigure.Name = 'HoloDoppler';
         app.HoloDopplerUIFigure.Icon = fullfile(pathToMLAPP, 'holoDopplerLogo.png');
         app.HoloDopplerUIFigure.CloseRequestFcn = createCallbackFcn(app, @HoloDopplerUIFigureCloseRequest, true);
         app.HoloDopplerUIFigure.WindowKeyPressFcn = createCallbackFcn(app, @HoloDopplerUIFigureWindowKeyPress, true);
 
         app.RootGrid = uigridlayout(app.HoloDopplerUIFigure, [2 2]);
-        app.RootGrid.ColumnWidth = {'1x', '1x'};
-        app.RootGrid.RowHeight = {'1x', '1x'};
+        app.RootGrid.ColumnWidth = {'fit', 'fit', '1x'};
+        app.RootGrid.RowHeight = {'1x', 'fit'};
         app.RootGrid.RowSpacing = 5;
         app.RootGrid.ColumnSpacing = 5;
+        app.RootGrid.Padding = [10 10 10 10];
         app.RootGrid.BackgroundColor = [0.2 0.2 0.2];
     end
 
@@ -646,7 +659,7 @@ methods (Access = private)
 
         app.mainParametersGrid = uigridlayout(app.FileselectionPanel, [10 3]);
         app.mainParametersGrid.RowHeight = {'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', '1x'};
-        app.mainParametersGrid.ColumnWidth = {'1x', '1x', '1x'};
+        app.mainParametersGrid.ColumnWidth = {'fit', 'fit', 'fit'};
         app.mainParametersGrid.Padding = [10 10 10 10];
         app.mainParametersGrid.RowSpacing = 5;
         app.mainParametersGrid.ColumnSpacing = 5;
@@ -658,12 +671,14 @@ methods (Access = private)
         app.LoadfileButton.FontColor = fontColor;
         app.LoadfileButton.Tooltip = {'Load a raw video file (formats : .raw, .cine, .holo)'};
         app.LoadfileButton.Layout.Row = 1;
-        app.LoadfileButton.Layout.Column = 1;
+        app.LoadfileButton.Layout.Column = [1 2];
         app.LoadfileButton.Text = 'Load file';
 
         app.fileLoadedLamp = uilamp(app.mainParametersGrid);
         app.fileLoadedLamp.Layout.Row = 1;
         app.fileLoadedLamp.Layout.Column = 3;
+        app.fileLoadedLamp.Color = [0.5 0.5 0.5]; % gray = no file, orange = loading, green = loaded, red = error
+        app.fileLoadedLamp.Tooltip = {'Indicates the file loading status: gray = no file, orange = loading, green = loaded, red = error'};
 
         app.lambdaLabel = uilabel(app.mainParametersGrid);
         app.lambdaLabel.FontColor = fontColor;
@@ -671,6 +686,7 @@ methods (Access = private)
         app.lambdaLabel.Text = 'λ (m)';
         app.lambdaLabel.Layout.Row = 2;
         app.lambdaLabel.Layout.Column = 1;
+        app.lambdaLabel.HorizontalAlignment = 'right';
 
         app.lambda = uieditfield(app.mainParametersGrid, 'numeric');
         app.lambda.Limits = [0 Inf];
@@ -687,6 +703,7 @@ methods (Access = private)
         app.fsLabel.Text = 'fs (kHz)';
         app.fsLabel.Layout.Row = 3;
         app.fsLabel.Layout.Column = 1;
+        app.fsLabel.HorizontalAlignment = 'right';
 
         app.fs = uieditfield(app.mainParametersGrid, 'numeric');
         app.fs.Limits = [0 Inf];
@@ -703,6 +720,7 @@ methods (Access = private)
         app.pixelPitchLabel.Text = 'Pixel pitch (m)';
         app.pixelPitchLabel.Layout.Row = 4;
         app.pixelPitchLabel.Layout.Column = 1;
+        app.pixelPitchLabel.HorizontalAlignment = 'right';
 
         app.ppx = uieditfield(app.mainParametersGrid, 'numeric');
         app.ppx.Limits = [0 10];
@@ -726,6 +744,7 @@ methods (Access = private)
         app.imageSizeLabel.Text = 'Image size (px)';
         app.imageSizeLabel.Layout.Row = 5;
         app.imageSizeLabel.Layout.Column = 1;
+        app.imageSizeLabel.HorizontalAlignment = 'right';
 
         app.Nx = uieditfield(app.mainParametersGrid, 'numeric');
         app.Nx.Limits = [0 Inf];
@@ -751,6 +770,7 @@ methods (Access = private)
         app.numworkersSpinnerLabel.Text = '# Workers';
         app.numworkersSpinnerLabel.Layout.Row = 6;
         app.numworkersSpinnerLabel.Layout.Column = 1;
+        app.numworkersSpinnerLabel.HorizontalAlignment = 'right';
 
         app.parforArg = uispinner(app.mainParametersGrid);
         app.parforArg.ValueChangingFcn = createCallbackFcn(app, @refreshClass, true);
@@ -769,6 +789,7 @@ methods (Access = private)
         app.positioninfileSliderLabel.Text = {'Position in file'};
         app.positioninfileSliderLabel.Layout.Row = 7;
         app.positioninfileSliderLabel.Layout.Column = 1;
+        app.positioninfileSliderLabel.HorizontalAlignment = 'right';
 
         app.positioninfileSlider = uislider(app.mainParametersGrid);
         app.positioninfileSlider.Limits = [0 1];
@@ -784,6 +805,7 @@ methods (Access = private)
         app.batchIndexLabel.Text = {'Batch index'};
         app.batchIndexLabel.Layout.Row = 8;
         app.batchIndexLabel.Layout.Column = 1;
+        app.batchIndexLabel.HorizontalAlignment = 'right';
 
         app.batchIndexField = uieditfield(app.mainParametersGrid, 'numeric');
         app.batchIndexField.Editable = 'off';
@@ -838,9 +860,9 @@ methods (Access = private)
         app.batchPanel.Layout.Row = 10;
         app.batchPanel.Layout.Column = [1 3];
 
-        app.batchGrid = uigridlayout(app.batchPanel, [11 2]);
+        app.batchGrid = uigridlayout(app.batchPanel, [11 3]);
         app.batchGrid.RowHeight = {'1x', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit'};
-        app.batchGrid.ColumnWidth = {'1x', '1x'};
+        app.batchGrid.ColumnWidth = {'fit', 'fit', '1x'};
         app.batchGrid.Padding = [10 10 10 10];
         app.batchGrid.RowSpacing = 5;
         app.batchGrid.ColumnSpacing = 5;
@@ -857,7 +879,7 @@ methods (Access = private)
         app.imageTypesListBox.FontColor = [1 1 1];
         app.imageTypesListBox.BackgroundColor = darkBackgroundColor;
         app.imageTypesListBox.Layout.Row = 1;
-        app.imageTypesListBox.Layout.Column = [1 2];
+        app.imageTypesListBox.Layout.Column = [1 3];
         app.imageTypesListBox.Value = {};
 
         % buttons row 2
@@ -911,6 +933,8 @@ methods (Access = private)
         app.VideoRenderingLamp = uilamp(p);
         app.VideoRenderingLamp.Layout.Row = 4;
         app.VideoRenderingLamp.Layout.Column = 2;
+        app.VideoRenderingLamp.Color = [0.5 0.5 0.5]; % gray = no file, orange = loading, green = loaded, red = error
+        app.VideoRenderingLamp.Tooltip = {'Indicates the video rendering status: gray = not rendered, orange = rendering in progress, green = rendered, red = error'};
 
         % sizes row 5 6 7
         app.batchSizeLabel = uilabel(p);
@@ -1011,7 +1035,7 @@ methods (Access = private)
 
         app.renderingParametersGrid = uigridlayout(app.renderingParametersPanel, [14 3]);
         app.renderingParametersGrid.RowHeight = repmat({'fit'}, 1, 14);
-        app.renderingParametersGrid.ColumnWidth = {'fit', '1x', '1x'};
+        app.renderingParametersGrid.ColumnWidth = {'fit', 'fit', 'fit'};
         app.renderingParametersGrid.Padding = [10 10 10 10];
         app.renderingParametersGrid.RowSpacing = 5;
         app.renderingParametersGrid.ColumnSpacing = 5;
@@ -1043,29 +1067,13 @@ methods (Access = private)
         app.spatialFilterRange2.Layout.Column = 3;
         app.spatialFilterRange2.Layout.Row = 1;
 
-        % Padding row 2
-        app.PaddingLabel = uilabel(p);
-        app.PaddingLabel.HorizontalAlignment = 'right';
-        app.PaddingLabel.FontColor = fontColor;
-        app.PaddingLabel.Layout.Column = 1;
-        app.PaddingLabel.Layout.Row = 2;
-        app.PaddingLabel.Text = 'Padding N';
-
-        app.PaddingNum = uieditfield(p, 'numeric');
-        app.PaddingNum.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.PaddingNum.FontColor = fontColor;
-        app.PaddingNum.BackgroundColor = darkBackgroundColor;
-        app.PaddingNum.Tooltip = {'Distance of spatial reconstruction using the preceding calculation scheme in (m) '};
-        app.PaddingNum.Layout.Column = 2;
-        app.PaddingNum.Layout.Row = 2;
-
-        % Local spatial transformation row 3
+        % Local spatial transformation row 2
 
         app.spatialTransformationLabel = uilabel(p);
         app.spatialTransformationLabel.HorizontalAlignment = 'right';
         app.spatialTransformationLabel.FontColor = fontColor;
         app.spatialTransformationLabel.Layout.Column = 1;
-        app.spatialTransformationLabel.Layout.Row = 3;
+        app.spatialTransformationLabel.Layout.Row = 2;
         app.spatialTransformationLabel.Text = 'Spatial transformation';
 
         app.spatialTransformation = uidropdown(p);
@@ -1074,16 +1082,15 @@ methods (Access = private)
         app.spatialTransformation.FontColor = fontColor;
         app.spatialTransformation.BackgroundColor = grayButtonColor;
         app.spatialTransformation.Layout.Column = [2 3];
-        app.spatialTransformation.Layout.Row = 3;
+        app.spatialTransformation.Layout.Row = 2;
         app.spatialTransformation.Items = {'Angular spectrum', 'Fresnel', 'None'};
 
-        % Spatial propagation row 4
-
+        % Spatial propagation row 3
         app.spatialPropagationLabel = uilabel(p);
         app.spatialPropagationLabel.HorizontalAlignment = 'right';
         app.spatialPropagationLabel.FontColor = fontColor;
         app.spatialPropagationLabel.Layout.Column = 1;
-        app.spatialPropagationLabel.Layout.Row = 4;
+        app.spatialPropagationLabel.Layout.Row = 3;
         app.spatialPropagationLabel.Text = 'Spatial propagation';
 
         app.spatialPropagation = uieditfield(p, 'numeric');
@@ -1092,15 +1099,31 @@ methods (Access = private)
         app.spatialPropagation.BackgroundColor = darkBackgroundColor;
         app.spatialPropagation.Tooltip = {'Distance of spatial reconstruction using the preceding calculation scheme in (m) '};
         app.spatialPropagation.Layout.Column = 2;
-        app.spatialPropagation.Layout.Row = 4;
+        app.spatialPropagation.Layout.Row = 3;
 
         app.AutofocusButton = uibutton(p, 'push');
         app.AutofocusButton.ButtonPushedFcn = createCallbackFcn(app, @AutofocusButtonPushed, true);
         app.AutofocusButton.BackgroundColor = grayButtonColor;
         app.AutofocusButton.FontColor = fontColor;
         app.AutofocusButton.Layout.Column = 3;
-        app.AutofocusButton.Layout.Row = 4;
+        app.AutofocusButton.Layout.Row = 3;
         app.AutofocusButton.Text = 'Autofocus';
+
+        % Padding row 4
+        app.PaddingLabel = uilabel(p);
+        app.PaddingLabel.HorizontalAlignment = 'right';
+        app.PaddingLabel.FontColor = fontColor;
+        app.PaddingLabel.Layout.Column = 1;
+        app.PaddingLabel.Layout.Row = 4;
+        app.PaddingLabel.Text = 'Padding N';
+
+        app.PaddingNum = uieditfield(p, 'numeric');
+        app.PaddingNum.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.PaddingNum.FontColor = fontColor;
+        app.PaddingNum.BackgroundColor = darkBackgroundColor;
+        app.PaddingNum.Tooltip = {'Distance of spatial reconstruction using the preceding calculation scheme in (m) '};
+        app.PaddingNum.Layout.Column = 2;
+        app.PaddingNum.Layout.Row = 4;
 
         % SVD filtering row 5 6
 
@@ -1277,13 +1300,13 @@ methods (Access = private)
         app.ImproveContrast = uicheckbox(p);
         app.ImproveContrast.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.ImproveContrast.Tooltip = {'Improve the contrast by rescaling the previewed frame'};
-        app.ImproveContrast.Text = 'Improve frame contrast';
+        app.ImproveContrast.Text = 'Improve contrast';
         app.ImproveContrast.FontColor = fontColor;
         app.ImproveContrast.Layout.Column = 1;
         app.ImproveContrast.Layout.Row = 13;
 
         app.RenderPreviewLamp = uilamp(p);
-        app.RenderPreviewLamp.Color = [0.8 0.8 0.8];
+        app.RenderPreviewLamp.Color = [0.5 0.5 0.5];
         app.RenderPreviewLamp.Layout.Column = 1;
         app.RenderPreviewLamp.Layout.Row = 14;
 
@@ -1309,7 +1332,7 @@ methods (Access = private)
     function createImageViewsAndMenus(app)
         app.Image = uiimage(app.RootGrid);
         app.Image.Layout.Row = 1;
-        app.Image.Layout.Column = 2;
+        app.Image.Layout.Column = [2 3];
 
         app.RightClickImageContextMenu = uicontextmenu(app.HoloDopplerUIFigure);
 
