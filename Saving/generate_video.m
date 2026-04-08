@@ -72,8 +72,7 @@ end
 
 % corner normalizations
 if opt.cornerNorm > 0
-    numX = size(video, 1);
-    numY = size(video, 2);
+    [numX, numY, ~] = size(video);
     disk_ratio = opt.cornerNorm;
     disk = diskMask(numX, numY, disk_ratio);
     video = video ./ mean(video .* ~disk, [1, 2]);

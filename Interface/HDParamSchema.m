@@ -70,6 +70,7 @@ s(end + 1) = entry('flip_y', 'flip_y', 'checkbox', false);
 s(end + 1) = entry('flip_x', 'flip_x', 'checkbox', false);
 s(end + 1) = entry('square', 'square', 'checkbox', false);
 s(end + 1) = entry('ImproveContrast', 'ImproveContrast', 'checkbox', false);
+s(end + 1) = entry('CornerCompensation', 'CornerCompensation', 'checkbox', false);
 
 % ---- advanced (AdvancedPanel app) ------------------------------------------
 s(end + 1) = entry('phase_registration', 'phaseregistrationCheckBox', 'checkbox', false);

@@ -799,7 +799,10 @@ methods
                 elseif strcmp(imageTypes{i}, 'color_Doppler')
                     generate_video(mat, result_folder_path, 'color_Doppler', square = params.square, enhance_contrast = true);
                 elseif strcmp(imageTypes{i}, 'color_band_ratio')
-                    generate_video(mat, result_folder_path, 'color_band_ratio', cornerNorm = 1.2, substractFlash = false, ...
+                    generate_video(mat, result_folder_path, 'color_band_ratio', substractFlash = false, ...
+                        square = params.square, enhance_contrast = false);
+                elseif strcmp(imageTypes{i}, 'band_ratio')
+                    generate_video(mat, result_folder_path, 'band_ratio', cornerNorm=0, substractFlash = false, ...
                         square = params.square, enhance_contrast = false);
                 else
                     generate_video(mat, result_folder_path, strcat(imageTypes{i}), temporalFilter = 2, square = params.square);

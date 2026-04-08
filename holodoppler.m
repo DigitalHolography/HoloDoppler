@@ -96,6 +96,7 @@ properties (Access = public)
     RenderPreviewButton matlab.ui.control.Button
     SavePreviewButton matlab.ui.control.Button
     ImproveContrast matlab.ui.control.CheckBox
+    CornerCompensation matlab.ui.control.CheckBox
 
     % ---- context menu ----
     RightClickImageContextMenu matlab.ui.container.ContextMenu
@@ -1304,6 +1305,14 @@ methods (Access = private)
         app.ImproveContrast.FontColor = fontColor;
         app.ImproveContrast.Layout.Column = 1;
         app.ImproveContrast.Layout.Row = 13;
+
+        app.CornerCompensation = uicheckbox(p);
+        app.CornerCompensation.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.CornerCompensation.Tooltip = {'Substract the signal from the corner'};
+        app.CornerCompensation.Text = 'Corner compensation';
+        app.CornerCompensation.FontColor = fontColor;
+        app.CornerCompensation.Layout.Column = [2 3];
+        app.CornerCompensation.Layout.Row = 13;
 
         app.RenderPreviewLamp = uilamp(p);
         app.RenderPreviewLamp.Color = [0.5 0.5 0.5];

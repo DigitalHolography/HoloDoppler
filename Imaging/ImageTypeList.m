@@ -192,12 +192,22 @@ methods
         f2 = Params.frequencyRange2;
         fi1 = Params.frequencyRangeInter1;
         fi2 = Params.frequencyRangeInter2;
-        [~, ~, batchSize] = size(SHin);
+        [Nx, Ny, batchSize] = size(SHin);
         fs = Params.fs;
         gw = Params.flatfield_gw;
 
         SH_mod = abs(SHin) .^ 2;
         SH_arg = angle(SHin);
+
+        if Params.CornerCompensation
+            disk = diskMask(Nx, Ny, 1.2);
+            outsideMask = ~disk;
+            outsideVals = SH_mod(repmat(outsideMask, [1 1 batchSize]));
+            background = mean(outsideVals, [1 2]);
+
+            % Subtract that constant background from every pixel / every frame
+            SH_mod = SH_mod - background;
+        end
 
         % --- Power Doppler variants ------------------------------------
         if obj.power_Doppler.is_selected
