@@ -200,13 +200,12 @@ methods
         SH_arg = angle(SHin);
 
         if Params.CornerCompensation
-            disk = diskMask(Nx, Ny, 1.2);
+            disk = diskMask(Ny, Nx, 1.2);
             outsideMask = ~disk;
-            outsideVals = SH_mod(repmat(outsideMask, [1 1 batchSize]));
-            background = mean(outsideVals, [1 2]);
-
-            % Subtract that constant background from every pixel / every frame
-            SH_mod = SH_mod - background;
+            largeMask = repmat(outsideMask, [1 1 batchSize]);
+            SH_outside = SH_mod;
+            SH_outside(~largeMask) = NaN;
+            SH_mod = SH_mod - mean(SH_outside, [1 2], 'omitnan');
         end
 
         % --- Power Doppler variants ------------------------------------

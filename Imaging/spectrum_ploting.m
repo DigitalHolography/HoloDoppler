@@ -19,6 +19,7 @@ axis_x = linspace(-fs / 2, fs / 2, size(SH_mask, 3));
 range_1 = (-f2 < axis_x) & (axis_x <- f1);
 range_2 = (f1 < axis_x) & (axis_x < f2);
 
+spectrumAVG_mask(spectrumAVG_mask <= 0) = NaN;
 signal_log = fftshift(log10(spectrumAVG_mask));
 
 hold on;
