@@ -1,7 +1,6 @@
 {
   "batchSize": 512,
   "batchStride": 512,
-  "frame_stride": 1,
   "framePosition": 1,
   "registrationDiskRatio": 0.8,
   "imageTypes": [

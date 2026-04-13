@@ -210,6 +210,8 @@ methods (Access = private)
         end
 
         app.updateButtonStates();
+        app.positioninfileSliderValueChanged();
+        app.refreshClass();
     end
 
     function LoadConfigButtonPushed(app, ~)
@@ -473,12 +475,12 @@ methods (Access = private)
 
     % Push all widget values into HD (was external guitoclass)
     function syncClassFromGui(app)
-        guitoclass(app.HD, app);
+        HDParamSchema.guitoclass(app.HD, app);
     end
 
     % Pull all HD values into widgets (was external classtogui)
     function syncGuiFromClass(app)
-        classtogui(app.HD, app);
+        HDParamSchema.classtogui(app.HD, app);
     end
 
     % --- Enable / disable controls based on application state -------------

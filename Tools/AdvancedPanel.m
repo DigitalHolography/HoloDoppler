@@ -126,15 +126,6 @@ showSHbtn.Layout.Row = 6;
 showSHbtn.Layout.Column = 1;
 showSHbtn.ButtonPushedFcn = @(btn, event) ExploreAp(app.HD.render.Frames, app.HD.params);
 
-% Explore Quant - Row 6
-showSHbtn = uibutton(gl, 'push');
-showSHbtn.Text = 'Explore Quant';
-showSHbtn.BackgroundColor = btnColor;
-showSHbtn.FontColor = textColor;
-showSHbtn.Layout.Row = 6;
-showSHbtn.Layout.Column = 2;
-showSHbtn.ButtonPushedFcn = @(btn, event) ExploreQuant(app.HD);
-
 % Explore  - Row 6
 showSHbtn = uibutton(gl, 'push');
 showSHbtn.Text = 'Explore Z';

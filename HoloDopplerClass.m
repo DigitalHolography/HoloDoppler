@@ -187,7 +187,7 @@ methods
         obj.params.frequencyRange1 = obj.render.LastParams.frequencyRange1; % the default from init value of rendering class
         obj.params.frequencyRange2 = obj.params.fs / 2;
 
-        %2)bis) Set Defaults from the StandardConfig
+        % 2) bis) Set Defaults from the StandardConfig
 
         stdConfigDir = fullfile(fileparts(mfilename('fullpath')), 'StandardConfigs');
 
@@ -221,7 +221,17 @@ methods
         % Look for old .mat config files existing in the current folder
         [GuiCacheObj, old_mat_path] = findGUICache(filedir, filename);
 
-        if ~isempty(GuiCacheObj)
+        % Load saved config parameters if they exist (prevails over the last computation)
+        if isfile(config_params_path)
+            fprintf('Loading saved config from %s\n', config_params_path);
+            obj.loadParams(config_params_path);
+        elseif isfile(video_params_path)
+            fprintf('Loading saved video parameters from %s\n', video_params_path);
+            obj.loadParams(video_params_path);
+        elseif isfile(preview_params_path)
+            fprintf('Loading saved preview parameters from %s\n', preview_params_path);
+            obj.loadParams(preview_params_path);
+        elseif ~isempty(GuiCacheObj)
 
             if ~isempty(GuiCacheObj.z)
                 p.spatialPropagation = GuiCacheObj.z;
@@ -243,24 +253,6 @@ methods
             obj.setParams(p); % overwrites the z propagation params with the one found in the old mat
         end
 
-        % Load saved preview parameters if they exist
-        if isfile(preview_params_path)
-            fprintf('Loading saved preview parameters from %s\n', preview_params_path);
-            obj.loadParams(preview_params_path);
-        end
-
-        % Load saved video parameters if they exist
-        if isfile(video_params_path)
-            fprintf('Loading saved video parameters from %s\n', video_params_path);
-            obj.loadParams(video_params_path);
-        end
-
-        % Load saved config parameters if they exist (prevails over the last computation)
-        if isfile(config_params_path)
-            fprintf('Loading saved config from %s\n', config_params_path);
-            obj.loadParams(config_params_path);
-        end
-
         if ~isempty(opt.params) % if optional parameters were supplied, they take precedence
             obj.setParams(opt.params);
         end
@@ -280,21 +272,27 @@ methods
     end
 
     function setParams(obj, params)
-        % set class parameters
+        % setParams  Load parameters from a struct, keeping only those defined in the schema.
+        %            Special handling for 'imageTypes' to validate against ImageTypeList.
+
+        % Get the full schema array (static method avoids instantiation)
+        schemaArray = HDParamSchema.getFullSchema();
+        validParamNames = {schemaArray.param};
+
+        % Only process fields that exist in the schema
         fields = fieldnames(params);
+        fieldsToSet = intersect(fields, validParamNames);
 
-        for i = 1:length(fields)
+        for i = 1:numel(fieldsToSet)
+            field = fieldsToSet{i};
+            value = params.(field);
 
-            if ismember(fields{i}, {'record_time_stamps_us', 'num_frames', 'Nx', 'Ny', 'info'})
-                continue % do not set info fields
-            end
-
-            if strcmp(fields{i}, 'imageTypes')
+            % Special validation for imageTypes
+            if strcmp(field, 'imageTypes')
                 possibleItems = fieldnames(ImageTypeList);
-                validItems = intersect(params.(fields{i}), possibleItems);
-                obj.params.imageTypes = validItems;
+                obj.params.imageTypes = intersect(value, possibleItems, 'stable');
             else
-                obj.params.(fields{i}) = params.(fields{i});
+                obj.params.(field) = value;
             end
 
         end
@@ -302,6 +300,7 @@ methods
     end
 
     function loadParams(obj, path)
+        % load the params from a json file and set them in the class
         fprintf('Loading parameters from %s\n', path);
         fid = fopen(path, 'r');
 
@@ -802,7 +801,7 @@ methods
                     generate_video(mat, result_folder_path, 'color_band_ratio', substractFlash = false, ...
                         square = params.square, enhance_contrast = false);
                 elseif strcmp(imageTypes{i}, 'band_ratio')
-                    generate_video(mat, result_folder_path, 'band_ratio', cornerNorm=0, substractFlash = false, ...
+                    generate_video(mat, result_folder_path, 'band_ratio', cornerNorm = 0, substractFlash = false, ...
                         square = params.square, enhance_contrast = false);
                 else
                     generate_video(mat, result_folder_path, strcat(imageTypes{i}), temporalFilter = 2, square = params.square);

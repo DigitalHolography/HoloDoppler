@@ -46,48 +46,7 @@ methods
     % ------------------------------------------------------------------
     function setInitParams(obj)
         % Default pipeline parameters.
-        p = struct();
-
-        % Acquisition
-        p.fs = 1; % Camera frame rate (Hz)
-        p.lambda = 852e-9; % Illumination wavelength (m)
-        p.ppx = 20e-6; % Pixel pitch x (m)
-        p.ppy = 20e-6; % Pixel pitch y (m)
-
-        % Spatial filter (step 1)
-        p.spatialFilter = false;
-        p.spatialFilterRange1 = 0;
-        p.spatialFilterRange2 = 1;
-
-        % Spatial propagation (step 2)
-        p.spatialTransformation = "Fresnel";
-        p.spatialPropagation = 0.5;
-        p.PaddingNum = 0;
-
-        % SVD filter (step 3)
-        p.svd_filter = 1;
-        p.svdThreshold = false;
-        p.svdStride = 1;
-        p.frequencyRange1 = 6;
-        p.frequencyRange2 = 10.5;
-
-        % Short-time transform (step 4)
-        p.timeTransform = "FFT";
-        p.frequencyRangeInter1 = 7;
-        p.frequencyRangeInter2 = 7;
-        p.indexRange1 = 3;
-        p.indexRange2 = 10;
-        p.frequencyRange_extra = -1;
-        p.bucketsRanges = [[4; 18.3], [6; 18.3]];
-        p.buckets_raw = false;
-        p.flatfield_gw = 35;
-
-        % Output orientation
-        p.flip_y = false;
-        p.flip_x = false;
-        p.square = true;
-
-        obj.LastParams = p;
+        obj.LastParams = HDParamSchema.getDefaults();
     end
 
     % ------------------------------------------------------------------

@@ -36,15 +36,6 @@ properties
     SVD_cov
     SVD_U
 
-    % --- Correlation / variance -----------------------------------------
-    doppler_variance_mod
-    doppler_variance_mod_pha
-    amplitude_decorrelation
-    diff_mod
-    diff_mod_pha
-    phase_diff
-    phase_variance
-
     % --- Spectral statistics --------------------------------------------
     cumulative_distribution
     band_ratio
@@ -88,15 +79,6 @@ methods
         % SVD
         obj.SVD_cov = ImageType('SVD_cov');
         obj.SVD_U = ImageType('SVD_U');
-
-        % Correlation / variance
-        obj.doppler_variance_mod = ImageType('doppler_variance_mod');
-        obj.doppler_variance_mod_pha = ImageType('doppler_variance_mod_pha');
-        obj.amplitude_decorrelation = ImageType('amplitude_decorrelation');
-        obj.diff_mod = ImageType('diff_mod');
-        obj.diff_mod_pha = ImageType('diff_mod_pha');
-        obj.phase_diff = ImageType('phase_diff');
-        obj.phase_variance = ImageType('phase_variance');
 
         % Spectral statistics
         obj.cumulative_distribution = ImageType('cdf');
@@ -281,48 +263,6 @@ methods
             M0 = moment0(SH_mod, f1, f2, fs, batchSize);
             M2 = moment2(SH_mod, f1, f2, fs, batchSize);
             obj.f_RMS.image = sqrt(M2 ./ mean(M0, [1, 2]));
-        end
-
-        % --- Correlation / variance ------------------------------------
-        if obj.doppler_variance_mod.is_selected
-            A = SH_mod(:, :, 1:end - 1);
-            B = SH_mod(:, :, 2:end);
-            obj.doppler_variance_mod.image = 1 - (2 .* sum(A .* B, 3)) ./ (sum(A .^ 2, 3) + sum(B .^ 2, 3));
-        end
-
-        if obj.doppler_variance_mod_pha.is_selected
-            A = SH_mod(:, :, 1:end - 1);
-            B = SH_mod(:, :, 2:end);
-            Ac = SHin(:, :, 1:end - 1);
-            Bc = SHin(:, :, 2:end);
-            obj.doppler_variance_mod_pha.image = ...
-                1 - (2 .* abs(sum(Ac .* Bc, 3))) ./ (sum(A .^ 2, 3) + sum(B .^ 2, 3));
-        end
-
-        if obj.amplitude_decorrelation.is_selected
-            A = SH_mod(:, :, 1:end - 1);
-            B = SH_mod(:, :, 2:end);
-            S = sum(A .* B ./ (A .^ 2 + B .^ 2), 3);
-            obj.amplitude_decorrelation.image = 1 - S ./ (size(SH_mod, 3) - 1);
-        end
-
-        if obj.diff_mod.is_selected
-            M = size(SH_mod, 3);
-            obj.diff_mod.image = 1 - sum(diff(SH_mod, 1, 3), 3) ./ (M - 1);
-        end
-
-        if obj.diff_mod_pha.is_selected
-            M = size(SHin, 3);
-            obj.diff_mod_pha.image = 1 - sum(abs(diff(SHin, 1, 3)), 3) ./ (M - 1);
-        end
-
-        if obj.phase_diff.is_selected
-            obj.phase_diff.image = mean(diff(SH_arg, 1, 3), 3);
-        end
-
-        if obj.phase_variance.is_selected
-            M = size(SH_mod, 3);
-            obj.phase_variance.image = std(diff(SH_arg, 1, 3), [], 3) ./ (M - 1);
         end
 
         % --- Spectral statistics ---------------------------------------

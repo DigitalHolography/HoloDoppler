@@ -1,7 +1,6 @@
 {
   "batchSize": 256,
   "batchStride": 256,
-  "frame_stride": 1,
   "registrationDiskRatio": 0.8,
   "imageTypes": [
     "power_Doppler",
@@ -22,13 +21,6 @@
   "flatfield_gw": 35,
   "applyautofocusfromref": false,
   "refBatchSize": 512,
-  "bucketsRanges": [
-    [
-      3,
-      18.3
-    ]
-  ],
-  "buckets_raw": true,
   "flip_y": false,
   "flip_x": false,
   "square": true
