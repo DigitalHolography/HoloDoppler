@@ -7,11 +7,11 @@ spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(mask);
 
 momentM0 = moment0(SH, f1, f2, fs, size(SH_mask, 3));
 momentM2 = moment2(SH, f1, f2, fs, size(SH_mask, 3));
-
+momentM1 = moment1(SH, f1, f2, fs, size(SH_mask, 3));
 M0 = mean(momentM0, "all");
 M2 = mean(momentM2(mask), "all");
-
-omegaRMS = sqrt(M2 / M0); % sqrt(M2/M0);
+M1 = mean(momentM1(mask), "all");
+omegaRMS = sqrt(M1 / M0); % sqrt(M2/M0);
 omegaRMS_index = omegaRMS * size(SH_mask, 3) / fs;
 I_omega = log10(spectrumAVG_mask(round(omegaRMS_index)));
 
@@ -30,12 +30,14 @@ sclingrange = abs(fftshift(axis_x)) > f1;
 yrange = [.88 * log10(min(spectrumAVG_mask(sclingrange))) 1.08 * log10(max(spectrumAVG_mask(sclingrange)))];
 ylim(yrange)
 
-om_RMS_line = line([-omegaRMS omegaRMS], [I_omega I_omega]);
-om_RMS_line.Color = 'black';
-om_RMS_line.LineStyle = '-';
-om_RMS_line.Marker = '|';
-om_RMS_line.MarkerSize = 12;
-om_RMS_line.LineWidth = 1;
+% om_RMS_line = line([0 omegaRMS], [1 1]);
+% om_RMS_line.Color = 'black';
+% om_RMS_line.LineStyle = '-';
+% om_RMS_line.Marker = '|';
+% om_RMS_line.MarkerSize = 6;
+% om_RMS_line.LineWidth = 1;
+% 
+% xline(omegaRMS, '--')
 
 xline(f1, '--')
 xline(f2, '--')
@@ -50,7 +52,7 @@ else
     xticklabels({num2str(round(-f2, 1)), num2str(round(f2, 1))})
 end
 
-title(sprintf('f_{RMS} = %.2f kHz', omegaRMS))
+title(sprintf('f_{range} = [6.00 - 18.3] kHz'))
 fontsize(gca, 12, "points");
 xlabel('frequency (kHz)', 'FontSize', 14);
 ylabel('log10 S', 'FontSize', 14);
@@ -60,6 +62,6 @@ set(gca, 'LineWidth', 2);
 uistack(p_mask, 'top');
 uistack(gca, 'top');
 
-fit_spectrum(axis_x, signal_log, f1, f2);
+%fit_spectrum(axis_x, signal_log, f1, f2);
 
 end

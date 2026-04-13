@@ -326,8 +326,11 @@ methods
         set(gca, 'LineWidth', 1);
         uistack(p_mask, 'top');
         uistack(gca, 'top');
-
         hold on
+
+        
+
+
 
         local_mask = obj.mask .* obj.bkgmask;
         pbaspect([1.618 1 1]);
@@ -373,14 +376,28 @@ methods
         % fprintf('f_{RMS %d} = %.2f kHz\n', i, omegaRMS);
         t2 = text(0, I_omega - 0.08, sprintf('\x27E8\x03C3_{f}\x27E9 = %.2f kHz', round(omegaRMS, 1)), 'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'BackgroundColor', 'white');
         set(gca, 'LineWidth', 1);
+        
+
+        hold on
+        axis_x = linspace(-obj.Params.fs / 2, obj.Params.fs / 2, size(SH_mask, 3));
+        f1 = obj.Params.time_range(1);
+        f2 = obj.Params.time_range(2);
+
+        range_1 = (-f2 < axis_x) & (axis_x <- f1);
+        range_2 = (f1 < axis_x) & (axis_x < f2);
+        signal_log = fftshift(scalingfn(spectrumAVG_mask));
+        area(axis_x(range_1), signal_log(range_1), 'EdgeColor', 'black', 'FaceColor', [0.9 0.9 0.9], 'LineWidth', 1, 'DisplayName', 'Arteries');
+        area(axis_x(range_2), signal_log(range_2), 'EdgeColor', 'black', 'FaceColor', [0.9 0.9 0.9], 'LineWidth', 1, 'DisplayName', 'Arteries');
+        xlim([-obj.Params.fs / 2 obj.Params.fs / 2])
+        
+
         uistack(p_mask, 'top');
         uistack(t1, 'top');
         uistack(t2, 'top');
         uistack(om_RMS_line1, 'top');
         uistack(om_RMS_line, 'top');
         uistack(gca, 'top');
-
-        legend({'', '', '', '', 'Arteries', 'Background', '', ''})
+        % legend({'', '', '', '', 'Arteries', 'Background', '', ''})
 
     end
 
