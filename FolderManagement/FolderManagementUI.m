@@ -1,0 +1,387 @@
+classdef FolderManagementUI < handle
+% FolderManagementUI   User interface for batch rendering multiple files
+%
+%   FM = FolderManagementUI(APP) creates a non-modal figure that allows
+%   managing a list of .cine/.holo files and their rendering configurations.
+%   APP is the main HoloDoppler application object.
+
+properties (Access = private)
+    MainApp % Reference to the main HoloDoppler app
+    Figure % uifigure handle
+    TextArea % uitextarea displaying the file list
+    KeepZCheckbox % uicheckbox for 'Keep z distance' option
+end
+
+methods
+
+    function obj = FolderManagementUI(mainApp)
+        % Constructor – builds and displays the UI.
+        arguments
+            mainApp
+        end
+
+        obj.MainApp = mainApp;
+        obj.createUI();
+    end
+
+end
+
+methods (Access = private)
+
+    function createUI(obj)
+        % Create the figure and all UI components.
+        app = obj.MainApp; % local alias for brevity
+
+        % Calculate initial height based on number of files
+        initialHeight = 260 + length(app.HD.drawer_list) * 14;
+
+        % Position figure next to the main app if possible
+        if isvalid(app.HoloDopplerUIFigure)
+            mainPos = app.HoloDopplerUIFigure.Position;
+            xPos = mainPos(1) + mainPos(3) + 20;
+            yPos = mainPos(2);
+        else
+            xPos = 300;
+            yPos = 300;
+        end
+
+        obj.Figure = uifigure('Position', [xPos, yPos, 700, initialHeight], ...
+            'Color', [0.2, 0.2, 0.2], ...
+            'Name', 'Folder management', ...
+            'Resize', 'on', ...
+            'WindowStyle', 'normal', ...
+            'CloseRequestFcn', @(~, ~) obj.closeFigure());
+
+        drawnow;
+
+        % Main grid: list area (top) + button grid (bottom)
+        mainGrid = uigridlayout(obj.Figure, [2, 1], ...
+            'ColumnWidth', {'1x'}, ...
+            'RowHeight', {'1x', 'fit'}, ...
+            'Padding', [10, 10, 10, 10], ...
+            'BackgroundColor', [0.2, 0.2, 0.2], ...
+            'RowSpacing', 10, ...
+            'ColumnSpacing', 10);
+
+        % Text area for file list
+        if isempty(app.HD.drawer_list)
+            displayValue = {''};
+        else
+            displayValue = app.HD.drawer_list;
+        end
+
+        obj.TextArea = uitextarea('Parent', mainGrid, ...
+            'BackgroundColor', [0.2, 0.2, 0.2], ...
+            'FontColor', [0.8, 0.8, 0.8], ...
+            'Value', displayValue, ...
+            'Editable', 'off');
+        obj.TextArea.Layout.Row = 1;
+        obj.TextArea.Layout.Column = 1;
+
+        % Button grid: 4 rows × 3 columns
+        buttonGrid = uigridlayout(mainGrid, [4, 3], ...
+            'ColumnWidth', {200, 200, 200}, ...
+            'RowHeight', {'fit', 'fit', 'fit', 'fit'}, ...
+            'Padding', [5, 5, 5, 5], ...
+            'BackgroundColor', [0.2, 0.2, 0.2]);
+        buttonGrid.Layout.Row = 2;
+        buttonGrid.Layout.Column = 1;
+
+        % Checkbox
+        obj.KeepZCheckbox = uicheckbox('Parent', buttonGrid, ...
+            'FontColor', [1 1 1], ...
+            'Text', 'Keep z distance', ...
+            'Value', 0);
+        obj.KeepZCheckbox.Layout.Row = 2;
+        obj.KeepZCheckbox.Layout.Column = 3;
+
+        % Common button colors
+        bkgColor = [0.5, 0.5, 0.5];
+        fontColor = [1, 1, 1];
+        renderColor = [0.2, 0.6, 0.2];
+
+        % Column 1 buttons
+        obj.makeButton(buttonGrid, [1, 1], 'Select file', ...
+            @(~, ~) obj.selectFile(), bkgColor, fontColor);
+        obj.makeButton(buttonGrid, [2, 1], 'Select folder', ...
+            @(~, ~) obj.selectFolder(), bkgColor, fontColor);
+        obj.makeButton(buttonGrid, [3, 1], 'Select current', ...
+            @(~, ~) obj.selectCurrent(), bkgColor, fontColor);
+        obj.makeButton(buttonGrid, [4, 1], 'Select current Folder', ...
+            @(~, ~) obj.selectCurrentFolder(), bkgColor, fontColor);
+
+        % Column 2 buttons
+        obj.makeButton(buttonGrid, [1, 2], 'Clear list', ...
+            @(~, ~) obj.clearList(), bkgColor, fontColor);
+        obj.makeButton(buttonGrid, [3, 2], 'Save to txt', ...
+            @(~, ~) obj.saveToTxt(), bkgColor, fontColor);
+        obj.makeButton(buttonGrid, [4, 2], 'Load from txt', ...
+            @(~, ~) obj.loadFromTxt(), bkgColor, fontColor);
+
+        % Column 3 buttons
+        obj.makeButton(buttonGrid, [3, 3], 'Save configs', ...
+            @(~, ~) obj.saveConfigs(), bkgColor, fontColor);
+        obj.makeButton(buttonGrid, [4, 3], 'Delete all configs', ...
+            @(~, ~) obj.deleteAllConfigs(), bkgColor, fontColor);
+        obj.makeButton(buttonGrid, [1, 3], 'Render Videos', ...
+            @(~, ~) obj.renderVideos(), renderColor, fontColor);
+
+        % Set consistent font
+        fontname(obj.Figure, 'Arial');
+        fontsize(obj.Figure, 12, "points");
+    end
+
+    function btn = makeButton(~, parent, pos, label, cb, bgColor, fontColor)
+        btn = uibutton(parent, 'push', ...
+            'BackgroundColor', bgColor, ...
+            'FontColor', fontColor, ...
+            'Text', label, ...
+            'ButtonPushedFcn', cb);
+        btn.Layout.Row = pos(1);
+        btn.Layout.Column = pos(2);
+    end
+
+    function updateDisplay(obj)
+        % Refresh the text area and adjust window height.
+        app = obj.MainApp;
+
+        if isempty(app.HD.drawer_list)
+            displayValue = {''};
+        else
+            displayValue = app.HD.drawer_list;
+        end
+
+        obj.TextArea.Value = displayValue;
+
+        newHeight = 100 + length(app.HD.drawer_list) * 14;
+
+        if newHeight > obj.Figure.Position(4)
+            obj.Figure.Position(4) = newHeight;
+        end
+
+    end
+
+    function closeFigure(obj)
+        % Clean up and delete the figure.
+        delete(obj.Figure);
+        delete(obj); % object will be destroyed
+    end
+
+    % -----------------------------------------------------------------
+    % Callback methods
+    % -----------------------------------------------------------------
+
+    function selectFile(obj)
+        app = obj.MainApp;
+
+        if ~isempty(app.HD.drawer_list)
+            [file, path] = uigetfile(app.HD.drawer_list{end}, ...
+                'Select File', '*.holo;*.cine');
+        else
+            [file, path] = uigetfile('Select File', '*.holo;*.cine');
+        end
+
+        if isequal(file, 0), return; end
+
+        [~, ~, ext] = fileparts(file);
+
+        if ismember(ext, {'.cine', '.holo'})
+            app.HD.drawer_list{end + 1} = fullfile(path, file);
+        else
+            uialert(obj.Figure, 'File must be .cine or .holo', 'Invalid File Type');
+        end
+
+        obj.updateDisplay();
+    end
+
+    function selectCurrent(obj)
+        app = obj.MainApp;
+
+        if isempty(app.HD.file)
+            uialert(obj.Figure, 'No current file loaded', 'No File');
+            return;
+        end
+
+        filePath = app.HD.file.path;
+        [~, ~, ext] = fileparts(filePath);
+
+        if ismember(ext, {'.cine', '.holo'})
+            app.HD.drawer_list{end + 1} = filePath;
+        else
+            uialert(obj.Figure, 'File must be .cine or .holo', 'Invalid File Type');
+        end
+
+        obj.updateDisplay();
+    end
+
+    function selectCurrentFolder(obj)
+        app = obj.MainApp;
+
+        if isempty(app.HD.file)
+            uialert(obj.Figure, 'No current file loaded', 'No File');
+            return;
+        end
+
+        obj.addFilesFromFolder(app.HD.file.dir);
+        obj.updateDisplay();
+    end
+
+    function selectFolder(obj)
+        app = obj.MainApp;
+
+        if ~isempty(app.HD.drawer_list)
+            lastFolder = fileparts(app.HD.drawer_list{end});
+        else
+            lastFolder = '';
+        end
+
+        folder = uigetdir(lastFolder);
+        if folder == 0, return; end
+        obj.addFilesFromFolder(folder);
+        obj.updateDisplay();
+    end
+
+    function addFilesFromFolder(obj, folder)
+        app = obj.MainApp;
+        entries = dir(folder);
+
+        for i = 1:numel(entries)
+
+            if ~entries(i).isdir
+                [~, ~, ext] = fileparts(entries(i).name);
+
+                if ismember(ext, {'.cine', '.holo'})
+                    app.HD.drawer_list{end + 1} = fullfile(folder, entries(i).name);
+                end
+
+            end
+
+        end
+
+    end
+
+    function clearList(obj)
+        obj.MainApp.HD.drawer_list = {};
+        obj.updateDisplay();
+    end
+
+    function saveToTxt(obj)
+        [file, path] = uiputfile('*.txt', 'Save list as text file');
+        if isequal(file, 0), return; end
+        writelines(obj.MainApp.HD.drawer_list, fullfile(path, file));
+    end
+
+    function loadFromTxt(obj)
+        app = obj.MainApp;
+        [file, path] = uigetfile('*.txt', 'Select File');
+        if isequal(file, 0), return; end
+        lines = readlines(fullfile(path, file));
+
+        for i = 1:numel(lines)
+
+            if ~isempty(lines(i))
+
+                try
+                    [~, ~, ext] = fileparts(lines(i));
+
+                    if ismember(ext, {'.cine', '.holo'})
+                        app.HD.drawer_list{end + 1} = lines{i};
+                    end
+
+                catch e
+                    disp(e);
+                end
+
+            end
+
+        end
+
+        obj.updateDisplay();
+    end
+
+    function saveConfigs(obj)
+        app = obj.MainApp;
+        keepZ = obj.KeepZCheckbox.Value;
+        defaultParamPath = "StandardConfigs\Phantom S711 37kHz retinal analysis.json";
+
+        originalParams = app.HD.params;
+
+        for i = 1:length(app.HD.drawer_list)
+            filePath = app.HD.drawer_list{i};
+            [dirName, name] = fileparts(filePath);
+            existing = dir(fullfile(dirName, sprintf('%s_input_HD_params_*.json', name)));
+
+            if isempty(existing) && ~isempty(defaultParamPath)
+                app.HD.loadParams(defaultParamPath);
+                app.HD.saveParams(filePath, keepZ);
+            else
+                app.HD.saveParams(filePath, keepZ);
+            end
+
+            fprintf('Saved config for: %s\n', filePath);
+        end
+
+        app.HD.params = originalParams;
+    end
+
+    function fileList = buildDrawerFileList(obj)
+        % BUILDRAWERFILELIST   Retrieve config files for each drawer entry
+        app = obj.MainApp;
+        fileList = cell(size(app.HD.drawer_list));
+
+        for i = 1:length(app.HD.drawer_list)
+            [config_list, path_list] = get_config_files(app.HD.drawer_list{i});
+
+            if ~isempty(config_list)
+                fileList{i} = {app.HD.drawer_list{i}, config_list, path_list};
+            end
+
+        end
+
+    end
+
+    function renderVideos(obj)
+        app = obj.MainApp;
+        fileList = obj.buildDrawerFileList(); % external helper function
+
+        for i = 1:length(fileList)
+            entry = fileList{i};
+
+            if ~isempty(entry) && ~isempty(entry{2})
+
+                for j = 1:length(entry{2})
+                    app.HD.LoadFile(entry{1}, params = entry{2}{j});
+                    app.HD.VideoRendering();
+                end
+
+            end
+
+        end
+
+    end
+
+    function deleteAllConfigs(obj)
+        fileList = obj.buildDrawerFileList(); % external helper function
+        n = 0;
+
+        for i = 1:length(fileList)
+            entry = fileList{i};
+
+            if ~isempty(entry) && ~isempty(entry{3})
+
+                for j = 1:length(entry{3})
+                    delete(entry{3}{j});
+                    n = n + 1;
+                end
+
+            end
+
+        end
+
+        fprintf('Deleted %d config files for %d entries\n', n, length(fileList));
+
+    end
+
+end
+
+end

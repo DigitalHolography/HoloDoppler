@@ -56,22 +56,6 @@ methods
     end
 
     % ------------------------------------------------------------------
-    function showFramesHistogram(obj)
-        FIGURE_ID = 45;
-
-        try
-            figure(FIGURE_ID);
-            histogram(obj.Frames, ...
-                'BinLimits', [min(obj.Frames(:)), max(obj.Frames(:))], ...
-                'BinMethod', 'integers');
-            title('Frames histogram');
-        catch
-            close(FIGURE_ID);
-        end
-
-    end
-
-    % ------------------------------------------------------------------
     function freeCache(obj)
         obj.FH = [];
         obj.H = [];

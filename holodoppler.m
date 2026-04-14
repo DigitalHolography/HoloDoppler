@@ -43,9 +43,8 @@ properties (Access = public)
     imageTypesListBox matlab.ui.control.ListBox
     LoadConfigButton matlab.ui.control.Button
     SaveConfigButton matlab.ui.control.Button
-    FolderManagementButton matlab.ui.control.Button
+    FolderManagerButton matlab.ui.control.Button
     VideoRenderingButton matlab.ui.control.Button
-    ShowHistogramButton matlab.ui.control.Button
     VideoRenderingLamp matlab.ui.control.Lamp
     batchSizeLabel matlab.ui.control.Label
     batchSize matlab.ui.control.NumericEditField
@@ -115,14 +114,6 @@ properties (Access = public)
 end
 
 % =========================================================================
-% Internal state
-% =========================================================================
-properties (Access = private)
-    DialogApp % Dialog box app
-    poolobj
-end
-
-% =========================================================================
 % Callbacks
 % =========================================================================
 methods (Access = private)
@@ -164,15 +155,19 @@ methods (Access = private)
 
     function HoloDopplerUIFigureWindowKeyPress(app, event)
 
-        switch event.Key
-            case 'return'
-                app.RenderPreviewButtonPushed();
-            case 'space'
-                app.ViewAllMenuSelected();
-            case 'leftarrow'
-                app.changeMenu('previous');
-            case 'rightarrow'
-                app.changeMenu('next');
+        if app.fileLoaded
+
+            switch event.Key
+                case 'return'
+                    app.RenderPreviewButtonPushed();
+                case 'space'
+                    app.ViewAllMenuSelected();
+                case 'leftarrow'
+                    app.changeMenu('previous');
+                case 'rightarrow'
+                    app.changeMenu('next');
+            end
+
         end
 
     end
@@ -364,11 +359,6 @@ methods (Access = private)
     end
 
     % --- Misc callbacks ----------------------------------------------------
-
-    function ShowHistogramButtonPushed(app, ~)
-        app.HD.render.showFramesHistogram();
-    end
-
     function svdThresholdResetButtonPushed(app, ~)
 
         if app.svdThreshold.Value == 0
@@ -460,8 +450,8 @@ methods (Access = private)
 
     % --- Folder management -------------------------------------------------
 
-    function FolderManagementButtonPushed(app, ~)
-        FolderManagement(app);
+    function FolderManagerButtonPushed(app, ~)
+        FolderManagementUI(app);
     end
 
 end % callbacks methods block
@@ -487,7 +477,7 @@ methods (Access = private)
     %
     % Three tiers of availability:
     %   (A) always available  — LoadfileButton, LoadConfigButton,
-    %                           FolderManagementButton, AdvancedButton
+    %                           FolderManagerButton, AdvancedButton
     %   (B) file loaded       — everything that reads from obj.reader
     %   (C) preview rendered  — SavePreviewButton, image navigation
 
@@ -500,7 +490,6 @@ methods (Access = private)
         fileControls = { ...
                             app.SaveConfigButton, ...
                             app.VideoRenderingButton, ...
-                            app.ShowHistogramButton, ...
                             app.RefreshAppButton, ...
                             app.RenderPreviewButton, ...
                             app.AutofocusButton, ...
@@ -538,6 +527,10 @@ methods (Access = private)
                             app.flip_x, ...
                             app.flip_y, ...
                             app.parforArg, ...
+                            app.AdvancedButton, ...
+                            app.LoadConfigButton, ...
+                            app.ImproveContrast, ...
+                            app.CornerCompensation ...
                         };
 
         for k = 1:numel(fileControls)
@@ -592,8 +585,6 @@ methods (Access = private)
         app.indexRangeLabel.Enable = ~useFreqRange;
     end
 
-    % --- Drawer (folder management) helpers --------------------------------
-
 end % private helpers methods block
 
 % =========================================================================
@@ -627,20 +618,22 @@ methods (Access = private)
         appX = (screenSize(3) - appWidth) / 2;
         appY = (screenSize(4) - appHeight) / 2;
 
-        app.HoloDopplerUIFigure = uifigure('Visible', 'off');
-        app.HoloDopplerUIFigure.Position = [appX appY appWidth appHeight];
-        app.HoloDopplerUIFigure.Name = 'HoloDoppler';
-        app.HoloDopplerUIFigure.Icon = fullfile(pathToMLAPP, 'holoDopplerLogo.png');
-        app.HoloDopplerUIFigure.CloseRequestFcn = createCallbackFcn(app, @HoloDopplerUIFigureCloseRequest, true);
-        app.HoloDopplerUIFigure.WindowKeyPressFcn = createCallbackFcn(app, @HoloDopplerUIFigureWindowKeyPress, true);
+        app.HoloDopplerUIFigure = uifigure('Visible', 'off', ...
+            'Position', [appX appY appWidth appHeight], ...
+            'Name', 'HoloDoppler', ...
+            'Icon', fullfile(pathToMLAPP, 'holoDopplerLogo.png'), ...
+            'CloseRequestFcn', createCallbackFcn(app, @HoloDopplerUIFigureCloseRequest, true), ...
+            'WindowKeyPressFcn', createCallbackFcn(app, @HoloDopplerUIFigureWindowKeyPress, true), ...
+            'WindowStyle', 'normal'); % allows maximizing on Windows
 
-        app.RootGrid = uigridlayout(app.HoloDopplerUIFigure, [2 2]);
-        app.RootGrid.ColumnWidth = {'fit', 'fit', '1x'};
-        app.RootGrid.RowHeight = {'1x', 'fit'};
-        app.RootGrid.RowSpacing = 5;
-        app.RootGrid.ColumnSpacing = 5;
-        app.RootGrid.Padding = [10 10 10 10];
-        app.RootGrid.BackgroundColor = [0.2 0.2 0.2];
+        app.RootGrid = uigridlayout(app.HoloDopplerUIFigure, [2 2], ...
+            'ColumnWidth', {'fit', 'fit', '1x'}, ...
+            'RowHeight', {'1x', 'fit'}, ...
+            'RowSpacing', 5, ...
+            'ColumnSpacing', 5, ...
+            'Padding', [10 10 10 10], ...
+            'BackgroundColor', [0.2 0.2 0.2]);
+
     end
 
     % -----------------------------------------------------------------------
@@ -648,25 +641,35 @@ methods (Access = private)
 
         backgroundColor = [0.2 0.2 0.2];
         darkBackgroundColor = [0.15 0.15 0.15];
-        fontColor = [0.9 0.9 0.9];
+        fontColor = [1 1 1];
         grayButtonColor = [0.5 0.5 0.5];
 
-        app.FileselectionPanel = uipanel(app.RootGrid);
-        app.FileselectionPanel.Tooltip = {''};
-        app.FileselectionPanel.ForegroundColor = fontColor;
-        app.FileselectionPanel.TitlePosition = 'centertop';
-        app.FileselectionPanel.Title = 'File selection';
-        app.FileselectionPanel.BackgroundColor = backgroundColor;
+        app.FileselectionPanel = uipanel(app.RootGrid, ...
+            'BackgroundColor', backgroundColor, ...
+            'ForegroundColor', fontColor, ...
+            'BorderType', 'line', ...
+            'Title', 'File selection', ...
+            'TitlePosition', 'centertop');
+
         app.FileselectionPanel.Layout.Row = [1 2];
         app.FileselectionPanel.Layout.Column = 1;
 
-        app.mainParametersGrid = uigridlayout(app.FileselectionPanel, [10 3]);
-        app.mainParametersGrid.RowHeight = {'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', '1x'};
-        app.mainParametersGrid.ColumnWidth = {'fit', 'fit', 'fit'};
-        app.mainParametersGrid.Padding = [10 10 10 10];
-        app.mainParametersGrid.RowSpacing = 5;
-        app.mainParametersGrid.ColumnSpacing = 5;
-        app.mainParametersGrid.BackgroundColor = backgroundColor;
+        app.mainParametersGrid = uigridlayout(app.FileselectionPanel, [11 3], ...
+            'RowHeight', {'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', '1x', 'fit'}, ...
+            'ColumnWidth', {'fit', 'fit', 'fit'}, ...
+            'Padding', [10 10 10 10], ...
+            'RowSpacing', 5, ...
+            'ColumnSpacing', 5, ...
+            'BackgroundColor', backgroundColor);
+
+        app.FolderManagerButton = uibutton(app.mainParametersGrid, 'push');
+        app.FolderManagerButton.ButtonPushedFcn = createCallbackFcn(app, @FolderManagerButtonPushed, true);
+        app.FolderManagerButton.BackgroundColor = grayButtonColor;
+        app.FolderManagerButton.FontColor = fontColor;
+        app.FolderManagerButton.Tooltip = {'Open a window to render all files from different folders with their config files'};
+        app.FolderManagerButton.Layout.Row = 1;
+        app.FolderManagerButton.Layout.Column = 1;
+        app.FolderManagerButton.Text = 'Folder manager';
 
         app.LoadfileButton = uibutton(app.mainParametersGrid, 'push');
         app.LoadfileButton.ButtonPushedFcn = createCallbackFcn(app, @LoadfileButtonPushed, true);
@@ -674,7 +677,7 @@ methods (Access = private)
         app.LoadfileButton.FontColor = fontColor;
         app.LoadfileButton.Tooltip = {'Load a raw video file (formats : .raw, .cine, .holo)'};
         app.LoadfileButton.Layout.Row = 1;
-        app.LoadfileButton.Layout.Column = [1 2];
+        app.LoadfileButton.Layout.Column = 2;
         app.LoadfileButton.Text = 'Load file';
 
         app.fileLoadedLamp = uilamp(app.mainParametersGrid);
@@ -683,11 +686,30 @@ methods (Access = private)
         app.fileLoadedLamp.Color = [0.5 0.5 0.5]; % gray = no file, orange = loading, green = loaded, red = error
         app.fileLoadedLamp.Tooltip = {'Indicates the file loading status: gray = no file, orange = loading, green = loaded, red = error'};
 
+        % buttons row 2
+        app.LoadConfigButton = uibutton(app.mainParametersGrid, 'push');
+        app.LoadConfigButton.ButtonPushedFcn = createCallbackFcn(app, @LoadConfigButtonPushed, true);
+        app.LoadConfigButton.BackgroundColor = grayButtonColor;
+        app.LoadConfigButton.FontColor = fontColor;
+        app.LoadConfigButton.Tooltip = {'Save a configuration for the video rendering of a file'};
+        app.LoadConfigButton.Layout.Row = 2;
+        app.LoadConfigButton.Layout.Column = 1;
+        app.LoadConfigButton.Text = 'Load config';
+
+        app.SaveConfigButton = uibutton(app.mainParametersGrid, 'push');
+        app.SaveConfigButton.ButtonPushedFcn = createCallbackFcn(app, @SaveConfigButtonPushed, true);
+        app.SaveConfigButton.BackgroundColor = grayButtonColor;
+        app.SaveConfigButton.FontColor = fontColor;
+        app.SaveConfigButton.Tooltip = {'Save a configuration for the video rendering of a file'};
+        app.SaveConfigButton.Layout.Row = 2;
+        app.SaveConfigButton.Layout.Column = 2;
+        app.SaveConfigButton.Text = 'Save config';
+
         app.lambdaLabel = uilabel(app.mainParametersGrid);
         app.lambdaLabel.FontColor = fontColor;
         app.lambdaLabel.Tooltip = {'Laser''s wavelength for light propagation calculations in (m)'};
         app.lambdaLabel.Text = 'λ (m)';
-        app.lambdaLabel.Layout.Row = 2;
+        app.lambdaLabel.Layout.Row = 3;
         app.lambdaLabel.Layout.Column = 1;
         app.lambdaLabel.HorizontalAlignment = 'right';
 
@@ -697,14 +719,14 @@ methods (Access = private)
         app.lambda.FontColor = fontColor;
         app.lambda.BackgroundColor = darkBackgroundColor;
         app.lambda.Tooltip = {'Laser wavelength in nanometers'};
-        app.lambda.Layout.Row = 2;
+        app.lambda.Layout.Row = 3;
         app.lambda.Layout.Column = 2;
 
         app.fsLabel = uilabel(app.mainParametersGrid);
         app.fsLabel.FontColor = fontColor;
         app.fsLabel.Tooltip = {'Sampling frequency in (kHz)'};
         app.fsLabel.Text = 'fs (kHz)';
-        app.fsLabel.Layout.Row = 3;
+        app.fsLabel.Layout.Row = 4;
         app.fsLabel.Layout.Column = 1;
         app.fsLabel.HorizontalAlignment = 'right';
 
@@ -714,14 +736,14 @@ methods (Access = private)
         app.fs.FontColor = fontColor;
         app.fs.BackgroundColor = darkBackgroundColor;
         app.fs.Tooltip = {'Sampling frequency in (kHz)'};
-        app.fs.Layout.Row = 3;
+        app.fs.Layout.Row = 4;
         app.fs.Layout.Column = 2;
 
         app.pixelPitchLabel = uilabel(app.mainParametersGrid);
         app.pixelPitchLabel.FontColor = fontColor;
         app.pixelPitchLabel.Tooltip = {'Camera pixel pitch (distance between spatial sampling points) in (m)'};
         app.pixelPitchLabel.Text = 'Pixel pitch (m)';
-        app.pixelPitchLabel.Layout.Row = 4;
+        app.pixelPitchLabel.Layout.Row = 5;
         app.pixelPitchLabel.Layout.Column = 1;
         app.pixelPitchLabel.HorizontalAlignment = 'right';
 
@@ -730,7 +752,7 @@ methods (Access = private)
         app.ppx.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.ppx.FontColor = fontColor;
         app.ppx.BackgroundColor = darkBackgroundColor;
-        app.ppx.Layout.Row = 4;
+        app.ppx.Layout.Row = 5;
         app.ppx.Layout.Column = 2;
 
         app.ppy = uieditfield(app.mainParametersGrid, 'numeric');
@@ -738,14 +760,14 @@ methods (Access = private)
         app.ppy.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.ppy.FontColor = fontColor;
         app.ppy.BackgroundColor = darkBackgroundColor;
-        app.ppy.Layout.Row = 4;
+        app.ppy.Layout.Row = 5;
         app.ppy.Layout.Column = 3;
 
         app.imageSizeLabel = uilabel(app.mainParametersGrid);
         app.imageSizeLabel.FontColor = fontColor;
         app.imageSizeLabel.Tooltip = {'Size of the recorded interferograms in pixels (width x height)'};
         app.imageSizeLabel.Text = 'Image size (px)';
-        app.imageSizeLabel.Layout.Row = 5;
+        app.imageSizeLabel.Layout.Row = 6;
         app.imageSizeLabel.Layout.Column = 1;
         app.imageSizeLabel.HorizontalAlignment = 'right';
 
@@ -755,7 +777,7 @@ methods (Access = private)
         app.Nx.FontColor = fontColor;
         app.Nx.BackgroundColor = darkBackgroundColor;
         app.Nx.Tooltip = {'Width of the recorded interferograms'};
-        app.Nx.Layout.Row = 5;
+        app.Nx.Layout.Row = 6;
         app.Nx.Layout.Column = 2;
 
         app.Ny = uieditfield(app.mainParametersGrid, 'numeric');
@@ -764,14 +786,14 @@ methods (Access = private)
         app.Ny.FontColor = fontColor;
         app.Ny.BackgroundColor = darkBackgroundColor;
         app.Ny.Tooltip = {'Height of the recorded interferograms'};
-        app.Ny.Layout.Row = 5;
+        app.Ny.Layout.Row = 6;
         app.Ny.Layout.Column = 3;
 
         app.numworkersSpinnerLabel = uilabel(app.mainParametersGrid);
         app.numworkersSpinnerLabel.FontColor = fontColor;
         app.numworkersSpinnerLabel.Tooltip = {'Number of worker used for the video rendering (depends of the working station)'};
         app.numworkersSpinnerLabel.Text = '# Workers';
-        app.numworkersSpinnerLabel.Layout.Row = 6;
+        app.numworkersSpinnerLabel.Layout.Row = 7;
         app.numworkersSpinnerLabel.Layout.Column = 1;
         app.numworkersSpinnerLabel.HorizontalAlignment = 'right';
 
@@ -784,13 +806,13 @@ methods (Access = private)
         app.parforArg.BackgroundColor = darkBackgroundColor;
         app.parforArg.Tooltip = {'Number of worker used for the video rendering (depends of the working station)'};
         app.parforArg.Value = 10;
-        app.parforArg.Layout.Row = 6;
+        app.parforArg.Layout.Row = 7;
         app.parforArg.Layout.Column = 2;
 
         app.positioninfileSliderLabel = uilabel(app.mainParametersGrid);
         app.positioninfileSliderLabel.FontColor = fontColor;
         app.positioninfileSliderLabel.Text = {'Position in file'};
-        app.positioninfileSliderLabel.Layout.Row = 7;
+        app.positioninfileSliderLabel.Layout.Row = 8;
         app.positioninfileSliderLabel.Layout.Column = 1;
         app.positioninfileSliderLabel.HorizontalAlignment = 'right';
 
@@ -800,13 +822,13 @@ methods (Access = private)
         app.positioninfileSlider.ValueChangedFcn = createCallbackFcn(app, @positioninfileSliderValueChanged, true);
         app.positioninfileSlider.MinorTicks = [0 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1];
         app.positioninfileSlider.Tooltip = {'Change value to display a different video timestamp in the gui.'};
-        app.positioninfileSlider.Layout.Row = 7;
+        app.positioninfileSlider.Layout.Row = 8;
         app.positioninfileSlider.Layout.Column = [2 3];
 
         app.batchIndexLabel = uilabel(app.mainParametersGrid);
         app.batchIndexLabel.FontColor = fontColor;
         app.batchIndexLabel.Text = {'Batch index'};
-        app.batchIndexLabel.Layout.Row = 8;
+        app.batchIndexLabel.Layout.Row = 9;
         app.batchIndexLabel.Layout.Column = 1;
         app.batchIndexLabel.HorizontalAlignment = 'right';
 
@@ -815,7 +837,7 @@ methods (Access = private)
         app.batchIndexField.FontColor = fontColor;
         app.batchIndexField.BackgroundColor = darkBackgroundColor;
         app.batchIndexField.ValueDisplayFormat = '%.0f';
-        app.batchIndexField.Layout.Row = 8;
+        app.batchIndexField.Layout.Row = 9;
         app.batchIndexField.Layout.Column = 2;
 
         app.framePosition = uieditfield(app.mainParametersGrid, 'numeric');
@@ -826,8 +848,10 @@ methods (Access = private)
         app.framePosition.FontColor = fontColor;
         app.framePosition.BackgroundColor = darkBackgroundColor;
         app.framePosition.Tooltip = {''};
-        app.framePosition.Layout.Row = 8;
+        app.framePosition.Layout.Row = 9;
         app.framePosition.Layout.Column = 3;
+
+        % Column 11
 
         app.RefreshAppButton = uibutton(app.mainParametersGrid, 'push');
         app.RefreshAppButton.ButtonPushedFcn = createCallbackFcn(app, @RefreshAppButtonPushed, true);
@@ -835,7 +859,7 @@ methods (Access = private)
         app.RefreshAppButton.FontColor = fontColor;
         app.RefreshAppButton.Tooltip = {'Refresh the app'};
         app.RefreshAppButton.Text = '👌 Refresh app';
-        app.RefreshAppButton.Layout.Row = 9;
+        app.RefreshAppButton.Layout.Row = 11;
         app.RefreshAppButton.Layout.Column = 2;
 
         app.AdvancedButton = uibutton(app.mainParametersGrid, 'push');
@@ -844,7 +868,7 @@ methods (Access = private)
         app.AdvancedButton.FontColor = fontColor;
         app.AdvancedButton.Tooltip = {'Advanced settings'};
         app.AdvancedButton.Text = '📎 Advanced';
-        app.AdvancedButton.Layout.Row = 9;
+        app.AdvancedButton.Layout.Row = 11;
         app.AdvancedButton.Layout.Column = 3;
     end
 
@@ -853,8 +877,8 @@ methods (Access = private)
 
         backgroundColor = [0.2 0.2 0.2];
         darkBackgroundColor = [0.15 0.15 0.15];
-        fontColor = [0.9 0.9 0.9];
-        grayButtonColor = [0.5 0.5 0.5];
+        fontColor = [1 1 1];
+        renderButtonColor = [0.2, 0.6, 0.2];
 
         app.batchPanel = uipanel(app.mainParametersGrid);
         app.batchPanel.ForegroundColor = fontColor;
@@ -863,8 +887,8 @@ methods (Access = private)
         app.batchPanel.Layout.Row = 10;
         app.batchPanel.Layout.Column = [1 3];
 
-        app.batchGrid = uigridlayout(app.batchPanel, [11 3]);
-        app.batchGrid.RowHeight = {'1x', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit'};
+        app.batchGrid = uigridlayout(app.batchPanel, [10 3]);
+        app.batchGrid.RowHeight = {'1x', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit'};
         app.batchGrid.ColumnWidth = {'fit', 'fit', '1x'};
         app.batchGrid.Padding = [10 10 10 10];
         app.batchGrid.RowSpacing = 5;
@@ -885,64 +909,26 @@ methods (Access = private)
         app.imageTypesListBox.Layout.Column = [1 3];
         app.imageTypesListBox.Value = {};
 
-        % buttons row 2
-        app.LoadConfigButton = uibutton(p, 'push');
-        app.LoadConfigButton.ButtonPushedFcn = createCallbackFcn(app, @LoadConfigButtonPushed, true);
-        app.LoadConfigButton.BackgroundColor = grayButtonColor;
-        app.LoadConfigButton.FontColor = fontColor;
-        app.LoadConfigButton.Tooltip = {'Save a configuration for the video rendering of a file'};
-        app.LoadConfigButton.Layout.Row = 2;
-        app.LoadConfigButton.Layout.Column = 1;
-        app.LoadConfigButton.Text = 'Load config';
-
-        app.SaveConfigButton = uibutton(p, 'push');
-        app.SaveConfigButton.ButtonPushedFcn = createCallbackFcn(app, @SaveConfigButtonPushed, true);
-        app.SaveConfigButton.BackgroundColor = grayButtonColor;
-        app.SaveConfigButton.FontColor = fontColor;
-        app.SaveConfigButton.Tooltip = {'Save a configuration for the video rendering of a file'};
-        app.SaveConfigButton.Layout.Row = 2;
-        app.SaveConfigButton.Layout.Column = 2;
-        app.SaveConfigButton.Text = 'Save config';
-
         % buttons row 3
-        app.FolderManagementButton = uibutton(p, 'push');
-        app.FolderManagementButton.ButtonPushedFcn = createCallbackFcn(app, @FolderManagementButtonPushed, true);
-        app.FolderManagementButton.BackgroundColor = grayButtonColor;
-        app.FolderManagementButton.FontColor = fontColor;
-        app.FolderManagementButton.Tooltip = {'Open a window to render all files from different folders with their config files'};
-        app.FolderManagementButton.Layout.Row = 3;
-        app.FolderManagementButton.Layout.Column = 1;
-        app.FolderManagementButton.Text = 'Folder management';
-
         app.VideoRenderingButton = uibutton(p, 'push');
         app.VideoRenderingButton.ButtonPushedFcn = createCallbackFcn(app, @VideoRenderingButtonPushed, true);
-        app.VideoRenderingButton.BackgroundColor = grayButtonColor;
+        app.VideoRenderingButton.BackgroundColor = renderButtonColor;
         app.VideoRenderingButton.FontColor = fontColor;
         app.VideoRenderingButton.Tooltip = {'Render ''batchSize'' frame batchs spaced by ''batchStride'' and output a video of different image types'};
-        app.VideoRenderingButton.Layout.Row = 3;
-        app.VideoRenderingButton.Layout.Column = 2;
+        app.VideoRenderingButton.Layout.Row = 2;
+        app.VideoRenderingButton.Layout.Column = 1;
         app.VideoRenderingButton.Text = 'Video Rendering';
 
-        % Trivia row 4
-        app.ShowHistogramButton = uibutton(p, 'push');
-        app.ShowHistogramButton.ButtonPushedFcn = createCallbackFcn(app, @ShowHistogramButtonPushed, true);
-        app.ShowHistogramButton.BackgroundColor = grayButtonColor;
-        app.ShowHistogramButton.FontColor = fontColor;
-        app.ShowHistogramButton.Tooltip = {'Show the full frame batch histogram'};
-        app.ShowHistogramButton.Layout.Row = 4;
-        app.ShowHistogramButton.Layout.Column = 1;
-        app.ShowHistogramButton.Text = 'Histogram';
-
         app.VideoRenderingLamp = uilamp(p);
-        app.VideoRenderingLamp.Layout.Row = 4;
+        app.VideoRenderingLamp.Layout.Row = 2;
         app.VideoRenderingLamp.Layout.Column = 2;
         app.VideoRenderingLamp.Color = [0.5 0.5 0.5]; % gray = no file, orange = loading, green = loaded, red = error
         app.VideoRenderingLamp.Tooltip = {'Indicates the video rendering status: gray = not rendered, orange = rendering in progress, green = rendered, red = error'};
 
-        % sizes row 5 6 7
+        % sizes row 4 5 6
         app.batchSizeLabel = uilabel(p);
         app.batchSizeLabel.FontColor = fontColor;
-        app.batchSizeLabel.Layout.Row = 5;
+        app.batchSizeLabel.Layout.Row = 3;
         app.batchSizeLabel.Layout.Column = 1;
         app.batchSizeLabel.Text = 'Batch size';
 
@@ -953,12 +939,12 @@ methods (Access = private)
         app.batchSize.FontColor = fontColor;
         app.batchSize.BackgroundColor = darkBackgroundColor;
         app.batchSize.Tooltip = {'Number of interferograms used to compute the image'};
-        app.batchSize.Layout.Row = 5;
+        app.batchSize.Layout.Row = 3;
         app.batchSize.Layout.Column = 2;
 
         app.batchStrideLabel = uilabel(p);
         app.batchStrideLabel.FontColor = fontColor;
-        app.batchStrideLabel.Layout.Row = 6;
+        app.batchStrideLabel.Layout.Row = 4;
         app.batchStrideLabel.Layout.Column = 1;
         app.batchStrideLabel.Text = 'Batch stride';
 
@@ -969,12 +955,12 @@ methods (Access = private)
         app.batchStride.FontColor = fontColor;
         app.batchStride.BackgroundColor = darkBackgroundColor;
         app.batchStride.Tooltip = {'Number of interferograms to skip between two images'};
-        app.batchStride.Layout.Row = 6;
+        app.batchStride.Layout.Row = 4;
         app.batchStride.Layout.Column = 2;
 
         app.refBatchSizeLabel = uilabel(p);
         app.refBatchSizeLabel.FontColor = fontColor;
-        app.refBatchSizeLabel.Layout.Row = 7;
+        app.refBatchSizeLabel.Layout.Row = 5;
         app.refBatchSizeLabel.Layout.Column = 1;
         app.refBatchSizeLabel.Text = 'Reference batch size';
 
@@ -984,16 +970,16 @@ methods (Access = private)
         app.refBatchSize.FontColor = fontColor;
         app.refBatchSize.BackgroundColor = darkBackgroundColor;
         app.refBatchSize.Tooltip = {'Number of interferograms used to compute the image used as reference in registration'};
-        app.refBatchSize.Layout.Row = 7;
+        app.refBatchSize.Layout.Row = 5;
         app.refBatchSize.Layout.Column = 2;
 
-        % Registration row 8 9 10
+        % Registration row 7 8 9 10
         app.AutofocusFromRef = uicheckbox(p);
         app.AutofocusFromRef.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
         app.AutofocusFromRef.Tooltip = {'Activate frame to frame translation registration of images'};
         app.AutofocusFromRef.Text = 'autofocus from ref';
         app.AutofocusFromRef.FontColor = fontColor;
-        app.AutofocusFromRef.Layout.Row = 8;
+        app.AutofocusFromRef.Layout.Row = 6;
         app.AutofocusFromRef.Layout.Column = 1;
 
         app.imageRegistration = uicheckbox(p);
@@ -1001,12 +987,12 @@ methods (Access = private)
         app.imageRegistration.Tooltip = {'Activate frame to frame translation registration of images'};
         app.imageRegistration.Text = 'image registration';
         app.imageRegistration.FontColor = fontColor;
-        app.imageRegistration.Layout.Row = 10;
+        app.imageRegistration.Layout.Row = 7;
         app.imageRegistration.Layout.Column = [1 2];
 
         app.registrationDiskLabel = uilabel(p);
         app.registrationDiskLabel.FontColor = fontColor;
-        app.registrationDiskLabel.Layout.Row = 11;
+        app.registrationDiskLabel.Layout.Row = 9;
         app.registrationDiskLabel.Layout.Column = 1;
         app.registrationDiskLabel.Text = 'Registration disk ratio';
 
@@ -1016,7 +1002,7 @@ methods (Access = private)
         app.registrationDiskRatio.FontColor = fontColor;
         app.registrationDiskRatio.BackgroundColor = darkBackgroundColor;
         app.registrationDiskRatio.Tooltip = {'Size of a disk centered on the images used to compute the registration shifts (0 is empty and 1 is a disk of the maximum dimension).'};
-        app.registrationDiskRatio.Layout.Row = 11;
+        app.registrationDiskRatio.Layout.Row = 9;
         app.registrationDiskRatio.Layout.Column = 2;
 
     end
@@ -1026,7 +1012,7 @@ methods (Access = private)
 
         backgroundColor = [0.2 0.2 0.2];
         darkBackgroundColor = [0.15 0.15 0.15];
-        fontColor = [0.9 0.9 0.9];
+        fontColor = [1 1 1];
         grayButtonColor = [0.5 0.5 0.5];
 
         app.renderingParametersPanel = uipanel(app.RootGrid);

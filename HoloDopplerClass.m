@@ -301,7 +301,6 @@ methods
 
     function loadParams(obj, path)
         % load the params from a json file and set them in the class
-        fprintf('Loading parameters from %s\n', path);
         fid = fopen(path, 'r');
 
         if fid == -1
@@ -328,7 +327,7 @@ methods
 
         parms = obj.params;
 
-        if ~save_z %&& strcmp(ext,'.holo') % if you dont want to save the z and prefer to take the automatic one
+        if isfield(parms, 'record_time_stamps_us') && ~save_z %&& strcmp(ext,'.holo') % if you dont want to save the z and prefer to take the automatic one
             % only for holo files because cine dont save the z
             parms = rmfield(parms, 'spatialPropagation');
         end
