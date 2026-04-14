@@ -26,7 +26,7 @@
   "frequencyRange1": 6,
   "frequencyRange2": 18,
   "svd_filter": true,
-  "svdThreshold": 10,
+  "svdThreshold": 0,
   "timeTransform": "FFT",
   "flatfield_gw": 35,
   "bucketsRanges": [

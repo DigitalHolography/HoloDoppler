@@ -15,7 +15,7 @@
   "frequencyRange2": 18.3,
   "spatialFilter": false,
   "svd_filter": true,
-  "svdThreshold": 64,
+  "svdThreshold": 0,
   "svdStride": 1,
   "timeTransform": "FFT",
   "flatfield_gw": 35,

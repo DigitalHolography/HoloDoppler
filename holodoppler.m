@@ -614,7 +614,7 @@ methods (Access = private)
         screenSize = get(0, 'ScreenSize');
         % Set the app window position to be centered
         appWidth = 800;
-        appHeight = 800;
+        appHeight = 900;
         appX = (screenSize(3) - appWidth) / 2;
         appY = (screenSize(4) - appHeight) / 2;
 

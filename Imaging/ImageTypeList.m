@@ -13,6 +13,13 @@ properties
     power_Doppler
     power_1_Doppler
     power_2_Doppler
+
+    % --- Spectral moments -----------------------------------------------
+    moment_0
+    moment_1
+    moment_2
+
+    % Computed variables -------------------------------------------------
     color_Doppler
     directional_Doppler
     broadening
@@ -20,9 +27,6 @@ properties
     power_adapt
 
     % --- Spectral moments -----------------------------------------------
-    moment_0
-    moment_1
-    moment_2
     arg_0
     f_RMS
 

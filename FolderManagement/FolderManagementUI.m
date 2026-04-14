@@ -175,12 +175,17 @@ methods (Access = private)
     function selectFile(obj)
         app = obj.MainApp;
 
+        figureHandle = obj.Figure;
+        figure(figureHandle);
+
         if ~isempty(obj.drawerList)
             [file, path] = uigetfile(obj.drawerList{end}, ...
                 'Select File', '*.holo;*.cine');
         else
             [file, path] = uigetfile('Select File', '*.holo;*.cine');
         end
+
+        figure(figureHandle);
 
         if isequal(file, 0), return; end
 
@@ -233,6 +238,9 @@ methods (Access = private)
     function selectFolder(obj)
         app = obj.MainApp;
 
+        figureHandle = obj.Figure;
+        figure(figureHandle);
+
         if ~isempty(obj.drawerList)
             lastFolder = fileparts(obj.drawerList{end});
         else
@@ -240,6 +248,9 @@ methods (Access = private)
         end
 
         folder = uigetdir(lastFolder);
+
+        figure(figureHandle);
+
         if folder == 0, return; end
         obj.addFilesFromFolder(folder);
 
@@ -271,14 +282,28 @@ methods (Access = private)
     end
 
     function saveToTxt(obj)
+
+        figureHandle = obj.Figure;
+        figure(figureHandle);
+
         [file, path] = uiputfile('*.txt', 'Save list as text file');
+
+        figure(figureHandle);
+
         if isequal(file, 0), return; end
         writelines(obj.drawerList, fullfile(path, file));
     end
 
     function loadFromTxt(obj)
         app = obj.MainApp;
+
+        figureHandle = obj.Figure;
+        figure(figureHandle);
+
         [file, path] = uigetfile('*.txt', 'Select File');
+
+        figure(figureHandle);
+
         if isequal(file, 0), return; end
         lines = readlines(fullfile(path, file));
 
@@ -349,6 +374,30 @@ methods (Access = private)
         app = obj.MainApp;
         fileList = obj.buildDrawerFileList(); % external helper function
 
+        if ~isempty(fileList) && ~isempty(fileList{1}) && ~isempty(fileList{1}{2})
+            firstParams = fileList{1}{2}{1};
+            numWorkers = firstParams.parforArg;
+        else
+            numWorkers = 0;
+        end
+
+        if numWorkers > 0
+
+            if isempty(app.HD.poolManager)
+                app.HD.poolManager = ParallelPoolManager(numWorkers);
+            end
+
+            app.HD.poolManager.acquire();
+            cleanupPool = onCleanup(@() app.HD.poolManager.release());
+
+            pool = app.HD.poolManager.Pool;
+            fprintf("Processing %d files with %d workers (refcount=%d)...\n", ...
+                length(fileList), pool.NumWorkers, app.HD.poolManager.RefCount);
+        else
+            fprintf("Processing %d files in serial mode...\n", length(fileList));
+        end
+
+        % === Traitement des fichiers ===
         for i = 1:length(fileList)
             entry = fileList{i};
 
@@ -357,6 +406,7 @@ methods (Access = private)
                 for j = 1:length(entry{2})
                     app.HD.LoadFile(entry{1}, params = entry{2}{j});
                     app.HD.VideoRendering();
+                    fprintf("Completed: %s [%d/%d]\n", entry{1}, j, length(entry{2}));
                 end
 
             end

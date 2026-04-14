@@ -659,6 +659,8 @@ methods
         VideoSavingTime = tic;
 
         disp('Saving video...');
+        h = waitbar(0, 'Saving video...');
+        N = double(numel(imageTypes) - 1);
 
         index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HD_'));
         result_folder_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD_', num2str(index + 1)));
@@ -673,6 +675,7 @@ methods
 
         for i = 1:numel(imageTypes)
             tmp = {obj.video.(imageTypes{i})};
+            waitbar((i - 1) / N, h, sprintf("Saving %s", imageTypes{i}))
 
             if strcmp(imageTypes{i}, 'SH') %SH extraction
                 sz = size(tmp{1}.parameters.SH);
