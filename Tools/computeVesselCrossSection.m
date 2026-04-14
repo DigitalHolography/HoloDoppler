@@ -22,17 +22,17 @@ central_region = labeled_regions(central_peak_loc);
 % If central peak is in a valid region (not zero/below threshold)
 if central_region > 0
     % Get all points in this region
-    central_range = find(labeled_regions == central_region);
+    centralRange = find(labeled_regions == central_region);
 else
     % Fallback: use all points above threshold
-    central_range = find(above_thresh);
+    centralRange = find(above_thresh);
     warning('Central peak not in thresholded region - using all above-threshold points');
 end
 
-centt = mean(central_range);
+centt = mean(centralRange);
 
-r_range = (central_range - centt) * px_size;
-[p1, p2, p3, rsquare, p1_err, p2_err, p3_err] = customPoly2Fit(r_range', profile(central_range)');
+rRange = (centralRange - centt) * px_size;
+[p1, p2, p3, rsquare, p1_err, p2_err, p3_err] = customPoly2Fit(rRange', profile(centralRange)');
 [r1, r2, r1_err, r2_err] = customPoly2Roots(p1, p2, p3, p1_err, p2_err, p3_err);
 
 c1 = max(round(centt + (r1 / px_size)), 1);
@@ -70,7 +70,7 @@ plot(r_, curve1, "Color", Color_std, 'LineWidth', 2);
 plot(r_, curve2, "Color", Color_std, 'LineWidth', 2);
 
 % Plot measured data points used for fitting
-plot(r_(central_range), profile(central_range), 'xk', 'MarkerSize', 10, 'LineWidth', 1.5);
+plot(r_(centralRange), profile(centralRange), 'xk', 'MarkerSize', 10, 'LineWidth', 1.5);
 
 % Plot zero line
 yline(0, '--k', 'LineWidth', 1);

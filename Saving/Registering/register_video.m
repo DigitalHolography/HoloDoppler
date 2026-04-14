@@ -2,7 +2,7 @@ function [registered, shifts] = register_video(frames, ref_idx)
 % registers a video
 % frames: a video 4D-array width x height x 1 x num_frames
 
-%% read all frames from video
+% read all frames from video
 % r = VideoReader(filename);
 % width = r.width;
 % height = r.height;
@@ -28,7 +28,7 @@ h = waitbar(0, 'Video registration in progress...');
 afterEach(D, @update_registration_waitbar);
 N = double(num_frames);
 
-%% apply registration
+% apply registration
 parfor i = 1:num_frames
     send(D, i);
 

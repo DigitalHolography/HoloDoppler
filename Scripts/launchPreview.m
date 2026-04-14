@@ -1,4 +1,4 @@
-%% Get the list of holofiles to be processed from user
+% Get the list of holofiles to be processed from user
 fprintf("=== HOLOPROCESS START ===\n");
 
 version_tag = readlines("version.txt");
@@ -25,7 +25,7 @@ end
 
 fprintf("Loaded %d paths from input list.\n", numel(paths));
 
-%% Get default or user-defined parameter file
+% Get default or user-defined parameter file
 paramspath = [];
 
 % Load default config if available
@@ -61,7 +61,7 @@ else
     fprintf("Using default parameter file: %s\n", paramspath);
 end
 
-%% Launch HoloDoppler preview processing
+% Launch HoloDoppler preview processing
 HD = HoloDopplerClass;
 
 fprintf("\n=== STARTING HOLOFILE PROCESSING ===\n");
@@ -84,11 +84,11 @@ for ind = 1:numel(paths)
         HD.PreviewRendering();
 
         if HD.params.applyautofocusfromref
-            HD.params.spatial_propagation = autofocus(HD.view, HD.params); % Autofocus
+            HD.params.spatialPropagation = autofocus(HD.render, HD.params); % Autofocus
         end
 
         HD.PreviewRendering(); % Render the preview
-        img = HD.view.getImages({"power_Doppler"});
+        img = HD.render.getImages({"power_Doppler"});
         imgs{ind} = img{1};
     catch ME
         fprintf("Error processing %s: %s\n", currentPath, ME.message);
@@ -98,7 +98,7 @@ end
 
 fprintf("\n=== PROCESSING COMPLETE ===\n");
 
-%% Show the previews
+% Show the previews
 valid = imgs(~cellfun(@isempty, imgs));
 figure;
 montage(valid, 'BorderSize', 5);

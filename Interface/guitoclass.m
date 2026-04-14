@@ -1,74 +1,115 @@
 function guitoclass(HD, app)
-% Transfers all values from app UI to HD.params
+% guitoclass  Push all app UI values into HD.params.
+%
+% Driven entirely by HDParamSchema — add a parameter there, not here.
 
-HD.params.fs = app.fs.Value;
-HD.params.lambda = app.lambda.Value;
-HD.params.ppx = app.ppx.Value;
-HD.params.ppy = app.ppy.Value;
-HD.params.parfor_arg = app.parfor_arg.Value;
-HD.params.batch_size = app.batch_size.Value;
-HD.params.batch_size_registration = app.batch_size_registration.Value;
+if isempty(HD)
+    return
+end
 
-HD.params.batch_stride = app.batch_stride.Value;
-HD.params.frame_position = app.frame_position.Value;
-HD.params.registration_disc_ratio = app.registration_disc_ratio.Value;
+schema = HDParamSchema();
 
-% Handle image types as a cell array
-HD.params.image_types = app.Image_typesListBox.Value;
+for k = 1:numel(schema)
+    e = schema(k);
 
-HD.params.frame_position = app.frame_position.Value;
-HD.params.image_registration = app.image_registration.Value;
+    % Skip entries whose widget doesn't exist on this app
+    if ~widgetExists(app, e.widget)
+        continue
+    end
 
-% Spatial filtering parameters
-HD.params.spatial_filter = app.spatial_filter.Value;
-HD.params.hilbert_filter = app.hilbert_filter.Value;
-HD.params.spatial_filter_range = [app.spatial_filter_range1.Value, app.spatial_filter_range2.Value];
-HD.params.spatial_transformation = app.spatial_transformation.Value;
-HD.params.spatial_propagation = app.spatial_propagation.Value;
-HD.params.Padding_num = app.Padding_num.Value;
+    switch e.type
+        case 'numeric'
+            HD.params.(e.param) = getNumeric(app.(e.widget), e.default);
 
-% SVD parameters
-HD.params.svd_filter = app.svd_filter.Value;
-HD.params.svdx_filter = app.svdx_filter.Value;
-HD.params.svdx_t_filter = app.svdx_t_filter.Value;
-HD.params.svd_threshold = app.svd_threshold.Value;
-HD.params.svdx_threshold = app.svdx_threshold.Value;
-HD.params.svdx_t_threshold = app.svdx_t_threshold.Value;
-HD.params.svdx_Nsub = app.svdx_Nsub.Value;
-HD.params.svdx_t_Nsub = app.svdx_t_Nsub.Value;
+        case 'checkbox'
+            HD.params.(e.param) = getCheckbox(app.(e.widget), e.default);
 
-% Time transformation parameters
-HD.params.time_transform = app.time_transform.Value;
-HD.params.time_range = [app.time_range1.Value, app.time_range2.Value];
-HD.params.index_range = [app.index_range1.Value, app.index_range2.Value];
+        case 'dropdown'
+            HD.params.(e.param) = getDropdown(app.(e.widget), e.default);
 
-% Flatfield correction
-HD.params.flatfield_gw = app.flat_field_gw.Value;
+        case 'listbox'
+            HD.params.(e.param) = getListbox(app.(e.widget), e.default);
+    end
 
-HD.params.flip_y = app.flip_y.Value;
-HD.params.flip_x = app.flip_x.Value;
-HD.params.square = app.square.Value;
+end
 
-HD.params.applyautofocusfromref = app.AutofocusFromRef.Value;
+% ---- framePosition: driven by slider (the canonical position source) ------
+if isprop(app, 'positioninfileSlider')
+    HD.params.framePosition = round(app.positioninfileSlider.Value);
+end
 
-% Shack-Hartmann correction
-HD.params.applyshackhartmannfromref = app.applyshackhartmannfromref.Value;
+end
 
-if app.ShackHartmannCheckBox.Value
-    HD.params.ShackHartmannCorrection.iterate = app.IterativeCheckBox.Value;
-    HD.params.ShackHartmannCorrection.N_iterate = app.NumberOfIterationEditField.Value;
-    HD.params.ShackHartmannCorrection.ZernikeProjection = app.ZernikeProjectionCheckBox.Value;
-    HD.params.ShackHartmannCorrection.zernikeranks = app.shackhartmannzernikeranksEditField.Value;
-    HD.params.ShackHartmannCorrection.subapnumpositions = app.subapnumpositionsEditField.Value;
-    HD.params.ShackHartmannCorrection.imagesubapsizeratio = app.imagesubapsizeratioEditField.Value;
-    HD.params.ShackHartmannCorrection.subaperturemargin = app.subaperturemarginEditField.Value;
-    HD.params.ShackHartmannCorrection.referenceimage = app.referenceimageDropDown.Value;
-    HD.params.ShackHartmannCorrection.calibrationfactor = app.CalibrationFactorEditField.Value;
-    HD.params.ShackHartmannCorrection.convergencethreshold = app.ConvergenceThreshold.Value;
-    HD.params.ShackHartmannCorrection.onlydefocus = app.onlydefocusCheckBox.Value;
+% ===========================================================================
+% Private helpers
+% ===========================================================================
 
+function tf = widgetExists(app, widget)
+
+if isempty(widget) || (iscell(widget) && any(cellfun(@isempty, widget)))
+    tf = false;
+    return
+end
+
+if iscell(widget)
+    tf = all(cellfun(@(w) isprop(app, w), widget));
 else
-    HD.params.ShackHartmannCorrection = [];
+    tf = isprop(app, widget);
+end
+
+end
+
+function val = getNumeric(field, default)
+
+try
+    val = double(field.Value);
+
+    if isempty(val) || ~isfinite(val)
+        val = default;
+    end
+
+catch
+    val = default;
+end
+
+end
+
+function val = getCheckbox(field, default)
+
+try
+    val = logical(field.Value);
+catch
+    val = default;
+end
+
+end
+
+function val = getDropdown(field, default)
+
+try
+    val = field.Value;
+
+    if isempty(val)
+        val = default;
+    end
+
+catch
+    val = default;
+end
+
+end
+
+function val = getListbox(field, default)
+
+try
+    val = field.Value;
+
+    if isempty(val)
+        val = default;
+    end
+
+catch
+    val = default;
 end
 
 end

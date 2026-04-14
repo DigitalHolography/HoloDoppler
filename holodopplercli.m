@@ -26,6 +26,8 @@ while idx <= nargin
     switch arg
         case "-batch"
             mode = 'batch';
+        case "-b"
+            mode = 'batch';
         case "-config"
             % Check if next argument exists and isn't another flag
             if idx < nargin && ~startsWith(string(varargin{idx + 1}), "-")
@@ -59,7 +61,7 @@ try
             if isequal(txt_name, 0); return; end
             fullInputPath = fullfile(txt_path, txt_name);
         else
-            fullInputPath = inputPath;
+            fullInputPath = strrep(inputPath, '"', '');
 
             if ~isfile(fullInputPath)
                 error("Batch file not found: %s", fullInputPath);

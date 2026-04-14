@@ -19,6 +19,7 @@ axis_x = linspace(-fs / 2, fs / 2, size(SH_mask, 3));
 range_1 = (-f2 < axis_x) & (axis_x <- f1);
 range_2 = (f1 < axis_x) & (axis_x < f2);
 
+spectrumAVG_mask(spectrumAVG_mask <= 0) = NaN;
 signal_log = fftshift(log10(spectrumAVG_mask));
 
 hold on;
@@ -50,7 +51,7 @@ else
     xticklabels({num2str(round(-f2, 1)), num2str(round(f2, 1))})
 end
 
-title(sprintf('f_{RMS} = %.2f kHz', omegaRMS))
+% title(sprintf('f_{RMS} = %.2f kHz', omegaRMS))
 fontsize(gca, 12, "points");
 xlabel('frequency (kHz)', 'FontSize', 14);
 ylabel('log10 S', 'FontSize', 14);
@@ -60,6 +61,6 @@ set(gca, 'LineWidth', 2);
 uistack(p_mask, 'top');
 uistack(gca, 'top');
 
-fit_spectrum(axis_x, signal_log, f1, f2);
+% fit_spectrum_voigt(axis_x, signal_log, f1, f2);
 
 end

@@ -204,20 +204,20 @@ methods
 
         SubapI = obj.I(y1:y2, x1:x2, :);
 
-        switch obj.Params.spatial_transformation
+        switch obj.Params.spatialTransformation
             case "angular spectrum"
                 [NY, NX, ~] = size(SubapI);
-                SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, obj.Params.spatial_propagation, obj.Params.lambda, obj.Params.ppx, obj.Params.ppy, 0);
+                SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, obj.Params.spatialPropagation, obj.Params.lambda, obj.Params.ppx, obj.Params.ppy, 0);
                 FH = fft2(single(SubapI)) .* fftshift(SpatialKernel);
             case "Fresnel"
                 [NY, NX, ~] = size(SubapI);
-                [SpatialKernel] = propagation_kernelFresnel(NX, NY, obj.Params.spatial_propagation, obj.Params.lambda, obj.Params.ppx, obj.Params.ppy, 0);
+                [SpatialKernel] = propagation_kernelFresnel(NX, NY, obj.Params.spatialPropagation, obj.Params.lambda, obj.Params.ppx, obj.Params.ppy, 0);
                 FH = single(SubapI) .* SpatialKernel;
             case "None"
                 FH = [];
         end
 
-        switch obj.Params.spatial_transformation
+        switch obj.Params.spatialTransformation
             case "angular spectrum"
                 H = ifft2(FH);
             case "Fresnel"
@@ -227,10 +227,10 @@ methods
         end
 
         if obj.Params.svd_filter
-            [H] = svd_filter(H, obj.Params.svd_threshold, obj.Params.time_range(1), obj.Params.fs, obj.Params.svd_stride);
+            [H] = svd_filter(H, obj.Params.svdThreshold, obj.Params.frequencyRange1, obj.Params.fs, obj.Params.svdStride);
         end
 
-        switch obj.Params.time_transform
+        switch obj.Params.timeTransform
             case 'FFT'
                 SH = fft(H, [], 3);
             case 'PCA'
@@ -239,10 +239,10 @@ methods
                 SH = H;
         end
 
-        if strcmp(obj.Params.time_transform, 'PCA')
-            img = cumulant(SH, obj.Params.index_range(1), obj.Params.index_range(2));
+        if strcmp(obj.Params.timeTransform, 'PCA')
+            img = cumulant(SH, obj.Params.indexRange1, obj.Params.indexRange2);
         else
-            img = moment0(SH, obj.Params.time_range(1), obj.Params.time_range(2), obj.Params.fs, size(obj.I, 3), obj.Params.flatfield_gw);
+            img = moment0(SH, obj.Params.frequencyRange1, obj.Params.frequencyRange2, obj.Params.fs, size(obj.I, 3), obj.Params.flatfield_gw);
         end
 
         % Plot

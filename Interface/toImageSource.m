@@ -1,20 +1,18 @@
 function [image] = toImageSource(image, app)
-%toImageSource rescales and add dimensions if grayscale image
+%toImageSource rescales and adds dimensions if grayscale image
+
+if app.ImproveContrast.Value
+    image = rescale(image);
+    % Improve contrast by imadjust
+    image = imadjustn(image, stretchlim(image(:), [0.01, 0.99]));
+end
 
 if isnumeric(image)
-    app.PanelPlot.Visible = false;
 
-    if size(size(image)) == [1, 2] % if no color channel
+    if size(image, 3) == 1 % if no color channel
         image = repmat(image, [1 1 3]);
     end
 
-else
-    app.PanelPlot.Visible = true;
-    copyobj(image, app.PanelPlot);
 end
 
-% if size(image,1) ~= size(image,2)
-%     image = imresize(image,[max(size(image,1),size(image,2)),max(size(image,1),size(image,2))]);
-% end
-%image = rescale(image);
 end

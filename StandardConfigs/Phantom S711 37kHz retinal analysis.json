@@ -1,39 +1,26 @@
 {
-  "batch_size": 256,
-  "batch_stride": 256,
-  "frame_stride": 1,
-  "registration_disc_ratio": 0.8,
-  "image_types": [
+  "batchSize": 256,
+  "batchStride": 256,
+  "registrationDiskRatio": 0.8,
+  "imageTypes": [
     "power_Doppler",
     "moment_0",
     "moment_1",
     "moment_2"
   ],
-  "parfor_arg": 18,
-  "image_registration": true,
-  "spatial_transformation": "Fresnel",
-  "time_range": [
-    6,
-    18.3
-  ],
-  "spatial_filter": false,
-  "hilbert_filter": false,
+  "parforArg": 18,
+  "imageRegistration": true,
+  "spatialTransformation": "Fresnel",
+  "frequencyRange1": 6,
+  "frequencyRange2": 18.3,
+  "spatialFilter": false,
   "svd_filter": true,
-  "svdx_filter": false,
-  "svdx_t_filter": false,
-  "svd_threshold": 64,
-  "svd_stride": [],
-  "time_transform": "FFT",
+  "svdThreshold": 0,
+  "svdStride": 1,
+  "timeTransform": "FFT",
   "flatfield_gw": 35,
   "applyautofocusfromref": false,
-  "batch_size_registration": 512,
-  "buckets_ranges": [
-    [
-      3,
-      18.3
-    ]
-  ],
-  "buckets_raw": true,
+  "refBatchSize": 512,
   "flip_y": false,
   "flip_x": false,
   "square": true

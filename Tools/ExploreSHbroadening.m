@@ -15,6 +15,7 @@ properties
     fs
     f1
     f2
+    outerReference % Reference spectrum from outer diaphragm
 end
 
 methods
@@ -36,10 +37,9 @@ methods
 
     function createUI(obj)
         % Create the main figure with fixed size
-        obj.fig = figure('Name', 'Explore SH', 'NumberTitle', 'off', ...
+        obj.fig = figure('Name', 'Explore SH Broadening', 'NumberTitle', 'off', ...
             'Position', [100, 100, 1000, 600], ...
-            'CloseRequestFcn', @(src, evt)obj.closeFigure(), ...
-            'Color', [1, 1, 1]);
+            'CloseRequestFcn', @(src, evt)obj.closeFigure());
 
         % Define layout parameters
         imageWidth = 0.45; % Width of image display area
@@ -60,19 +60,16 @@ methods
         title(obj.axPlot, 'Signal Spectrum');
         xlabel(obj.axPlot, 'Dimension 3 Index');
         ylabel(obj.axPlot, 'Magnitude');
-        grid(obj.axPlot, 'on');
 
         % Create display options panel (bottom left)
         obj.panel = uipanel('Parent', obj.fig, ...
             'Title', 'Display Options', ...
             'Position', [margin, margin, imageWidth, panelHeight], ...
-            'BackgroundColor', [1, 1, 1], ...
-            'BorderType', 'etchedin');
+            'BorderType', 'line');
 
         % Create button group for display options
         obj.btnGroup = uibuttongroup('Parent', obj.panel, ...
             'Position', [0.02, 0.45, 0.43, 0.5], ...
-            'BackgroundColor', [1, 1, 1], ...
             'SelectionChangedFcn', @(src, evt)obj.changeDisplayOption());
 
         % Add radio buttons and checkboxes dynamically
@@ -91,8 +88,7 @@ methods
                 'String', options{i, 2}, ...
                 'Tag', options{i, 1}, ...
                 'Units', 'normalized', ...
-                'Position', [0.05, 0.8 - 0.15 * (i - 1), 1, 0.15], ...
-                'BackgroundColor', [1, 1, 1]);
+                'Position', [0.05, 0.8 - 0.15 * (i - 1), 1, 0.15]);
         end
 
         % Add pushbutton for creating a new ROI
@@ -100,7 +96,7 @@ methods
             'Style', 'pushbutton', ...
             'String', 'Select ROI', ...
             'Units', 'normalized', ...
-            'Position', [0.5, 0.2, 0.45, 0.2], ...
+            'Position', [0.5, 0.7, 0.45, 0.2], ...
             'Callback', @(src, evt)obj.roiNew());
 
         % Add pushbutton for loading PNG mask
@@ -108,7 +104,7 @@ methods
             'Style', 'pushbutton', ...
             'String', 'Load PNG Mask', ...
             'Units', 'normalized', ...
-            'Position', [0.5, 0.4, 0.45, 0.2], ...
+            'Position', [0.5, 0.5, 0.45, 0.2], ...
             'Callback', @(src, evt)obj.loadPNGMask());
 
         % Add pushbutton for clearing all ROIs
@@ -116,8 +112,16 @@ methods
             'Style', 'pushbutton', ...
             'String', 'Clear ROIs', ...
             'Units', 'normalized', ...
-            'Position', [0.5, 0.6, 0.45, 0.2], ...
+            'Position', [0.5, 0.1, 0.45, 0.2], ...
             'Callback', @(src, evt)obj.clearROIs());
+
+        % Add pushbutton for clearing all ROIs
+        uicontrol('Parent', obj.panel, ...
+            'Style', 'pushbutton', ...
+            'String', 'Save Spectra', ...
+            'Units', 'normalized', ...
+            'Position', [0.5, 0.3, 0.45, 0.2], ...
+            'Callback', @(src, evt)obj.saveSpectra());
 
         % Set default selection
         set(obj.btnGroup, 'SelectedObject', findobj(obj.btnGroup, 'Tag', 'abs'));
@@ -167,7 +171,6 @@ methods
         colormap(obj.axImage, 'gray');
         title('Moment order 0 f1 f2 Image');
         colorbar;
-        obj.clearROIs();
     end
 
     function clearROIs(obj)
@@ -177,11 +180,11 @@ methods
             for i = 1:length(obj.rois)
 
                 if obj.rois{i} == 1
-                    break;
+                    continue;
                 end
 
                 if isempty(obj.rois{i}) || ~isvalid(obj.rois{i})
-                    break;
+                    continue;
                 end
 
                 delete(obj.rois{i});
@@ -197,6 +200,43 @@ methods
         obj.spectrum_plotting(); % Update the spectrum plot
     end
 
+    function saveSpectra(obj)
+        % Saves Spectra into the preview folder
+
+        folderPath = uigetdir(pwd, 'Select a folder to save the figure');
+
+        % Check if user selected a folder (didn't click Cancel)
+        if folderPath ~= 0
+            % Ask user for filename
+            defaultName = 'spectra';
+            prompt = {'Enter filename (without extension):'};
+            dlgtitle = 'Save Figure';
+            dims = [1 35];
+            answer = inputdlg(prompt, dlgtitle, dims, {defaultName});
+
+            % Check if user entered a filename
+            if ~isempty(answer)
+                fileName = answer{1};
+
+                % Construct full file path
+                fullFilePath = fullfile(folderPath, [fileName, '.png']);
+
+                % Save the figure using exportgraphics
+                exportgraphics(obj.axPlot, fullFilePath, 'Resolution', 300);
+
+                % Display confirmation message
+                fprintf('Figure saved successfully to:\n%s\n', fullFilePath);
+
+            else
+                disp('Save cancelled: No filename provided');
+            end
+
+        else
+            disp('Save cancelled: No folder selected');
+        end
+
+    end
+
     function roiNew(obj, manual)
 
         if nargin < 2
@@ -205,7 +245,7 @@ methods
 
         n = length(obj.rois);
         C = colororder('gem');
-        randomColor = C(mod(n, 7), :); % Generate a random RGB color
+        randomColor = C(mod(n, 7) + 1, :); % Generate a random RGB color
 
         if manual
             obj.rois{end + 1} = drawfreehand(obj.axImage, 'Color', randomColor, ...
@@ -218,6 +258,7 @@ methods
                 'FaceAlpha', 0.2, ...
                 'InteractionsAllowed', 'translate');
         end
+
         obj.colors{end + 1} = randomColor;
         % Add listener to ROI for position changes
         addlistener(obj.rois{end}, 'MovingROI', @(src, evt)obj.spectrum_plotting());
@@ -231,11 +272,11 @@ methods
             roi = obj.rois{i};
 
             if roi == 1
-                return;
+                continue;
             end
 
             if isempty(roi) || ~isvalid(roi)
-                return;
+                continue;
             end
 
             roiPos = roi.Position; % [x, y, width, height]
@@ -288,9 +329,9 @@ methods
             obj.rois{end + 1} = 1;
             obj.masks{end + 1} = maskResized; % Store the image handle
 
-            n = length(obj.rois);
+            n = length(obj.rois) - 1;
             C = colororder('gem');
-            randomColor = C(mod(n, 7), :); % Generate a random RGB color
+            randomColor = C(mod(n, 7) + 1, :); % Generate a random RGB color
             obj.colors{end + 1} = randomColor;
 
             % Create a visual representation of the mask
@@ -320,20 +361,19 @@ methods
 
     end
 
-    function spectrum_plotting(obj, rescale)
-
-        if nargin < 2
-            rescale = true;
-        end
+    function spectrum_plotting(obj)
 
         % Extract parameters for easier access
         f_1 = obj.f1;
         f_2 = obj.f2;
         f_s = obj.fs;
-        batch_size = size(obj.SH_processed, 3);
+        batchSize = size(obj.SH_processed, 3);
 
         axes(obj.axPlot);
         cla(obj.axPlot); % Clear the previous plot
+        title(obj.axPlot, 'Signal Spectrum');
+        xlabel(obj.axPlot, 'Dimension 3 Index');
+        ylabel(obj.axPlot, 'Magnitude');
 
         if isempty(obj.rois)
             return
@@ -349,20 +389,14 @@ methods
 
         % Plot the spectrum for the selected region
         obj.updateMasks();
-        xline(f_1, '--')
-        xline(f_2, '--')
-        xline(-f_1, '--')
-        xline(-f_2, '--')
-        xticks([-f_2 -f_1 0 f_1 f_2])
-        xticklabels({num2str(round(-f_2, 1)), num2str(round(-f_1, 1)), '0', num2str(round(f_1, 1)), num2str(round(f_2, 1))})
-        fontsize(gca, 12, "points");
-        xlabel('frequency (kHz)', 'FontSize', 14);
 
         if angleout
             ylabel('S', 'FontSize', 14);
         else
             ylabel('log10 S', 'FontSize', 14);
         end
+
+        obj.makeOuterDiaphragmReference()
 
         for i = 1:numel(obj.rois)
 
@@ -375,12 +409,13 @@ methods
             % Compute the average spectrum for the masked region
             SH_mask = obj.SH_processed .* mask;
             spectrumAVG_mask = squeeze(sum(SH_mask, [1 2])) / nnz(mask);
-            momentM0 = moment0(obj.SH_processed, f_1, f_2, f_s, batch_size);
-            momentM2 = moment2(obj.SH_processed, f_1, f_2, f_s, batch_size);
+            spectrumAVG_mask = spectrumAVG_mask ./ obj.outerReference;
+            momentM0 = moment0(obj.SH_processed, f_1, f_2, f_s, batchSize);
+            momentM2 = moment2(obj.SH_processed, f_1, f_2, f_s, batchSize);
             M0_full = mean(momentM0, [1, 2]);
             M2 = mean(momentM2(mask));
             omegaRMS = sqrt(M2 / M0_full); % sqrt(M2/M0);
-            omegaRMS_index = omegaRMS * batch_size / f_s;
+            omegaRMS_index = omegaRMS * batchSize / f_s;
             I_omega = scalingfn(spectrumAVG_mask(round(omegaRMS_index)));
             axis_x = linspace(-f_s / 2, f_s / 2, size(SH_mask, 3));
 
@@ -389,15 +424,10 @@ methods
 
             p_mask = plot(axis_x, fftshift(scalingfn(spectrumAVG_mask)), 'Color', roiColor, 'LineWidth', 1, 'DisplayName', 'Arteries');
             xlim([-f_s / 2 f_s / 2])
-            sclingrange = abs(fftshift(axis_x)) > f_1;
 
-            if rescale
-                yrange = [.99 * scalingfn(min(spectrumAVG_mask(sclingrange))) 1.01 * scalingfn(max(spectrumAVG_mask(sclingrange)))];
-                ylim(yrange)
-            else
-                yrange = get(gca, 'YLim');
-                ylim(yrange)
-            end
+            axis padded
+            axP = axis;
+            axis([-f_s / 2 f_s / 2, axP(3), axP(4)])
 
             om_RMS_line = line([-omegaRMS omegaRMS], [I_omega I_omega]);
             om_RMS_line.Color = roiColor;
@@ -414,14 +444,55 @@ methods
 
             hold on
 
-            fit_spectrum(axis_x, log10(fftshift(spectrumAVG_mask)), f_1, f_2, annotation = false);
+            fit_spectrum_voigt(axis_x, log10(fftshift(spectrumAVG_mask)), f_1, f_2, annotation = false);
 
         end
 
         pbaspect([1.618 1 1]);
-        yline(0, 'LineWidth', 2)
         box on,
         set(gca, 'FontSize', 12, 'LineWidth', 2);
+
+        % Fill in gray the are between f1 and -f1, and between f2 or -f2 and outer boundaries
+        % Store fill handles for later reordering
+        fillHandles = gobjects(3, 1);
+
+        fig_axis = axis;
+        c_gray = [0.9 0.9 0.9];
+        X = [fig_axis(1) -f_2 -f_2 fig_axis(1)];
+        Y = [fig_axis(4) fig_axis(4) fig_axis(3) fig_axis(3)];
+        fillHandles(1) = fill(X, Y, c_gray, 'EdgeColor', 'black', 'LineWidth', 1, 'DisplayName', 'Arteries');
+
+        X = [-f_1 f_1 f_1 -f_1];
+        Y = [fig_axis(4) fig_axis(4) fig_axis(3) fig_axis(3)];
+        fillHandles(2) = fill(X, Y, c_gray, 'EdgeColor', 'black', 'LineWidth', 1, 'DisplayName', 'Arteries');
+
+        X = [f_2 fig_axis(2) fig_axis(2) f_2];
+        Y = [fig_axis(4) fig_axis(4) fig_axis(3) fig_axis(3)];
+        fillHandles(3) = fill(X, Y, c_gray, 'EdgeColor', 'black', 'LineWidth', 1, 'DisplayName', 'Arteries');
+
+        % Move all fills to the background
+        for j = 1:length(fillHandles)
+            uistack(fillHandles(j), 'bottom');
+        end
+
+        xticks([-f_2 -f_1 0 f_1 f_2])
+        xticklabels({num2str(round(-f_2, 1)), num2str(round(-f_1, 1)), '0', num2str(round(f_1, 1)), num2str(round(f_2, 1))})
+        fontsize(gca, 12, "points");
+        xlabel('frequency (kHz)', 'FontSize', 14);
+
+        yline(0, 'LineWidth', 2)
+
+    end
+
+    function makeOuterDiaphragmReference(obj)
+        % This function can be implemented to create a reference spectrum from an outer diaphragm region
+        % It can be called when the user clicks a button to set the reference spectrum for fitting
+
+        [Nx, Ny, batchSize] = size(obj.SH_processed);
+        outerMask = ~diskMask(Ny, Nx, 1.1);
+        largeMask = repmat(outerMask, [1 1 batchSize]);
+        SH_mask = obj.SH_processed .* largeMask;
+        obj.outerReference = squeeze(sum(SH_mask, [1 2])) / nnz(outerMask);
 
     end
 

@@ -8,7 +8,7 @@ fprintf("=== HOLOPROCESS START ===\n");
 version_tag = readlines("version.txt");
 fprintf("HoloDoppler version : %s\n", version_tag);
 
-%% Load list of holofiles
+% Load list of holofiles
 if nargin < 1 || isempty(listFile)
     fprintf('Select input list (.txt) containing file paths\n');
     [txt_name, txt_path] = uigetfile('*.txt', 'Select input list (.txt) containing file paths');
@@ -33,7 +33,7 @@ end
 
 fprintf("Loaded %d paths from input list.\n", numel(paths));
 
-%% Determine parameter file
+% Determine parameter file
 paramspath = [];
 
 % Use provided paramFile if given
@@ -82,7 +82,7 @@ else
 
 end
 
-%% Launch HoloDoppler processing
+% Launch HoloDoppler processing
 HD = HoloDopplerClass;
 
 fprintf("\n=== STARTING HOLOFILE PROCESSING ===\n");

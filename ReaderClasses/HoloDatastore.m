@@ -23,11 +23,7 @@ end
 
 methods
 
-    function ds = HoloDatastore(filename, loadAll)
-
-        if nargin < 2
-            loadAll = false;
-        end
+    function ds = HoloDatastore(filename)
 
         ds.Filename = filename;
         ds.parseHeaderAndFooter();
@@ -38,13 +34,9 @@ methods
 
         ds.EndianFlag = ternary(ds.Endianness == 0, 'l', 'b');
 
-        if loadAll
-            ds.tryLoadAllFrames();
-        end
-
     end
 
-    %% Datastore API
+    % Datastore API
     function tf = hasdata(ds)
         tf = ds.CurrentFrame <= ds.NumFrames;
     end
@@ -67,7 +59,7 @@ methods
         dsNew = copy(ds);
     end
 
-    %% MiniBatchable
+    % MiniBatchable
     function setMiniBatchSize(ds, n)
         ds.MiniBatchSize = n;
     end
@@ -82,7 +74,7 @@ methods
 
 end
 
-%% Internal logic
+% Internal logic
 methods (Access = private)
 
     function parseHeaderAndFooter(ds)
@@ -109,7 +101,7 @@ methods (Access = private)
         ds.DataSize = h.Data.total_size;
         ds.Endianness = h.Data.endianness;
 
-        %% Footer
+        % Footer
         headerSize = uint64(64);
         dataBytes = uint64(ds.FrameWidth) * ...
             uint64(ds.FrameHeight) * ...
@@ -131,33 +123,6 @@ methods (Access = private)
             raw = fread(fid, fileInfo.bytes - footerOffset, '*char');
             fclose(fid);
             ds.Footer = jsondecode(string(raw'));
-        end
-
-    end
-
-    function tryLoadAllFrames(ds)
-        mem = memory;
-        availGB = mem.MemAvailableAllArrays / 1e9;
-        fileGB = dir(ds.Filename).bytes / 1e9;
-
-        if availGB > 3 * fileGB
-            fprintf("Loading HOLO file into memory...\n");
-            fid = fopen(ds.Filename, 'r');
-            fseek(fid, 64, 'bof');
-
-            if ds.BitDepth == 8
-                type = 'uint8=>single';
-            else
-                type = 'uint16=>single';
-            end
-
-            ds.AllFrames = reshape( ...
-                fread(fid, ...
-                ds.FrameWidth * ds.FrameHeight * ds.NumFrames, ...
-                type, ds.EndianFlag), ...
-                ds.FrameWidth, ds.FrameHeight, []);
-
-            fclose(fid);
         end
 
     end
@@ -197,7 +162,7 @@ methods (Access = private)
 
 end
 
-%% Static utilities
+% Static utilities
 methods (Static)
 
     function batch = replace_dropped_frames(batch, threshold)

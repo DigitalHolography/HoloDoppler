@@ -18,8 +18,8 @@ methods
 
     function obj = ExploreSH(app)
         % Constructor - initialize the application
-        obj.SH = app.HD.view.SH;
-        obj.SH_processed = app.HD.view.SH; % Start with original data
+        obj.SH = app.HD.render.SH;
+        obj.SH_processed = app.HD.render.SH; % Start with original data
         obj.params = app.HD.params;
 
         % Calculate initial average image
@@ -238,7 +238,7 @@ methods
         meanSpectrum = mean(abs(maskedSH), 1);
 
         Fs = obj.params.fs;
-        batch_size = obj.params.batch_size;
+        batchSize = obj.params.batchSize;
 
         freqs = linspace(-Fs / 2, Fs / 2, size(obj.SH, 3));
 
@@ -302,9 +302,9 @@ methods
         initial_guess = [1, 0, 1, 0];
 
         % Select data around the peak for fitting (e.g., ±10 frequency points)
-        fit_range = peaks_idx;
-        x_fit = freqs(fit_range);
-        y_fit = normalizedSpectrum(fit_range);
+        fitRange = peaks_idx;
+        x_fit = freqs(fitRange);
+        y_fit = normalizedSpectrum(fitRange);
 
         % Perform the fit
         fit_params = lsqcurvefit(lorentzian, initial_guess, x_fit, y_fit);
@@ -323,9 +323,9 @@ methods
         initial_guess = [1, 0, 1, 0.5, 0];
 
         % Select data around the peak for fitting (e.g., ±10 frequency points)
-        fit_range = peaks_idx;
-        x_fit = freqs(fit_range);
-        y_fit = normalizedSpectrum(fit_range);
+        fitRange = peaks_idx;
+        x_fit = freqs(fitRange);
+        y_fit = normalizedSpectrum(fitRange);
 
         % Perform the fit
         fit_params = lsqcurvefit(voigt, initial_guess, x_fit, y_fit);

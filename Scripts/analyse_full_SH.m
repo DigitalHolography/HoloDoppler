@@ -1,0 +1,115 @@
+function analyse_full_SH(h5_path,full_time)
+% h5_path
+SH_ = h5read(h5_path,"/SH_Slices");
+
+[h5folder,name,~] = fileparts(h5_path);
+
+if ~isfolder(fullfile(h5folder,name,"full_time"))
+    mkdir(fullfile(h5folder,name,"full_time"));
+end
+
+NAME = name;
+[Nx,Ny,Nw,Nt] = size(SH_);
+
+% SH = 10.^SH;
+SH_ = ifftshift(SH_,3);
+
+% % one beat
+if ~full_time
+    art_sig=mean(SH_(:,:,1:8,:),[1,2,3]);
+    [sys_idx_list, ~, ~, ~] = find_systole_index_choroid(art_sig);
+    Nbeat = length(sys_idx_list) - 1;
+    sz = size(SH_);
+    Ninterp = 64;
+    sz(4) = Ninterp;
+    SHbeat = zeros(sz,'single');
+    for i = 1:Nbeat
+        i1 = sys_idx_list(i);
+        i2 = sys_idx_list(i+1)-1;
+        SHbeat = SHbeat + interpft(SH_(:,:,:,i1:i2),Ninterp,4);
+    end
+    SHbeat = SHbeat / Nbeat;
+    
+    Nt = Ninterp;
+    
+    SH_ = SHbeat;
+end
+
+image = squeeze(mean(SH_,[3,4]));
+SH_ = SH_ ./ imgaussfilt(squeeze(image), 50);
+
+SH_ = reshape(SH_,Nx*Ny,Nw*Nt);
+
+n = min(Nx,Ny);
+cx0 = (Nx+1)/2;
+cy0 = (Ny+1)/2;
+r0  = n/2;
+[xg,yg] = ndgrid(1:Nx, 1:Ny);
+mask = ((xg-cx0).^2 + (yg-cy0).^2) <= r0^2;
+validPix = mask(:) & all(isfinite(SH_),2);
+SH_ = SH_(validPix,:);
+
+SH_ = double(SH_);
+kmax = 6;
+[U,S,V] = svds(SH_,kmax);
+clear SH_;
+Uimg = zeros(Nx*Ny,kmax);
+Uimg(validPix,:) = U;
+Uimg = reshape(Uimg,Nx,Ny,kmax);
+
+Vtw = reshape(V, Nw, Nt, kmax);
+
+
+fs = 78000;
+subfs = 78000/512;
+if ~full_time
+    output_folder_path_name = fullfile(h5folder,name);
+    avgsizebeat = mean(diff(sys_idx_list));
+    fprintf("bpm = %f\n",60/(avgsizebeat*1/subfs))
+    plotSig(art_sig(:), [],fullfile(output_folder_path_name,sprintf("%s art_sig",NAME)));
+else
+    output_folder_path_name = fullfile(h5folder,name,"full_time");
+end
+
+for j=1:kmax
+    inv = 1;
+    
+    imwrite(rescalemask(inv * Uimg(:,:,j),mask),fullfile(output_folder_path_name,sprintf("%s mode %d lin ff.png",NAME,j)));
+    
+    if ~full_time
+        time = linspace(0,avgsizebeat*1/subfs,Nt);
+    else
+        time = linspace(0,Nt*1/subfs,Nt);
+    end
+
+    freq = linspace(-fs/2,fs/2,32)/1000;
+    f=figure("Visible","off"); imagesc(time,freq,inv * Vtw(:,:,j));
+    xlabel("time (s)","FontSize",18);
+    ylabel('frequency (kHz)',"FontSize",18);
+    ax = gca;
+    ax.FontSize = 18; 
+    saveas(f,fullfile(output_folder_path_name,sprintf("%s mode %d spectrogram.png",NAME,j)));
+    close(f);
+    % imwrite(rescale(inv * Vtw(:,:,j)),fullfile(output_folder_path_name,sprintf("%s mode %d spectrogram.png",NAME,j)));
+    plotSig(inv *S(j,j)* Vtw, j,fullfile(output_folder_path_name,sprintf("%s mode %d",NAME, j)));
+end
+
+SH_rec = zeros(Nx, Ny, Nw, Nt);
+for j = 1:kmax
+    Uj = Uimg(:,:,j);
+    Vj = Vtw(:,:,j);
+    SH_rec = SH_rec + S(j,j) * reshape(Uj, Nx, Ny, 1, 1) .* reshape(Vj, 1, 1, Nw, Nt);
+end
+% SH_rec = SH_rec .* mask;
+
+SH_rec = (SH_rec-sum(SH_rec.* mask,[1,2])/nnz(mask)).* mask;
+
+M0_reconstructed = mean(SH_rec(:,:,1:8,:)+SH_rec(:,:,25:32,:),3);
+M0_reconstructed = (M0_reconstructed-sum(M0_reconstructed.* mask,[1,2])/nnz(mask)).* mask;
+writeVideoOnDisc(rescale(M0_reconstructed), fullfile(output_folder_path_name,sprintf("%s M0_reconstructed_modes %d",NAME, j)))
+ 
+
+% corr = V*S'*S*V';
+
+
+end

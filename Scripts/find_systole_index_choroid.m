@@ -1,4 +1,4 @@
-function [sys_idx_list, pulse_artery_filtered, sys_max_list, sys_min_list] = find_systole_index_choroid(pulse_artery, options)
+function [sys_idx_list, pulse_arteryFiltered, sys_max_list, sys_min_list] = find_systole_index_choroid(pulse_artery, options)
 % FIND_SYSTOLE_INDEX Identifies systole peaks in the pulse signal.
 % Inputs:
 %   - pulseArtery: The extracted pulse signal
@@ -7,7 +7,7 @@ function [sys_idx_list, pulse_artery_filtered, sys_max_list, sys_min_list] = fin
 %       - savepng: (Optional) Boolean flag to save diagnostic plots
 % Outputs:
 %   - sys_idx_list: Indices of systole peaks
-%   - pulse_artery_filtered: The extracted pulse signal
+%   - pulse_arteryFiltered: The extracted pulse signal
 %   - sys_max_list: Indices of local maxima within each cycle
 %   - sys_min_list: Indices of local minima within each cycle
 
@@ -21,11 +21,10 @@ dt = 1 / options.fs;
 
 % Step 1: Extract pulse signal
 [b, a] = butter(4, options.lowpass_freq / (options.fs / 2), 'low');
-pulse_artery_filtered = filtfilt(b, a, pulse_artery);
-
+pulse_arteryFiltered = filtfilt(b, a, pulse_artery);
 
 % Step 2: Compute derivative
-diff_artery_signal = gradient(pulse_artery_filtered);
+diff_artery_signal = gradient(pulse_arteryFiltered);
 
 % Step 3: Detect peaks
 min_duration = 0.5; % Beyond this period errors will occur (in s)
@@ -47,20 +46,20 @@ for i = 1:(numel(sys_idx_list) - 1)
     L = sys_idx_list(i + 1) - sys_idx_list(i);
     D = round(L / 2);
     % Find the maximum within the current cycle
-    [~, amax] = max(pulse_artery_filtered(sys_idx_list(i):sys_idx_list(i) + D));
+    [~, amax] = max(pulse_arteryFiltered(sys_idx_list(i):sys_idx_list(i) + D));
     sys_max_list(i) = sys_idx_list(i) + amax - 1;
 
     % Find the minimum within the current cycle
-    [~, amin] = min(pulse_artery_filtered(sys_idx_list(i) + D:sys_idx_list(i + 1) - 1));
+    [~, amin] = min(pulse_arteryFiltered(sys_idx_list(i) + D:sys_idx_list(i + 1) - 1));
     sys_min_list(i + 1) = sys_idx_list(i) + amin - 1 + D;
 end
 
 % Find the minimum before the first cycle
-[~, amin] = min(pulse_artery_filtered(1:sys_idx_list(1)));
+[~, amin] = min(pulse_arteryFiltered(1:sys_idx_list(1)));
 sys_min_list(1) = amin;
 
 % Find the maximum after the end cycle
-[~, amax] = max(pulse_artery_filtered(sys_idx_list(i + 1):end));
+[~, amax] = max(pulse_arteryFiltered(sys_idx_list(i + 1):end));
 sys_max_list(i + 1) = sys_idx_list(i + 1) + amax - 1;
 
 sys_max_list = sys_max_list';
@@ -73,7 +72,7 @@ end
 
 end
 
-%% **Validate Peaks (Removes peaks that are too close)**
+% **Validate Peaks (Removes peaks that are too close)**
 function sys_idx_list = validate_peaks(sys_idx_list, min_distance)
 i = 1;
 
