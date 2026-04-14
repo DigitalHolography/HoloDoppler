@@ -521,25 +521,31 @@ methods
         % === Préparation des données ===
         VideoRenderingTime = tic;
 
-        h = waitbar(0, '');
-        N = double(num_batches - 1);
+        h = waitbar(0, 'Initializing...');
+        N = double(num_batches); % CHANGÉ : num_batches au lieu de num_batches-1
         progress = 1;
 
         function update_waitbar(sig)
             % signal table
             % 0 => increment value
-            % 1 => reset for stage 1 (registration)
-            % 2 => reset for stage 2 (video_M0 computation)
+            % -1 => reset for stage 1 (registration)
+            % -2 => reset for stage 2 (video_M0 computation)
             switch sig
                 case 0
-                    waitbar(progress / N, h);
+
+                    if N > 0 % Protection contre division par zéro
+                        percent = round(progress / N * 100);
+                        msg = sprintf('Video rendering %d/%d (%d%%)', progress, N, percent);
+                        waitbar(progress / N, h, msg);
+                    end
+
                     progress = progress + 1;
                 case -1
-                    waitbar(0, h, 'Registration computation...');
+                    waitbar(0, h, 'Registration computation... (0%)');
                     progress = 1;
                     disp('Registration computation...')
                 case -2
-                    waitbar(0, h, 'Video rendering...');
+                    waitbar(0, h, 'Video rendering... (0%)');
                     progress = 1;
                     disp('Video rendering...')
             end
@@ -816,6 +822,8 @@ methods
             end
 
         end
+
+        close(h);
 
         if p.imageRegistration
 

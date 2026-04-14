@@ -391,8 +391,8 @@ methods (Access = private)
             cleanupPool = onCleanup(@() app.HD.poolManager.release());
 
             pool = app.HD.poolManager.Pool;
-            fprintf("Processing %d files with %d workers (refcount=%d)...\n", ...
-                length(fileList), pool.NumWorkers, app.HD.poolManager.RefCount);
+            fprintf("Processing %d files with %d workers ...\n", ...
+                length(fileList), pool.NumWorkers);
         else
             fprintf("Processing %d files in serial mode...\n", length(fileList));
         end
