@@ -10,6 +10,7 @@ properties (Access = private)
     Figure % uifigure handle
     TextArea % uitextarea displaying the file list
     KeepZCheckbox % uicheckbox for 'Keep z distance' option
+    drawerList % Local reference to the drawer list for easy access
 end
 
 methods
@@ -21,6 +22,7 @@ methods
         end
 
         obj.MainApp = mainApp;
+        obj.drawerList = mainApp.HD.drawer_list;
         obj.createUI();
     end
 
@@ -33,7 +35,7 @@ methods (Access = private)
         app = obj.MainApp; % local alias for brevity
 
         % Calculate initial height based on number of files
-        initialHeight = 260 + length(app.HD.drawer_list) * 14;
+        initialHeight = 260 + length(obj.drawerList) * 14;
 
         % Position figure next to the main app if possible
         if isvalid(app.HoloDopplerUIFigure)
@@ -64,10 +66,10 @@ methods (Access = private)
             'ColumnSpacing', 10);
 
         % Text area for file list
-        if isempty(app.HD.drawer_list)
+        if isempty(obj.drawerList)
             displayValue = {''};
         else
-            displayValue = app.HD.drawer_list;
+            displayValue = obj.drawerList;
         end
 
         obj.TextArea = uitextarea('Parent', mainGrid, ...
@@ -143,17 +145,16 @@ methods (Access = private)
 
     function updateDisplay(obj)
         % Refresh the text area and adjust window height.
-        app = obj.MainApp;
 
-        if isempty(app.HD.drawer_list)
+        if isempty(obj.drawerList)
             displayValue = {''};
         else
-            displayValue = app.HD.drawer_list;
+            displayValue = obj.drawerList;
         end
 
         obj.TextArea.Value = displayValue;
 
-        newHeight = 100 + length(app.HD.drawer_list) * 14;
+        newHeight = 100 + length(obj.drawerList) * 14;
 
         if newHeight > obj.Figure.Position(4)
             obj.Figure.Position(4) = newHeight;
@@ -174,8 +175,8 @@ methods (Access = private)
     function selectFile(obj)
         app = obj.MainApp;
 
-        if ~isempty(app.HD.drawer_list)
-            [file, path] = uigetfile(app.HD.drawer_list{end}, ...
+        if ~isempty(obj.drawerList)
+            [file, path] = uigetfile(obj.drawerList{end}, ...
                 'Select File', '*.holo;*.cine');
         else
             [file, path] = uigetfile('Select File', '*.holo;*.cine');
@@ -186,11 +187,12 @@ methods (Access = private)
         [~, ~, ext] = fileparts(file);
 
         if ismember(ext, {'.cine', '.holo'})
-            app.HD.drawer_list{end + 1} = fullfile(path, file);
+            obj.drawerList{end + 1} = fullfile(path, file);
         else
             uialert(obj.Figure, 'File must be .cine or .holo', 'Invalid File Type');
         end
 
+        app.HD.drawer_list = obj.drawerList;
         obj.updateDisplay();
     end
 
@@ -206,11 +208,12 @@ methods (Access = private)
         [~, ~, ext] = fileparts(filePath);
 
         if ismember(ext, {'.cine', '.holo'})
-            app.HD.drawer_list{end + 1} = filePath;
+            obj.drawerList{end + 1} = filePath;
         else
             uialert(obj.Figure, 'File must be .cine or .holo', 'Invalid File Type');
         end
 
+        app.HD.drawer_list = obj.drawerList;
         obj.updateDisplay();
     end
 
@@ -223,14 +226,15 @@ methods (Access = private)
         end
 
         obj.addFilesFromFolder(app.HD.file.dir);
+        app.HD.drawer_list = obj.drawerList;
         obj.updateDisplay();
     end
 
     function selectFolder(obj)
         app = obj.MainApp;
 
-        if ~isempty(app.HD.drawer_list)
-            lastFolder = fileparts(app.HD.drawer_list{end});
+        if ~isempty(obj.drawerList)
+            lastFolder = fileparts(obj.drawerList{end});
         else
             lastFolder = '';
         end
@@ -238,11 +242,12 @@ methods (Access = private)
         folder = uigetdir(lastFolder);
         if folder == 0, return; end
         obj.addFilesFromFolder(folder);
+
+        app.HD.drawer_list = obj.drawerList;
         obj.updateDisplay();
     end
 
     function addFilesFromFolder(obj, folder)
-        app = obj.MainApp;
         entries = dir(folder);
 
         for i = 1:numel(entries)
@@ -251,7 +256,7 @@ methods (Access = private)
                 [~, ~, ext] = fileparts(entries(i).name);
 
                 if ismember(ext, {'.cine', '.holo'})
-                    app.HD.drawer_list{end + 1} = fullfile(folder, entries(i).name);
+                    obj.drawerList{end + 1} = fullfile(folder, entries(i).name);
                 end
 
             end
@@ -261,14 +266,14 @@ methods (Access = private)
     end
 
     function clearList(obj)
-        obj.MainApp.HD.drawer_list = {};
+        obj.drawerList = {};
         obj.updateDisplay();
     end
 
     function saveToTxt(obj)
         [file, path] = uiputfile('*.txt', 'Save list as text file');
         if isequal(file, 0), return; end
-        writelines(obj.MainApp.HD.drawer_list, fullfile(path, file));
+        writelines(obj.drawerList, fullfile(path, file));
     end
 
     function loadFromTxt(obj)
@@ -285,7 +290,7 @@ methods (Access = private)
                     [~, ~, ext] = fileparts(lines(i));
 
                     if ismember(ext, {'.cine', '.holo'})
-                        app.HD.drawer_list{end + 1} = lines{i};
+                        obj.drawerList{end + 1} = lines{i};
                     end
 
                 catch e
@@ -296,6 +301,7 @@ methods (Access = private)
 
         end
 
+        app.HD.drawer_list = obj.drawerList;
         obj.updateDisplay();
     end
 
@@ -306,8 +312,8 @@ methods (Access = private)
 
         originalParams = app.HD.params;
 
-        for i = 1:length(app.HD.drawer_list)
-            filePath = app.HD.drawer_list{i};
+        for i = 1:length(obj.drawerList)
+            filePath = obj.drawerList{i};
             [dirName, name] = fileparts(filePath);
             existing = dir(fullfile(dirName, sprintf('%s_input_HD_params_*.json', name)));
 
@@ -326,14 +332,13 @@ methods (Access = private)
 
     function fileList = buildDrawerFileList(obj)
         % BUILDRAWERFILELIST   Retrieve config files for each drawer entry
-        app = obj.MainApp;
-        fileList = cell(size(app.HD.drawer_list));
+        fileList = cell(size(obj.drawerList));
 
-        for i = 1:length(app.HD.drawer_list)
-            [config_list, path_list] = get_config_files(app.HD.drawer_list{i});
+        for i = 1:length(obj.drawerList)
+            [config_list, path_list] = get_config_files(obj.drawerList{i});
 
             if ~isempty(config_list)
-                fileList{i} = {app.HD.drawer_list{i}, config_list, path_list};
+                fileList{i} = {obj.drawerList{i}, config_list, path_list};
             end
 
         end

@@ -478,6 +478,8 @@ methods
 
         if isempty(p.end_frame)
             end_frame = obj.file.num_frames;
+        elseif p.end_frame > obj.file.num_frames
+            end_frame = obj.file.num_frames;
         else
             end_frame = p.end_frame;
         end
