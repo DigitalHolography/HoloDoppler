@@ -471,13 +471,13 @@ methods
             error("No file loaded")
         end
 
-        if ~p.first_frame
+        if isempty(p.first_frame)
             first_frame = 1;
         else
             first_frame = p.first_frame;
         end
 
-        if ~p.end_frame
+        if isempty(p.end_frame)
             end_frame = obj.file.num_frames;
         else
             end_frame = p.end_frame;
