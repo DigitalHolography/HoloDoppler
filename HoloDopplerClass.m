@@ -464,30 +464,38 @@ methods
         %VideoRendering Construct the Video according to the current params
         % Close the waitbar from any previous run if it still exists
 
-        p = obj.params; % to avoid too many obj.params in the code below
+        p = obj.params; % shorthand
 
         if isempty(obj.reader)
             error("No file loaded")
         end
-
+    
+        % --- First frame ---
         if isempty(p.first_frame)
             first_frame = 1;
         else
             first_frame = p.first_frame;
         end
-
-        if isempty(p.end_frame)
-            end_frame = obj.file.num_frames;
-        elseif p.end_frame > obj.file.num_frames
-            end_frame = obj.file.num_frames;
+        
+        % --- End frame (Python logic: <= 0 triggers auto) ---
+        if isempty(p.end_frame) || p.end_frame <= 0
+                end_frame = obj.file.num_frames;
         else
             end_frame = p.end_frame;
         end
-
-        num_batches = floor((end_frame - first_frame + 1) / p.batchStride);
-
-        if num_batches * p.batchStride + p.batchSize > end_frame
-            num_batches = num_batches - 1;
+        
+        % --- Span (Python: end_frame - first_frame) ---
+        span = end_frame - first_frame;
+        
+        % --- Batch logic (STRICT Python equivalent) ---
+        if p.batchStride >= span
+            if p.batchSize <= span
+                num_batches = 1;
+            else
+                num_batches = 0;
+            end
+        else
+            num_batches = floor(span / p.batchStride); % int() equivalent
         end
 
         % Command Message
