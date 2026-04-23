@@ -32,19 +32,25 @@ methods (Access = private)
 
     function createUI(obj)
         % Create the figure and all UI components.
-        app = obj.MainApp; % local alias for brevity
 
         % Calculate initial height based on number of files
         initialHeight = 260 + length(obj.drawerList) * 14;
 
-        % Position figure next to the main app if possible
-        if isvalid(app.HoloDopplerUIFigure)
-            mainPos = app.HoloDopplerUIFigure.Position;
-            xPos = mainPos(1) + mainPos(3) + 20;
-            yPos = mainPos(2);
+        mainApp = obj.MainApp;
+
+        if isvalid(mainApp) && ismethod(mainApp, 'getMainFigure')
+            mainFig = mainApp.getMainFigure();
+
+            if isvalid(mainFig)
+                mainPos = mainFig.Position;
+                xPos = mainPos(1) + mainPos(3) + 20;
+                yPos = mainPos(2);
+            else
+                xPos = 300; yPos = 300;
+            end
+
         else
-            xPos = 300;
-            yPos = 300;
+            xPos = 300; yPos = 300;
         end
 
         obj.Figure = uifigure('Position', [xPos, yPos, 700, initialHeight], ...
@@ -173,31 +179,37 @@ methods (Access = private)
     % -----------------------------------------------------------------
 
     function selectFile(obj)
-        app = obj.MainApp;
+        % Define the file filter: description and extensions
+        filters = { ...
+                       '*.cine;*.holo', 'Supported Video Files (*.cine, *.holo)'; ...
+                       '*.cine', 'Cine Files (*.cine)'; ...
+                       '*.holo', 'Holo Files (*.holo)'; ...
+                   };
 
-        figureHandle = obj.Figure;
-        figure(figureHandle);
+        % Bring the FolderManagement figure to focus
+        figure(obj.Figure);
 
         if ~isempty(obj.drawerList)
-            [file, path] = uigetfile(obj.drawerList{end}, ...
-                'Select File', '*.holo;*.cine');
+            % Start in the folder of the last file in the list
+            startFolder = fileparts(obj.drawerList{end});
+            [file, path] = uigetfile(filters, 'Select File', startFolder);
         else
-            [file, path] = uigetfile('Select File', '*.holo;*.cine');
+            [file, path] = uigetfile(filters, 'Select File');
         end
 
-        figure(figureHandle);
+        figure(obj.Figure);
 
         if isequal(file, 0), return; end
 
         [~, ~, ext] = fileparts(file);
 
-        if ismember(ext, {'.cine', '.holo'})
+        if ismember(ext, {'.cine', '.holo', '.h5'})
             obj.drawerList{end + 1} = fullfile(path, file);
         else
-            uialert(obj.Figure, 'File must be .cine or .holo', 'Invalid File Type');
+            uialert(obj.Figure, 'File must be .cine, .holo, .raw or .h5', 'Invalid File Type');
         end
 
-        app.HD.drawer_list = obj.drawerList;
+        obj.MainApp.HD.drawer_list = obj.drawerList;
         obj.updateDisplay();
     end
 
@@ -333,22 +345,24 @@ methods (Access = private)
     function saveConfigs(obj)
         app = obj.MainApp;
         keepZ = obj.KeepZCheckbox.Value;
-        defaultParamPath = "StandardConfigs\Phantom S711 37kHz retinal analysis.json";
+        defaultParamPath = fullfile(fileparts(mfilename('fullpath')), 'StandardConfigs', ...
+        'Phantom S711 37kHz retinal analysis.json'); % use fullfile for robustness
 
         originalParams = app.HD.params;
 
         for i = 1:length(obj.drawerList)
             filePath = obj.drawerList{i};
             [dirName, name] = fileparts(filePath);
-            existing = dir(fullfile(dirName, sprintf('%s_input_HD_params_*.json', name)));
+            % New fixed location
+            configFile = fullfile(dirName, name, sprintf('%s_input_HD_params.json', name));
 
-            if isempty(existing) && ~isempty(defaultParamPath)
+            if ~isfile(configFile) && isfile(defaultParamPath)
+                % No config yet → load default and save
                 app.HD.loadParams(defaultParamPath);
-                app.HD.saveParams(filePath, keepZ);
-            else
-                app.HD.saveParams(filePath, keepZ);
             end
 
+            % Save (overwrites existing or creates new)
+            app.HD.saveParams(filePath, keepZ);
             fprintf('Saved config for: %s\n', filePath);
         end
 
@@ -356,14 +370,24 @@ methods (Access = private)
     end
 
     function fileList = buildDrawerFileList(obj)
-        % BUILDRAWERFILELIST   Retrieve config files for each drawer entry
+        % Build a cell array: {filePath, {paramsStruct}, configPath} for each entry.
         fileList = cell(size(obj.drawerList));
 
         for i = 1:length(obj.drawerList)
-            [config_list, path_list] = get_config_files(obj.drawerList{i});
+            filePath = obj.drawerList{i};
+            [dirName, name] = fileparts(filePath);
+            configFile = fullfile(dirName, name, sprintf('%s_input_HD_params.json', name));
 
-            if ~isempty(config_list)
-                fileList{i} = {obj.drawerList{i}, config_list, path_list};
+            if isfile(configFile)
+                % Load the parameters (simple jsondecode)
+                fid = fopen(configFile, 'r');
+                raw = fread(fid, inf, '*char')';
+                fclose(fid);
+                params = jsondecode(raw);
+                fileList{i} = {filePath, {params}, configFile}; % config_list as cell
+            else
+                % No config file – leave empty, but keep the path if needed later
+                fileList{i} = {filePath, {}, configFile};
             end
 
         end
@@ -372,13 +396,19 @@ methods (Access = private)
 
     function renderVideos(obj)
         app = obj.MainApp;
-        fileList = obj.buildDrawerFileList(); % external helper function
+        fileList = obj.buildDrawerFileList();
 
-        if ~isempty(fileList) && ~isempty(fileList{1}) && ~isempty(fileList{1}{2})
-            firstParams = fileList{1}{2}{1};
-            numWorkers = firstParams.parforArg;
-        else
-            numWorkers = 0;
+        % Determine number of workers from the first valid config
+        numWorkers = 0;
+
+        for i = 1:length(fileList)
+
+            if ~isempty(fileList{i}) && ~isempty(fileList{i}{2})
+                firstParams = fileList{i}{2}{1};
+                numWorkers = firstParams.parforArg;
+                break;
+            end
+
         end
 
         if numWorkers > 0
@@ -416,25 +446,21 @@ methods (Access = private)
     end
 
     function deleteAllConfigs(obj)
-        fileList = obj.buildDrawerFileList(); % external helper function
         n = 0;
 
-        for i = 1:length(fileList)
-            entry = fileList{i};
+        for i = 1:length(obj.drawerList)
+            filePath = obj.drawerList{i};
+            [dirName, name] = fileparts(filePath);
+            configFile = fullfile(dirName, name, sprintf('%s_input_HD_params.json', name));
 
-            if ~isempty(entry) && ~isempty(entry{3})
-
-                for j = 1:length(entry{3})
-                    delete(entry{3}{j});
-                    n = n + 1;
-                end
-
+            if isfile(configFile)
+                delete(configFile);
+                n = n + 1;
             end
 
         end
 
-        fprintf('Deleted %d config files for %d entries\n', n, length(fileList));
-
+        fprintf('Deleted %d config files for %d entries\n', n, length(obj.drawerList));
     end
 
 end

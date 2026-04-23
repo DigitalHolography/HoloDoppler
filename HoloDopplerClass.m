@@ -27,7 +27,6 @@ methods
                 fullfile(root, 'ReaderClasses'), ...
                 fullfile(root, 'Rendering'), ...
                 fullfile(root, 'Saving'), ...
-                fullfile(root, 'Scripts'), ...
                 fullfile(root, 'Saving', 'Registering'), ...
                 fullfile(root, 'Tools'), ...
                 fullfile(root, 'StandardConfigs'));
@@ -207,19 +206,12 @@ methods
         end
 
         % 3) Look for config or last computation params
-
-        % Define the paths for saved preview, video, and config parameters
-        filename = obj.file.name;
-        filedir = obj.file.dir;
-        last_preview_index = get_highest_number_in_directories(filedir, sprintf('%s_HDPreview', filename));
-        preview_params_path = fullfile(filedir, sprintf('%s_HDPreview_%d', filename, last_preview_index), sprintf('%s_HDPreview_%d_input_HD_params.json', filename, last_preview_index));
-        last_video_index = get_highest_number_in_directories(filedir, sprintf('%s_HD', filename));
-        video_params_path = fullfile(filedir, sprintf('%s_HD_%d', filename, last_video_index), sprintf('%s_HD_%d_input_HD_params.json', filename, last_video_index));
-        last_config_index = get_highest_number_in_files(filedir, sprintf('%s_input_HD_params_', filename));
-        config_params_path = fullfile(filedir, sprintf('%s_input_HD_params_%d.json', filename, last_config_index));
-
-        % Look for old .mat config files existing in the current folder
-        [GuiCacheObj, old_mat_path] = findGUICache(filedir, filename);
+        baseOutputDir = fullfile(obj.file.dir, obj.file.name);
+        preview_folder = fullfile(baseOutputDir, sprintf('%s_HDPreview', obj.file.name));
+        preview_params_path = fullfile(preview_folder, sprintf('%s_HDPreview_input_HD_params.json', obj.file.name));
+        video_folder = fullfile(baseOutputDir, sprintf('%s_HD', obj.file.name));
+        video_params_path = fullfile(video_folder, sprintf('%s_HD_input_HD_params.json', obj.file.name));
+        config_params_path = fullfile(baseOutputDir, sprintf('%s_input_HD_params.json', obj.file.name));
 
         % Load saved config parameters if they exist (prevails over the last computation)
         if isfile(config_params_path)
@@ -231,26 +223,6 @@ methods
         elseif isfile(preview_params_path)
             fprintf('Loading saved preview parameters from %s\n', preview_params_path);
             obj.loadParams(preview_params_path);
-        elseif ~isempty(GuiCacheObj)
-
-            if ~isempty(GuiCacheObj.z)
-                p.spatialPropagation = GuiCacheObj.z;
-            end
-
-            if ~isempty(GuiCacheObj.z_retina)
-                p.spatialPropagation = GuiCacheObj.z_retina;
-            end
-
-            if ~isempty(GuiCacheObj.spatialTransformation)
-                p.spatialTransformation = GuiCacheObj.spatialTransformation;
-            end
-
-            if ~isempty(GuiCacheObj.wavelength)
-                p.lambda = GuiCacheObj.wavelength;
-            end
-
-            fprintf('Loading z parameter from %s\n', old_mat_path);
-            obj.setParams(p); % overwrites the z propagation params with the one found in the old mat
         end
 
         if ~isempty(opt.params) % if optional parameters were supplied, they take precedence
@@ -321,6 +293,12 @@ methods
             [dir, name, ~] = fileparts(filename);
         end
 
+        baseOutputDir = fullfile(dir, name);
+
+        if ~isfolder(baseOutputDir)
+            mkdir(baseOutputDir);
+        end
+
         if nargin < 3
             save_z = true;
         end
@@ -352,8 +330,7 @@ methods
             parms = rmfield(parms, 'info'); %
         end
 
-        index = get_highest_number_in_files(dir, strcat(name, '_', 'input_HD_params'));
-        outputPath = fullfile(dir, strcat(name, '_', 'input_HD_params_', num2str(index + 1), '.json'));
+        outputPath = fullfile(baseOutputDir, sprintf('%s_input_HD_params.json', name));
         fid = fopen(outputPath, 'w');
 
         if fid == -1
@@ -424,8 +401,15 @@ methods
             imageTypes = obj.params.imageTypes;
         end
 
-        index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HDPreview'));
-        result_folder_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HDPreview_', num2str(index + 1)));
+        % Base folder named after the file
+        baseOutputDir = fullfile(obj.file.dir, obj.file.name);
+
+        if ~isfolder(baseOutputDir)
+            mkdir(baseOutputDir);
+        end
+
+        % Fixed preview folder name
+        result_folder_path = fullfile(baseOutputDir, sprintf('%s_HDPreview', obj.file.name));
 
         if ~isfolder(result_folder_path)
             mkdir(result_folder_path);
@@ -448,14 +432,15 @@ methods
 
         end
 
-        previewParamsPath = fullfile(result_folder_path, [obj.file.name '_HDPreview_' num2str(index + 1) '_input_HD_params.json']);
+        % Save parameters inside the preview folder
+        previewParamsPath = fullfile(result_folder_path, sprintf('%s_HDPreview_input_HD_params.json', obj.file.name));
         fid = fopen(previewParamsPath, 'w');
 
         if fid ~= -1
             closeFile = onCleanup(@() fclose(fid));
             fwrite(fid, jsonencode(obj.params, 'PrettyPrint', true), 'char');
         else
-            warning('HoloDopplerClass:savePreview:cannotOpenFile', 'Could not write params to %s', previewParamsPath);
+            warning('Could not write params to %s', previewParamsPath);
         end
 
     end
@@ -668,15 +653,30 @@ methods
         h = waitbar(0, 'Saving video...');
         N = double(numel(imageTypes) - 1);
 
-        index = get_highest_number_in_directories(obj.file.dir, strcat(obj.file.name, '_HD_'));
-        result_folder_path = fullfile(obj.file.dir, strcat(obj.file.name, '_HD_', num2str(index + 1)));
+        % Base folder and fixed HD folder
+        baseOutputDir = fullfile(obj.file.dir, obj.file.name);
+
+        if ~isfolder(baseOutputDir)
+            mkdir(baseOutputDir);
+        end
+
+        result_folder_path = fullfile(baseOutputDir, sprintf('%s_HD', obj.file.name));
 
         if ~isfolder(result_folder_path)
             mkdir(result_folder_path);
+        end
+
+        % Create subdirectories
+        if ~isfolder(fullfile(result_folder_path, 'avi'))
             mkdir(fullfile(result_folder_path, 'avi'));
+        end
+
+        if ~isfolder(fullfile(result_folder_path, 'raw'))
             mkdir(fullfile(result_folder_path, 'raw'));
+        end
+
+        if ~isfolder(fullfile(result_folder_path, 'png'))
             mkdir(fullfile(result_folder_path, 'png'));
-            mkdir(fullfile(result_folder_path, 'mat')); % for previous versions of PW
         end
 
         for i = 1:numel(imageTypes)
@@ -852,7 +852,7 @@ methods
             disp("Error while saving the parameters.")
         end
 
-        videoParamsPath = fullfile(result_folder_path, [obj.file.name '_HD_' num2str(index + 1) '_input_HD_params.json']);
+        videoParamsPath = fullfile(result_folder_path, sprintf('%s_HD_input_HD_params.json', obj.file.name));
         fid = fopen(videoParamsPath, 'w');
 
         if fid ~= -1
@@ -862,9 +862,10 @@ methods
             warning('HoloDopplerClass:SaveVideo:cannotOpenFile', 'Could not write params to %s', videoParamsPath);
         end
 
-        % copy the HD version file
+        % Copy version.txt to the HD folder
         appRoot = fileparts(mfilename('fullpath'));
         copyfile(fullfile(appRoot, 'version.txt'), result_folder_path);
+
         % Try to get git commit hash and branch, and log to git.txt
         try
             % Get current commit hash
@@ -888,13 +889,6 @@ methods
             MEdisp(ME);
             disp('No git info.');
         end
-
-        %saving a small mat for old versions of PW
-        cache.Fs = p.fs * 1000;
-        cache.batchStride = p.batchStride;
-        cache.timeTransform.f1 = p.frequencyRange1;
-        cache.timeTransform.f2 = p.frequencyRange2;
-        save(fullfile(result_folder_path, 'mat', strcat(obj.file.name, '_HD_', num2str(index + 1), '.mat')), "cache");
 
         fprintf("Video Saving took : %f s\n", toc(VideoSavingTime));
 

@@ -3,7 +3,7 @@ classdef holodoppler < matlab.apps.AppBase
 % =========================================================================
 % UI component handles — required public by App Designer / registerApp
 % =========================================================================
-properties (Access = public)
+properties (Access = private)
     HoloDopplerUIFigure matlab.ui.Figure
 
     % ---- top-level layout ----
@@ -107,10 +107,14 @@ end
 % Application state (readable by external code, e.g. classtogui / guitoclass)
 % =========================================================================
 properties (Access = public)
-    fileLoaded % was file_loaded
     HD % HoloDopplerClass instance
     drawer_list = {}
-    MenuIndex
+end
+
+properties (Access = private)
+    fileLoaded % was file_loaded
+    OriginalPath char % path before startupFcn adds Tools folder
+    MenuIndex double = 1; % which image type is currently shown in the main view
 end
 
 % =========================================================================
@@ -123,28 +127,45 @@ methods (Access = private)
     function startupFcn(app)
         logFile = fullfile(tempdir, ['matlab_log_' char(datetime('now', 'Format', 'yyyyMMdd_HHmmss')) '.txt']);
         diary(logFile);
+        app.OriginalPath = path;
 
+        % Determine version
         version = 'unknown';
 
         if isfile(fullfile(fileparts(mfilename('fullpath')), 'version.txt'))
             v = readlines('version.txt');
             version = char(v(1));
-            fprintf("============================================\n" + ...
-                " Welcome to HoloDoppler %s\n" + ...
-                "--------------------------------------------\n" + ...
-                " Developed by the DigitalHolographyFoundation\n" + ...
-                "============================================\n", version);
         else
             warning('holodoppler:noVersionFile', 'version.txt not found — version will be shown as unknown.');
         end
 
-        app.HoloDopplerUIFigure.Name = ['HoloDoppler ' version];
+        versionStr = ['HoloDoppler ' version];
 
-        % Use fullfile so the path separator is correct on all platforms
+        % Git info (branch + commit hash)
+        gitInfo = '';
+
+        try
+            [~, branch] = system('git rev-parse --abbrev-ref HEAD');
+            branch = strtrim(branch);
+            [~, hash] = system('git rev-parse --short HEAD');
+            hash = strtrim(hash);
+            gitInfo = sprintf('Branch: %s | Commit: %s', branch, hash);
+        catch
+        end
+
+        app.HoloDopplerUIFigure.Name = versionStr;
+
+        % Add Tools folder
         addpath(fullfile(fileparts(mfilename('fullpath')), 'Tools'));
-        displaySplashScreen();
-        app.HD = HoloDopplerClass();
 
+        % Show splash screen (via external function)
+        if isempty(gitInfo)
+            displaySplashScreen(versionStr);
+        else
+            displaySplashScreen(versionStr, gitInfo);
+        end
+
+        app.HD = HoloDopplerClass();
         app.updateButtonStates();
     end
 
@@ -179,10 +200,19 @@ methods (Access = private)
         f = figure('Position', [-200 -200 1 1], 'Visible', 'off');
         cleanupObj = onCleanup(@() delete(f));
 
+        % Define the file filter: description and extensions
+        filters = { ...
+                       '*.cine;*.holo', 'Supported Video Files (*.cine, *.holo)'; ...
+                       '*.cine', 'Cine Files (*.cine)'; ...
+                       '*.holo', 'Holo Files (*.holo)'; ...
+                   };
+
         if isempty(app.HD.file)
-            [fname, fpath] = uigetfile('*.raw;*.cine;*.holo');
+            [fname, fpath] = uigetfile(filters, 'Select a video file');
         else
-            [fname, fpath] = uigetfile(fullfile(app.HD.file.path, '*.raw;*.cine;*.holo'));
+            % Get the directory from the full file path – safer than .dir
+            currentDir = fileparts(app.HD.file.path);
+            [fname, fpath] = uigetfile(filters, 'Select a video file', fullfile(currentDir, ''));
         end
 
         if isequal(fname, 0)
@@ -396,14 +426,17 @@ methods (Access = private)
     function positioninfileSliderValueChanged(app, ~)
 
         if ~isempty(app.HD.file)
-            app.framePosition.Value = app.positioninfileSlider.Value;
+            app.framePosition.Value = round(app.positioninfileSlider.Value);
         else
             app.framePosition.Value = 1;
         end
 
         frame = app.framePosition.Value;
-        stride = app.batchStride.Value;
+        stride = max(app.batchStride.Value, 1); % avoid division by zero
         batchIndex = ceil(frame / stride);
+        % Clamp to field limits
+        maxIdx = app.batchIndexField.Limits(2);
+        batchIndex = max(1, min(batchIndex, maxIdx));
         app.batchIndexField.Value = batchIndex;
 
         app.refreshClass();
@@ -417,12 +450,8 @@ methods (Access = private)
             app.positioninfileSlider.Value = 0;
         end
 
-        frame = app.framePosition.Value;
-        stride = app.batchStride.Value;
-        batchIndex = ceil(frame / stride);
-        app.batchIndexField.Value = batchIndex;
-
-        app.refreshClass();
+        % Reuse the same safe update
+        app.positioninfileSliderValueChanged();
     end
 
     function registrationCheckBoxValueChanged(app, ~)
@@ -839,6 +868,7 @@ methods (Access = private)
         app.batchIndexField.ValueDisplayFormat = '%.0f';
         app.batchIndexField.Layout.Row = 9;
         app.batchIndexField.Layout.Column = 2;
+        app.batchIndexField.Limits = [1 Inf];
 
         app.framePosition = uieditfield(app.mainParametersGrid, 'numeric');
         app.framePosition.Limits = [0 Inf];
@@ -1362,8 +1392,77 @@ methods (Access = public)
 
     end
 
+    function fig = getMainFigure(app)
+        % Return the main UIFigure handle (needed by auxiliary UIs).
+        fig = app.HoloDopplerUIFigure;
+    end
+
+    function value = getWidgetValue(app, widgetName)
+        % Return the current value of the UI widget named widgetName.
+        % Handles NumericEditField, CheckBox, DropDown, ListBox, Spinner.
+        w = app.(widgetName);
+
+        if isempty(w)
+            value = [];
+        elseif isa(w, 'matlab.ui.control.CheckBox')
+            value = logical(w.Value);
+        elseif isa(w, 'matlab.ui.control.DropDown')
+            value = w.Value; % char vector
+        elseif isa(w, 'matlab.ui.control.ListBox')
+            value = w.Value; % cell array of char
+        elseif isa(w, 'matlab.ui.control.NumericEditField') || isa(w, 'matlab.ui.control.Spinner')
+            value = double(w.Value);
+        else
+            value = w.Value;
+        end
+
+    end
+
+    function setWidgetValue(app, widgetName, value)
+        % Set the value of the UI widget named widgetName.
+        w = app.(widgetName);
+
+        if isempty(w)
+            return
+        end
+
+        if isa(w, 'matlab.ui.control.CheckBox')
+            w.Value = logical(value);
+        elseif isa(w, 'matlab.ui.control.DropDown')
+
+            if ismember(value, w.Items)
+                w.Value = value;
+            else
+                w.Value = w.Items{1};
+            end
+
+        elseif isa(w, 'matlab.ui.control.ListBox')
+            allItems = properties(ImageTypeList);
+            w.Items = allItems;
+
+            if iscell(value)
+                w.Value = intersect(value, allItems, 'stable');
+            else
+                w.Value = {};
+            end
+
+        elseif isa(w, 'matlab.ui.control.NumericEditField') || isa(w, 'matlab.ui.control.Spinner')
+            w.Value = double(value(1));
+        else
+            w.Value = value;
+        end
+
+    end
+
     function delete(app)
-        delete(app.HoloDopplerUIFigure)
+        % Restore original MATLAB path before shutting down
+        if ~isempty(app.OriginalPath)
+            path(app.OriginalPath);
+        end
+
+        % Turn off diary (already done in CloseRequestFcn, but safe to repeat)
+        diary off;
+        delete(app.HoloDopplerUIFigure);
     end
 
 end
