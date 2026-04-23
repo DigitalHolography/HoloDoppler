@@ -93,7 +93,7 @@ methods
         % --- Step 2: Spatial propagation --------------------------------
         doFH = obj.FramesChanged || changed.PaddingNum || ...
             changed.svd_filter || changed.svdThreshold || ...
-            changed.spatialTransformation || changed.spatialPropagation || ...
+            changed.spatialTransform || changed.spatialPropagation || ...
             ~options.cache_intermediate_results;
 
         obj.applySpatialTransform(Params, changed, doFH, Nx, Ny);
@@ -156,7 +156,7 @@ methods
         obj.setInitParams();
 
         obj.Render(struct(), {"power_Doppler"});
-        obj.Render(struct("spatialTransformation", "angular spectrum"), {"power_Doppler"});
+        obj.Render(struct("spatialTransform", "angular spectrum"), {"power_Doppler"});
         obj.Render(struct("timeTransform", "PCA"), {"power_Doppler"});
         obj.Render(struct(), {"power_Doppler"});
         obj.Render(struct(), {"directional_Doppler"});
@@ -218,9 +218,9 @@ methods (Access = private)
         if ~doFH, return, end
 
         kernelChanged = changed.spatialPropagation || changed.PaddingNum || ...
-            changed.spatialTransformation;
+            changed.spatialTransform;
 
-        switch Params.spatialTransformation
+        switch Params.spatialTransform
 
             case "angular spectrum"
                 ND = max([Params.PaddingNum, Nx, Ny]); % PaddingNum=0 → use data size
@@ -263,8 +263,8 @@ methods (Access = private)
                 obj.H = twin_image_removal_(single(obj.Frames), [], changed, Params);
 
             otherwise
-                error("RenderingClass: unknown spatialTransformation '%s'", ...
-                    Params.spatialTransformation);
+                error("RenderingClass: unknown spatialTransform '%s'", ...
+                    Params.spatialTransform);
         end
 
     end

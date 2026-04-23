@@ -21,7 +21,7 @@
   "fs": 78,
   "ppx": 1.9400147441120552E-5,
   "ppy": 1.9400147441120552E-5,
-  "spatialTransformation": "Fresnel",
+  "spatialTransform": "Fresnel",
   "spatialPropagation": 1.25,
   "frequencyRange1": 6,
   "frequencyRange2": 18,

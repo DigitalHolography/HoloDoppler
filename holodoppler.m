@@ -65,8 +65,8 @@ properties (Access = private)
     spatialFilterRange2 matlab.ui.control.NumericEditField
     PaddingLabel matlab.ui.control.Label
     PaddingNum matlab.ui.control.NumericEditField
-    spatialTransformationLabel matlab.ui.control.Label
-    spatialTransformation matlab.ui.control.DropDown
+    spatialTransformLabel matlab.ui.control.Label
+    spatialTransform matlab.ui.control.DropDown
     spatialPropagationLabel matlab.ui.control.Label
     spatialPropagation matlab.ui.control.NumericEditField
     AutofocusButton matlab.ui.control.Button
@@ -538,7 +538,7 @@ methods (Access = private)
                             app.spatialFilterRange1, ...
                             app.spatialFilterRange2, ...
                             app.PaddingNum, ...
-                            app.spatialTransformation, ...
+                            app.spatialTransform, ...
                             app.spatialPropagation, ...
                             app.svd_filter, ...
                             app.svdThreshold, ...
@@ -674,11 +674,11 @@ methods (Access = private)
         grayButtonColor = [0.5 0.5 0.5];
 
         app.FileselectionPanel = uipanel(app.RootGrid, ...
+            'Title', 'File selection', ...
             'BackgroundColor', backgroundColor, ...
             'ForegroundColor', fontColor, ...
             'BorderType', 'line', ...
-            'Title', 'File selection', ...
-            'TitlePosition', 'centertop');
+            'FontWeight', 'bold');
 
         app.FileselectionPanel.Layout.Row = [1 2];
         app.FileselectionPanel.Layout.Column = 1;
@@ -691,23 +691,23 @@ methods (Access = private)
             'ColumnSpacing', 5, ...
             'BackgroundColor', backgroundColor);
 
-        app.FolderManagerButton = uibutton(app.mainParametersGrid, 'push');
-        app.FolderManagerButton.ButtonPushedFcn = createCallbackFcn(app, @FolderManagerButtonPushed, true);
-        app.FolderManagerButton.BackgroundColor = grayButtonColor;
-        app.FolderManagerButton.FontColor = fontColor;
-        app.FolderManagerButton.Tooltip = {'Open a window to render all files from different folders with their config files'};
+        app.FolderManagerButton = uibutton(app.mainParametersGrid, 'push', ...
+            'Text', 'Folder manager', ...
+            'ButtonPushedFcn', createCallbackFcn(app, @FolderManagerButtonPushed, true), ...
+            'Tooltip', {'Open a window to render all files from different folders with their config files'}, ...
+            'BackgroundColor', grayButtonColor, ...
+            'FontColor', fontColor);
         app.FolderManagerButton.Layout.Row = 1;
         app.FolderManagerButton.Layout.Column = 1;
-        app.FolderManagerButton.Text = 'Folder manager';
 
-        app.LoadfileButton = uibutton(app.mainParametersGrid, 'push');
-        app.LoadfileButton.ButtonPushedFcn = createCallbackFcn(app, @LoadfileButtonPushed, true);
-        app.LoadfileButton.BackgroundColor = grayButtonColor;
-        app.LoadfileButton.FontColor = fontColor;
-        app.LoadfileButton.Tooltip = {'Load a raw video file (formats : .raw, .cine, .holo)'};
+        app.LoadfileButton = uibutton(app.mainParametersGrid, 'push', ...
+            'Text', 'Load file', ...
+            'ButtonPushedFcn', createCallbackFcn(app, @LoadfileButtonPushed, true), ...
+            'Tooltip', {'Load a raw video file (formats : .raw, .cine, .holo)'}, ...
+            'BackgroundColor', grayButtonColor, ...
+            'FontColor', fontColor);
         app.LoadfileButton.Layout.Row = 1;
         app.LoadfileButton.Layout.Column = 2;
-        app.LoadfileButton.Text = 'Load file';
 
         app.fileLoadedLamp = uilamp(app.mainParametersGrid);
         app.fileLoadedLamp.Layout.Row = 1;
@@ -716,23 +716,23 @@ methods (Access = private)
         app.fileLoadedLamp.Tooltip = {'Indicates the file loading status: gray = no file, orange = loading, green = loaded, red = error'};
 
         % buttons row 2
-        app.LoadConfigButton = uibutton(app.mainParametersGrid, 'push');
-        app.LoadConfigButton.ButtonPushedFcn = createCallbackFcn(app, @LoadConfigButtonPushed, true);
-        app.LoadConfigButton.BackgroundColor = grayButtonColor;
-        app.LoadConfigButton.FontColor = fontColor;
-        app.LoadConfigButton.Tooltip = {'Save a configuration for the video rendering of a file'};
+        app.LoadConfigButton = uibutton(app.mainParametersGrid, 'push', ...
+            'Text', 'Load config', ...
+            'ButtonPushedFcn', createCallbackFcn(app, @LoadConfigButtonPushed, true), ...
+            'Tooltip', {'Load a configuration for the video rendering of a file'}, ...
+            'BackgroundColor', grayButtonColor, ...
+            'FontColor', fontColor);
         app.LoadConfigButton.Layout.Row = 2;
         app.LoadConfigButton.Layout.Column = 1;
-        app.LoadConfigButton.Text = 'Load config';
 
-        app.SaveConfigButton = uibutton(app.mainParametersGrid, 'push');
-        app.SaveConfigButton.ButtonPushedFcn = createCallbackFcn(app, @SaveConfigButtonPushed, true);
-        app.SaveConfigButton.BackgroundColor = grayButtonColor;
-        app.SaveConfigButton.FontColor = fontColor;
-        app.SaveConfigButton.Tooltip = {'Save a configuration for the video rendering of a file'};
+        app.SaveConfigButton = uibutton(app.mainParametersGrid, 'push', ...
+            'Text', 'Save config', ...
+            'ButtonPushedFcn', createCallbackFcn(app, @SaveConfigButtonPushed, true), ...
+            'Tooltip', {'Save a configuration for the video rendering of a file'}, ...
+            'BackgroundColor', grayButtonColor, ...
+            'FontColor', fontColor);
         app.SaveConfigButton.Layout.Row = 2;
         app.SaveConfigButton.Layout.Column = 2;
-        app.SaveConfigButton.Text = 'Save config';
 
         app.lambdaLabel = uilabel(app.mainParametersGrid);
         app.lambdaLabel.FontColor = fontColor;
@@ -742,12 +742,12 @@ methods (Access = private)
         app.lambdaLabel.Layout.Column = 1;
         app.lambdaLabel.HorizontalAlignment = 'right';
 
-        app.lambda = uieditfield(app.mainParametersGrid, 'numeric');
-        app.lambda.Limits = [0 Inf];
-        app.lambda.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.lambda.FontColor = fontColor;
-        app.lambda.BackgroundColor = darkBackgroundColor;
-        app.lambda.Tooltip = {'Laser wavelength in nanometers'};
+        app.lambda = uieditfield(app.mainParametersGrid, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Tooltip', {'Laser wavelength in nanometers'});
         app.lambda.Layout.Row = 3;
         app.lambda.Layout.Column = 2;
 
@@ -759,12 +759,12 @@ methods (Access = private)
         app.fsLabel.Layout.Column = 1;
         app.fsLabel.HorizontalAlignment = 'right';
 
-        app.fs = uieditfield(app.mainParametersGrid, 'numeric');
-        app.fs.Limits = [0 Inf];
-        app.fs.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.fs.FontColor = fontColor;
-        app.fs.BackgroundColor = darkBackgroundColor;
-        app.fs.Tooltip = {'Sampling frequency in (kHz)'};
+        app.fs = uieditfield(app.mainParametersGrid, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Tooltip', {'Sampling frequency in (kHz)'});
         app.fs.Layout.Row = 4;
         app.fs.Layout.Column = 2;
 
@@ -776,19 +776,19 @@ methods (Access = private)
         app.pixelPitchLabel.Layout.Column = 1;
         app.pixelPitchLabel.HorizontalAlignment = 'right';
 
-        app.ppx = uieditfield(app.mainParametersGrid, 'numeric');
-        app.ppx.Limits = [0 10];
-        app.ppx.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.ppx.FontColor = fontColor;
-        app.ppx.BackgroundColor = darkBackgroundColor;
+        app.ppx = uieditfield(app.mainParametersGrid, 'numeric', ...
+            'Limits', [0 10], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor);
         app.ppx.Layout.Row = 5;
         app.ppx.Layout.Column = 2;
 
-        app.ppy = uieditfield(app.mainParametersGrid, 'numeric');
-        app.ppy.Limits = [0 10];
-        app.ppy.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.ppy.FontColor = fontColor;
-        app.ppy.BackgroundColor = darkBackgroundColor;
+        app.ppy = uieditfield(app.mainParametersGrid, 'numeric', ...
+            'Limits', [0 10], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor);
         app.ppy.Layout.Row = 5;
         app.ppy.Layout.Column = 3;
 
@@ -800,21 +800,21 @@ methods (Access = private)
         app.imageSizeLabel.Layout.Column = 1;
         app.imageSizeLabel.HorizontalAlignment = 'right';
 
-        app.Nx = uieditfield(app.mainParametersGrid, 'numeric');
-        app.Nx.Limits = [0 Inf];
-        app.Nx.Editable = 'off';
-        app.Nx.FontColor = fontColor;
-        app.Nx.BackgroundColor = darkBackgroundColor;
-        app.Nx.Tooltip = {'Width of the recorded interferograms'};
+        app.Nx = uieditfield(app.mainParametersGrid, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'Editable', 'off', ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Tooltip', {'Width of the recorded interferograms'});
         app.Nx.Layout.Row = 6;
         app.Nx.Layout.Column = 2;
 
-        app.Ny = uieditfield(app.mainParametersGrid, 'numeric');
-        app.Ny.Limits = [0 Inf];
-        app.Ny.Editable = 'off';
-        app.Ny.FontColor = fontColor;
-        app.Ny.BackgroundColor = darkBackgroundColor;
-        app.Ny.Tooltip = {'Height of the recorded interferograms'};
+        app.Ny = uieditfield(app.mainParametersGrid, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'Editable', 'off', ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Tooltip', {'Height of the recorded interferograms'});
         app.Ny.Layout.Row = 6;
         app.Ny.Layout.Column = 3;
 
@@ -861,45 +861,46 @@ methods (Access = private)
         app.batchIndexLabel.Layout.Column = 1;
         app.batchIndexLabel.HorizontalAlignment = 'right';
 
-        app.batchIndexField = uieditfield(app.mainParametersGrid, 'numeric');
-        app.batchIndexField.Editable = 'off';
-        app.batchIndexField.FontColor = fontColor;
-        app.batchIndexField.BackgroundColor = darkBackgroundColor;
-        app.batchIndexField.ValueDisplayFormat = '%.0f';
+        app.batchIndexField = uieditfield(app.mainParametersGrid, 'numeric', ...
+            'Editable', 'off', ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'ValueDisplayFormat', '%.0f', ...
+            'Limits', [1 Inf], ...
+            'Tooltip', {'Current batch index based on the position in file and the batch stride (read-only)'});
         app.batchIndexField.Layout.Row = 9;
         app.batchIndexField.Layout.Column = 2;
-        app.batchIndexField.Limits = [1 Inf];
 
-        app.framePosition = uieditfield(app.mainParametersGrid, 'numeric');
-        app.framePosition.Limits = [0 Inf];
-        app.framePosition.RoundFractionalValues = 'on';
-        app.framePosition.ValueDisplayFormat = '%.0f';
-        app.framePosition.ValueChangedFcn = createCallbackFcn(app, @framePositionValueChanged, true);
-        app.framePosition.FontColor = fontColor;
-        app.framePosition.BackgroundColor = darkBackgroundColor;
-        app.framePosition.Tooltip = {''};
+        app.framePosition = uieditfield(app.mainParametersGrid, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'RoundFractionalValues', 'on', ...
+            'ValueDisplayFormat', '%.0f', ...
+            'ValueChangedFcn', createCallbackFcn(app, @framePositionValueChanged, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Tooltip', {''});
         app.framePosition.Layout.Row = 9;
         app.framePosition.Layout.Column = 3;
 
         % Column 11
 
-        app.RefreshAppButton = uibutton(app.mainParametersGrid, 'push');
-        app.RefreshAppButton.ButtonPushedFcn = createCallbackFcn(app, @RefreshAppButtonPushed, true);
-        app.RefreshAppButton.BackgroundColor = grayButtonColor;
-        app.RefreshAppButton.FontColor = fontColor;
-        app.RefreshAppButton.Tooltip = {'Refresh the app'};
-        app.RefreshAppButton.Text = '👌 Refresh app';
+        app.AdvancedButton = uibutton(app.mainParametersGrid, 'push', ...
+            'Text', '📎 Advanced', ...
+            'ButtonPushedFcn', createCallbackFcn(app, @AdvancedButtonPushed, true), ...
+            'Tooltip', {'Advanced settings'}, ...
+            'BackgroundColor', grayButtonColor, ...
+            'FontColor', fontColor);
+        app.AdvancedButton.Layout.Row = 11;
+        app.AdvancedButton.Layout.Column = 1;
+
+        app.RefreshAppButton = uibutton(app.mainParametersGrid, 'push', ...
+            'Text', '👌 Refresh app', ...
+            'ButtonPushedFcn', createCallbackFcn(app, @RefreshAppButtonPushed, true), ...
+            'Tooltip', {'Refresh the app'}, ...
+            'BackgroundColor', grayButtonColor, ...
+            'FontColor', fontColor);
         app.RefreshAppButton.Layout.Row = 11;
         app.RefreshAppButton.Layout.Column = 2;
-
-        app.AdvancedButton = uibutton(app.mainParametersGrid, 'push');
-        app.AdvancedButton.ButtonPushedFcn = createCallbackFcn(app, @AdvancedButtonPushed, true);
-        app.AdvancedButton.BackgroundColor = grayButtonColor;
-        app.AdvancedButton.FontColor = fontColor;
-        app.AdvancedButton.Tooltip = {'Advanced settings'};
-        app.AdvancedButton.Text = '📎 Advanced';
-        app.AdvancedButton.Layout.Row = 11;
-        app.AdvancedButton.Layout.Column = 3;
     end
 
     % -----------------------------------------------------------------------
@@ -910,10 +911,12 @@ methods (Access = private)
         fontColor = [1 1 1];
         renderButtonColor = [0.2, 0.6, 0.2];
 
-        app.batchPanel = uipanel(app.mainParametersGrid);
-        app.batchPanel.ForegroundColor = fontColor;
-        app.batchPanel.Title = 'Batch parameters';
-        app.batchPanel.BackgroundColor = backgroundColor;
+        app.batchPanel = uipanel(app.mainParametersGrid, ...
+            'Title', 'Batch parameters', ...
+            'BackgroundColor', backgroundColor, ...
+            'ForegroundColor', fontColor, ...
+            'BorderType', 'line', ...
+            'FontWeight', 'bold');
         app.batchPanel.Layout.Row = 10;
         app.batchPanel.Layout.Column = [1 3];
 
@@ -940,14 +943,14 @@ methods (Access = private)
         app.imageTypesListBox.Value = {};
 
         % buttons row 3
-        app.VideoRenderingButton = uibutton(p, 'push');
-        app.VideoRenderingButton.ButtonPushedFcn = createCallbackFcn(app, @VideoRenderingButtonPushed, true);
-        app.VideoRenderingButton.BackgroundColor = renderButtonColor;
-        app.VideoRenderingButton.FontColor = fontColor;
-        app.VideoRenderingButton.Tooltip = {'Render ''batchSize'' frame batchs spaced by ''batchStride'' and output a video of different image types'};
+        app.VideoRenderingButton = uibutton(p, 'push', ...
+            'Text', 'Video Rendering', ...
+            'ButtonPushedFcn', createCallbackFcn(app, @VideoRenderingButtonPushed, true), ...
+            'BackgroundColor', renderButtonColor, ...
+            'FontColor', fontColor, ...
+            'Tooltip', {'Render ''batchSize'' frame batchs spaced by ''batchStride'' and output a video of different image types'});
         app.VideoRenderingButton.Layout.Row = 2;
         app.VideoRenderingButton.Layout.Column = 1;
-        app.VideoRenderingButton.Text = 'Video Rendering';
 
         app.VideoRenderingLamp = uilamp(p);
         app.VideoRenderingLamp.Layout.Row = 2;
@@ -961,14 +964,15 @@ methods (Access = private)
         app.batchSizeLabel.Layout.Row = 3;
         app.batchSizeLabel.Layout.Column = 1;
         app.batchSizeLabel.Text = 'Batch size';
+        app.batchSizeLabel.HorizontalAlignment = 'right';
 
-        app.batchSize = uieditfield(p, 'numeric');
-        app.batchSize.Limits = [0 Inf];
-        app.batchSize.ValueDisplayFormat = '%.0f';
-        app.batchSize.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.batchSize.FontColor = fontColor;
-        app.batchSize.BackgroundColor = darkBackgroundColor;
-        app.batchSize.Tooltip = {'Number of interferograms used to compute the image'};
+        app.batchSize = uieditfield(p, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueDisplayFormat', '%.0f', ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Tooltip', {'Number of interferograms used to compute the image'});
         app.batchSize.Layout.Row = 3;
         app.batchSize.Layout.Column = 2;
 
@@ -977,14 +981,15 @@ methods (Access = private)
         app.batchStrideLabel.Layout.Row = 4;
         app.batchStrideLabel.Layout.Column = 1;
         app.batchStrideLabel.Text = 'Batch stride';
+        app.batchStrideLabel.HorizontalAlignment = 'right';
 
-        app.batchStride = uieditfield(p, 'numeric');
-        app.batchStride.Limits = [0 Inf];
-        app.batchStride.ValueDisplayFormat = '%.0f';
-        app.batchStride.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.batchStride.FontColor = fontColor;
-        app.batchStride.BackgroundColor = darkBackgroundColor;
-        app.batchStride.Tooltip = {'Number of interferograms to skip between two images'};
+        app.batchStride = uieditfield(p, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueDisplayFormat', '%.0f', ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Tooltip', {'Number of interferograms to skip between two images'});
         app.batchStride.Layout.Row = 4;
         app.batchStride.Layout.Column = 2;
 
@@ -993,30 +998,31 @@ methods (Access = private)
         app.refBatchSizeLabel.Layout.Row = 5;
         app.refBatchSizeLabel.Layout.Column = 1;
         app.refBatchSizeLabel.Text = 'Reference batch size';
+        app.refBatchSizeLabel.HorizontalAlignment = 'right';
 
-        app.refBatchSize = uieditfield(p, 'numeric');
-        app.refBatchSize.Limits = [0 Inf];
-        app.refBatchSize.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.refBatchSize.FontColor = fontColor;
-        app.refBatchSize.BackgroundColor = darkBackgroundColor;
-        app.refBatchSize.Tooltip = {'Number of interferograms used to compute the image used as reference in registration'};
+        app.refBatchSize = uieditfield(p, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Tooltip', {'Number of interferograms used to compute the image used as reference in registration'});
         app.refBatchSize.Layout.Row = 5;
         app.refBatchSize.Layout.Column = 2;
 
         % Registration row 7 8 9 10
-        app.AutofocusFromRef = uicheckbox(p);
-        app.AutofocusFromRef.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.AutofocusFromRef.Tooltip = {'Activate frame to frame translation registration of images'};
-        app.AutofocusFromRef.Text = 'autofocus from ref';
-        app.AutofocusFromRef.FontColor = fontColor;
+        app.AutofocusFromRef = uicheckbox(p, ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'Tooltip', {'Activate frame to frame translation registration of images'}, ...
+            'Text', 'autofocus from ref');
         app.AutofocusFromRef.Layout.Row = 6;
         app.AutofocusFromRef.Layout.Column = 1;
 
-        app.imageRegistration = uicheckbox(p);
-        app.imageRegistration.ValueChangedFcn = createCallbackFcn(app, @registrationCheckBoxValueChanged, true);
-        app.imageRegistration.Tooltip = {'Activate frame to frame translation registration of images'};
-        app.imageRegistration.Text = 'image registration';
-        app.imageRegistration.FontColor = fontColor;
+        app.imageRegistration = uicheckbox(p, ...
+            'ValueChangedFcn', createCallbackFcn(app, @registrationCheckBoxValueChanged, true), ...
+            'FontColor', fontColor, ...
+            'Tooltip', {'Activate frame to frame translation registration of images'}, ...
+            'Text', 'image registration');
         app.imageRegistration.Layout.Row = 7;
         app.imageRegistration.Layout.Column = [1 2];
 
@@ -1025,13 +1031,14 @@ methods (Access = private)
         app.registrationDiskLabel.Layout.Row = 9;
         app.registrationDiskLabel.Layout.Column = 1;
         app.registrationDiskLabel.Text = 'Registration disk ratio';
+        app.registrationDiskLabel.HorizontalAlignment = 'right';
 
-        app.registrationDiskRatio = uieditfield(p, 'numeric');
-        app.registrationDiskRatio.Limits = [0 1000];
-        app.registrationDiskRatio.ValueChangedFcn = createCallbackFcn(app, @registrationDiskRatioValueChanged, true);
-        app.registrationDiskRatio.FontColor = fontColor;
-        app.registrationDiskRatio.BackgroundColor = darkBackgroundColor;
-        app.registrationDiskRatio.Tooltip = {'Size of a disk centered on the images used to compute the registration shifts (0 is empty and 1 is a disk of the maximum dimension).'};
+        app.registrationDiskRatio = uieditfield(p, 'numeric', ...
+            'Limits', [0 1000], ...
+            'ValueChangedFcn', createCallbackFcn(app, @registrationDiskRatioValueChanged, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Tooltip', {'Size of a disk centered on the images used to compute the registration shifts (0 is empty and 1 is a disk of the maximum dimension).'});
         app.registrationDiskRatio.Layout.Row = 9;
         app.registrationDiskRatio.Layout.Column = 2;
 
@@ -1044,11 +1051,14 @@ methods (Access = private)
         darkBackgroundColor = [0.15 0.15 0.15];
         fontColor = [1 1 1];
         grayButtonColor = [0.5 0.5 0.5];
+        renderButtonColor = [0.2, 0.6, 0.2];
 
-        app.renderingParametersPanel = uipanel(app.RootGrid);
-        app.renderingParametersPanel.ForegroundColor = [0.8 0.8 0.8];
-        app.renderingParametersPanel.Title = 'Rendering parameters';
-        app.renderingParametersPanel.BackgroundColor = [0.2 0.2 0.2];
+        app.renderingParametersPanel = uipanel(app.RootGrid, ...
+            'Title', 'Rendering parameters', ...
+            'BackgroundColor', backgroundColor, ...
+            'ForegroundColor', fontColor, ...
+            'BorderType', 'line', ...
+            'FontWeight', 'bold');
         app.renderingParametersPanel.Layout.Row = 2;
         app.renderingParametersPanel.Layout.Column = 2;
 
@@ -1064,45 +1074,49 @@ methods (Access = private)
 
         % Spatial filtering parameters row 1
 
-        app.spatialFilter = uicheckbox(p);
-        app.spatialFilter.ValueChangedFcn = createCallbackFcn(app, @spatialFilterCheckBoxValueChanged, true);
-        app.spatialFilter.Tooltip = {'Filter the spatial frequencies of the interferograms keeping only those between spatial filter range1 and 2 (between 0 and 1-> highest dimension)'};
-        app.spatialFilter.Text = 'Spatial filter';
-        app.spatialFilter.FontColor = fontColor;
+        app.spatialFilter = uicheckbox(p, ...
+            'ValueChangedFcn', createCallbackFcn(app, @spatialFilterCheckBoxValueChanged, true), ...
+            'FontColor', fontColor, ...
+            'Tooltip', {'Filter the spatial frequencies of the interferograms keeping only those between spatial filter range1 and 2 (between 0 and 1-> highest dimension)'}, ...
+            'Text', 'Spatial filter');
         app.spatialFilter.Layout.Column = 1;
         app.spatialFilter.Layout.Row = 1;
 
-        app.spatialFilterRange1 = uieditfield(p, 'numeric');
-        app.spatialFilterRange1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.spatialFilterRange1.FontColor = fontColor;
-        app.spatialFilterRange1.BackgroundColor = darkBackgroundColor;
+        app.spatialFilterRange1 = uieditfield(p, 'numeric', ...
+            'Limits', [0 1], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Tooltip', {'Lower bound of the spatial filter range (0 to 1)'});
         app.spatialFilterRange1.Layout.Column = 2;
         app.spatialFilterRange1.Layout.Row = 1;
 
-        app.spatialFilterRange2 = uieditfield(p, 'numeric');
-        app.spatialFilterRange2.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.spatialFilterRange2.FontColor = fontColor;
-        app.spatialFilterRange2.BackgroundColor = darkBackgroundColor;
+        app.spatialFilterRange2 = uieditfield(p, 'numeric', ...
+            'Limits', [0 1], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Tooltip', {'Upper bound of the spatial filter range (0 to 1)'});
         app.spatialFilterRange2.Layout.Column = 3;
         app.spatialFilterRange2.Layout.Row = 1;
 
-        % Local spatial transformation row 2
+        % Local spatial transform row 2
 
-        app.spatialTransformationLabel = uilabel(p);
-        app.spatialTransformationLabel.HorizontalAlignment = 'right';
-        app.spatialTransformationLabel.FontColor = fontColor;
-        app.spatialTransformationLabel.Layout.Column = 1;
-        app.spatialTransformationLabel.Layout.Row = 2;
-        app.spatialTransformationLabel.Text = 'Spatial transformation';
+        app.spatialTransformLabel = uilabel(p);
+        app.spatialTransformLabel.HorizontalAlignment = 'right';
+        app.spatialTransformLabel.FontColor = fontColor;
+        app.spatialTransformLabel.Layout.Column = 1;
+        app.spatialTransformLabel.Layout.Row = 2;
+        app.spatialTransformLabel.Text = 'Spatial transform';
 
-        app.spatialTransformation = uidropdown(p);
-        app.spatialTransformation.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.spatialTransformation.Tooltip = {'Type of light propagation calculation to perform (depends of the experimental setup)'};
-        app.spatialTransformation.FontColor = fontColor;
-        app.spatialTransformation.BackgroundColor = grayButtonColor;
-        app.spatialTransformation.Layout.Column = [2 3];
-        app.spatialTransformation.Layout.Row = 2;
-        app.spatialTransformation.Items = {'Angular spectrum', 'Fresnel', 'None'};
+        app.spatialTransform = uidropdown(p);
+        app.spatialTransform.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
+        app.spatialTransform.Tooltip = {'Type of light propagation calculation to perform (depends of the experimental setup)'};
+        app.spatialTransform.FontColor = fontColor;
+        app.spatialTransform.BackgroundColor = grayButtonColor;
+        app.spatialTransform.Layout.Column = [2 3];
+        app.spatialTransform.Layout.Row = 2;
+        app.spatialTransform.Items = {'Angular spectrum', 'Fresnel', 'None'};
 
         % Spatial propagation row 3
         app.spatialPropagationLabel = uilabel(p);
@@ -1112,21 +1126,23 @@ methods (Access = private)
         app.spatialPropagationLabel.Layout.Row = 3;
         app.spatialPropagationLabel.Text = 'Spatial propagation';
 
-        app.spatialPropagation = uieditfield(p, 'numeric');
-        app.spatialPropagation.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.spatialPropagation.FontColor = fontColor;
-        app.spatialPropagation.BackgroundColor = darkBackgroundColor;
-        app.spatialPropagation.Tooltip = {'Distance of spatial reconstruction using the preceding calculation scheme in (m) '};
+        app.spatialPropagation = uieditfield(p, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Tooltip', {'Distance of spatial reconstruction using the preceding calculation scheme in (m) '});
         app.spatialPropagation.Layout.Column = 2;
         app.spatialPropagation.Layout.Row = 3;
 
-        app.AutofocusButton = uibutton(p, 'push');
-        app.AutofocusButton.ButtonPushedFcn = createCallbackFcn(app, @AutofocusButtonPushed, true);
-        app.AutofocusButton.BackgroundColor = grayButtonColor;
-        app.AutofocusButton.FontColor = fontColor;
+        app.AutofocusButton = uibutton(p, 'push', ...
+            'Text', 'Autofocus', ...
+            'Tooltip', {'Find the best spatial propagation distance using the preceding calculation scheme and a focus criterion based on the high spatial frequencies content of the reconstructed image.'}, ...
+            'ButtonPushedFcn', createCallbackFcn(app, @AutofocusButtonPushed, true), ...
+            'BackgroundColor', grayButtonColor, ...
+            'FontColor', fontColor);
         app.AutofocusButton.Layout.Column = 3;
         app.AutofocusButton.Layout.Row = 3;
-        app.AutofocusButton.Text = 'Autofocus';
 
         % Padding row 4
         app.PaddingLabel = uilabel(p);
@@ -1136,37 +1152,39 @@ methods (Access = private)
         app.PaddingLabel.Layout.Row = 4;
         app.PaddingLabel.Text = 'Padding N';
 
-        app.PaddingNum = uieditfield(p, 'numeric');
-        app.PaddingNum.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.PaddingNum.FontColor = fontColor;
-        app.PaddingNum.BackgroundColor = darkBackgroundColor;
-        app.PaddingNum.Tooltip = {'Distance of spatial reconstruction using the preceding calculation scheme in (m) '};
+        app.PaddingNum = uieditfield(p, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Tooltip', {'Distance of spatial reconstruction using the preceding calculation scheme in (m) '});
         app.PaddingNum.Layout.Column = 2;
         app.PaddingNum.Layout.Row = 4;
 
         % SVD filtering row 5 6
 
-        app.svd_filter = uicheckbox(p);
-        app.svd_filter.ValueChangedFcn = createCallbackFcn(app, @svdFilterCheckBoxValueChanged, true);
-        app.svd_filter.Tooltip = {'Filter to remove intense time correlated feature images of the output fluctuation hologram using eigenvalue decomposition of the correlation matrix of frames.'};
-        app.svd_filter.Text = 'SVD Filter';
-        app.svd_filter.FontColor = fontColor;
+        app.svd_filter = uicheckbox(p, ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'Tooltip', {'Filter to remove intense time correlated feature images of the output fluctuation hologram using eigenvalue decomposition of the correlation matrix of frames.'}, ...
+            'Text', 'SVD Filter');
         app.svd_filter.Layout.Column = 1;
         app.svd_filter.Layout.Row = 5;
 
-        app.svdThresholdResetButton = uibutton(p, 'push');
-        app.svdThresholdResetButton.ButtonPushedFcn = createCallbackFcn(app, @svdThresholdResetButtonPushed, true);
-        app.svdThresholdResetButton.BackgroundColor = grayButtonColor;
-        app.svdThresholdResetButton.FontColor = fontColor;
+        app.svdThresholdResetButton = uibutton(p, 'push', ...
+            'Text', 'Reset', ...
+            'ButtonPushedFcn', createCallbackFcn(app, @svdThresholdResetButtonPushed, true), ...
+            'BackgroundColor', grayButtonColor, ...
+            'FontColor', fontColor);
         app.svdThresholdResetButton.Layout.Column = 2;
         app.svdThresholdResetButton.Layout.Row = 5;
-        app.svdThresholdResetButton.Text = 'Reset';
 
-        app.svdThreshold = uieditfield(p, 'numeric');
-        app.svdThreshold.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.svdThreshold.FontColor = fontColor;
-        app.svdThreshold.BackgroundColor = darkBackgroundColor;
-        app.svdThreshold.Tooltip = {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => frequencyRange1/fs * batchSize * 2)'};
+        app.svdThreshold = uieditfield(p, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Tooltip', {'number of first eigenvectors to remove from the fluctuation holograms (zero means default => frequencyRange1/fs * batchSize * 2)'});
         app.svdThreshold.Layout.Column = 3;
         app.svdThreshold.Layout.Row = 5;
 
@@ -1177,17 +1195,17 @@ methods (Access = private)
         app.svdStrideLabel.Layout.Row = 6;
         app.svdStrideLabel.Text = 'SVD stride';
 
-        app.svdStride = uieditfield(p, 'numeric');
-        app.svdStride.Limits = [0 Inf];
-        app.svdStride.Tooltip = {'Sub sampling parameter for faster SVD calculations. Defaults to 1 -> full image, 2 -> one pixel on two, ...'};
-        app.svdStride.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.svdStride.FontColor = fontColor;
-        app.svdStride.BackgroundColor = darkBackgroundColor;
+        app.svdStride = uieditfield(p, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Value', 1, ...
+            'Tooltip', {'Sub sampling parameter for faster SVD calculations. Defaults to 1 -> full image, 2 -> one pixel on two, ...'});
         app.svdStride.Layout.Row = 6;
         app.svdStride.Layout.Column = 2;
-        app.svdStride.Value = 1;
 
-        % Time transformation row 7
+        % Time transform row 7
         app.timeTransformLabel = uilabel(p);
         app.timeTransformLabel.FontColor = fontColor;
         app.timeTransformLabel.Layout.Column = 1;
@@ -1212,23 +1230,25 @@ methods (Access = private)
         app.frequencyRangeLabel.Layout.Row = 8;
         app.frequencyRangeLabel.HorizontalAlignment = 'right';
 
-        app.frequencyRange1 = uieditfield(p, 'numeric');
-        app.frequencyRange1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.frequencyRange1.FontColor = fontColor;
-        app.frequencyRange1.BackgroundColor = darkBackgroundColor;
+        app.frequencyRange1 = uieditfield(p, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Placeholder', 'f1', ...
+            'Tooltip', {'Frequency range to apply the time transform (if different from time range)'});
         app.frequencyRange1.Layout.Column = 2;
         app.frequencyRange1.Layout.Row = 8;
-        app.frequencyRange1.Tooltip = {'Frequency range to apply the time transformation (if different from time range)'};
-        app.frequencyRange1.Placeholder = 'f1';
 
-        app.frequencyRange2 = uieditfield(p, 'numeric');
-        app.frequencyRange2.ValueChangedFcn = createCallbackFcn(app, @frequencyRange2ValueChanged, true);
-        app.frequencyRange2.FontColor = fontColor;
-        app.frequencyRange2.BackgroundColor = darkBackgroundColor;
+        app.frequencyRange2 = uieditfield(p, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueChangedFcn', createCallbackFcn(app, @frequencyRange2ValueChanged, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Placeholder', 'f2', ...
+            'Tooltip', {'Frequency range to apply the time transform (if different from time range)'});
         app.frequencyRange2.Layout.Column = 3;
         app.frequencyRange2.Layout.Row = 8;
-        app.frequencyRange2.Tooltip = {'Frequency range to apply the time transformation (if different from time range)'};
-        app.frequencyRange2.Placeholder = 'f2';
 
         app.frequencyRangeInterLabel = uilabel(p);
         app.frequencyRangeInterLabel.FontColor = fontColor;
@@ -1237,23 +1257,25 @@ methods (Access = private)
         app.frequencyRangeInterLabel.Layout.Column = 1;
         app.frequencyRangeInterLabel.HorizontalAlignment = 'right';
 
-        app.frequencyRangeInter1 = uieditfield(p, 'numeric');
-        app.frequencyRangeInter1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.frequencyRangeInter1.FontColor = fontColor;
-        app.frequencyRangeInter1.BackgroundColor = darkBackgroundColor;
+        app.frequencyRangeInter1 = uieditfield(p, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Placeholder', 'fi1', ...
+            'Tooltip', {'Frequency range to apply the intermediary time transform (if different from time range)'});
         app.frequencyRangeInter1.Layout.Column = 2;
         app.frequencyRangeInter1.Layout.Row = 9;
-        app.frequencyRangeInter1.Tooltip = {'Frequency range to apply the intermediary time transformation (if different from time range)'};
-        app.frequencyRangeInter1.Placeholder = 'fi1';
 
-        app.frequencyRangeInter2 = uieditfield(p, 'numeric');
-        app.frequencyRangeInter2.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.frequencyRangeInter2.FontColor = fontColor;
-        app.frequencyRangeInter2.BackgroundColor = darkBackgroundColor;
+        app.frequencyRangeInter2 = uieditfield(p, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Placeholder', 'fi2', ...
+            'Tooltip', {'Frequency range to apply the intermediary time transform (if different from time range)'});
         app.frequencyRangeInter2.Layout.Column = 3;
         app.frequencyRangeInter2.Layout.Row = 9;
-        app.frequencyRangeInter2.Tooltip = {'Frequency range to apply the intermediary time transformation (if different from time range)'};
-        app.frequencyRangeInter2.Placeholder = 'fi2';
 
         app.indexRangeLabel = uilabel(p);
         app.indexRangeLabel.FontColor = fontColor;
@@ -1262,17 +1284,23 @@ methods (Access = private)
         app.indexRangeLabel.Layout.Row = 10;
         app.indexRangeLabel.HorizontalAlignment = 'right';
 
-        app.indexRange1 = uieditfield(p, 'numeric');
-        app.indexRange1.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.indexRange1.FontColor = fontColor;
-        app.indexRange1.BackgroundColor = darkBackgroundColor;
+        app.indexRange1 = uieditfield(p, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Placeholder', 'i1', ...
+            'Tooltip', {'Index range to apply the transform (if different from time range)'});
         app.indexRange1.Layout.Column = 2;
         app.indexRange1.Layout.Row = 10;
 
-        app.indexRange2 = uieditfield(p, 'numeric');
-        app.indexRange2.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.indexRange2.FontColor = fontColor;
-        app.indexRange2.BackgroundColor = darkBackgroundColor;
+        app.indexRange2 = uieditfield(p, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Placeholder', 'i2', ...
+            'Tooltip', {'Index range to apply the transform (if different from time range)'});
         app.indexRange2.Layout.Column = 3;
         app.indexRange2.Layout.Row = 10;
 
@@ -1284,51 +1312,53 @@ methods (Access = private)
         app.flat_field_gwLabel.Layout.Column = 1;
         app.flat_field_gwLabel.Layout.Row = 11;
 
-        app.flat_field_gw = uieditfield(p, 'numeric');
-        app.flat_field_gw.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.flat_field_gw.FontColor = fontColor;
-        app.flat_field_gw.BackgroundColor = darkBackgroundColor;
-        app.flat_field_gw.Tooltip = {'flat_filed parameter to apply to some of the output images (gaussian width in pixels to divide the image to correct uneven illumination of images).'};
+        app.flat_field_gw = uieditfield(p, 'numeric', ...
+            'Limits', [0 Inf], ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Placeholder', 'fw', ...
+            'Tooltip', {'flat_filed parameter to apply to some of the output images (gaussian width in pixels to divide the image to correct uneven illumination of images).'});
         app.flat_field_gw.Layout.Column = 2;
         app.flat_field_gw.Layout.Row = 11;
 
-        app.flip_y = uicheckbox(p);
-        app.flip_y.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.flip_y.Tooltip = {'Flip the output image vertically'};
-        app.flip_y.Text = 'Flip y';
-        app.flip_y.FontColor = fontColor;
+        app.flip_y = uicheckbox(p, ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'Tooltip', {'Flip the output image vertically'}, ...
+            'Text', 'Flip y');
         app.flip_y.Layout.Column = 3;
         app.flip_y.Layout.Row = 12;
 
-        app.flip_x = uicheckbox(p);
-        app.flip_x.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.flip_x.Tooltip = {'Flip the output image horizontally'};
-        app.flip_x.Text = 'Flip x';
-        app.flip_x.FontColor = fontColor;
+        app.flip_x = uicheckbox(p, ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'Tooltip', {'Flip the output image horizontally'}, ...
+            'Text', 'Flip x');
         app.flip_x.Layout.Column = 2;
         app.flip_x.Layout.Row = 12;
 
-        app.square = uicheckbox(p);
-        app.square.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.square.Tooltip = {'Crop the output image to a square aspect ratio'};
-        app.square.Text = 'Square';
-        app.square.FontColor = fontColor;
+        app.square = uicheckbox(p, ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'Tooltip', {'Crop the output image to a square aspect ratio'}, ...
+            'Text', 'Square');
         app.square.Layout.Column = 1;
         app.square.Layout.Row = 12;
 
-        app.ImproveContrast = uicheckbox(p);
-        app.ImproveContrast.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.ImproveContrast.Tooltip = {'Improve the contrast by rescaling the previewed frame'};
-        app.ImproveContrast.Text = 'Improve contrast';
-        app.ImproveContrast.FontColor = fontColor;
+        app.ImproveContrast = uicheckbox(p, ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'Tooltip', {'Improve the contrast by rescaling the previewed frame'}, ...
+            'Text', 'Improve contrast');
         app.ImproveContrast.Layout.Column = 1;
         app.ImproveContrast.Layout.Row = 13;
 
-        app.CornerCompensation = uicheckbox(p);
-        app.CornerCompensation.ValueChangedFcn = createCallbackFcn(app, @refreshClass, true);
-        app.CornerCompensation.Tooltip = {'Substract the signal from the corner'};
-        app.CornerCompensation.Text = 'Corner compensation';
-        app.CornerCompensation.FontColor = fontColor;
+        app.CornerCompensation = uicheckbox(p, ...
+            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
+            'FontColor', fontColor, ...
+            'Tooltip', {'Substract the signal from the corner'}, ...
+            'Text', 'Corner compensation');
         app.CornerCompensation.Layout.Column = [2 3];
         app.CornerCompensation.Layout.Row = 13;
 
@@ -1337,21 +1367,23 @@ methods (Access = private)
         app.RenderPreviewLamp.Layout.Column = 1;
         app.RenderPreviewLamp.Layout.Row = 14;
 
-        app.RenderPreviewButton = uibutton(p, 'push');
-        app.RenderPreviewButton.ButtonPushedFcn = createCallbackFcn(app, @RenderPreviewButtonPushed, true);
-        app.RenderPreviewButton.BackgroundColor = grayButtonColor;
-        app.RenderPreviewButton.FontColor = fontColor;
+        app.RenderPreviewButton = uibutton(p, 'push', ...
+            'Text', 'Render preview', ...
+            'ButtonPushedFcn', createCallbackFcn(app, @RenderPreviewButtonPushed, true), ...
+            'Tooltip', {'Render the preview frame with the current parameters settings'}, ...
+            'BackgroundColor', renderButtonColor, ...
+            'FontColor', fontColor);
         app.RenderPreviewButton.Layout.Column = 2;
         app.RenderPreviewButton.Layout.Row = 14;
-        app.RenderPreviewButton.Text = 'Preview';
 
-        app.SavePreviewButton = uibutton(p, 'push');
-        app.SavePreviewButton.ButtonPushedFcn = createCallbackFcn(app, @SavePreviewButtonPushed, true);
-        app.SavePreviewButton.BackgroundColor = grayButtonColor;
-        app.SavePreviewButton.FontColor = fontColor;
+        app.SavePreviewButton = uibutton(p, 'push', ...
+            'Text', 'Save preview', ...
+            'ButtonPushedFcn', createCallbackFcn(app, @SavePreviewButtonPushed, true), ...
+            'Tooltip', {'Save the preview frame with the current parameters settings'}, ...
+            'BackgroundColor', grayButtonColor, ...
+            'FontColor', fontColor);
         app.SavePreviewButton.Layout.Column = 3;
         app.SavePreviewButton.Layout.Row = 14;
-        app.SavePreviewButton.Text = 'Save';
 
     end
 

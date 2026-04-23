@@ -134,7 +134,7 @@ methods (Static, Access = private)
         s(end + 1) = HDParamSchema.entry('spatialFilter', 'spatialFilter', 'checkbox', false);
         s(end + 1) = HDParamSchema.entry('spatialFilterRange1', 'spatialFilterRange1', 'numeric', 0);
         s(end + 1) = HDParamSchema.entry('spatialFilterRange2', 'spatialFilterRange2', 'numeric', 1);
-        s(end + 1) = HDParamSchema.entry('spatialTransformation', 'spatialTransformation', 'dropdown', 'Fresnel');
+        s(end + 1) = HDParamSchema.entry('spatialTransform', 'spatialTransform', 'dropdown', 'Fresnel');
         s(end + 1) = HDParamSchema.entry('spatialPropagation', 'spatialPropagation', 'numeric', 0);
         s(end + 1) = HDParamSchema.entry('PaddingNum', 'PaddingNum', 'numeric', 0);
         % SVD

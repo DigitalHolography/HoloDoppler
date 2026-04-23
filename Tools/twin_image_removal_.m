@@ -75,7 +75,7 @@ P_cam = P_cam_unwrapped - imgaussfilt(P_cam_unwrapped, 60);
 
 H1 = A_cam .* exp(1j * P_cam);
 
-if ParamChanged.spatialPropagation || ParamChanged.spatialTransformation || isempty(SpatialKernel)
+if ParamChanged.spatialPropagation || ParamChanged.spatialTransform || isempty(SpatialKernel)
     [NY, NX, ~] = size(H);
     SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, Params.spatialPropagation, Params.lambda, Params.ppx, Params.ppy, 0);
 end

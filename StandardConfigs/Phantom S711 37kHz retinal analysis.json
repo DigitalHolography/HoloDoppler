@@ -10,7 +10,7 @@
   ],
   "parforArg": 18,
   "imageRegistration": true,
-  "spatialTransformation": "Fresnel",
+  "spatialTransform": "Fresnel",
   "frequencyRange1": 6,
   "frequencyRange2": 18.3,
   "spatialFilter": false,

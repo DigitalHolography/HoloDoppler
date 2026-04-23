@@ -162,7 +162,7 @@ methods
 
         switch obj.file.ext
             case '.holo'
-                obj.params.spatialTransformation = 'Fresnel';
+                obj.params.spatialTransform = 'Fresnel';
 
                 if obj.reader.version >= holo_versionThreshold
                     obj.params.spatialPropagation = obj.reader.footer.compute_settings.image_rendering.propagation_distance;
@@ -179,7 +179,7 @@ methods
                 end
 
             case '.cine'
-                obj.params.spatialTransformation = 'Fresnel';
+                obj.params.spatialTransform = 'Fresnel';
                 obj.params.spatialPropagation = 1.13; % meters
         end
 
@@ -596,7 +596,7 @@ methods
             spatialKernel = generate_spatial_kernel( ...
                 obj.file.Nx, ...
                 obj.file.Ny, ...
-                p.spatialTransformation, ...
+                p.spatialTransform, ...
                 p.spatialPropagation, ...
                 p.lambda, p.ppx, p.ppy);
 

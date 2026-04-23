@@ -307,7 +307,7 @@ methods
 
         if isempty(FHin), return, end
 
-        isAngular = strcmp(Params.spatialTransformation, 'angular spectrum');
+        isAngular = strcmp(Params.spatialTransform, 'angular spectrum');
 
         if obj.FH_modulus_mean.is_selected
             m = mean(abs(FHin), 3);
