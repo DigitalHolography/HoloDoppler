@@ -50,20 +50,20 @@ methods (Static)
 
         % ---- Special handling for file‑dependent info ----
         if ~isempty(HD.file)
+            % image dimensions
             app.setWidgetValue('Nx', double(HD.file.Nx));
             app.setWidgetValue('Ny', double(HD.file.Ny));
 
+            % slider limits & value
             if isfield(HD.file, 'num_frames')
-
-                try
-                    app.positioninfileSlider.Limits = ...
-                        double([1 HD.file.num_frames - HD.params.batchSize + 1]);
-                    app.setWidgetValue('positioninfileSlider', double(HD.params.framePosition));
-                catch
+                newLimits = double([1, HD.file.num_frames - HD.params.batchSize + 1]);
+                % ensure at least [1 1]
+                if newLimits(2) < newLimits(1)
+                    newLimits(2) = newLimits(1);
                 end
-
+                app.setSliderLimits('positioninfileSlider', newLimits);
+                app.setWidgetValue('positioninfileSlider', double(HD.params.framePosition));
             end
-
         end
 
     end

@@ -370,24 +370,28 @@ methods (Access = private)
     end
 
     function fileList = buildDrawerFileList(obj)
-        % Build a cell array: {filePath, {paramsStruct}, configPath} for each entry.
+        % Build cell array: {filePath, {paramsStruct}, configPath}
         fileList = cell(size(obj.drawerList));
 
         for i = 1:length(obj.drawerList)
-            filePath = obj.drawerList{i};
-            [dirName, name] = fileparts(filePath);
-            configFile = fullfile(dirName, name, sprintf('%s_input_HD_params.json', name));
+            parentPath = obj.drawerList{i};
+            [~, name] = fileparts(parentPath);
+            configFile = fullfile(parentPath, sprintf('%s_input_HD_params.json', name));
 
             if isfile(configFile)
-                % Load the parameters (simple jsondecode)
-                fid = fopen(configFile, 'r');
-                raw = fread(fid, inf, '*char')';
-                fclose(fid);
-                params = jsondecode(raw);
-                fileList{i} = {filePath, {params}, configFile}; % config_list as cell
+
+                try
+                    fid = fopen(configFile, 'r');
+                    raw = fread(fid, inf, '*char')';
+                    fclose(fid);
+                    params = jsondecode(raw);
+                catch
+                    params = struct(); % empty struct if load fails
+                end
+
+                fileList{i} = {parentPath, {params}, configFile};
             else
-                % No config file – leave empty, but keep the path if needed later
-                fileList{i} = {filePath, {}, configFile};
+                fileList{i} = {parentPath, {}, configFile};
             end
 
         end
@@ -396,7 +400,7 @@ methods (Access = private)
 
     function renderVideos(obj)
         app = obj.MainApp;
-        fileList = obj.buildDrawerFileList();
+        fileList = obj.buildDrawerFileList(); % returns cell {filePath, {configStruct}, configPath}
 
         % Determine number of workers from the first valid config
         numWorkers = 0;
@@ -404,9 +408,13 @@ methods (Access = private)
         for i = 1:length(fileList)
 
             if ~isempty(fileList{i}) && ~isempty(fileList{i}{2})
-                firstParams = fileList{i}{2}{1};
-                numWorkers = firstParams.parforArg;
-                break;
+                candidate = fileList{i}{2}{1}; % first config struct
+
+                if isstruct(candidate) && isfield(candidate, 'parforArg')
+                    numWorkers = candidate.parforArg;
+                    break;
+                end
+
             end
 
         end

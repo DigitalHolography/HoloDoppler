@@ -244,8 +244,12 @@ methods
     end
 
     function setParams(obj, params)
-        % setParams  Load parameters from a struct, keeping only those defined in the schema.
-        %            Special handling for 'imageTypes' to validate against ImageTypeList.
+        % early exit if not a struct
+        if ~isstruct(params)
+            warning('HoloDopplerClass:setParams:notAStruct', ...
+            'setParams called with non‑struct input – ignoring.');
+            return
+        end
 
         % Get the full schema array (static method avoids instantiation)
         schemaArray = HDParamSchema.getFullSchema();
@@ -280,7 +284,17 @@ methods
         end
 
         closeFile = onCleanup(@() fclose(fid));
-        obj.setParams(jsondecode(fread(fid, inf, '*char')'));
+
+        raw = fread(fid, inf, '*char')';
+        decoded = jsondecode(raw);
+
+        if ~isstruct(decoded)
+            warning('HoloDopplerClass:loadParams:notAStruct', ...
+                'Config file "%s" does not contain a JSON object – ignoring.', path);
+            return;
+        end
+
+        obj.setParams(decoded);
     end
 
     function outputPath = saveParams(obj, filename, save_z)
@@ -447,9 +461,7 @@ methods
 
     function result_folder_path = VideoRendering(obj)
         %VideoRendering Construct the Video according to the current params
-        % Close the waitbar from any previous run if it still exists
-
-        p = obj.params; % to avoid too many obj.params in the code below
+        p = obj.params;
 
         if isempty(obj.reader)
             error("No file loaded")

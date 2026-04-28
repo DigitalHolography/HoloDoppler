@@ -1486,6 +1486,17 @@ methods (Access = public)
 
     end
 
+    function setSliderLimits(app, widgetName, limits)
+        % Set the Limits property of a slider widget.
+        % limits = [min max]
+        s = app.(widgetName);
+
+        if isa(s, 'matlab.ui.control.Slider')
+            s.Limits = double(limits);
+        end
+
+    end
+
     function delete(app)
         % Restore original MATLAB path before shutting down
         if ~isempty(app.OriginalPath)
