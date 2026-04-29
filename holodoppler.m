@@ -12,6 +12,8 @@ properties (Access = private)
 
     % ---- file selection panel (left column) ----
     FileselectionPanel matlab.ui.container.Panel
+    FileNameLabel matlab.ui.control.Label
+    FileNameField matlab.ui.control.EditField
 
     % ---- top grid menu ----
     mainParametersGrid matlab.ui.container.GridLayout
@@ -52,7 +54,6 @@ properties (Access = private)
     batchStride matlab.ui.control.NumericEditField
     refBatchSizeLabel matlab.ui.control.Label
     refBatchSize matlab.ui.control.NumericEditField
-    AutofocusFromRef matlab.ui.control.CheckBox
     imageRegistration matlab.ui.control.CheckBox
     registrationDiskLabel matlab.ui.control.Label
     registrationDiskRatio matlab.ui.control.NumericEditField
@@ -227,11 +228,13 @@ methods (Access = private)
             app.RenderPreviewButtonPushed();
             app.fileLoaded = 1;
             app.fileLoadedLamp.Color = [0 1 0];
+            app.FileNameField.Value = app.HD.file.name;
         catch ME
             MEdisp(ME);
             app.fileLoaded = 0;
             app.fileLoadedLamp.Color = [1 0 0];
             drawnow;
+            app.FileNameField.Value = '';
         end
 
         app.updateButtonStates();
@@ -522,7 +525,6 @@ methods (Access = private)
                             app.RefreshAppButton, ...
                             app.RenderPreviewButton, ...
                             app.AutofocusButton, ...
-                            app.AutofocusFromRef, ...
                             app.imageRegistration, ...
                             app.registrationDiskRatio, ...
                             app.positioninfileSlider, ...
@@ -559,7 +561,8 @@ methods (Access = private)
                             app.AdvancedButton, ...
                             app.LoadConfigButton, ...
                             app.ImproveContrast, ...
-                            app.CornerCompensation ...
+                            app.CornerCompensation, ...
+                            app.FileNameField, ...
                         };
 
         for k = 1:numel(fileControls)
@@ -683,8 +686,8 @@ methods (Access = private)
         app.FileselectionPanel.Layout.Row = [1 2];
         app.FileselectionPanel.Layout.Column = 1;
 
-        app.mainParametersGrid = uigridlayout(app.FileselectionPanel, [11 3], ...
-            'RowHeight', {'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', '1x', 'fit'}, ...
+        app.mainParametersGrid = uigridlayout(app.FileselectionPanel, [12 3], ...
+            'RowHeight', {'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', 'fit', '1x', 'fit'}, ...
             'ColumnWidth', {'fit', 'fit', 'fit'}, ...
             'Padding', [10 10 10 10], ...
             'RowSpacing', 5, ...
@@ -738,7 +741,7 @@ methods (Access = private)
         app.lambdaLabel.FontColor = fontColor;
         app.lambdaLabel.Tooltip = {'Laser''s wavelength for light propagation calculations in (m)'};
         app.lambdaLabel.Text = 'λ (m)';
-        app.lambdaLabel.Layout.Row = 3;
+        app.lambdaLabel.Layout.Row = 4;
         app.lambdaLabel.Layout.Column = 1;
         app.lambdaLabel.HorizontalAlignment = 'right';
 
@@ -748,14 +751,14 @@ methods (Access = private)
             'FontColor', fontColor, ...
             'BackgroundColor', darkBackgroundColor, ...
             'Tooltip', {'Laser wavelength in nanometers'});
-        app.lambda.Layout.Row = 3;
+        app.lambda.Layout.Row = 4;
         app.lambda.Layout.Column = 2;
 
         app.fsLabel = uilabel(app.mainParametersGrid);
         app.fsLabel.FontColor = fontColor;
         app.fsLabel.Tooltip = {'Sampling frequency in (kHz)'};
         app.fsLabel.Text = 'fs (kHz)';
-        app.fsLabel.Layout.Row = 4;
+        app.fsLabel.Layout.Row = 5;
         app.fsLabel.Layout.Column = 1;
         app.fsLabel.HorizontalAlignment = 'right';
 
@@ -765,14 +768,14 @@ methods (Access = private)
             'FontColor', fontColor, ...
             'BackgroundColor', darkBackgroundColor, ...
             'Tooltip', {'Sampling frequency in (kHz)'});
-        app.fs.Layout.Row = 4;
+        app.fs.Layout.Row = 5;
         app.fs.Layout.Column = 2;
 
         app.pixelPitchLabel = uilabel(app.mainParametersGrid);
         app.pixelPitchLabel.FontColor = fontColor;
         app.pixelPitchLabel.Tooltip = {'Camera pixel pitch (distance between spatial sampling points) in (m)'};
         app.pixelPitchLabel.Text = 'Pixel pitch (m)';
-        app.pixelPitchLabel.Layout.Row = 5;
+        app.pixelPitchLabel.Layout.Row = 6;
         app.pixelPitchLabel.Layout.Column = 1;
         app.pixelPitchLabel.HorizontalAlignment = 'right';
 
@@ -781,7 +784,7 @@ methods (Access = private)
             'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
             'FontColor', fontColor, ...
             'BackgroundColor', darkBackgroundColor);
-        app.ppx.Layout.Row = 5;
+        app.ppx.Layout.Row = 6;
         app.ppx.Layout.Column = 2;
 
         app.ppy = uieditfield(app.mainParametersGrid, 'numeric', ...
@@ -789,14 +792,14 @@ methods (Access = private)
             'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
             'FontColor', fontColor, ...
             'BackgroundColor', darkBackgroundColor);
-        app.ppy.Layout.Row = 5;
+        app.ppy.Layout.Row = 6;
         app.ppy.Layout.Column = 3;
 
         app.imageSizeLabel = uilabel(app.mainParametersGrid);
         app.imageSizeLabel.FontColor = fontColor;
         app.imageSizeLabel.Tooltip = {'Size of the recorded interferograms in pixels (width x height)'};
         app.imageSizeLabel.Text = 'Image size (px)';
-        app.imageSizeLabel.Layout.Row = 6;
+        app.imageSizeLabel.Layout.Row = 7;
         app.imageSizeLabel.Layout.Column = 1;
         app.imageSizeLabel.HorizontalAlignment = 'right';
 
@@ -806,7 +809,7 @@ methods (Access = private)
             'FontColor', fontColor, ...
             'BackgroundColor', darkBackgroundColor, ...
             'Tooltip', {'Width of the recorded interferograms'});
-        app.Nx.Layout.Row = 6;
+        app.Nx.Layout.Row = 7;
         app.Nx.Layout.Column = 2;
 
         app.Ny = uieditfield(app.mainParametersGrid, 'numeric', ...
@@ -815,14 +818,14 @@ methods (Access = private)
             'FontColor', fontColor, ...
             'BackgroundColor', darkBackgroundColor, ...
             'Tooltip', {'Height of the recorded interferograms'});
-        app.Ny.Layout.Row = 6;
+        app.Ny.Layout.Row = 7;
         app.Ny.Layout.Column = 3;
 
         app.numworkersSpinnerLabel = uilabel(app.mainParametersGrid);
         app.numworkersSpinnerLabel.FontColor = fontColor;
         app.numworkersSpinnerLabel.Tooltip = {'Number of worker used for the video rendering (depends of the working station)'};
         app.numworkersSpinnerLabel.Text = '# Workers';
-        app.numworkersSpinnerLabel.Layout.Row = 7;
+        app.numworkersSpinnerLabel.Layout.Row = 8;
         app.numworkersSpinnerLabel.Layout.Column = 1;
         app.numworkersSpinnerLabel.HorizontalAlignment = 'right';
 
@@ -835,13 +838,13 @@ methods (Access = private)
         app.parforArg.BackgroundColor = darkBackgroundColor;
         app.parforArg.Tooltip = {'Number of worker used for the video rendering (depends of the working station)'};
         app.parforArg.Value = 10;
-        app.parforArg.Layout.Row = 7;
+        app.parforArg.Layout.Row = 8;
         app.parforArg.Layout.Column = 2;
 
         app.positioninfileSliderLabel = uilabel(app.mainParametersGrid);
         app.positioninfileSliderLabel.FontColor = fontColor;
         app.positioninfileSliderLabel.Text = {'Position in file'};
-        app.positioninfileSliderLabel.Layout.Row = 8;
+        app.positioninfileSliderLabel.Layout.Row = 9;
         app.positioninfileSliderLabel.Layout.Column = 1;
         app.positioninfileSliderLabel.HorizontalAlignment = 'right';
 
@@ -851,13 +854,13 @@ methods (Access = private)
         app.positioninfileSlider.ValueChangedFcn = createCallbackFcn(app, @positioninfileSliderValueChanged, true);
         app.positioninfileSlider.MinorTicks = [0 0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4 0.45 0.5 0.55 0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95 1];
         app.positioninfileSlider.Tooltip = {'Change value to display a different video timestamp in the gui.'};
-        app.positioninfileSlider.Layout.Row = 8;
+        app.positioninfileSlider.Layout.Row = 9;
         app.positioninfileSlider.Layout.Column = [2 3];
 
         app.batchIndexLabel = uilabel(app.mainParametersGrid);
         app.batchIndexLabel.FontColor = fontColor;
         app.batchIndexLabel.Text = {'Batch index'};
-        app.batchIndexLabel.Layout.Row = 9;
+        app.batchIndexLabel.Layout.Row = 10;
         app.batchIndexLabel.Layout.Column = 1;
         app.batchIndexLabel.HorizontalAlignment = 'right';
 
@@ -868,7 +871,7 @@ methods (Access = private)
             'ValueDisplayFormat', '%.0f', ...
             'Limits', [1 Inf], ...
             'Tooltip', {'Current batch index based on the position in file and the batch stride (read-only)'});
-        app.batchIndexField.Layout.Row = 9;
+        app.batchIndexField.Layout.Row = 10;
         app.batchIndexField.Layout.Column = 2;
 
         app.framePosition = uieditfield(app.mainParametersGrid, 'numeric', ...
@@ -879,7 +882,7 @@ methods (Access = private)
             'FontColor', fontColor, ...
             'BackgroundColor', darkBackgroundColor, ...
             'Tooltip', {''});
-        app.framePosition.Layout.Row = 9;
+        app.framePosition.Layout.Row = 10;
         app.framePosition.Layout.Column = 3;
 
         % Column 11
@@ -890,7 +893,7 @@ methods (Access = private)
             'Tooltip', {'Advanced settings'}, ...
             'BackgroundColor', grayButtonColor, ...
             'FontColor', fontColor);
-        app.AdvancedButton.Layout.Row = 11;
+        app.AdvancedButton.Layout.Row = 12;
         app.AdvancedButton.Layout.Column = 1;
 
         app.RefreshAppButton = uibutton(app.mainParametersGrid, 'push', ...
@@ -899,8 +902,24 @@ methods (Access = private)
             'Tooltip', {'Refresh the app'}, ...
             'BackgroundColor', grayButtonColor, ...
             'FontColor', fontColor);
-        app.RefreshAppButton.Layout.Row = 11;
+        app.RefreshAppButton.Layout.Row = 12;
         app.RefreshAppButton.Layout.Column = 2;
+
+        app.FileNameLabel = uilabel(app.mainParametersGrid, ...
+            'Text', 'File name:', ...
+            'FontColor', fontColor, ...
+            'HorizontalAlignment', 'right');
+        app.FileNameLabel.Layout.Row = 3;
+        app.FileNameLabel.Layout.Column = 1;
+
+        app.FileNameField = uieditfield(app.mainParametersGrid, 'text', ...
+            'Editable', 'off', ...
+            'Value', '', ...
+            'FontColor', fontColor, ...
+            'BackgroundColor', darkBackgroundColor, ...
+            'Tooltip', {'Name of the currently loaded file'});
+        app.FileNameField.Layout.Row = 3;
+        app.FileNameField.Layout.Column = [2 3];
     end
 
     % -----------------------------------------------------------------------
@@ -917,7 +936,7 @@ methods (Access = private)
             'ForegroundColor', fontColor, ...
             'BorderType', 'line', ...
             'FontWeight', 'bold');
-        app.batchPanel.Layout.Row = 10;
+        app.batchPanel.Layout.Row = 11;
         app.batchPanel.Layout.Column = [1 3];
 
         app.batchGrid = uigridlayout(app.batchPanel, [10 3]);
@@ -1010,25 +1029,17 @@ methods (Access = private)
         app.refBatchSize.Layout.Column = 2;
 
         % Registration row 7 8 9 10
-        app.AutofocusFromRef = uicheckbox(p, ...
-            'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
-            'FontColor', fontColor, ...
-            'Tooltip', {'Activate frame to frame translation registration of images'}, ...
-            'Text', 'autofocus from ref');
-        app.AutofocusFromRef.Layout.Row = 6;
-        app.AutofocusFromRef.Layout.Column = 1;
-
         app.imageRegistration = uicheckbox(p, ...
             'ValueChangedFcn', createCallbackFcn(app, @registrationCheckBoxValueChanged, true), ...
             'FontColor', fontColor, ...
             'Tooltip', {'Activate frame to frame translation registration of images'}, ...
-            'Text', 'image registration');
+            'Text', 'Image registration');
         app.imageRegistration.Layout.Row = 7;
         app.imageRegistration.Layout.Column = [1 2];
 
         app.registrationDiskLabel = uilabel(p);
         app.registrationDiskLabel.FontColor = fontColor;
-        app.registrationDiskLabel.Layout.Row = 9;
+        app.registrationDiskLabel.Layout.Row = 8;
         app.registrationDiskLabel.Layout.Column = 1;
         app.registrationDiskLabel.Text = 'Registration disk ratio';
         app.registrationDiskLabel.HorizontalAlignment = 'right';
@@ -1039,7 +1050,7 @@ methods (Access = private)
             'FontColor', fontColor, ...
             'BackgroundColor', darkBackgroundColor, ...
             'Tooltip', {'Size of a disk centered on the images used to compute the registration shifts (0 is empty and 1 is a disk of the maximum dimension).'});
-        app.registrationDiskRatio.Layout.Row = 9;
+        app.registrationDiskRatio.Layout.Row = 8;
         app.registrationDiskRatio.Layout.Column = 2;
 
     end

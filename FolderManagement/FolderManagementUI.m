@@ -421,6 +421,16 @@ methods (Access = private)
 
         if numWorkers > 0
 
+            cluster = parcluster;
+            maxWorkers = cluster.NumWorkers;
+
+            if numWorkers > maxWorkers
+                warning('FolderManagementUI:parforArgExceedsMaxWorkers', ...
+                    'parforArg (%d) exceeds maximum allowed workers (%d). Using %d.', ...
+                    numWorkers, maxWorkers, maxWorkers);
+                numWorkers = maxWorkers;
+            end
+
             if isempty(app.HD.poolManager)
                 app.HD.poolManager = ParallelPoolManager(numWorkers);
             end

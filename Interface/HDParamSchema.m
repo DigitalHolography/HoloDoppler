@@ -61,9 +61,11 @@ methods (Static)
                 if newLimits(2) < newLimits(1)
                     newLimits(2) = newLimits(1);
                 end
+
                 app.setSliderLimits('positioninfileSlider', newLimits);
                 app.setWidgetValue('positioninfileSlider', double(HD.params.framePosition));
             end
+
         end
 
     end
@@ -127,7 +129,6 @@ methods (Static, Access = private)
         % registration
         s(end + 1) = HDParamSchema.entry('imageRegistration', 'imageRegistration', 'checkbox', false);
         s(end + 1) = HDParamSchema.entry('registrationDiskRatio', 'registrationDiskRatio', 'numeric', 0.8);
-        s(end + 1) = HDParamSchema.entry('applyautofocusfromref', 'AutofocusFromRef', 'checkbox', false);
         s(end + 1) = HDParamSchema.entry('autofocusRange1', 'autofocusRange1', 'numeric', 0);
         s(end + 1) = HDParamSchema.entry('autofocusRange2', 'autofocusRange2', 'numeric', 1);
         % spatial

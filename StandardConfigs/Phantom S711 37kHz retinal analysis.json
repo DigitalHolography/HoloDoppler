@@ -19,7 +19,6 @@
   "svdStride": 1,
   "timeTransform": "FFT",
   "flatfield_gw": 35,
-  "applyautofocusfromref": false,
   "refBatchSize": 512,
   "flip_y": false,
   "flip_x": false,

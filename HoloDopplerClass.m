@@ -501,6 +501,16 @@ methods
         % === Gestion optimisée du pool ===
         if p.parforArg > 0
 
+            cluster = parcluster;
+            maxWorkers = cluster.NumWorkers;
+
+            if p.parforArg > maxWorkers
+                warning('FolderManagementUI:parforArgExceedsMaxWorkers', ...
+                    'parforArg (%d) exceeds maximum allowed workers (%d). Using %d.', ...
+                    p.parforArg, maxWorkers, maxWorkers);
+                p.parforArg = maxWorkers;
+            end
+
             if isempty(obj.poolManager)
                 obj.poolManager = ParallelPoolManager(p.parforArg);
             end
@@ -564,11 +574,6 @@ methods
         view_ref = RenderingClass();
         view_ref.setFrames(obj.reader.read_frame_batch(p.refBatchSize, p.framePosition));
         view_ref.Render(p, p.imageTypes, cache_intermediate_results = false);
-
-        if p.applyautofocusfromref
-            z_opti = autofocus(view_ref, p); % update the z distance
-            p.spatialPropagation = z_opti;
-        end
 
         % 2) Then compute the video frames in batches, and update the registration
         % running average after each batch to speed up the convergence of the registration (especially for long videos)
