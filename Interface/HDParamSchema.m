@@ -125,7 +125,7 @@ methods (Static, Access = private)
         s(end + 1) = HDParamSchema.entry('first_frame', '', 'numeric', 1);
         s(end + 1) = HDParamSchema.entry('end_frame', '', 'numeric', Inf);
         % image types
-        s(end + 1) = HDParamSchema.entry('imageTypes', 'imageTypesListBox', 'listbox', {{'power_Doppler', 'moment_0', 'moment_1', 'moment_2'}});
+        s(end + 1) = HDParamSchema.entry('imageTypes', 'imageTypesListBox', 'listbox', {{'power_Doppler', 'moment_0', 'moment_1', 'moment_2', 'band_ratio'}});
         % registration
         s(end + 1) = HDParamSchema.entry('imageRegistration', 'imageRegistration', 'checkbox', false);
         s(end + 1) = HDParamSchema.entry('registrationDiskRatio', 'registrationDiskRatio', 'numeric', 0.8);
@@ -150,8 +150,8 @@ methods (Static, Access = private)
         s(end + 1) = HDParamSchema.entry('indexRange2', 'indexRange2', 'numeric', 100);
         % extra
         s(end + 1) = HDParamSchema.entry('frequencyRange_extra', '', 'numeric', -1);
-        s(end + 1) = HDParamSchema.entry('frequencyRangeInter1', 'frequencyRangeInter1', 'numeric', 7);
-        s(end + 1) = HDParamSchema.entry('frequencyRangeInter2', 'frequencyRangeInter2', 'numeric', 7);
+        s(end + 1) = HDParamSchema.entry('frequencyRangeBandRatio1', 'frequencyRangeBandRatio1', 'numeric', 3);
+        s(end + 1) = HDParamSchema.entry('frequencyRangeBandRatio2', 'frequencyRangeBandRatio2', 'numeric', 9);
         % post‑processing
         s(end + 1) = HDParamSchema.entry('flatfield_gw', 'flat_field_gw', 'numeric', 0);
         s(end + 1) = HDParamSchema.entry('flip_y', 'flip_y', 'checkbox', false);
@@ -161,7 +161,6 @@ methods (Static, Access = private)
         s(end + 1) = HDParamSchema.entry('CornerCompensation', 'CornerCompensation', 'checkbox', false);
         % advanced
         s(end + 1) = HDParamSchema.entry('phase_registration', 'phaseregistrationCheckBox', 'checkbox', false);
-        s(end + 1) = HDParamSchema.entry('rephasing', 'rephasingCheckBox', 'checkbox', false);
         s(end + 1) = HDParamSchema.entry('iterative_registration', 'iterativeregistrationCheckBox', 'checkbox', false);
         s(end + 1) = HDParamSchema.entry('show_ref', 'showrefCheckBox', 'checkbox', false);
         s(end + 1) = HDParamSchema.entry('bucketsRanges', '', 'numeric', []);

@@ -81,9 +81,9 @@ properties (Access = private)
     frequencyRangeLabel matlab.ui.control.Label
     frequencyRange1 matlab.ui.control.NumericEditField
     frequencyRange2 matlab.ui.control.NumericEditField
-    frequencyRangeInterLabel matlab.ui.control.Label
-    frequencyRangeInter1 matlab.ui.control.NumericEditField
-    frequencyRangeInter2 matlab.ui.control.NumericEditField
+    frequencyRangeBandRatioLabel matlab.ui.control.Label
+    frequencyRangeBandRatio1 matlab.ui.control.NumericEditField
+    frequencyRangeBandRatio2 matlab.ui.control.NumericEditField
     indexRangeLabel matlab.ui.control.Label
     indexRange1 matlab.ui.control.NumericEditField
     indexRange2 matlab.ui.control.NumericEditField
@@ -145,13 +145,14 @@ methods (Access = private)
         % Git info (branch + commit hash)
         gitInfo = '';
 
-        try
+        appRoot = fileparts(mfilename('fullpath'));
+
+        if exist(fullfile(appRoot, '.git'), 'dir')
             [~, branch] = system('git rev-parse --abbrev-ref HEAD');
             branch = strtrim(branch);
             [~, hash] = system('git rev-parse --short HEAD');
             hash = strtrim(hash);
             gitInfo = sprintf('Branch: %s | Commit: %s', branch, hash);
-        catch
         end
 
         app.HoloDopplerUIFigure.Name = versionStr;
@@ -549,8 +550,8 @@ methods (Access = private)
                             app.timeTransform, ...
                             app.frequencyRange1, ...
                             app.frequencyRange2, ...
-                            app.frequencyRangeInter1, ...
-                            app.frequencyRangeInter2, ...
+                            app.frequencyRangeBandRatio1, ...
+                            app.frequencyRangeBandRatio2, ...
                             app.indexRange1, ...
                             app.indexRange2, ...
                             app.flat_field_gw, ...
@@ -609,9 +610,9 @@ methods (Access = private)
         app.frequencyRangeLabel.Enable = useFreqRange;
         app.frequencyRange1.Enable = useFreqRange;
         app.frequencyRange2.Enable = useFreqRange;
-        app.frequencyRangeInterLabel.Enable = useFreqRange;
-        app.frequencyRangeInter1.Enable = useFreqRange;
-        app.frequencyRangeInter2.Enable = useFreqRange;
+        app.frequencyRangeBandRatioLabel.Enable = useFreqRange;
+        app.frequencyRangeBandRatio1.Enable = useFreqRange;
+        app.frequencyRangeBandRatio2.Enable = useFreqRange;
         app.indexRange1.Enable = ~useFreqRange;
         app.indexRange2.Enable = ~useFreqRange;
         app.indexRangeLabel.Enable = ~useFreqRange;
@@ -1261,32 +1262,32 @@ methods (Access = private)
         app.frequencyRange2.Layout.Column = 3;
         app.frequencyRange2.Layout.Row = 8;
 
-        app.frequencyRangeInterLabel = uilabel(p);
-        app.frequencyRangeInterLabel.FontColor = fontColor;
-        app.frequencyRangeInterLabel.Text = 'Inter freq range';
-        app.frequencyRangeInterLabel.Layout.Row = 9;
-        app.frequencyRangeInterLabel.Layout.Column = 1;
-        app.frequencyRangeInterLabel.HorizontalAlignment = 'right';
+        app.frequencyRangeBandRatioLabel = uilabel(p);
+        app.frequencyRangeBandRatioLabel.FontColor = fontColor;
+        app.frequencyRangeBandRatioLabel.Text = 'Band ratio range';
+        app.frequencyRangeBandRatioLabel.Layout.Row = 9;
+        app.frequencyRangeBandRatioLabel.Layout.Column = 1;
+        app.frequencyRangeBandRatioLabel.HorizontalAlignment = 'right';
 
-        app.frequencyRangeInter1 = uieditfield(p, 'numeric', ...
+        app.frequencyRangeBandRatio1 = uieditfield(p, 'numeric', ...
             'Limits', [0 Inf], ...
             'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
             'FontColor', fontColor, ...
             'BackgroundColor', darkBackgroundColor, ...
-            'Placeholder', 'fi1', ...
+            'Placeholder', 'fr1', ...
             'Tooltip', {'Frequency range to apply the intermediary time transform (if different from time range)'});
-        app.frequencyRangeInter1.Layout.Column = 2;
-        app.frequencyRangeInter1.Layout.Row = 9;
+        app.frequencyRangeBandRatio1.Layout.Column = 2;
+        app.frequencyRangeBandRatio1.Layout.Row = 9;
 
-        app.frequencyRangeInter2 = uieditfield(p, 'numeric', ...
+        app.frequencyRangeBandRatio2 = uieditfield(p, 'numeric', ...
             'Limits', [0 Inf], ...
             'ValueChangedFcn', createCallbackFcn(app, @refreshClass, true), ...
             'FontColor', fontColor, ...
             'BackgroundColor', darkBackgroundColor, ...
-            'Placeholder', 'fi2', ...
+            'Placeholder', 'fr2', ...
             'Tooltip', {'Frequency range to apply the intermediary time transform (if different from time range)'});
-        app.frequencyRangeInter2.Layout.Column = 3;
-        app.frequencyRangeInter2.Layout.Row = 9;
+        app.frequencyRangeBandRatio2.Layout.Column = 3;
+        app.frequencyRangeBandRatio2.Layout.Row = 9;
 
         app.indexRangeLabel = uilabel(p);
         app.indexRangeLabel.FontColor = fontColor;

@@ -6,7 +6,9 @@
     "power_Doppler",
     "moment_0",
     "moment_1",
-    "moment_2"
+    "moment_2",
+    "band_ratio",
+    "broadening"
   ],
   "parforArg": 18,
   "imageRegistration": true,
@@ -15,12 +17,14 @@
   "frequencyRange2": 18.3,
   "spatialFilter": false,
   "svd_filter": true,
-  "svdThreshold": 0,
+  "svdThreshold": 40,
   "svdStride": 1,
   "timeTransform": "FFT",
   "flatfield_gw": 35,
   "refBatchSize": 512,
   "flip_y": false,
-  "flip_x": false,
-  "square": true
+  "flip_x": true,
+  "square": true,
+  "frequencyRangeBandRatio1": 3,
+  "frequencyRangeBandRatio2": 9
 }
