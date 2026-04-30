@@ -400,15 +400,17 @@ methods (Access = private)
 
     function renderVideos(obj)
         app = obj.MainApp;
-        fileList = obj.buildDrawerFileList(); % returns cell {filePath, {configStruct}, configPath}
+        fileList = obj.buildDrawerFileList(); % {filePath, {configStruct}, configPath}
 
         % Determine number of workers from the first valid config
         numWorkers = 0;
+        cluster = parcluster;
+        maxWorkers = cluster.NumWorkers;
 
         for i = 1:length(fileList)
 
             if ~isempty(fileList{i}) && ~isempty(fileList{i}{2})
-                candidate = fileList{i}{2}{1}; % first config struct
+                candidate = fileList{i}{2}{1};
 
                 if isstruct(candidate) && isfield(candidate, 'parforArg')
                     numWorkers = candidate.parforArg;
@@ -421,42 +423,57 @@ methods (Access = private)
 
         if numWorkers > 0
 
-            cluster = parcluster;
-            maxWorkers = cluster.NumWorkers;
-
             if numWorkers > maxWorkers
                 warning('FolderManagementUI:parforArgExceedsMaxWorkers', ...
-                    'parforArg (%d) exceeds maximum allowed workers (%d). Using %d.', ...
+                    'parforArg (%d) exceeds max workers (%d). Using %d.', ...
                     numWorkers, maxWorkers, maxWorkers);
                 numWorkers = maxWorkers;
             end
 
-            if isempty(app.HD.poolManager)
-                app.HD.poolManager = ParallelPoolManager(numWorkers);
-            end
-
-            app.HD.poolManager.acquire();
-            cleanupPool = onCleanup(@() app.HD.poolManager.release());
-
-            pool = app.HD.poolManager.Pool;
-            fprintf("Processing %d files with %d workers ...\n", ...
-                length(fileList), pool.NumWorkers);
         else
-            fprintf("Processing %d files in serial mode...\n", length(fileList));
+            numWorkers = maxWorkers - 2;
         end
 
-        % === Traitement des fichiers ===
+        if isempty(app.HD.poolManager)
+            app.HD.poolManager = ParallelPoolManager(numWorkers);
+        end
+
+        app.HD.poolManager.acquire();
+        cleanupPool = onCleanup(@() app.HD.poolManager.release());
+
+        pool = app.HD.poolManager.Pool;
+        fprintf("Processing %d files with %d workers ...\n", ...
+            length(fileList), pool.NumWorkers);
+
+        % Load the default configuration once (empty struct if unavailable)
+        defaultConfig = loadDefaultConfig(obj);
+
+        % === File processing ===
         for i = 1:length(fileList)
             entry = fileList{i};
 
-            if ~isempty(entry) && ~isempty(entry{2})
+            if isempty(entry)
+                continue;
+            end
 
-                for j = 1:length(entry{2})
-                    app.HD.LoadFile(entry{1}, params = entry{2}{j});
-                    app.HD.VideoRendering();
-                    fprintf("Completed: %s [%d/%d]\n", entry{1}, j, length(entry{2}));
+            configs = entry{2}; % cell array of config structs (may be {})
+
+            % If no config file exists, use the default config
+            if isempty(configs)
+
+                if isempty(fieldnames(defaultConfig))
+                    warning('FolderManagementUI:noConfig', ...
+                        'No config for %s – and no default config available. Skipping.', entry{1});
+                    continue;
                 end
 
+                configs = {defaultConfig};
+            end
+
+            for j = 1:length(configs)
+                app.HD.LoadFile(entry{1}, params = configs{j});
+                app.HD.VideoRendering();
+                fprintf("Completed: %s [%d/%d]\n", entry{1}, j, length(configs));
             end
 
         end
@@ -479,6 +496,27 @@ methods (Access = private)
         end
 
         fprintf('Deleted %d config files for %d entries\n', n, length(obj.drawerList));
+    end
+
+    function params = loadDefaultConfig(obj)
+        % Try to load the standard default parameter file
+        try
+            % Use the same folder as in saveConfigs (relative to the class file)
+            defaultParamPath = fullfile('StandardConfigs', 'Phantom S711 37kHz retinal analysis.json');
+
+            if isfile(defaultParamPath)
+                fid = fopen(defaultParamPath, 'r');
+                raw = fread(fid, inf, '*char')';
+                fclose(fid);
+                params = jsondecode(raw);
+            else
+                params = struct();
+            end
+
+        catch
+            params = struct();
+        end
+
     end
 
 end
