@@ -696,6 +696,7 @@ methods
             mkdir(fullfile(result_folder_path, 'png'));
         end
 
+        % Save each image type
         for i = 1:numel(imageTypes)
             tmp = {obj.video.(imageTypes{i})};
             waitbar((i - 1) / N, h, sprintf("Saving %s", imageTypes{i}))
@@ -713,6 +714,7 @@ methods
 
                 generate_video(mat, result_folder_path, 'SH', export_raw = 1, temporalFilter = 2);
                 continue
+
             elseif strcmp(imageTypes{i}, 'buckets')
                 sz = size(tmp{1}.parameters.intervals_0);
                 sz(3) = length(tmp);
@@ -742,6 +744,7 @@ methods
                 end
 
                 continue
+
             elseif strcmp(imageTypes{i}, 'full_buckets')
                 sz = size(tmp{1}.parameters.SH_full);
                 numSlices = sz(3);
@@ -804,8 +807,8 @@ methods
                     generate_video(mat, result_folder_path, 'moment1', export_raw = 1, temporalFilter = 2, square = params.square);
                 elseif strcmp(imageTypes{i}, 'moment_2')
                     generate_video(mat, result_folder_path, 'moment2', export_raw = 1, temporalFilter = 2, square = params.square);
-                elseif strcmp(imageTypes{i}, 'energy_ratio')
-                    generate_video(mat, result_folder_path, 'energy_ratio', export_raw = 1, temporalFilter = 2, square = params.square);
+                elseif strcmp(imageTypes{i}, 'band_ratio')
+                    generate_video(mat, result_folder_path, 'band_ratio', export_raw = 1, temporalFilter = 2, square = params.square);
                 elseif strcmp(imageTypes{i}, 'power_Doppler')
                     generate_video(mat, result_folder_path, 'M0', temporalFilter = 2, square = params.square);
                 elseif strcmp(imageTypes{i}, 'broadening')
@@ -826,9 +829,6 @@ methods
                     generate_video(mat, result_folder_path, 'color_Doppler', square = params.square, enhance_contrast = true);
                 elseif strcmp(imageTypes{i}, 'color_band_ratio')
                     generate_video(mat, result_folder_path, 'color_band_ratio', substractFlash = false, ...
-                        square = params.square, enhance_contrast = false);
-                elseif strcmp(imageTypes{i}, 'band_ratio')
-                    generate_video(mat, result_folder_path, 'band_ratio', cornerNorm = 0, substractFlash = false, ...
                         square = params.square, enhance_contrast = false);
                 else
                     generate_video(mat, result_folder_path, strcat(imageTypes{i}), temporalFilter = 2, square = params.square);

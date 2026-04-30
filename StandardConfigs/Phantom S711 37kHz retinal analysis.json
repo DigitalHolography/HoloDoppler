@@ -10,7 +10,6 @@
     "band_ratio",
     "broadening"
   ],
-  "parforArg": 18,
   "imageRegistration": true,
   "spatialTransform": "Fresnel",
   "frequencyRange1": 6,

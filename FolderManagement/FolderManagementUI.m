@@ -179,7 +179,7 @@ methods (Access = private)
     % -----------------------------------------------------------------
 
     function selectFile(obj)
-        % Define the file filter: description and extensions
+        % Select a single .cine or .holo file.
         filters = { ...
                        '*.cine;*.holo', 'Supported Video Files (*.cine, *.holo)'; ...
                        '*.cine', 'Cine Files (*.cine)'; ...
@@ -204,7 +204,7 @@ methods (Access = private)
         [~, ~, ext] = fileparts(file);
 
         if ismember(ext, {'.cine', '.holo', '.h5'})
-            obj.drawerList{end + 1} = fullfile(path, file);
+            obj.addUniqueFile(fullfile(path, file));
         else
             uialert(obj.Figure, 'File must be .cine, .holo, .raw or .h5', 'Invalid File Type');
         end
@@ -214,6 +214,7 @@ methods (Access = private)
     end
 
     function selectCurrent(obj)
+        % Add the currently loaded file in the main application.
         app = obj.MainApp;
 
         if isempty(app.HD.file)
@@ -225,7 +226,7 @@ methods (Access = private)
         [~, ~, ext] = fileparts(filePath);
 
         if ismember(ext, {'.cine', '.holo'})
-            obj.drawerList{end + 1} = filePath;
+            obj.addUniqueFile(filePath);
         else
             uialert(obj.Figure, 'File must be .cine or .holo', 'Invalid File Type');
         end
@@ -235,6 +236,7 @@ methods (Access = private)
     end
 
     function selectCurrentFolder(obj)
+        % Add all supported files from the folder of the currently loaded file.
         app = obj.MainApp;
 
         if isempty(app.HD.file)
@@ -248,8 +250,7 @@ methods (Access = private)
     end
 
     function selectFolder(obj)
-        app = obj.MainApp;
-
+        % Let the user pick a folder and add all supported files.
         figureHandle = obj.Figure;
         figure(figureHandle);
 
@@ -266,11 +267,12 @@ methods (Access = private)
         if folder == 0, return; end
         obj.addFilesFromFolder(folder);
 
-        app.HD.drawer_list = obj.drawerList;
+        obj.MainApp.HD.drawer_list = obj.drawerList;
         obj.updateDisplay();
     end
 
     function addFilesFromFolder(obj, folder)
+        % Append all .cine / .holo files from a folder, avoiding duplicates.
         entries = dir(folder);
 
         for i = 1:numel(entries)
@@ -279,11 +281,19 @@ methods (Access = private)
                 [~, ~, ext] = fileparts(entries(i).name);
 
                 if ismember(ext, {'.cine', '.holo'})
-                    obj.drawerList{end + 1} = fullfile(folder, entries(i).name);
+                    obj.addUniqueFile(fullfile(folder, entries(i).name));
                 end
 
             end
 
+        end
+
+    end
+
+    function addUniqueFile(obj, fullFilePath)
+        % Add the file only if it is not already in the list.
+        if ~any(strcmp(obj.drawerList, fullFilePath))
+            obj.drawerList{end + 1} = fullFilePath;
         end
 
     end
@@ -294,7 +304,6 @@ methods (Access = private)
     end
 
     function saveToTxt(obj)
-
         figureHandle = obj.Figure;
         figure(figureHandle);
 
@@ -327,7 +336,7 @@ methods (Access = private)
                     [~, ~, ext] = fileparts(lines(i));
 
                     if ismember(ext, {'.cine', '.holo'})
-                        obj.drawerList{end + 1} = lines{i};
+                        obj.addUniqueFile(lines{i}); % avoid duplicates
                     end
 
                 catch e
@@ -343,40 +352,53 @@ methods (Access = private)
     end
 
     function saveConfigs(obj)
+        % Save/update the HoloDoppler parameter config for every file in the list.
         app = obj.MainApp;
         keepZ = obj.KeepZCheckbox.Value;
-        defaultParamPath = fullfile(fileparts(mfilename('fullpath')), 'StandardConfigs', ...
-        'Phantom S711 37kHz retinal analysis.json'); % use fullfile for robustness
+
+        % Determine the application root (one level above this class file)
+        appRoot = fileparts(fileparts(mfilename('fullpath')));
+        defaultParamPath = fullfile(appRoot, 'StandardConfigs', ...
+        'Phantom S711 37kHz retinal analysis.json');
 
         originalParams = app.HD.params;
 
         for i = 1:length(obj.drawerList)
             filePath = obj.drawerList{i};
             [dirName, name] = fileparts(filePath);
-            % New fixed location
             configFile = fullfile(dirName, name, sprintf('%s_input_HD_params.json', name));
 
-            if ~isfile(configFile) && isfile(defaultParamPath)
-                % No config yet → load default and save
-                app.HD.loadParams(defaultParamPath);
+            if ~isfile(configFile)
+
+                if isfile(defaultParamPath)
+                    app.HD.loadParams(defaultParamPath);
+                else
+                    warning('FolderManagementUI:saveConfigs:NoDefaultConfig', ...
+                        'Default config file "%s" not found. Skipping config creation for %s.', ...
+                        defaultParamPath, filePath);
+                    continue;
+                end
+
             end
 
-            % Save (overwrites existing or creates new)
             app.HD.saveParams(filePath, keepZ);
             fprintf('Saved config for: %s\n', filePath);
         end
 
+        % Restore the original parameters
         app.HD.params = originalParams;
     end
 
     function fileList = buildDrawerFileList(obj)
         % Build cell array: {filePath, {paramsStruct}, configPath}
+        % This method now uses the same config location as saveConfigs and LoadFile.
         fileList = cell(size(obj.drawerList));
 
         for i = 1:length(obj.drawerList)
-            parentPath = obj.drawerList{i};
-            [~, name] = fileparts(parentPath);
-            configFile = fullfile(parentPath, sprintf('%s_input_HD_params.json', name));
+            parentPath = obj.drawerList{i}; % full path to .cine/.holo
+            [parentDir, name] = fileparts(parentPath);
+            % Correct location: <parentDir>/<name>/<name>_input_HD_params.json
+            configFile = fullfile(parentDir, name, sprintf('%s_input_HD_params.json', name));
 
             if isfile(configFile)
 
@@ -421,7 +443,10 @@ methods (Access = private)
 
         end
 
-        if numWorkers > 0
+        % Safeguard: ensure at least 1 worker and not exceeding pool maximum
+        if numWorkers <= 0
+            numWorkers = max(1, maxWorkers - 2);
+        else
 
             if numWorkers > maxWorkers
                 warning('FolderManagementUI:parforArgExceedsMaxWorkers', ...
@@ -430,8 +455,6 @@ methods (Access = private)
                 numWorkers = maxWorkers;
             end
 
-        else
-            numWorkers = maxWorkers - 2;
         end
 
         if isempty(app.HD.poolManager)
@@ -478,6 +501,9 @@ methods (Access = private)
 
         end
 
+        % NOTE: At this point the main application will be pointing to the last file.
+        % If you want to restore the original file state, consider storing it before
+        % the loop and restoring it afterwards.
     end
 
     function deleteAllConfigs(obj)
@@ -499,10 +525,12 @@ methods (Access = private)
     end
 
     function params = loadDefaultConfig(obj)
-        % Try to load the standard default parameter file
+        % Try to load the standard default parameter file.
+        % Uses the application root (one level above FolderManagement).
         try
-            % Use the same folder as in saveConfigs (relative to the class file)
-            defaultParamPath = fullfile('StandardConfigs', 'Phantom S711 37kHz retinal analysis.json');
+            appRoot = fileparts(fileparts(mfilename('fullpath')));
+            defaultParamPath = fullfile(appRoot, 'StandardConfigs', ...
+            'Phantom S711 37kHz retinal analysis.json');
 
             if isfile(defaultParamPath)
                 fid = fopen(defaultParamPath, 'r');
