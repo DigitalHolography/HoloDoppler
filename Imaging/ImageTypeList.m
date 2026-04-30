@@ -191,7 +191,7 @@ methods
             largeMask = repmat(outsideMask, [1 1 batchSize]);
             SH_outside = SH_mod;
             SH_outside(~largeMask) = NaN;
-            SH_mod = SH_mod - mean(SH_outside, [1 2], 'omitnan');
+            SH_mod = SH_mod ./ mean(SH_outside, [1 2], 'omitnan');
         end
 
         % --- Power Doppler variants ------------------------------------

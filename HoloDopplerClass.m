@@ -804,8 +804,8 @@ methods
                     generate_video(mat, result_folder_path, 'moment1', export_raw = 1, temporalFilter = 2, square = params.square);
                 elseif strcmp(imageTypes{i}, 'moment_2')
                     generate_video(mat, result_folder_path, 'moment2', export_raw = 1, temporalFilter = 2, square = params.square);
-                elseif strcmp(imageTypes{i}, 'energy_ratio_type')
-                    generate_video(mat, result_folder_path, 'energy_ratio_type', export_raw = 1, temporalFilter = 2, square = params.square);
+                elseif strcmp(imageTypes{i}, 'energy_ratio')
+                    generate_video(mat, result_folder_path, 'energy_ratio', export_raw = 1, temporalFilter = 2, square = params.square);
                 elseif strcmp(imageTypes{i}, 'power_Doppler')
                     generate_video(mat, result_folder_path, 'M0', temporalFilter = 2, square = params.square);
                 elseif strcmp(imageTypes{i}, 'broadening')
