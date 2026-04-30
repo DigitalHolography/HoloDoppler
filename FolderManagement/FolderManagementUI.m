@@ -4,6 +4,8 @@ classdef FolderManagementUI < handle
 %   FM = FolderManagementUI(APP) creates a non-modal figure that allows
 %   managing a list of .cine/.holo files and their rendering configurations.
 %   APP is the main HoloDoppler application object.
+%
+%   Each file in the list has exactly one associated configuration.
 
 properties (Access = private)
     MainApp % Reference to the main HoloDoppler app
@@ -190,7 +192,6 @@ methods (Access = private)
         figure(obj.Figure);
 
         if ~isempty(obj.drawerList)
-            % Start in the folder of the last file in the list
             startFolder = fileparts(obj.drawerList{end});
             [file, path] = uigetfile(filters, 'Select File', startFolder);
         else
@@ -356,7 +357,7 @@ methods (Access = private)
         app = obj.MainApp;
         keepZ = obj.KeepZCheckbox.Value;
 
-        % Determine the application root (one level above this class file)
+        % Application root is one level above this class file
         appRoot = fileparts(fileparts(mfilename('fullpath')));
         defaultParamPath = fullfile(appRoot, 'StandardConfigs', ...
         'Phantom S711 37kHz retinal analysis.json');
@@ -385,19 +386,18 @@ methods (Access = private)
             fprintf('Saved config for: %s\n', filePath);
         end
 
-        % Restore the original parameters
+        % Restore original parameters
         app.HD.params = originalParams;
     end
 
     function fileList = buildDrawerFileList(obj)
-        % Build cell array: {filePath, {paramsStruct}, configPath}
-        % This method now uses the same config location as saveConfigs and LoadFile.
-        fileList = cell(size(obj.drawerList));
+        % Build cell array: {filePath, paramsStruct, configPath}
+        % Each file now has exactly one configuration.
+        fileList = cell(length(obj.drawerList), 3);
 
         for i = 1:length(obj.drawerList)
             parentPath = obj.drawerList{i}; % full path to .cine/.holo
             [parentDir, name] = fileparts(parentPath);
-            % Correct location: <parentDir>/<name>/<name>_input_HD_params.json
             configFile = fullfile(parentDir, name, sprintf('%s_input_HD_params.json', name));
 
             if isfile(configFile)
@@ -408,12 +408,16 @@ methods (Access = private)
                     fclose(fid);
                     params = jsondecode(raw);
                 catch
-                    params = struct(); % empty struct if load fails
+                    params = struct(); % empty if load fails
                 end
 
-                fileList{i} = {parentPath, {params}, configFile};
+                fileList{i, 1} = parentPath;
+                fileList{i, 2} = params;
+                fileList{i, 3} = configFile;
             else
-                fileList{i} = {parentPath, {}, configFile};
+                fileList{i, 1} = parentPath;
+                fileList{i, 2} = struct();
+                fileList{i, 3} = configFile;
             end
 
         end
@@ -422,20 +426,20 @@ methods (Access = private)
 
     function renderVideos(obj)
         app = obj.MainApp;
-        fileList = obj.buildDrawerFileList(); % {filePath, {configStruct}, configPath}
+        fileList = obj.buildDrawerFileList(); % {filePath, paramsStruct, configPath}
 
-        % Determine number of workers from the first valid config
+        % Determine number of workers from the first available config
         numWorkers = 0;
         cluster = parcluster;
         maxWorkers = cluster.NumWorkers;
 
-        for i = 1:length(fileList)
+        for i = 1:size(fileList, 1)
 
-            if ~isempty(fileList{i}) && ~isempty(fileList{i}{2})
-                candidate = fileList{i}{2}{1};
+            if ~isempty(fileList{i, 2})
+                params = fileList{i, 2};
 
-                if isstruct(candidate) && isfield(candidate, 'parforArg')
-                    numWorkers = candidate.parforArg;
+                if isfield(params, 'parforArg')
+                    numWorkers = params.parforArg;
                     break;
                 end
 
@@ -466,44 +470,35 @@ methods (Access = private)
 
         pool = app.HD.poolManager.Pool;
         fprintf("Processing %d files with %d workers ...\n", ...
-            length(fileList), pool.NumWorkers);
+            size(fileList, 1), pool.NumWorkers);
 
-        % Load the default configuration once (empty struct if unavailable)
+        % Load the default configuration (empty struct if unavailable)
         defaultConfig = loadDefaultConfig(obj);
 
         % === File processing ===
-        for i = 1:length(fileList)
-            entry = fileList{i};
+        for i = 1:size(fileList, 1)
+            filePath = fileList{i, 1};
+            params = fileList{i, 2};
 
-            if isempty(entry)
-                continue;
-            end
-
-            configs = entry{2}; % cell array of config structs (may be {})
-
-            % If no config file exists, use the default config
-            if isempty(configs)
+            if isempty(params) || isempty(fieldnames(params))
 
                 if isempty(fieldnames(defaultConfig))
                     warning('FolderManagementUI:noConfig', ...
-                        'No config for %s – and no default config available. Skipping.', entry{1});
+                        'No config for %s – and no default config available. Skipping.', filePath);
                     continue;
                 end
 
-                configs = {defaultConfig};
+                params = defaultConfig;
             end
 
-            for j = 1:length(configs)
-                app.HD.LoadFile(entry{1}, params = configs{j});
-                app.HD.VideoRendering();
-                fprintf("Completed: %s [%d/%d]\n", entry{1}, j, length(configs));
-            end
-
+            % Use the single configuration for this file
+            app.HD.LoadFile(filePath, params = params);
+            app.HD.VideoRendering();
+            fprintf("Completed: %s\n", filePath);
         end
 
-        % NOTE: At this point the main application will be pointing to the last file.
-        % If you want to restore the original file state, consider storing it before
-        % the loop and restoring it afterwards.
+        % NOTE: After this loop the main application points to the last rendered file.
+        % Consider saving and restoring the original state if needed.
     end
 
     function deleteAllConfigs(obj)
@@ -524,8 +519,8 @@ methods (Access = private)
         fprintf('Deleted %d config files for %d entries\n', n, length(obj.drawerList));
     end
 
-    function params = loadDefaultConfig(obj)
-        % Try to load the standard default parameter file.
+    function params = loadDefaultConfig(~)
+        % Load the standard default parameter file.
         % Uses the application root (one level above FolderManagement).
         try
             appRoot = fileparts(fileparts(mfilename('fullpath')));

@@ -1,22 +1,26 @@
 classdef HoloDopplerClass < handle
-% Main class replacing the app
+% Main application class – GPU‑accelerated video rendering.
+%
+%   HD = HoloDopplerClass() creates an instance with GPU enabled if
+%   a compatible GPU is present. To force CPU‑only:
+%       HD.useGPU = false;
 
 properties
-    file % stores main file information : path, camera pixel pitches, dimensions, wavelength used, frame rate etc
-    drawer_list cell % stores the path of files to be processed % TODO remove
-    reader % class obj to read new parts of the file
+    file % file info struct
+    drawer_list cell
+    reader
     render % RenderingClass
-    params % rendering parameters
-    video % ImageTypeList % store all the output images classes rendered at the end of a cycle
-    running_averages %  cumulative average over time
-    registration % store the shifts calculated to register images at the end (so that it can be reversed)
-    poolManager % ParallelPoolManager object to manage the parallel pool for the video rendering
+    params % parameters struct
+    video % ImageTypeList array (one per batch)
+    running_averages
+    registration
+    poolManager
+    useGPU (1, 1) logical = true % set to false to force CPU
 end
 
 methods
 
     function obj = HoloDopplerClass()
-        %HoloDopplerClass Construct an instance of this class
 
         if ~isdeployed
             root = fileparts(mfilename('fullpath'));
@@ -33,7 +37,27 @@ methods
         end
 
         obj.render = RenderingClass();
-        set(0, 'defaultfigurecolor', [1 1 1]); % background of figures in white
+        set(0, 'defaultfigurecolor', [1 1 1]);
+
+        % Check GPU availability correctly
+        if obj.useGPU
+
+            try
+
+                if ~parallel.gpu.GPUDevice.isAvailable()
+                    warning('HoloDopplerClass:GPUNotAvailable', ...
+                    'GPU requested but not available. Using CPU.');
+                    obj.useGPU = false;
+                end
+
+            catch % parallel computing toolbox may not be installed
+                warning('HoloDopplerClass:NoParallelToolbox', ...
+                'Parallel Computing Toolbox not found. Using CPU.');
+                obj.useGPU = false;
+            end
+
+        end
+
     end
 
     function LoadFile(obj, file_path, opt)
@@ -41,12 +65,10 @@ methods
         arguments
             obj
             file_path
-            opt.params = []; % Optional parameters to force in case the default behavior (finding existing in the folder is not ideal)
+            opt.params = [];
         end
 
-        % LoadFile
-
-        % 0) Reset the reader and the file
+        % 0) Reset
         obj.reader = [];
         obj.file = [];
         obj.render = RenderingClass();
@@ -54,14 +76,13 @@ methods
         obj.running_averages = RunningAveragesHolder();
         obj.registration = [];
 
-        % file_path path of the file .holo or .cine
         [dir, name, ext] = fileparts(file_path);
         obj.file.path = file_path;
         obj.file.dir = dir;
         obj.file.name = name;
         obj.file.ext = ext;
 
-        %1 ) Metadata extraction
+        % 1) Metadata extraction
 
         switch ext
             case '.holo'
@@ -150,12 +171,11 @@ methods
                 fprintf(2, "Unsupported file extension: %s\n", ext)
         end
 
-        % 2) Rendering parameters initialization
-        obj.params.lambda = obj.file.lambda; % wavelength
-        obj.params.fs = obj.file.fs; % camera frame rate
-        obj.params.ppx = obj.file.ppx; % pixel pitch of the camera
+        % 2) Initialise default parameters
+        obj.params.lambda = obj.file.lambda;
+        obj.params.fs = obj.file.fs;
+        obj.params.ppx = obj.file.ppx;
         obj.params.ppy = obj.file.ppy;
-
         obj.params.num_frames = obj.file.num_frames;
         obj.params.Nx = obj.file.Nx;
         obj.params.Ny = obj.file.Ny;
@@ -225,12 +245,11 @@ methods
             obj.loadParams(preview_params_path);
         end
 
-        if ~isempty(opt.params) % if optional parameters were supplied, they take precedence
+        if ~isempty(opt.params)
             obj.setParams(opt.params);
         end
 
-        % 4) Add last params from the default init
-
+        % Fill missing fields from LastParams
         fields = fieldnames(obj.render.LastParams);
 
         for i = 1:numel(fields)
@@ -460,12 +479,8 @@ methods
     end
 
     function result_folder_path = VideoRendering(obj)
-        %VideoRendering Construct the Video according to the current params
         p = obj.params;
-
-        if isempty(obj.reader)
-            error("No file loaded")
-        end
+        if isempty(obj.reader), error("No file loaded"); end
 
         if isempty(p.first_frame)
             first_frame = 1;
@@ -473,12 +488,10 @@ methods
             first_frame = p.first_frame;
         end
 
-        if isempty(p.end_frame)
-            end_frame = obj.file.num_frames;
-        elseif p.end_frame > obj.file.num_frames
+        if isempty(p.end_frame) || p.end_frame <= 0
             end_frame = obj.file.num_frames;
         else
-            end_frame = p.end_frame;
+            end_frame = min(p.end_frame, obj.file.num_frames);
         end
 
         num_batches = floor((end_frame - first_frame + 1) / p.batchStride);
@@ -487,27 +500,31 @@ methods
             num_batches = num_batches - 1;
         end
 
-        % Command Message
-        fprintf("==============================\n");
-        fprintf("Starting Video Rendering\n");
-        fprintf("File: %s\n", obj.file.path);
-        fprintf("Rendering %d frames.\n", num_batches);
-        fprintf("==============================\n");
-
-        if num_batches == 0
-            return
+        if num_batches <= 0
+            fprintf('No batches to process.\n');
+            return;
         end
 
-        % === Gestion optimisée du pool ===
-        if p.parforArg > 0
+        fprintf("==============================\n");
+        fprintf("Starting Video Rendering (GPU=%d)\n", obj.useGPU);
+        fprintf("File: %s\n", obj.file.path);
+        fprintf("Rendering %d frames, %d batches\n", num_batches * p.batchStride, num_batches);
+        fprintf("==============================\n");
 
+        % Precompute spatial kernel
+        kernel = single(generate_spatial_kernel( ...
+            obj.file.Nx, obj.file.Ny, ...
+            p.spatialTransform, p.spatialPropagation, ...
+            p.lambda, p.ppx, p.ppy));
+        if obj.useGPU, kernel = gpuArray(kernel); end
+
+        % Pool setup
+        if p.parforArg > 0
             cluster = parcluster;
             maxWorkers = cluster.NumWorkers;
 
             if p.parforArg > maxWorkers
-                warning('FolderManagementUI:parforArgExceedsMaxWorkers', ...
-                    'parforArg (%d) exceeds maximum allowed workers (%d). Using %d.', ...
-                    p.parforArg, maxWorkers, maxWorkers);
+                warning('Using max workers %d instead of %d', maxWorkers, p.parforArg);
                 p.parforArg = maxWorkers;
             end
 
@@ -517,142 +534,149 @@ methods
 
             obj.poolManager.acquire();
             cleanupPool = onCleanup(@() obj.poolManager.release());
-            pool = obj.poolManager.Pool;
-            numWorkers = pool.NumWorkers;
+            numWorkers = obj.poolManager.Pool.NumWorkers;
         else
             numWorkers = 0;
         end
 
-        fprintf("Using %d workers for parallel processing.\n", numWorkers);
+        fprintf("Using %d workers.\n", numWorkers);
 
-        % === Préparation des données ===
-        VideoRenderingTime = tic;
+        WAITBAR_STEP = 1;
+        h = waitbar(0, 'Initialising...');
+        progress = 0;
 
-        h = waitbar(0, 'Initializing...');
-        N = double(num_batches); % CHANGÉ : num_batches au lieu de num_batches-1
-        progress = 1;
+        function update_waitbar(increment)
+            progress = progress + increment;
 
-        function update_waitbar(sig)
-            % signal table
-            % 0 => increment value
-            % -1 => reset for stage 1 (registration)
-            % -2 => reset for stage 2 (video_M0 computation)
-            switch sig
-                case 0
-
-                    if N > 0 % Protection contre division par zéro
-                        percent = round(progress / N * 100);
-                        msg = sprintf('Video rendering %d/%d (%d%%)', progress, N, percent);
-                        waitbar(progress / N, h, msg);
-                    end
-
-                    progress = progress + 1;
-                case -1
-                    waitbar(0, h, 'Registration computation... (0%)');
-                    progress = 1;
-                    disp('Registration computation...')
-                case -2
-                    waitbar(0, h, 'Video rendering... (0%)');
-                    progress = 1;
-                    disp('Video rendering...')
+            if mod(progress, WAITBAR_STEP) == 0 || progress == num_batches
+                waitbar(progress / num_batches, h, ...
+                    sprintf('Video rendering %d/%d (%d%%)', ...
+                    progress, num_batches, round(100 * progress / num_batches)));
             end
 
         end
 
-        % 1) First compute the reference for registration and autofocus if needed, and initialize the video storage
+        % --- Reference for registration (FIXED: isfield → isprop) ---
+        refPD = [];
 
-        % Waitbar update for registration computation
-        update_waitbar(-1);
-
-        if isempty(obj.video) || numel(obj.video) ~= num_batches
-            v(1, num_batches) = ImageTypeList();
-            obj.video = v; clear v;
-        end
-
-        obj.running_averages = RunningAveragesHolder(); %reset this here
-
-        view_ref = RenderingClass();
-        view_ref.setFrames(obj.reader.read_frame_batch(p.refBatchSize, p.framePosition));
-        view_ref.Render(p, p.imageTypes, cache_intermediate_results = false);
-
-        % 2) Then compute the video frames in batches, and update the registration
-        % running average after each batch to speed up the convergence of the registration (especially for long videos)
-
-        % Waitbar update for video rendering
-        update_waitbar(-2);
-
-        if p.parforArg == 0
-
-            for i = 1:(num_batches)
-                obj.render.setFrames(obj.reader.read_frame_batch(p.batchSize, (i - 1) * p.batchStride + first_frame));
-                obj.render.Render(p, p.imageTypes);
-                obj.video(i) = ImageTypeList();
-                obj.video(i).copy_from(obj.render.Output); % work around against handles
-                SH_PSD = calc_registration_from_views(obj.render, view_ref, p);
-                obj.running_averages.update(SH_PSD, i, p);
-
-                % update waitbar after each batch
-                update_waitbar(0);
+        if p.imageRegistration
+            refFrames = obj.reader.read_frame_batch(p.refBatchSize, p.framePosition);
+            if obj.useGPU, refFrames = gpuArray(single(refFrames)); end
+            refView = RenderingClass('precomputeSpatialKernel', kernel);
+            refView.setFrames(refFrames);
+            refView.Render(p, p.imageTypes, 'cache_intermediate_results', false);
+            % Use isprop instead of isfield for object
+            if any(strcmp(fieldnames(refView.Output), 'power_Doppler'))
+                refPD = single(refView.Output.power_Doppler.image);
+                if obj.useGPU, refPD = gpuArray(refPD); end
+                refPD = refPD ./ imgaussfilt(refPD, p.flatfield_gw);
+            else
+                warning('power_Doppler not selected, registration disabled.');
+                p.imageRegistration = false;
             end
 
-        else
+        end
 
+        % --- Main batch loop ---
+        batchResults = cell(1, num_batches);
+        regShifts = cell(1, num_batches);
+        tRendering = tic;
+
+        if numWorkers == 0 % serial
+
+            for i = 1:num_batches
+                [imgs, shift] = processBatch(obj, i, first_frame, p, kernel, refPD);
+                batchResults{i} = imgs;
+                if p.imageRegistration, regShifts{i} = shift; end
+                update_waitbar(1);
+            end
+
+        else % parallel
+            cKernel = parallel.pool.Constant(kernel);
             D = parallel.pool.DataQueue;
-            afterEach(D, @update_waitbar);
-            dq = parallel.pool.DataQueue;
+            afterEach(D, @(x) update_waitbar(x));
 
-            l_video = obj.video;
-            afterEach(dq, @(data) obj.running_averages.update(data{1}, data{2}, p));
-            l_reader = obj.reader; % reader used by all the workers (if all the file is loaded in RAM it is way faster)
-
-            % parameters
-            batchSize = p.batchSize;
-            batchStride = p.batchStride;
-            imageTypes = p.imageTypes;
-
-            spatialKernel = generate_spatial_kernel( ...
-                obj.file.Nx, ...
-                obj.file.Ny, ...
-                p.spatialTransform, ...
-                p.spatialPropagation, ...
-                p.lambda, p.ppx, p.ppy);
-
-            parfor (i = 1:num_batches, numWorkers) % Utiliser numWorkers du pool manager
-
-                l_view = RenderingClass(precomputeSpatialKernel = spatialKernel);
-                l_view.setFrames(l_reader.read_frame_batch(batchSize, (i - 1) * batchStride + first_frame));
-                l_view.Render(p, imageTypes, cache_intermediate_results = false);
-                l_video(i) = ImageTypeList();
-                l_video(i).copy_from(l_view.Output);
-                send(D, 0);
-                SH_PSD = calc_registration_from_views(l_view, view_ref, p);
-                send(dq, {SH_PSD, i});
-
+            parfor i = 1:num_batches
+                [imgs, shift] = processBatch(obj, i, first_frame, p, cKernel.Value, refPD);
+                batchResults{i} = imgs;
+                if p.imageRegistration, regShifts{i} = shift; end
+                send(D, 1);
             end
 
-            obj.video = l_video;
         end
 
         close(h);
+        fprintf('Rendering took %.2f s\n', toc(tRendering));
 
-        if p.imageRegistration
+        % --- Assemble results into ImageTypeList array ---
+        obj.video = ImageTypeList.empty(num_batches, 0);
 
-            if ismember('power_Doppler', p.imageTypes)
-                obj.CalculateRegistration();
-                obj.ApplyRegistration();
-            else
-                disp('You need power_Doppler for registration');
+        for i = 1:num_batches
+            obj.video(i) = ImageTypeList();
+            flds = fieldnames(batchResults{i});
+
+            for f = 1:numel(flds)
+                obj.video(i).(flds{f}).image = batchResults{i}.(flds{f});
             end
 
         end
 
-        fprintf("Video Rendering took : %f s\n", toc(VideoRenderingTime));
+        % --- Registration (only if enabled AND power_Doppler present) ---
+        if p.imageRegistration && any(strcmp(p.imageTypes, 'power_Doppler'))
+            obj.registration.shifts = cell2mat(regShifts); % 2×N
+            obj.ApplyRegistration();
+        end
 
-        % Save the video
+        % --- Save video (gathers GPU data to CPU) ---
         result_folder_path = obj.SaveVideo();
     end
 
+    function [outImages, shift] = processBatch(obj, batchIdx, first_frame, p, kernel, refPD)
+        frameIdx = first_frame + (batchIdx - 1) * p.batchStride;
+        frames = obj.reader.read_frame_batch(p.batchSize, frameIdx);
+
+        if obj.useGPU
+            frames = gpuArray(single(frames));
+        end
+
+        lr = RenderingClass('precomputeSpatialKernel', kernel);
+        lr.setFrames(frames);
+        lr.Render(p, p.imageTypes, 'cache_intermediate_results', false);
+
+        outImages = struct();
+
+        for j = 1:numel(p.imageTypes)
+            outImages.(p.imageTypes{j}) = lr.Output.(p.imageTypes{j}).image;
+        end
+
+        shift = [0; 0];
+
+        if p.imageRegistration && isfield(outImages, 'power_Doppler')
+            moving = outImages.power_Doppler;
+            moving = moving ./ imgaussfilt(moving, p.flatfield_gw);
+            shift = obj.computeRegistrationShift(refPD, moving, p.registrationDiskRatio);
+        end
+
+    end
+
     function result_folder_path = SaveVideo(obj, imageTypes, params)
+
+        if obj.useGPU
+
+            for i = 1:numel(obj.video)
+                flds = fieldnames(obj.video(i));
+
+                for f = 1:numel(flds)
+
+                    if isa(obj.video(i).(flds{f}).image, 'gpuArray')
+                        obj.video(i).(flds{f}).image = gather(obj.video(i).(flds{f}).image);
+                    end
+
+                end
+
+            end
+
+        end
 
         p = obj.params; % to avoid too many obj.params in the code below
 
@@ -762,7 +786,7 @@ methods
 
                 [~, output_dirname] = fileparts(result_folder_path);
                 output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
-                export_h5_video(fullfile(result_folder_path, 'raw', output_filename_h5), "SH_Slices", mat_);
+                export_h5_video(fullfile(result_folder_path, 'raw', output_filename_h5), "SH_Slices", single(mat_));
 
                 continue
 
@@ -849,7 +873,7 @@ methods
             try
                 [~, output_dirname] = fileparts(result_folder_path);
                 output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
-                export_h5_video(fullfile(result_folder_path, 'raw', output_filename_h5), "registration", obj.registration.shifts);
+                export_h5_video(fullfile(result_folder_path, 'raw', output_filename_h5), "registration", single(obj.registration.shifts));
             catch ME
                 MEdisp(ME);
                 disp("Error while saving the registration.")
@@ -912,52 +936,37 @@ methods
         fprintf("All done! Results saved in %s\n", result_folder_path);
     end
 
-    function CalculateRegistration(obj)
-        %RegisterVideo Register the current Video according to the current params
-        if isempty(obj.video)
-            error("No video rendered")
-        end
+    function shift = computeRegistrationShift(~, fixed, moving, diskRatio)
+        [ny, nx] = size(fixed);
 
-        num_batches = numel(obj.video);
-        obj.registration = struct('shifts', [], 'rotation', [], 'scale', []);
-
-        video_M0 = zeros(obj.file.Ny, obj.file.Nx, 1, num_batches);
-
-        for i = 1:num_batches
-
-            if not(isempty(obj.video(i).power_Doppler.image))
-                video_M0(:, :, 1, i) = obj.video(i).power_Doppler.image;
-            end
-
-        end
-
-        numY = size(video_M0, 1);
-        numX = size(video_M0, 2);
-
-        if obj.params.registrationDiskRatio > 0
-            disk_ratio = obj.params.registrationDiskRatio;
-            disk = diskMask(numY, numX, disk_ratio);
-
-            if size(disk, 1) ~= size(video_M0, 1)
-                disk = disk';
-            end
-
+        if diskRatio > 0
+            [X, Y] = meshgrid(1:nx, 1:ny);
+            cx = nx / 2; cy = ny / 2;
+            a = (nx / 2) * diskRatio; b = (ny / 2) * diskRatio;
+            mask = ((X - cx) / a) .^ 2 + ((Y - cy) / b) .^ 2 <= 1;
         else
-            disk = ones([numY, numX]);
+            mask = true(ny, nx);
         end
 
-        video_M0_reg = video_M0 .* disk - disk .* sum(video_M0 .* disk, [1, 2]) / nnz(disk); % minus the mean in the disk of each frame
-        video_M0_reg = video_M0_reg ./ (max(abs(video_M0_reg), [], [1, 2])); % rescaling each frame but keeps mean at zero
+        if isa(fixed, 'gpuArray')
+            mask = gpuArray(mask);
+        end
 
-        obj.render.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.framePosition));
-        obj.render.Render(obj.params, obj.params.imageTypes);
+        fixed = (fixed - mean(fixed(mask))) .* mask;
+        moving = (moving - mean(moving(mask))) .* mask;
+        fixed = fixed ./ max(abs(fixed(:)));
+        moving = moving ./ max(abs(moving(:)));
 
-        ref_img = obj.render.Output.power_Doppler.image;
+        cross = fft2(fixed) .* conj(fft2(moving));
+        cross = ifft2(cross ./ (abs(cross) +1e-12));
+        [~, idx] = max(abs(cross(:)));
+        [ky0, kx0] = ind2sub([ny, nx], idx);
 
-        ref_img = ref_img .* disk - disk .* sum(ref_img .* disk, [1, 2]) / nnz(disk); % minus the mean
-        ref_img = ref_img ./ (max(abs(ref_img), [], [1, 2])); % rescaling but keeps mean at zero
-
-        [~, obj.registration.shifts] = register_video_from_reference(video_M0_reg, ref_img);
+        shift_y = ky0 - 1;
+        shift_x = kx0 - 1;
+        if shift_y > ny / 2, shift_y = shift_y - ny; end
+        if shift_x > nx / 2, shift_x = shift_x - nx; end
+        shift =- [shift_y; shift_x];
     end
 
     function ApplyRegistration(obj)
@@ -1038,63 +1047,6 @@ methods
 
     end
 
-    function UndoRegistration(obj)
-
-        num_batches = numel(obj.video);
-
-        for j = 1:length(obj.params.imageTypes)
-
-            if ismember(obj.params.imageTypes{j}, {'broadening', 'fRMS', 'FH_modulus_mean', 'FH_arg_mean', 'SVD_cov', 'SVD_U'})
-                continue
-            end
-
-            if strcmp(obj.params.imageTypes{j}, 'SH') %SH extraction
-                sz = size(obj.video(1).SH.parameters.SH);
-                bs = sz(3);
-                ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
-
-                for i = 1:num_batches
-
-                    for m = 1:bs
-                        obj.video(i).('SH').parameters.SH(:, :, m) = circshift(obj.video(i).('SH').parameters.SH(:, :, m), - floor(obj.registration.shifts(:, i) .* ratio'));
-                    end
-
-                end
-
-                continue
-            elseif strcmp(obj.params.imageTypes{j}, 'buckets')
-                sz = size(obj.video(1).buckets.parameters.intervals_0);
-                numF = sz(4);
-                ratio = [sz(1) sz(2)] ./ size(obj.video(1).('power_Doppler').image);
-
-                for i = 1:num_batches
-
-                    for k = 1:numF
-                        obj.video(i).('buckets').parameters.intervals_0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_0(:, :, :, k), - floor(obj.registration.shifts(:, i) .* ratio'));
-                        obj.video(i).('buckets').parameters.intervals_1(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_1(:, :, :, k), - floor(obj.registration.shifts(:, i) .* ratio'));
-                        obj.video(i).('buckets').parameters.intervals_2(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.intervals_2(:, :, :, k), - floor(obj.registration.shifts(:, i) .* ratio'));
-                        obj.video(i).('buckets').parameters.M0(:, :, :, k) = circshift(obj.video(i).('buckets').parameters.M0(:, :, :, k), - floor(obj.registration.shifts(:, i) .* ratio'));
-                    end
-
-                end
-
-                continue
-            end
-
-            try % in case of not the same image size
-                ratio = [size(obj.video(1).(obj.params.imageTypes{j}).image, 1) size(obj.video(1).(obj.params.imageTypes{j}).image, 2)] ./ size(obj.video(1).('power_Doppler').image);
-            catch
-                ratio = [1 1];
-            end
-
-            for i = 1:num_batches
-                obj.video(i).(obj.params.imageTypes{j}).image = circshift(obj.video(i).(obj.params.imageTypes{j}).image, - floor(obj.registration.shifts(:, i) .* ratio'));
-            end
-
-        end
-
-    end
-
     function show_SH(obj)
 
         try
@@ -1103,12 +1055,6 @@ methods
         catch ME
             MEdisp(ME);
         end
-
-    end
-
-    function SelfTesting(obj)
-        %SelfTesting Run the self testing of the class
-        obj.VideoRendering();
 
     end
 
