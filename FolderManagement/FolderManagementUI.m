@@ -162,11 +162,8 @@ methods (Access = private)
 
         obj.TextArea.Value = displayValue;
 
-        newHeight = 100 + length(obj.drawerList) * 14;
-
-        if newHeight > obj.Figure.Position(4)
-            obj.Figure.Position(4) = newHeight;
-        end
+        newHeight = 188 + length(obj.drawerList) * 18;
+        obj.Figure.Position(4) = max(newHeight, 206);
 
     end
 
