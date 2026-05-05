@@ -1,9 +1,7 @@
 classdef HoloDopplerClass < handle
 % Main application class – GPU‑accelerated video rendering.
 %
-%   HD = HoloDopplerClass() creates an instance with GPU enabled if
-%   a compatible GPU is present. To force CPU‑only:
-%       HD.useGPU = false;
+%   HD = HoloDopplerClass() creates an instance of the HoloDopplerClass.
 
 properties
     file % file info struct
@@ -15,7 +13,6 @@ properties
     running_averages
     registration
     poolManager
-    useGPU (1, 1) logical = true % set to false to force CPU
 end
 
 methods
@@ -38,25 +35,6 @@ methods
 
         obj.render = RenderingClass();
         set(0, 'defaultfigurecolor', [1 1 1]);
-
-        % Check GPU availability correctly
-        if obj.useGPU
-
-            try
-
-                if ~parallel.gpu.GPUDevice.isAvailable()
-                    warning('HoloDopplerClass:GPUNotAvailable', ...
-                    'GPU requested but not available. Using CPU.');
-                    obj.useGPU = false;
-                end
-
-            catch % parallel computing toolbox may not be installed
-                warning('HoloDopplerClass:NoParallelToolbox', ...
-                'Parallel Computing Toolbox not found. Using CPU.');
-                obj.useGPU = false;
-            end
-
-        end
 
     end
 
@@ -171,7 +149,7 @@ methods
                 fprintf(2, "Unsupported file extension: %s\n", ext)
         end
 
-        % 2) Initialise default parameters
+        % 2) Initialize default parameters
         obj.params.lambda = obj.file.lambda;
         obj.params.fs = obj.file.fs;
         obj.params.ppx = obj.file.ppx;
@@ -506,7 +484,7 @@ methods
         end
 
         fprintf("==============================\n");
-        fprintf("Starting Video Rendering (GPU=%d)\n", obj.useGPU);
+        fprintf("Starting Video Rendering\n");
         fprintf("File: %s\n", obj.file.path);
         fprintf("Rendering %d frames, %d batches\n", num_batches * p.batchStride, num_batches);
         fprintf("==============================\n");
@@ -516,7 +494,6 @@ methods
             obj.file.Nx, obj.file.Ny, ...
             p.spatialTransform, p.spatialPropagation, ...
             p.lambda, p.ppx, p.ppy));
-        if obj.useGPU, kernel = gpuArray(kernel); end
 
         % Pool setup
         if p.parforArg > 0
@@ -542,7 +519,7 @@ methods
         fprintf("Using %d workers.\n", numWorkers);
 
         WAITBAR_STEP = 1;
-        h = waitbar(0, 'Initialising...');
+        h = waitbar(0, 'Initializing...');
         progress = 0;
 
         function update_waitbar(increment)
@@ -556,38 +533,15 @@ methods
 
         end
 
-        % --- Reference for registration (FIXED: isfield → isprop) ---
-        refPD = [];
-
-        if p.imageRegistration
-            refFrames = obj.reader.read_frame_batch(p.refBatchSize, p.framePosition);
-            if obj.useGPU, refFrames = gpuArray(single(refFrames)); end
-            refView = RenderingClass('precomputeSpatialKernel', kernel);
-            refView.setFrames(refFrames);
-            refView.Render(p, p.imageTypes, 'cache_intermediate_results', false);
-            % Use isprop instead of isfield for object
-            if any(strcmp(fieldnames(refView.Output), 'power_Doppler'))
-                refPD = single(refView.Output.power_Doppler.image);
-                if obj.useGPU, refPD = gpuArray(refPD); end
-                refPD = refPD ./ imgaussfilt(refPD, p.flatfield_gw);
-            else
-                warning('power_Doppler not selected, registration disabled.');
-                p.imageRegistration = false;
-            end
-
-        end
-
         % --- Main batch loop ---
         batchResults = cell(1, num_batches);
-        regShifts = cell(1, num_batches);
         tRendering = tic;
 
         if numWorkers == 0 % serial
 
             for i = 1:num_batches
-                [imgs, shift] = processBatch(obj, i, first_frame, p, kernel, refPD);
+                [imgs] = processBatch(obj, i, first_frame, p, kernel);
                 batchResults{i} = imgs;
-                if p.imageRegistration, regShifts{i} = shift; end
                 update_waitbar(1);
             end
 
@@ -597,9 +551,8 @@ methods
             afterEach(D, @(x) update_waitbar(x));
 
             parfor i = 1:num_batches
-                [imgs, shift] = processBatch(obj, i, first_frame, p, cKernel.Value, refPD);
+                [imgs] = processBatch(obj, i, first_frame, p, cKernel.Value);
                 batchResults{i} = imgs;
-                if p.imageRegistration, regShifts{i} = shift; end
                 send(D, 1);
             end
 
@@ -621,23 +574,19 @@ methods
 
         end
 
-        % --- Registration (only if enabled AND power_Doppler present) ---
+        % --- Registration ---
         if p.imageRegistration && any(strcmp(p.imageTypes, 'power_Doppler'))
-            obj.registration.shifts = cell2mat(regShifts); % 2×N
+            obj.CalculateRegistration();
             obj.ApplyRegistration();
         end
 
-        % --- Save video (gathers GPU data to CPU) ---
+        % --- Save video ---
         result_folder_path = obj.SaveVideo();
     end
 
-    function [outImages, shift] = processBatch(obj, batchIdx, first_frame, p, kernel, refPD)
+    function [outImages] = processBatch(obj, batchIdx, first_frame, p, kernel)
         frameIdx = first_frame + (batchIdx - 1) * p.batchStride;
         frames = obj.reader.read_frame_batch(p.batchSize, frameIdx);
-
-        if obj.useGPU
-            frames = gpuArray(single(frames));
-        end
 
         lr = RenderingClass('precomputeSpatialKernel', kernel);
         lr.setFrames(frames);
@@ -649,34 +598,60 @@ methods
             outImages.(p.imageTypes{j}) = lr.Output.(p.imageTypes{j}).image;
         end
 
-        shift = [0; 0];
-
-        if p.imageRegistration && isfield(outImages, 'power_Doppler')
-            moving = outImages.power_Doppler;
-            moving = moving ./ imgaussfilt(moving, p.flatfield_gw);
-            shift = obj.computeRegistrationShift(refPD, moving, p.registrationDiskRatio);
-        end
-
     end
 
-    function result_folder_path = SaveVideo(obj, imageTypes, params)
+    function CalculateRegistration(obj)
+        %RegisterVideo  Compute shifts using all stored power_Doppler images
+        if isempty(obj.video)
+            error("No video rendered")
+        end
 
-        if obj.useGPU
+        num_batches = numel(obj.video);
+        obj.registration = struct('shifts', [], 'rotation', [], 'scale', []);
 
-            for i = 1:numel(obj.video)
-                flds = fieldnames(obj.video(i));
+        video_M0 = zeros(obj.file.Ny, obj.file.Nx, 1, num_batches);
 
-                for f = 1:numel(flds)
+        for i = 1:num_batches
 
-                    if isa(obj.video(i).(flds{f}).image, 'gpuArray')
-                        obj.video(i).(flds{f}).image = gather(obj.video(i).(flds{f}).image);
-                    end
-
-                end
-
+            if not(isempty(obj.video(i).power_Doppler.image))
+                video_M0(:, :, 1, i) = obj.video(i).power_Doppler.image;
             end
 
         end
+
+        numY = size(video_M0, 1);
+        numX = size(video_M0, 2);
+
+        % Disk mask (unchanged from old code)
+        if obj.params.registrationDiskRatio > 0
+            disk_ratio = obj.params.registrationDiskRatio;
+            disk = diskMask(numY, numX, disk_ratio);
+
+            if size(disk, 1) ~= size(video_M0, 1)
+                disk = disk';
+            end
+
+        else
+            disk = ones([numY, numX]);
+        end
+
+        % Mean subtraction & rescaling
+        video_M0_reg = video_M0 .* disk - disk .* sum(video_M0 .* disk, [1, 2]) / nnz(disk);
+        video_M0_reg = video_M0_reg ./ (max(abs(video_M0_reg), [], [1, 2]));
+
+        % Recompute reference image (same as old code)
+        obj.render.setFrames(obj.reader.read_frame_batch(obj.params.refBatchSize, obj.params.framePosition));
+        obj.render.Render(obj.params, obj.params.imageTypes);
+        ref_img = obj.render.Output.power_Doppler.image;
+
+        ref_img = ref_img .* disk - disk .* sum(ref_img .* disk, [1, 2]) / nnz(disk);
+        ref_img = ref_img ./ max(abs(ref_img(:)));
+
+        % Call the original registration function
+        [~, obj.registration.shifts] = register_video_from_reference(video_M0_reg, ref_img);
+    end
+
+    function result_folder_path = SaveVideo(obj, imageTypes, params)
 
         p = obj.params; % to avoid too many obj.params in the code below
 
@@ -934,39 +909,6 @@ methods
         fprintf("Video Saving took : %f s\n", toc(VideoSavingTime));
 
         fprintf("All done! Results saved in %s\n", result_folder_path);
-    end
-
-    function shift = computeRegistrationShift(~, fixed, moving, diskRatio)
-        [ny, nx] = size(fixed);
-
-        if diskRatio > 0
-            [X, Y] = meshgrid(1:nx, 1:ny);
-            cx = nx / 2; cy = ny / 2;
-            a = (nx / 2) * diskRatio; b = (ny / 2) * diskRatio;
-            mask = ((X - cx) / a) .^ 2 + ((Y - cy) / b) .^ 2 <= 1;
-        else
-            mask = true(ny, nx);
-        end
-
-        if isa(fixed, 'gpuArray')
-            mask = gpuArray(mask);
-        end
-
-        fixed = (fixed - mean(fixed(mask))) .* mask;
-        moving = (moving - mean(moving(mask))) .* mask;
-        fixed = fixed ./ max(abs(fixed(:)));
-        moving = moving ./ max(abs(moving(:)));
-
-        cross = fft2(fixed) .* conj(fft2(moving));
-        cross = ifft2(cross ./ (abs(cross) +1e-12));
-        [~, idx] = max(abs(cross(:)));
-        [ky0, kx0] = ind2sub([ny, nx], idx);
-
-        shift_y = ky0 - 1;
-        shift_x = kx0 - 1;
-        if shift_y > ny / 2, shift_y = shift_y - ny; end
-        if shift_x > nx / 2, shift_x = shift_x - nx; end
-        shift =- [shift_y; shift_x];
     end
 
     function ApplyRegistration(obj)

@@ -1,8 +1,8 @@
 classdef RenderingClass < handle
-% GPU‑aware holographic renderer.
+% Holographic renderer.
 %
-%   r = RenderingClass()                     % default, kernel computed on first use
-%   r = RenderingClass('precomputeSpatialKernel', kernel)   % use supplied kernel (CPU or GPU)
+%   r = RenderingClass() creates an instance of the RenderingClass.
+%   r = RenderingClass('precomputeSpatialKernel', kernel)
 
 properties
     LastParams struct
