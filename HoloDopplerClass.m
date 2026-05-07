@@ -687,8 +687,8 @@ methods
             mkdir(fullfile(result_folder_path, 'avi'));
         end
 
-        if ~isfolder(fullfile(result_folder_path, 'raw'))
-            mkdir(fullfile(result_folder_path, 'raw'));
+        if ~isfolder(fullfile(result_folder_path, 'h5'))
+            mkdir(fullfile(result_folder_path, 'h5'));
         end
 
         if ~isfolder(fullfile(result_folder_path, 'png'))
@@ -761,7 +761,7 @@ methods
 
                 [~, output_dirname] = fileparts(result_folder_path);
                 output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
-                export_h5_video(fullfile(result_folder_path, 'raw', output_filename_h5), "SH_Slices", single(mat_));
+                export_h5_video(fullfile(result_folder_path, 'h5', output_filename_h5), "SH_Slices", single(mat_));
 
                 continue
 
@@ -848,7 +848,7 @@ methods
             try
                 [~, output_dirname] = fileparts(result_folder_path);
                 output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
-                export_h5_video(fullfile(result_folder_path, 'raw', output_filename_h5), "registration", single(obj.registration.shifts));
+                export_h5_video(fullfile(result_folder_path, 'h5', output_filename_h5), "registration", single(obj.registration.shifts));
             catch ME
                 MEdisp(ME);
                 disp("Error while saving the registration.")
@@ -862,7 +862,7 @@ methods
             str = jsonencode(params);
             [~, output_dirname] = fileparts(result_folder_path);
             output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
-            export_h5_string(fullfile(result_folder_path, 'raw', output_filename_h5), "HD_parameters", str);
+            export_h5_string(fullfile(result_folder_path, 'h5', output_filename_h5), "HD_parameters", str);
         catch ME
             MEdisp(ME);
             disp("Error while saving the parameters.")

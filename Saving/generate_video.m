@@ -41,10 +41,10 @@ end
 % save to raw format
 if opt.export_raw
     output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
-    export_h5_video(fullfile(output_path, 'raw', output_filename_h5), name, single(video));
+    export_h5_video(fullfile(output_path, 'h5', output_filename_h5), name, single(video));
 
     output_filename_raw = sprintf('%s_%s_raw.%s', output_dirname, name, 'avi');
-    w = VideoWriter(fullfile(output_path, 'raw', output_filename_raw));
+    w = VideoWriter(fullfile(output_path, 'h5', output_filename_raw));
     w.Quality = 50;
     open(w);
 
