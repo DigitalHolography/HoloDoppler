@@ -397,6 +397,8 @@ methods
         uistack(om_RMS_line1, 'top');
         uistack(om_RMS_line, 'top');
         uistack(gca, 'top');
+        xlabel('frequency (kHz)', 'FontSize', 14);
+        ylabel('log_{10}(S)', 'FontSize', 14);
         % legend({'', '', '', '', 'Arteries', 'Background', '', ''})
 
     end
