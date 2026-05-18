@@ -31,7 +31,7 @@
   "square": true,
   "transpose": false,
   "flip_x": false,
-  "flip_y": false,
+  "flip_y": true,
   
   "debug" : true
 }

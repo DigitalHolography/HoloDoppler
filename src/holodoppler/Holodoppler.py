@@ -8,6 +8,7 @@ import time
 import threading
 import queue
 import traceback
+from collections.abc import Callable
 from collections import defaultdict
 from importlib.metadata import version
 
@@ -387,7 +388,8 @@ class Holodoppler:
     # ------------------------------------------------------------
     
     def process_moments(self, parameters, mp4_path = None, 
-                        return_numpy = False, holodoppler_path = True):
+                        return_numpy = False, holodoppler_path = True,
+                        progress_callback: Callable[[int, int], None] | None = None):
         """Process entire video"""
         
         batch_size = parameters["batch_size"]
@@ -408,6 +410,12 @@ class Holodoppler:
         
         if num_batch <= 0:
             return None
+
+        def report_progress(done_batches):
+            if progress_callback is not None:
+                progress_callback(done_batches, num_batch)
+
+        report_progress(0)
         
         out_list = []
         
@@ -461,15 +469,18 @@ class Holodoppler:
         if self.backend_name =="cupy":
             self._process_gpu_streaming(parameters, num_batch, first_frame, batch_stride,
                                         batch_size, M0_reg, out_list, coefs_list, reg_list,
-                                        debug_manager, debug_queue, res_store, lock)
+                                        debug_manager, debug_queue, res_store, lock,
+                                        report_progress if progress_callback is not None else None)
         elif self.backend_name =="cupyRAM":
             self._process_gpu_streaming_onram(parameters, num_batch, first_frame, batch_stride,
                                     batch_size, M0_reg, out_list, coefs_list, reg_list,
-                                    debug_manager, debug_queue, res_store, lock )
+                                    debug_manager, debug_queue, res_store, lock,
+                                    report_progress if progress_callback is not None else None)
         else:
             self._process_cpu(parameters, num_batch, first_frame, batch_stride,
                              batch_size, M0_reg, out_list, coefs_list, reg_list,
-                             debug_manager, debug_queue, res_store, lock)
+                             debug_manager, debug_queue, res_store, lock,
+                             report_progress if progress_callback is not None else None)
         
         # Stack results
         vid = self.bm.xp.stack(out_list, axis=3)
@@ -483,9 +494,12 @@ class Holodoppler:
             
         # Convert to numpy for saving
         vid_np = self.bm.to_numpy(vid)
-        for i in range(num_batch) :
-            coefs_list[i] =self.bm.to_numpy(coefs_list[i])
-            reg_list[i] =self.bm.to_numpy(reg_list[i])
+        if coefs_list is not None:
+            for i in range(num_batch):
+                coefs_list[i] = self.bm.to_numpy(coefs_list[i])
+        if reg_list is not None:
+            for i in range(num_batch):
+                reg_list[i] = self.bm.to_numpy(reg_list[i])
         if parameters["debug"]:
             vid_debug = {
                 key: np.moveaxis(np.stack([self.bm.to_numpy(debug_results[k][key]) for k in range(num_batch)]), 0, -1)
@@ -522,9 +536,10 @@ class Holodoppler:
     
     def _process_cpu(self, parameters, num_batch, first_frame, batch_stride,
                      batch_size, M0_reg, out_list, coefs_list, reg_list,
-                     debug_manager, debug_queue, res_store, lock):
+                     debug_manager, debug_queue, res_store, lock, progress_callback=None):
         """CPU processing loop"""
-        for i in tqdm(range(num_batch)):
+        iterator = range(num_batch) if progress_callback is not None else tqdm(range(num_batch))
+        for i in iterator:
             frames = self.read_frames(first_frame + i * batch_stride, batch_size)
             res = self.render_moments(parameters, frames=frames, registration_ref=M0_reg)
             
@@ -542,10 +557,13 @@ class Holodoppler:
                 with lock:
                     res_store[i] = res
                 debug_queue.put(i)
+
+            if progress_callback is not None:
+                progress_callback(i + 1)
     
     def _process_gpu_streaming(self, parameters, num_batch, first_frame, batch_stride,
                                batch_size, M0_reg, out_list, coefs_list, reg_list,
-                               debug_manager, debug_queue, res_store, lock):
+                               debug_manager, debug_queue, res_store, lock, progress_callback=None):
         """GPU streaming processing loop"""
         import cupy as cp
         
@@ -557,7 +575,8 @@ class Holodoppler:
         with stream_h2d:
             d_frames_next = cp.asarray(frames_next)
         
-        for i in tqdm(range(num_batch)):
+        iterator = range(num_batch) if progress_callback is not None else tqdm(range(num_batch))
+        for i in iterator:
             d_frames = d_frames_next
             
             # Prefetch next batch
@@ -588,13 +607,16 @@ class Holodoppler:
                 debug_queue.put(i)
             
             stream_compute.synchronize()
+
+            if progress_callback is not None:
+                progress_callback(i + 1)
         
         stream_h2d.synchronize()
         cp.cuda.Device().synchronize()
         
     def _process_gpu_streaming_onram(self, parameters, num_batch, first_frame, batch_stride,
                                     batch_size, M0_reg, out_list, coefs_list, reg_list,
-                                    debug_manager, debug_queue, res_store, lock):
+                                    debug_manager, debug_queue, res_store, lock, progress_callback=None):
         """GPU streaming processing loop with CPU RAM prefetch queue."""
         import queue, threading
         import cupy as cp
@@ -628,7 +650,8 @@ class Holodoppler:
             d_frames = cp.asarray(frames)
         stream_h2d.synchronize()
 
-        for i in tqdm(range(num_batch)):
+        iterator = range(num_batch) if progress_callback is not None else tqdm(range(num_batch))
+        for i in iterator:
             next_item = frame_queue.get() if i + 1 < num_batch else None
 
             d_frames_next = None
@@ -660,6 +683,9 @@ class Holodoppler:
             if d_frames_next is not None:
                 stream_h2d.synchronize()
                 d_frames = d_frames_next
+
+            if progress_callback is not None:
+                progress_callback(i + 1)
 
         stop_reader.set()
         reader_thread.join(timeout=5)
@@ -726,6 +752,11 @@ class Holodoppler:
             out.write(frame)
 
         out.release()
+
+    @staticmethod
+    def _moment_dataset_layout(frames):
+        """Convert a moment stack from x-y-z to z-y-x."""
+        return np.transpose(frames, axes=(2, 1, 0))
     
     def _save_holodoppler_output(self, vid, vid_debug, parameters, fps, reg_list, coefs_list, end_frame, first_frame, num_batch):
         """Save complete Holodoppler output directory"""
@@ -791,9 +822,9 @@ class Holodoppler:
         
         # Save HDF5
         with h5py.File(os.path.join(full_path, "h5", f"{dir_name}_output.h5"), "w") as f:
-            f.create_dataset("moment0", data=vid[:, :, 0, :])
-            f.create_dataset("moment1", data=vid[:, :, 1, :])
-            f.create_dataset("moment2", data=vid[:, :, 2, :])
+            f.create_dataset("moment0", data=self._moment_dataset_layout(vid[:, :, 0, :]))
+            f.create_dataset("moment1", data=self._moment_dataset_layout(vid[:, :, 1, :]))
+            f.create_dataset("moment2", data=self._moment_dataset_layout(vid[:, :, 2, :]))
             f.create_dataset("HD_parameters", data=json.dumps(parameters))
             f.create_dataset("HD_info", data=f"py{self.__version__}  {self.backend_name}  {self.pipeline_version}")
             if parameters["image_registration"]:

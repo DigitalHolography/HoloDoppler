@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 import numpy as np
 from holodoppler.Holodoppler import Holodoppler
 from matlab_imresize.imresize import imresize
@@ -94,7 +94,14 @@ def preview(holo_path, parameters: dict) -> None:
         return M0img
 
 
-def process(holo_path, parameters: dict) -> None:
+ProgressCallback = Callable[[int, int], None]
+
+
+def process(
+    holo_path,
+    parameters: dict,
+    progress_callback: ProgressCallback | None = None,
+) -> None:
     HD = Holodoppler(backend = "cupyRAM", pipeline_version = "latest")
 
     HD.load_file(holo_path)
@@ -104,7 +111,11 @@ def process(holo_path, parameters: dict) -> None:
         
     print("parameters : ", parameters)
 
-    HD.process_moments(parameters, holodoppler_path = True)
+    HD.process_moments(
+        parameters,
+        holodoppler_path=True,
+        progress_callback=progress_callback,
+    )
 
 def _existing_file(value: str) -> Path:
     path = Path(value).expanduser().resolve()

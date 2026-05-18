@@ -30,7 +30,7 @@
   "svd_threshold": 16,
   "square": true,
   "transpose": false,
-  "flip_x": false,
+  "flip_x": true,
   "flip_y": false,
   
   "debug" : false

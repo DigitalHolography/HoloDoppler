@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import sys
 
+from holodoppler.runtime import ensure_standard_streams
+
+ensure_standard_streams()
+
 from holodoppler.cli import main as cli_main
 from holodoppler.ui import UI
 

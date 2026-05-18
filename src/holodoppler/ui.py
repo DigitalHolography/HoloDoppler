@@ -43,10 +43,12 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
         self.config_path = DEFAULT_CONFIG
         self.config_var = tk.StringVar(value=str(DEFAULT_CONFIG))
         self.status_var = tk.StringVar(value="Ready")
+        self.progress_var = tk.DoubleVar(value=0.0)
 
         self.q = queue.Queue()
         self.stop = threading.Event()
         self.worker = None
+        self.operation = None
 
         self._setup_theme()
         self._build()
@@ -149,7 +151,12 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
         self.stop_btn.pack(side="left", padx=8)
 
         # ----- ROW 4: Progress & Status -----
-        self.progress = ttk.Progressbar(main, mode="indeterminate")
+        self.progress = ttk.Progressbar(
+            main,
+            mode="determinate",
+            maximum=100,
+            variable=self.progress_var,
+        )
         self.progress.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(5, 5))
 
         status_frame = ttk.Frame(main)
@@ -216,7 +223,7 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
         if self._busy():
             return
         self.stop.clear()
-        self._set_busy(True, "Loading preview...")
+        self._set_busy(True, "Loading preview...", operation="preview")
         self.worker = threading.Thread(target=self._preview_worker, args=(path,), daemon=True)
         self.worker.start()
 
@@ -262,21 +269,36 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
         if self._busy():
             return
         self.stop.clear()
-        self._set_busy(True, "Running...")
+        self._set_busy(True, "Running...", operation="process")
         self.worker = threading.Thread(target=self._run_worker, daemon=True)
         self.worker.start()
 
     def _run_worker(self):
         try:
             params = self._load_params()
+            total_files = len(self.paths)
             for i, p in enumerate(self.paths, 1):
                 if self.stop.is_set():
                     self.q.put(("status", "Stopped"))
                     return
-                self.q.put(("status", f"Processing {i}/{len(self.paths)}"))
+                self.q.put(("progress", (i - 1) / max(total_files, 1) * 100))
+                self.q.put(("status", f"Processing {i}/{total_files}: {p.name}"))
                 print(f"Processing {p} with parameters:")
-                process(str(p), params)
-            self.q.put(("status", "Done ヽ(^o^)丿"))
+
+                def on_progress(done_batches, total_batches, file_index=i, file_path=p):
+                    batch_fraction = done_batches / max(total_batches, 1)
+                    progress = ((file_index - 1) + batch_fraction) / max(total_files, 1) * 100
+                    self.q.put(("progress", progress))
+                    self.q.put((
+                        "status",
+                        f"Processing {file_index}/{total_files}: "
+                        f"{file_path.name} - batch {done_batches}/{total_batches}",
+                    ))
+
+                process(str(p), params, progress_callback=on_progress)
+                self.q.put(("progress", i / max(total_files, 1) * 100))
+            self.q.put(("progress", 100))
+            self.q.put(("status", "Done"))
         except Exception as e:
             import traceback
             print(traceback.format_exc())
@@ -341,20 +363,33 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
                     self.preview_label.config(text=v, image="")
                 elif k == "status":
                     self.status_var.set(v)
+                elif k == "progress":
+                    self.progress_var.set(float(v))
                 elif k == "done":
                     self._set_busy(False)
         except queue.Empty:
             pass
         self.after(50, self._poll)
 
-    def _set_busy(self, busy, status="Ready"):
+    def _set_busy(self, busy, status="Ready", operation=None):
         if busy:
+            self.operation = operation
             self.status_var.set(status)
-            self.progress.start(10)
+            if operation == "preview":
+                self.progress.configure(mode="indeterminate", maximum=100)
+                self.progress.start(10)
+            else:
+                self.progress.stop()
+                self.progress.configure(mode="determinate", maximum=100)
+                self.progress_var.set(0.0)
             self.run_btn["state"] = "disabled"
             self.stop_btn["state"] = "normal"
         else:
             self.progress.stop()
+            self.progress.configure(mode="determinate", maximum=100)
+            if self.operation == "preview":
+                self.progress_var.set(0.0)
+            self.operation = None
             self.run_btn["state"] = "normal" if self.paths else "disabled"
             self.stop_btn["state"] = "disabled"
 
