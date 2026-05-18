@@ -244,12 +244,20 @@ class Holodoppler:
                 res["U_subaps"] = U_subaps
             
             # Calculate displacements
-            shifts_y, shifts_x = self.shack_hartmann.calculate_displacements(
-                U_subaps,
-                pupil_threshold=parameters.get("shack_hartmann_pupil_threshold", 1.0),
-                deviation_threshold=parameters.get("shack_hartmann_deviation_threshold", 3.0),
-                shifts_range=parameters.get("shack_hartmann_shifts_pixel_range_threshold", 20.0)
-            )
+            if parameters.get("shack_hartmann_graph_laplacian"):
+                shifts_y, shifts_x = self.shack_hartmann.calculate_displacements_graph_laplacian(
+                    U_subaps,
+                    pupil_threshold=parameters.get("shack_hartmann_pupil_threshold", 1.0),
+                    deviation_threshold=parameters.get("shack_hartmann_deviation_threshold", 3.0),
+                    shifts_range=parameters.get("shack_hartmann_shifts_pixel_range_threshold", 20.0)
+                )
+            else:
+                shifts_y, shifts_x = self.shack_hartmann.calculate_displacements(
+                    U_subaps,
+                    pupil_threshold=parameters.get("shack_hartmann_pupil_threshold", 1.0),
+                    deviation_threshold=parameters.get("shack_hartmann_deviation_threshold", 3.0),
+                    shifts_range=parameters.get("shack_hartmann_shifts_pixel_range_threshold", 20.0)
+                )
             
             if parameters.get("debug"):
                 res["shifts_y"] = shifts_y
@@ -431,6 +439,10 @@ class Holodoppler:
             
             debug_thread = threading.Thread(target=plotting_worker, daemon=True)
             debug_thread.start()
+        else :
+            debug_queue = None
+            res_store = None
+            lock = None  
         
         # Registration reference
         if parameters.get("image_registration"):
@@ -449,15 +461,15 @@ class Holodoppler:
         if self.backend_name =="cupy":
             self._process_gpu_streaming(parameters, num_batch, first_frame, batch_stride,
                                         batch_size, M0_reg, out_list, coefs_list, reg_list,
-                                        debug_manager, debug_queue, res_store, lock if parameters.get("debug") else None)
+                                        debug_manager, debug_queue, res_store, lock)
         elif self.backend_name =="cupyRAM":
             self._process_gpu_streaming_onram(parameters, num_batch, first_frame, batch_stride,
                                     batch_size, M0_reg, out_list, coefs_list, reg_list,
-                                    debug_manager, debug_queue, res_store, lock if parameters.get("debug") else None)
+                                    debug_manager, debug_queue, res_store, lock )
         else:
             self._process_cpu(parameters, num_batch, first_frame, batch_stride,
                              batch_size, M0_reg, out_list, coefs_list, reg_list,
-                             debug_manager, debug_queue, res_store, lock if parameters.get("debug") else None)
+                             debug_manager, debug_queue, res_store, lock)
         
         # Stack results
         vid = self.bm.xp.stack(out_list, axis=3)

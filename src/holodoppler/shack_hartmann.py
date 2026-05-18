@@ -175,3 +175,227 @@ class ShackHartmann:
         shift_x[bad] = xp.nan
         
         return shift_y.astype(xp.float32), shift_x.astype(xp.float32)
+    
+    def calculate_displacements_graph_laplacian(self, U_subaps, pupil_threshold=1.0, deviation_threshold=3.0,
+                                shifts_range=20.0):
+        """
+        Calculate globally consistent Shack-Hartmann shifts using all-pairs
+        phase correlation and a graph-Laplacian least-squares solve.
+
+        Returns
+        -------
+        shift_y, shift_x : arrays, shape (ny_s, nx_s)
+            Estimated shifts relative to the central subaperture.
+        """
+        xp = self.bm.xp
+        ny_s, nx_s, Ny, Nx = U_subaps.shape
+        B = ny_s * nx_s
+
+        U = U_subaps.reshape(B, Ny, Nx)
+
+        # ------------------------------------------------------------
+        # Pupil mask
+        # ------------------------------------------------------------
+        xs = xp.linspace(-1, 1, nx_s)
+        ys = xp.linspace(-1, 1, ny_s)
+        YY, XX = xp.meshgrid(ys, xs, indexing="ij")
+        pupil_mask = (XX**2 + YY**2) <= pupil_threshold
+        pupil_flat = pupil_mask.reshape(B)
+
+        center = (ny_s // 2) * nx_s + (nx_s // 2)
+
+        if not bool(pupil_flat[center]):
+            valid_ids = xp.where(pupil_flat)[0]
+            cy, cx = ny_s // 2, nx_s // 2
+            yy = valid_ids // nx_s
+            xx = valid_ids % nx_s
+            dist2 = (yy - cy) ** 2 + (xx - cx) ** 2
+            center = int(valid_ids[xp.argmin(dist2)].item())
+
+        # ------------------------------------------------------------
+        # FFTs of zero-mean subapertures
+        # ------------------------------------------------------------
+        U_zm = U - xp.mean(U, axis=(1, 2), keepdims=True)
+        F = xp.fft.fft2(U_zm, axes=(-2, -1))
+
+        pair_shift_y = xp.full((B, B), xp.nan, dtype=xp.float32)
+        pair_shift_x = xp.full((B, B), xp.nan, dtype=xp.float32)
+        pair_weight = xp.zeros((B, B), dtype=xp.float32)
+
+        eps = 1e-12
+
+        # ------------------------------------------------------------
+        # All-pairs phase correlation
+        #
+        # For pair (i, j):
+        #     measured shift = s_j - s_i
+        # ------------------------------------------------------------
+        for i in range(B):
+            if not bool(pupil_flat[i]):
+                continue
+
+            cp_corr = F * F[i].conj()[None, :, :]
+            cp_corr = cp_corr / (xp.abs(cp_corr) + eps)
+
+            xcorr = xp.abs(
+                xp.fft.fftshift(
+                    xp.fft.ifft2(cp_corr, axes=(-2, -1)),
+                    axes=(-2, -1),
+                )
+            )
+
+            xcorr_2d = xcorr.reshape(B, Ny * Nx)
+            peaks = xp.argmax(xcorr_2d, axis=1)
+
+            py = peaks // Nx
+            px = peaks % Nx
+
+            py = xp.clip(py, 1, Ny - 2)
+            px = xp.clip(px, 1, Nx - 2)
+
+            idx = xp.arange(B)
+
+            v0 = xcorr[idx, py, px]
+            vm_y = xcorr[idx, py - 1, px]
+            vp_y = xcorr[idx, py + 1, px]
+            vm_x = xcorr[idx, py, px - 1]
+            vp_x = xcorr[idx, py, px + 1]
+
+            den_y = vm_y - 2 * v0 + vp_y + eps
+            den_x = vm_x - 2 * v0 + vp_x + eps
+
+            dy = py + 0.5 * (vm_y - vp_y) / den_y - Ny / 2
+            dx = px + 0.5 * (vm_x - vp_x) / den_x - Nx / 2
+
+            valid = (
+                pupil_flat
+                & xp.isfinite(dy)
+                & xp.isfinite(dx)
+                & (xp.abs(dy) <= 2 * shifts_range)
+                & (xp.abs(dx) <= 2 * shifts_range)
+            )
+
+            valid[i] = False
+
+            pair_shift_y[i, valid] = dy[valid].astype(xp.float32)
+            pair_shift_x[i, valid] = dx[valid].astype(xp.float32)
+
+            # Simple confidence weight: phase-correlation peak height.
+            pair_weight[i, valid] = v0[valid].astype(xp.float32)
+
+        # Symmetrize measurements.
+        # If d_ij = s_j - s_i, then d_ji = -d_ij.
+        for i in range(B):
+            for j in range(i + 1, B):
+                wij = pair_weight[i, j]
+                wji = pair_weight[j, i]
+
+                if wij > 0 and wji > 0:
+                    dy = 0.5 * (pair_shift_y[i, j] - pair_shift_y[j, i])
+                    dx = 0.5 * (pair_shift_x[i, j] - pair_shift_x[j, i])
+                    w = 0.5 * (wij + wji)
+
+                    pair_shift_y[i, j] = dy
+                    pair_shift_x[i, j] = dx
+                    pair_shift_y[j, i] = -dy
+                    pair_shift_x[j, i] = -dx
+                    pair_weight[i, j] = w
+                    pair_weight[j, i] = w
+
+                elif wji > 0:
+                    pair_shift_y[i, j] = -pair_shift_y[j, i]
+                    pair_shift_x[i, j] = -pair_shift_x[j, i]
+                    pair_weight[i, j] = wji
+
+                elif wij > 0:
+                    pair_shift_y[j, i] = -pair_shift_y[i, j]
+                    pair_shift_x[j, i] = -pair_shift_x[i, j]
+                    pair_weight[j, i] = wij
+
+        # ------------------------------------------------------------
+        # Graph-Laplacian solve
+        #
+        # Minimize:
+        #     sum_ij w_ij ||(s_j - s_i) - d_ij||^2
+        # ------------------------------------------------------------
+        L = xp.zeros((B, B), dtype=xp.float64)
+        by = xp.zeros(B, dtype=xp.float64)
+        bx = xp.zeros(B, dtype=xp.float64)
+
+        for i in range(B):
+            if not bool(pupil_flat[i]):
+                continue
+
+            for j in range(i + 1, B):
+                if not bool(pupil_flat[j]):
+                    continue
+
+                w = pair_weight[i, j]
+
+                if not bool(w > 0):
+                    continue
+
+                dy = pair_shift_y[i, j]
+                dx = pair_shift_x[i, j]
+
+                if not bool(xp.isfinite(dy) & xp.isfinite(dx)):
+                    continue
+
+                w = w.astype(xp.float64)
+                dy = dy.astype(xp.float64)
+                dx = dx.astype(xp.float64)
+
+                L[i, i] += w
+                L[j, j] += w
+                L[i, j] -= w
+                L[j, i] -= w
+
+                by[i] -= w * dy
+                by[j] += w * dy
+
+                bx[i] -= w * dx
+                bx[j] += w * dx
+
+        keep = pupil_flat.copy()
+        keep[center] = False
+
+        sy = xp.full(B, xp.nan, dtype=xp.float64)
+        sx = xp.full(B, xp.nan, dtype=xp.float64)
+
+        Lr = L[keep][:, keep]
+        byr = by[keep]
+        bxr = bx[keep]
+
+        sy[center] = 0.0
+        sx[center] = 0.0
+
+        if Lr.shape[0] > 0:
+            sy[keep] = xp.linalg.solve(Lr, byr)
+            sx[keep] = xp.linalg.solve(Lr, bxr)
+
+        shift_y = sy.reshape(ny_s, nx_s).astype(xp.float32)
+        shift_x = sx.reshape(ny_s, nx_s).astype(xp.float32)
+
+        # ------------------------------------------------------------
+        # Final outlier rejection on global shifts
+        # ------------------------------------------------------------
+        valid_vals = pupil_mask & xp.isfinite(shift_y) & xp.isfinite(shift_x)
+
+        if bool(xp.any(valid_vals)):
+            mean_y = xp.mean(shift_y[valid_vals])
+            mean_x = xp.mean(shift_x[valid_vals])
+            std_y = xp.std(shift_y[valid_vals]) + eps
+            std_x = xp.std(shift_x[valid_vals]) + eps
+
+            bad = (
+                (~valid_vals)
+                | (xp.abs(shift_y - mean_y) > deviation_threshold * std_y)
+                | (xp.abs(shift_x - mean_x) > deviation_threshold * std_x)
+                | (xp.abs(shift_y) > shifts_range)
+                | (xp.abs(shift_x) > shifts_range)
+            )
+
+            shift_y[bad] = xp.nan
+            shift_x[bad] = xp.nan
+
+        return shift_y.astype(xp.float32), shift_x.astype(xp.float32)
