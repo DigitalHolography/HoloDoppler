@@ -8,6 +8,7 @@ try:
     import cupy as cp
     import cupyx.scipy.fft as cp_fft
     from cupyx.scipy.ndimage import gaussian_filter as cp_gaussian_filter
+    from cupyx.scipy.ndimage import zoom as cupy_zoom
     import cupyx.scipy.ndimage as cp_ndi
     _cupy_available = True
 except ImportError:
@@ -20,6 +21,7 @@ except ImportError:
 import scipy.fft as np_fft
 from scipy.ndimage import gaussian_filter as np_gaussian_filter
 import scipy.ndimage as np_ndi
+from scipy.ndimage import zoom as scipy_zoom
 
 
 class BackendManager:
@@ -31,6 +33,7 @@ class BackendManager:
         self.fft = None
         self.gaussian_filter = None
         self.ndi = None
+        self.zoom = None 
         self._init_backend()
     
     def _init_backend(self):
@@ -41,11 +44,14 @@ class BackendManager:
             self.fft = cp_fft
             self.gaussian_filter = cp_gaussian_filter
             self.ndi = cp_ndi
+            self.zoom = cupy_zoom 
+            
         else:
             self.xp = np
             self.fft = np_fft
             self.gaussian_filter = np_gaussian_filter
             self.ndi = np_ndi
+            self.zoom = scipy_zoom 
     
     def to_backend(self, arr):
         if "cupy" in self.backend_name and self.xp is cp:

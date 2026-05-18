@@ -6,6 +6,8 @@ import numpy as np
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 
+from .utils import normalize_image
+
 try:
     import cupy as cp
 except ImportError:
@@ -178,8 +180,8 @@ class SpectrumPlotter:
 class SubapertureMontagePlotter:
     """Montage of subaperture images"""
     
-    def __init__(self):
-        pass
+    def __init__(self, normalize_per_frame=False):
+        self.normalize_per_frame = normalize_per_frame
     
     def plot(self, U_subaps):
         if cp is not None and isinstance(U_subaps, cp.ndarray):
@@ -187,9 +189,32 @@ class SubapertureMontagePlotter:
         
         rows = []
         for iy in range(U_subaps.shape[0]):
-            row_imgs = [U_subaps[iy, ix] for ix in range(U_subaps.shape[1])]
+            row_imgs = []
+            for ix in range(U_subaps.shape[1]):
+                img = U_subaps[iy, ix]
+                
+                if self.normalize_per_frame:
+                    # Normalize each frame individually
+                    img = normalize_image(img)
+                else:
+                    # Keep as is for global normalization later
+                    img = img.astype(np.float32)
+                
+                row_imgs.append(img)
             rows.append(np.hstack(row_imgs))
-        return np.vstack(rows)
+        
+        # Create the full montage
+        montage = np.vstack(rows)
+        
+        # If not normalizing per frame, apply global normalization
+        if not self.normalize_per_frame:
+            montage = normalize_image(montage)
+        else:
+            # If per-frame normalization was applied, ensure uint8 type
+            if montage.dtype != np.uint8:
+                montage = montage.astype(np.uint8)
+        
+        return montage
     
     def close(self):
         pass
@@ -201,6 +226,7 @@ class DebugPlotterManager:
     def __init__(self, parameters):
         plotters = {
             "montage": SubapertureMontagePlotter(),
+            "montagenormalized": SubapertureMontagePlotter(normalize_per_frame = True),
             "shifts": ShiftsPlotter(scale=30),
             "shifts_rel": ShiftsPlotter(scale=None),
             "phase": PhasePlotter(),
@@ -218,6 +244,7 @@ class DebugPlotterManager:
         
         self.sources = {
             "montage": lambda res: (res["U_subaps"],),
+            "montagenormalized": lambda res: (res["U_subaps"],),
             "shifts": lambda res: (res["shifts_y"], res["shifts_x"]),
             "shifts_rel": lambda res: (res["shifts_y"], res["shifts_x"]),
             "phase": lambda res: (res["phase"],),

@@ -252,11 +252,21 @@ class Holodoppler:
                     shifts_range=parameters.get("shack_hartmann_shifts_pixel_range_threshold", 20.0)
                 )
             else:
+                ny_s, nx_s, Ny, Nx = U_subaps.shape
+                imref = parameters.get("shack_hartmann_graph_ref")
+                if imref == "ref_from_registration":
+                    if registration_ref is None:
+                        # first iteration caculation of the ref
+                        imref = None
+                    else:
+                        imref = resize_fft2_slicewise(registration_ref, Ny, Nx, xp = self.bm.xp, fft = self.bm.fft)
+                
                 shifts_y, shifts_x = self.shack_hartmann.calculate_displacements(
                     U_subaps,
                     pupil_threshold=parameters.get("shack_hartmann_pupil_threshold", 1.0),
                     deviation_threshold=parameters.get("shack_hartmann_deviation_threshold", 3.0),
-                    shifts_range=parameters.get("shack_hartmann_shifts_pixel_range_threshold", 20.0)
+                    shifts_range=parameters.get("shack_hartmann_shifts_pixel_range_threshold", 20.0),
+                    ref = imref
                 )
             
             if parameters.get("debug"):
@@ -271,6 +281,14 @@ class Holodoppler:
                     parameters["shack_hartmann_zernike_fit_modes"]
                 )
                 res["coefs"] = coefs
+                if parameters.get("debug"):
+                    res["phase"] = phase
+            elif parameters.get("shack_hartmann_southwell_phase_integration"):
+                print("shack_hartmann_southwell_phase_integration")
+                phase = self.zernike.southwell_phase_integration(
+                    ny, nx, parameters["pixel_pitch"], parameters["pixel_pitch"],
+                    parameters["wavelength"], shifts_y, shifts_x
+                )
                 if parameters.get("debug"):
                     res["phase"] = phase
             else:

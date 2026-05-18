@@ -15,6 +15,7 @@
   "z": 0.480,
   "shack_hartmann": true,
   "shack_hartmann_accumulation": 8,
+  "shack_hartmann_graph_ref": "central_sub_ap",
   "shack_hartmann_graph_laplacian": false,
   "shack_hartmann_ny_subap": 5,
   "shack_hartmann_nx_subap": 5,

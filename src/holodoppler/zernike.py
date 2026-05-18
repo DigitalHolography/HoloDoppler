@@ -4,7 +4,6 @@ Zernike polynomial generation and wavefront reconstruction
 
 import numpy as np
 
-
 class ZernikeReconstructor:
     """Zernike polynomial-based wavefront reconstruction"""
     
@@ -80,7 +79,7 @@ class ZernikeReconstructor:
                     shifts_y, shifts_x, zernike_modes):
         """Fit Zernike polynomials to displacement data"""
         xp = self.bm.xp
-        # Use numpy for LSTQ (CUDA doesn't have batched lstsq efficiently)
+        
         
         nysubabs, nxsubabs = shifts_y.shape
         
@@ -129,3 +128,105 @@ class ZernikeReconstructor:
             phase += coef * Z
         
         return coefs.astype(xp.float32), phase.astype(xp.float32)
+    
+    def southwell_phase_integration(
+        self,
+        ny,
+        nx,
+        pixel_pitch_y,
+        pixel_pitch_x,
+        wavelength,
+        shifts_y,
+        shifts_x,
+    ):
+        """NaN-robust Southwell phase reconstruction using a DCT Poisson solver."""
+
+        xp = self.bm.xp
+        xp_name = getattr(xp, "__name__", "")
+
+        if xp_name == "numpy":
+            shifts_y = self._to_numpy(shifts_y)
+            shifts_x = self._to_numpy(shifts_x)
+            
+        zoom = self.bm.zoom
+        fft = self.bm.fft
+
+        def dct2(a):
+            return fft.dct(fft.dct(a, axis=0, norm="ortho"), axis=1, norm="ortho")
+
+        def idct2(a):
+            return fft.idct(fft.idct(a, axis=1, norm="ortho"), axis=0, norm="ortho")
+
+        def southwell_poisson_nan(slope_y, slope_x):
+            rows, cols = slope_y.shape
+            dtype = xp.result_type(slope_y.dtype, slope_x.dtype, xp.float32)
+
+            mask_x = xp.isfinite(slope_x)
+            mask_y = xp.isfinite(slope_y)
+
+            div = xp.zeros((rows, cols), dtype=dtype)
+
+            valid_x = mask_x[:, :-1]
+            sx = xp.where(valid_x, slope_x[:, :-1], 0.0)
+            div[:, :-1] += sx
+            div[:, 1:] -= sx
+
+            valid_y = mask_y[:-1, :]
+            sy = xp.where(valid_y, slope_y[:-1, :], 0.0)
+            div[:-1, :] += sy
+            div[1:, :] -= sy
+
+            valid = xp.zeros((rows, cols), dtype=bool)
+            valid[:, :-1] |= valid_x
+            valid[:, 1:] |= valid_x
+            valid[:-1, :] |= valid_y
+            valid[1:, :] |= valid_y
+
+            div = xp.where(valid, div, 0.0)
+
+            div_hat = dct2(div)
+
+            ky = xp.arange(rows, dtype=dtype)
+            kx = xp.arange(cols, dtype=dtype)
+
+            cy = xp.cos(xp.pi * ky / rows)
+            cx = xp.cos(xp.pi * kx / cols)
+
+            eig = 2.0 * (cy[:, None] + cx[None, :] - 2.0)
+            eig[0, 0] = 1.0
+
+            phi_hat = div_hat / eig
+            phi_hat[0, 0] = 0.0
+
+            phi = idct2(phi_hat)
+            phi = xp.where(valid, phi, xp.nan)
+
+            return phi
+
+        def resize_nan(phi, out_rows, out_cols, order=1):
+            phi = phi.reshape(phi.shape[-2], phi.shape[-1])
+
+            mask = xp.isfinite(phi)
+            phi_filled = xp.where(mask, phi, 0.0)
+
+            zoom_y = out_rows / phi.shape[0]
+            zoom_x = out_cols / phi.shape[1]
+
+            phi_zoom = zoom(phi_filled, (zoom_y, zoom_x), order=order)
+            mask_zoom = zoom(mask.astype(xp.float32), (zoom_y, zoom_x), order=order)
+
+            phi_zoom = phi_zoom / xp.maximum(mask_zoom, 1e-6)
+            phi_zoom = xp.where(mask_zoom > 0.1, phi_zoom, xp.nan)
+
+            return phi_zoom.reshape(out_rows, out_cols)
+
+        # Keep your original calibration convention.
+        # Note: pixel_pitch_y and pixel_pitch_x are currently unused.
+        slopes_y = shifts_y * wavelength
+        slopes_x = shifts_x * wavelength
+
+        phase = southwell_poisson_nan(slopes_y, slopes_x)
+        phase = phase * (2.0 * xp.pi / wavelength)
+        phase = resize_nan(phase, ny, nx)
+
+        return phase

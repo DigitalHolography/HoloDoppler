@@ -4,7 +4,6 @@ Shack-Hartmann wavefront sensing
 
 import numpy as np
 
-
 class ShackHartmann:
     """Shack-Hartmann wavefront sensor processing"""
     
@@ -109,8 +108,9 @@ class ShackHartmann:
         xp = self.bm.xp
         ny_s, nx_s, Ny, Nx = U_subaps.shape
         
-        if ref is None:
+        if ref is None or ref == "central_sub_ap":
             ref = U_subaps[ny_s // 2, nx_s // 2]
+        
         
         moving_stack = U_subaps.reshape(ny_s * nx_s, Ny, Nx)
         
