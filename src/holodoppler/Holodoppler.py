@@ -11,6 +11,14 @@ import traceback
 from collections import defaultdict
 from importlib.metadata import version
 
+from pathlib import Path
+import json
+import subprocess
+import h5py
+import numpy as np
+import matplotlib.pyplot as plt
+from .utils import normalize_to_uint8, write_video_file, flatfield3D
+
 import numpy as np
 import cv2
 import h5py
@@ -488,53 +496,73 @@ class Holodoppler:
             self._process_cpu(parameters, num_batch, first_frame, batch_stride,
                              batch_size, M0_reg, out_list, coefs_list, reg_list,
                              debug_manager, debug_queue, res_store, lock)
+            
+        # 1. Stack and move to CPU immediately to free VRAM
+        # stack(out_list, axis=0) creates (T, C, H, W) where C channel is moments 0, 1, 2
+        vid_t = self.bm.to_numpy(self.bm.xp.stack(out_list, axis=0))
         
-        # Stack results
-        vid = self.bm.xp.stack(out_list, axis=3)
-        
-        # Cleanup debug
+        # 2. Cleanup GPU resources
+        self.bm.clear_gpu_memory()
         if parameters.get("debug") and debug_manager is not None:
             debug_queue.join()
             stop_event.set()
             debug_thread.join()
             debug_manager.close_all()
-            
-        # Convert to numpy for saving
-        vid_np = self.bm.to_numpy(vid)
-        for i in range(num_batch) :
-            coefs_list[i] =self.bm.to_numpy(coefs_list[i])
-            reg_list[i] =self.bm.to_numpy(reg_list[i])
-        if parameters["debug"]:
-            vid_debug = {
-                key: np.moveaxis(np.stack([self.bm.to_numpy(debug_results[k][key]) for k in range(num_batch)]), 0, -1)
-                for key in debug_results[0]
-            }
-        else:
-            vid_debug = {}
-            
-        # clear gpu memory to enforce no memory leak
-        self.bm.clear_gpu_memory()
+
+        # 3. Convert auxiliary lists to numpy (Clean list comprehensions)
+        if coefs_list is not None:
+            coefs_list = [self.bm.to_numpy(c) for c in coefs_list]
+        if reg_list is not None:
+            reg_list = [self.bm.to_numpy(r) for r in reg_list]
+
+        # 4. Handle Debug data figures
+        # Convert debug_results from list of dicts -> dict of (T, H, W, C) arrays where C really is color channel
+        vid_debug = {}
+        if parameters.get("debug") and debug_results:
+            for key in debug_results[0].keys():
+                # print(key,debug_results[0][key])
+                # Stack into (T, H, W, C)
+                vid_debug[key] = np.stack([self.bm.to_numpy(debug_results[k][key]) 
+                                          for k in range(num_batch)], axis=0)
         
-        # Post-processing: spatial transforms
+        # 5. Post-processing: Spatial transforms
+        # Since vid_t is (T, H, W, C), H=Axis 1 and W=Axis 2
         if parameters.get("square"):
-            m = max(vid_np.shape[0], vid_np.shape[1])
-            vid_np = self._resize_to_square(vid_np, m, m)
+            # m is max of H or W
+            m = max(vid_t.shape[-2], vid_t.shape[-1])
+            vid_t = self._resize_to_square(vid_t, m, m)
+            
         if parameters.get("transpose"):
-            vid_np = np.transpose(vid_np, axes=(1, 0, 2, 3))
+            # Swap Y and X
+            vid_t = np.transpose(vid_t, axes=(0, 1, 3, 2))
+            
         if parameters.get("flip_x"):
-            vid_np = np.flip(vid_np, axis=1)
+            # Flip W (axis 2)
+            vid_t = np.flip(vid_t, axis=2)
+            
         if parameters.get("flip_y"):
-            vid_np = np.flip(vid_np, axis=0)
+            # Flip H (axis 1)
+            vid_t = np.flip(vid_t, axis=1)
         
-        # Save outputs
-        self._save_outputs(mp4_path, holodoppler_path, vid_np, vid_debug, parameters,
-                          reg_list, coefs_list, end_frame, first_frame, num_batch)
+        # 6. Save outputs (Passing the optimized vid_t)
+        self._save_outputs(
+            video_path=mp4_path, 
+            holodoppler_path=holodoppler_path, 
+            vid=vid_t, 
+            vid_debug=vid_debug, 
+            parameters=parameters,
+            reg_list=reg_list, 
+            coefs_list=coefs_list, 
+            end_frame=end_frame, 
+            first_frame=first_frame, 
+            num_batch=num_batch
+        )
         
         self.close_file()
         plt.close('all')
         
         if return_numpy:
-            return vid_np
+            return vid_t
         
         return None
     
@@ -663,7 +691,7 @@ class Holodoppler:
             if res is None:
                 break
 
-            out_list.append(cp.stack([res["M0"], res["M1"], res["M2"]], axis=2))
+            out_list.append(cp.stack([res["M0"], res["M1"], res["M2"]], axis=0))
 
             if "coefs" in res and coefs_list is not None:
                 coefs_list[i] = res["coefs"]
@@ -685,139 +713,277 @@ class Holodoppler:
         stream_h2d.synchronize()
         stream_compute.synchronize()
         cp.cuda.Device().synchronize()
-    
-    def _save_outputs(self, mp4_path, holodoppler_path, vid, vid_debug, parameters,
-                      reg_list, coefs_list, end_frame, first_frame, num_batch):
-        """Save outputs to disk"""
         
-        fps = num_batch / (end_frame - first_frame) * parameters["sampling_freq"]
-        fps = min(fps, 65)
-            
-        if mp4_path is not None:
-            self._write_video(mp4_path, vid[:, :, 0, :], fps)
+    def _save_outputs(self, video_path=None, holodoppler_path=None, vid=None, 
+                    vid_debug=None, parameters=None, reg_list=None, 
+                    coefs_list=None, end_frame=None, first_frame=None, num_batch=None):
+        """
+        Main entry point for saving. 
+        Determines priority: holodoppler_path > video_path > default
+        """
         
-        if holodoppler_path is not None:
-            self._save_holodoppler_output(vid, vid_debug, parameters, fps,
-                                          reg_list, coefs_list, end_frame, first_frame, num_batch)
-    
-    def _write_video(self, path, frames, fps, fourcc="mp4v"):
-        """Write grayscale (H, W, N) or color (H, W, C, N) video."""
-        import cv2
-        import numpy as np
-
-        frames = np.asarray(frames)
-
-        if frames.ndim == 3:
-            # (H, W, N) -> (N, H, W)
-            video = np.moveaxis(frames, -1, 0)
-            is_color = False
-
-        elif frames.ndim == 4:
-            # (H, W, C, N) -> (N, H, W, C)
-            video = np.moveaxis(frames, -1, 0)
-            is_color = video.shape[-1] > 1
-
-            if video.shape[-1] == 3:
-                video = video[..., ::-1]  # RGB -> BGR for OpenCV
-
+        # 1. Path and Mode Resolution
+        # Default path generation
+        default_path = self._get_default_output_path()
+        
+        if holodoppler_path:
+            if isinstance(holodoppler_path,bool):
+                holodoppler_path = default_path
+            target_dir = Path(holodoppler_path)
+            save_mode = "FULL"
+        elif video_path:
+            if isinstance(video_path,bool):
+                video_path = default_path
+            target_dir = Path(video_path)
+            save_mode = "LITE"
         else:
-            raise ValueError(f"Unsupported frame shape: {frames.shape}")
+            target_dir = default_path
+            save_mode = "FULL"
 
-        video = video.astype(np.float32, copy=False)
-        vmin = video.min(axis=tuple(range(1, video.ndim)), keepdims=True)
-        vmax = video.max(axis=tuple(range(1, video.ndim)), keepdims=True)
-
-        video = (255 * (video - vmin) / (vmax - vmin + 1e-12)).clip(0, 255).astype(np.uint8)
-        video = np.ascontiguousarray(video)
-
-        h, w = video.shape[1:3]
-
-        out = cv2.VideoWriter(
-            path,
-            cv2.VideoWriter_fourcc(*fourcc),
-            fps,
-            (w, h),
-            isColor=is_color,
+        # 2. Execute Save Bundle
+        self._save_bundle(
+            target_dir=target_dir,
+            mode=save_mode,
+            vid_t=vid,
+            vid_debug=vid_debug,
+            parameters=parameters,
+            reg_list=reg_list,
+            coefs_list=coefs_list,
+            end_frame=end_frame,
+            first_frame=first_frame,
+            num_batch=num_batch
         )
 
-        for frame in video:
-            out.write(frame)
+    def _get_default_output_path(self):
+        """Generates the standard Holodoppler directory structure"""
+        base_name = Path(self.file_reader.file_path).stem
+        return Path(self.file_reader.file_path).parent / base_name / f"{base_name}_HD"
 
-        out.release()
-    
-    def _save_holodoppler_output(self, vid, vid_debug, parameters, fps, reg_list, coefs_list, end_frame, first_frame, num_batch):
-        """Save complete Holodoppler output directory"""
-        import subprocess
-        import json
-        
-        base_name = os.path.splitext(os.path.basename(self.file_reader.file_path))[0]
-        dir_name = f"{base_name}_HD"
-        parent_dir = os.path.dirname(self.file_reader.file_path)
-        full_path = os.path.join(parent_dir, base_name, dir_name)
-        
-        print("Saving holodoppler outputs to : ",full_path)
-        os.makedirs(full_path, exist_ok=True)
-        
+    def _save_bundle(self, target_dir, mode, vid_t, vid_debug, parameters, 
+                    reg_list, coefs_list, end_frame, first_frame, num_batch):
+        """
+        Unified saving engine. 
+        mode="FULL" -> Saves everything including H5.
+        mode="LITE" -> Saves videos, pngs, json, txt.
+        """
         # Create subdirectories
-        for subdir in ["png", "mp4", "avi", "json", "h5"]:
-            os.makedirs(os.path.join(full_path, subdir), exist_ok=True)
+        subdirs = ["png", "mp4", "avi", "json"]
+        if mode == "FULL":
+            subdirs.append("h5")
+            
+        for sub in subdirs:
+            (target_dir / sub).mkdir(parents=True, exist_ok=True)
+
+        fps = min((num_batch / (end_frame - first_frame) * parameters["sampling_freq"]), 65)
+
+        # --- 1. Setup Data Map ---
+        save_map = {
+            "moment_0": vid_t[:,0,:,:],
+            "moment_1": vid_t[:,1,:,:],
+            "moment_2": vid_t[:,2,:,:],
+            "moment_0_flatfield": flatfield3D(vid_t[:,0,:,:], parameters["registration_flatfield_gw"]),
+        }
         
-        def save_pair(name, frames, png=True):
-            self._write_video(os.path.join(full_path, "mp4", f"{name}.mp4"), frames, fps, "mp4v")
-            self._write_video(os.path.join(full_path, "avi", f"{name}.avi"), frames, fps, "MJPG")
-            if png:
-                plt.imsave(os.path.join(full_path, "png", f"{name}.png"), np.mean(frames, axis=-1), cmap="gray")
+        # Add debug videos to map
+        for key, data in vid_debug.items():
+            
+            # Ensure debug videos are (T, H, W)
+            if data.ndim == 3 and data.shape[-1] == num_batch:
+                data = np.moveaxis(data, -1, 0)
+                
+            if parameters["square"] and key in ["M0ffnoreg", "M0notfixed", "montage", "montagenormalized"]:
+                m = max(data.shape[-2], data.shape[-1])
+                data = self._resize_to_square(data, m, m)
+            
+            save_map[f"debug_{key}"] = data
+
+        # --- 2. Save Visuals (MP4, AVI, PNG) ---
+        for name, data in save_map.items():
+            uint8_data = normalize_to_uint8(data)
+            write_video_file(target_dir / "mp4" / f"{name}.mp4", uint8_data, fps, "mp4v")
+            write_video_file(target_dir / "avi" / f"{name}.avi", uint8_data, fps, "MJPG")
+            if uint8_data.ndim == 3:
+                plt.imsave(target_dir / "png" / f"{name}.png", np.mean(uint8_data, axis=0), cmap="gray")
+
+        # --- 3. Save Metadata (JSON, TXT) ---
+        self._save_metadata(target_dir, parameters)
         
-        save_pair("moment_0", vid[:, :, 0, :])
-        save_pair("moment_1", vid[:, :, 1, :])
-        save_pair("moment_2", vid[:, :, 2, :])
-        save_pair("moment_0_flatfield", flatfield3D(vid[:, :, 0, :], parameters["registration_flatfield_gw"]))
-        
-        for key, video_debug in vid_debug.items():
-            if key in {"montage","M0notfixed", "M0ffnoreg"}:
-                ny, nx, nt = video_debug.shape
-                m = max(nx,ny)
-                video_debug = self._resize_to_square(video_debug, m, m)
-            save_pair(f"debug_{key}", video_debug, png=False)
-        
-        # Save JSON parameters
-        with open(os.path.join(full_path, "json", "parameters_holodoppler.json"), "w") as f:
+        # --- 4. Save H5 (Only if mode is FULL) ---
+        if mode == "FULL":
+            self._save_h5(target_dir, vid_t, parameters, reg_list, coefs_list)
+            
+        plt.close('all')
+
+    def _save_metadata(self, target_dir, parameters):
+        """Saves all configuration and versioning files"""
+        # JSON Params
+        with open(target_dir / "json" / "parameters_holodoppler.json", "w") as f:
             json.dump(parameters, f, indent=4)
         
-        # Save version info
-        with open(os.path.join(full_path, "git_version.txt"), "w") as f:
-            f.write(f"Holodoppler pipeline version: {self.pipeline_version}\n")
-            f.write(f"Holodoppler backend: {self.backend_name}\n")
-            try:
-                git_commit = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
-                f.write(f"Git commit hash: {git_commit}\n")
-            except Exception:
-                f.write("Git commit hash: Not available\n")
-        with open(os.path.join(full_path, "version_holodoppler.txt"), "w") as f:
-            f.write(f"py{self.__version__}")
-        with open(os.path.join(full_path, "info_holodoppler.txt"), "w") as f:
-            f.write(f"py{self.__version__}  {self.backend_name}  {self.pipeline_version}")
-            
-        # copy camera aquisition metadata information if any
+        # Versioning/Info
+        info_text = f"py{self.__version__}  {self.backend_name}  {self.pipeline_version}"
+        (target_dir / "info_holodoppler.txt").write_text(info_text)
+        (target_dir / "version_holodoppler.txt").write_text(f"py{self.__version__}")
+        
+        try:
+            commit = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
+            (target_dir / "git_version.txt").write_text(f"Git commit: {commit}\n{info_text}")
+        except:
+            (target_dir / "git_version.txt").write_text("Git commit: Not Available")
+
         if self.file_reader.ext == ".holo":
-            with open(os.path.join(full_path, "version_holovibes.txt"), "w") as f:
-                f.write(f"{self.file_reader.file_footer.get('info',{}).get('holovibes_version', 'unknown')}")
-            with open(os.path.join(full_path, "json", "holovibes_footer.json"), "w") as f:
+            with open(target_dir / "json" / "holovibes_footer.json", "w") as f:
                 json.dump(self.file_reader.file_footer, f, indent=4)
-        
-        plt.close('all') # close any open figures to free memory
-        
-        # Save HDF5
-        with h5py.File(os.path.join(full_path, "h5", f"{dir_name}_output.h5"), "w") as f:
-            f.create_dataset("moment0", data=vid[:, :, 0, :])
-            f.create_dataset("moment1", data=vid[:, :, 1, :])
-            f.create_dataset("moment2", data=vid[:, :, 2, :])
+            with open(target_dir / "json" / "holovibes_header.json", "w") as f:
+                json.dump(self.file_reader.file_header, f, indent=4)
+
+    def _save_h5(self, target_dir, vid_t, parameters, reg_list, coefs_list):
+        """Saves raw data to HDF5 with compression"""
+        with h5py.File(target_dir / "h5" / "output.h5", "w") as f:
+            f.create_dataset("moment0", data=vid_t[:,0,:,:]) # compression="gzip"
+            f.create_dataset("moment1", data=vid_t[:,0,:,:])
+            f.create_dataset("moment2", data=vid_t[:,0,:,:])
             f.create_dataset("HD_parameters", data=json.dumps(parameters))
-            f.create_dataset("HD_info", data=f"py{self.__version__}  {self.backend_name}  {self.pipeline_version}")
-            if parameters["image_registration"]:
-                reg_array = np.array(reg_list, dtype=np.float32)
-                f.create_dataset("registration", data=reg_array)
-            if parameters["shack_hartmann"] and parameters["shack_hartmann_zernike_fit"] and coefs_list is not None:
-                coefs_zernike = np.stack(coefs_list).astype(np.float32)
-                dset = f.create_dataset("zernike_coefs_radians", data=coefs_zernike)
-                dset.attrs["noll_indices"] = parameters["shack_hartmann_zernike_fit_modes"]
+            
+            if parameters.get("image_registration") and reg_list:
+                f.create_dataset("registration", data=np.array(reg_list, dtype=np.float32))
+            
+            if parameters.get("shack_hartmann") and coefs_list:
+                f.create_dataset("zernike_coefs_radians", data=np.stack(coefs_list).astype(np.float32))
+
+    
+    # def _save_outputs(self, mp4_path, holodoppler_path, vid, vid_debug, parameters,
+    #                   reg_list, coefs_list, end_frame, first_frame, num_batch):
+    #     """Save outputs to disk"""
+        
+    #     fps = num_batch / (end_frame - first_frame) * parameters["sampling_freq"]
+    #     fps = min(fps, 65)
+            
+    #     if mp4_path is not None:
+    #         self._write_video(mp4_path, vid[:, :, 0, :], fps)
+        
+    #     if holodoppler_path is not None:
+    #         self._save_holodoppler_output(vid, vid_debug, parameters, fps,
+    #                                       reg_list, coefs_list, end_frame, first_frame, num_batch)
+    
+    # def _write_video(self, path, frames, fps, fourcc="mp4v"):
+    #     """Write grayscale (H, W, N) or color (H, W, C, N) video."""
+    #     import cv2
+    #     import numpy as np
+
+    #     frames = np.asarray(frames)
+
+    #     if frames.ndim == 3:
+    #         # (H, W, N) -> (N, H, W)
+    #         video = np.moveaxis(frames, -1, 0)
+    #         is_color = False
+
+    #     elif frames.ndim == 4:
+    #         # (H, W, C, N) -> (N, H, W, C)
+    #         video = np.moveaxis(frames, -1, 0)
+    #         is_color = video.shape[-1] > 1
+
+    #         if video.shape[-1] == 3:
+    #             video = video[..., ::-1]  # RGB -> BGR for OpenCV
+
+    #     else:
+    #         raise ValueError(f"Unsupported frame shape: {frames.shape}")
+
+    #     video = video.astype(np.float32, copy=False)
+    #     vmin = video.min(axis=tuple(range(1, video.ndim)), keepdims=True)
+    #     vmax = video.max(axis=tuple(range(1, video.ndim)), keepdims=True)
+
+    #     video = (255 * (video - vmin) / (vmax - vmin + 1e-12)).clip(0, 255).astype(np.uint8)
+    #     video = np.ascontiguousarray(video)
+
+    #     h, w = video.shape[1:3]
+
+    #     out = cv2.VideoWriter(
+    #         path,
+    #         cv2.VideoWriter_fourcc(*fourcc),
+    #         fps,
+    #         (w, h),
+    #         isColor=is_color,
+    #     )
+
+    #     for frame in video:
+    #         out.write(frame)
+
+    #     out.release()
+    
+    # def _save_holodoppler_output(self, vid, vid_debug, parameters, fps, reg_list, coefs_list, end_frame, first_frame, num_batch):
+    #     """Save complete Holodoppler output directory"""
+    #     import subprocess
+    #     import json
+        
+    #     base_name = os.path.splitext(os.path.basename(self.file_reader.file_path))[0]
+    #     dir_name = f"{base_name}_HD"
+    #     parent_dir = os.path.dirname(self.file_reader.file_path)
+    #     full_path = os.path.join(parent_dir, base_name, dir_name)
+        
+    #     print("Saving holodoppler outputs to : ",full_path)
+    #     os.makedirs(full_path, exist_ok=True)
+        
+    #     # Create subdirectories
+    #     for subdir in ["png", "mp4", "avi", "json", "h5"]:
+    #         os.makedirs(os.path.join(full_path, subdir), exist_ok=True)
+        
+    #     def save_pair(name, frames, png=True):
+    #         self._write_video(os.path.join(full_path, "mp4", f"{name}.mp4"), frames, fps, "mp4v")
+    #         self._write_video(os.path.join(full_path, "avi", f"{name}.avi"), frames, fps, "MJPG")
+    #         if png:
+    #             plt.imsave(os.path.join(full_path, "png", f"{name}.png"), np.mean(frames, axis=-1), cmap="gray")
+        
+    #     save_pair("moment_0", vid[:, :, 0, :])
+    #     save_pair("moment_1", vid[:, :, 1, :])
+    #     save_pair("moment_2", vid[:, :, 2, :])
+    #     save_pair("moment_0_flatfield", flatfield3D(vid[:, :, 0, :], parameters["registration_flatfield_gw"]))
+        
+    #     for key, video_debug in vid_debug.items():
+    #         if key in {"montage","M0notfixed", "M0ffnoreg"}:
+    #             ny, nx, nt = video_debug.shape
+    #             m = max(nx,ny)
+    #             video_debug = self._resize_to_square(video_debug, m, m)
+    #         save_pair(f"debug_{key}", video_debug, png=False)
+        
+    #     # Save JSON parameters
+    #     with open(os.path.join(full_path, "json", "parameters_holodoppler.json"), "w") as f:
+    #         json.dump(parameters, f, indent=4)
+        
+    #     # Save version info
+    #     with open(os.path.join(full_path, "git_version.txt"), "w") as f:
+    #         f.write(f"Holodoppler pipeline version: {self.pipeline_version}\n")
+    #         f.write(f"Holodoppler backend: {self.backend_name}\n")
+    #         try:
+    #             git_commit = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+    #             f.write(f"Git commit hash: {git_commit}\n")
+    #         except Exception:
+    #             f.write("Git commit hash: Not available\n")
+    #     with open(os.path.join(full_path, "version_holodoppler.txt"), "w") as f:
+    #         f.write(f"py{self.__version__}")
+    #     with open(os.path.join(full_path, "info_holodoppler.txt"), "w") as f:
+    #         f.write(f"py{self.__version__}  {self.backend_name}  {self.pipeline_version}")
+            
+    #     # copy camera aquisition metadata information if any
+    #     if self.file_reader.ext == ".holo":
+    #         with open(os.path.join(full_path, "version_holovibes.txt"), "w") as f:
+    #             f.write(f"{self.file_reader.file_footer.get('info',{}).get('holovibes_version', 'unknown')}")
+    #         with open(os.path.join(full_path, "json", "holovibes_footer.json"), "w") as f:
+    #             json.dump(self.file_reader.file_footer, f, indent=4)
+        
+    #     plt.close('all') # close any open figures to free memory
+        
+    #     # Save HDF5
+    #     with h5py.File(os.path.join(full_path, "h5", f"{dir_name}_output.h5"), "w") as f:
+    #         f.create_dataset("moment0", data=vid[:, :, 0, :])
+    #         f.create_dataset("moment1", data=vid[:, :, 1, :])
+    #         f.create_dataset("moment2", data=vid[:, :, 2, :])
+    #         f.create_dataset("HD_parameters", data=json.dumps(parameters))
+    #         f.create_dataset("HD_info", data=f"py{self.__version__}  {self.backend_name}  {self.pipeline_version}")
+    #         if parameters["image_registration"]:
+    #             reg_array = np.array(reg_list, dtype=np.float32)
+    #             f.create_dataset("registration", data=reg_array)
+    #         if parameters["shack_hartmann"] and parameters["shack_hartmann_zernike_fit"] and coefs_list is not None:
+    #             coefs_zernike = np.stack(coefs_list).astype(np.float32)
+    #             dset = f.create_dataset("zernike_coefs_radians", data=coefs_zernike)
+    #             dset.attrs["noll_indices"] = parameters["shack_hartmann_zernike_fit_modes"]

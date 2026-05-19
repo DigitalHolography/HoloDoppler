@@ -8,43 +8,95 @@ from matlab_imresize import imresize
 from scipy.ndimage import gaussian_filter as np_gaussian_filter
 from scipy.ndimage import gaussian_filter1d
 
+# in utils.py
+import cv2
+import numpy as np
 
-def resize_fft2_slicewise(img, new_h, new_w, xp=np, fft=np.fft):
-    img = img.astype(xp.float32)
-    h, w = img.shape[:2]
-    rest = img.shape[2:]
-    img = img.reshape(h, w, -1)
-    n_slices = img.shape[-1]
-    out = xp.empty((new_h, new_w, n_slices), dtype=xp.float32)
-    for i in range(n_slices):
-        slice_2d = img[:, :, i]
-        F = fft.fftshift(
-            fft.fft2(slice_2d),
-        )
-        F_new = xp.zeros((new_h, new_w), dtype=F.dtype)
-        h_min, w_min = min(h, new_h), min(w, new_w)
-        ho, wo = (h - h_min)//2, (w - w_min)//2
-        hn, wn = (new_h - h_min)//2, (new_w - w_min)//2
-        F_new[hn:hn+h_min, wn:wn+w_min] = F[ho:ho+h_min, wo:wo+w_min]
-        resized = fft.ifft2(
-            fft.ifftshift(F_new)
-        ).real
-        resized *= (new_h * new_w) / (h * w)
-        out[:, :, i] = resized
-    return out.reshape(new_h, new_w, *rest)
+def normalize_to_uint8(data):
+    """
+    Normalizes any float array to 0-255 uint8.
+    Handles (T, H, W) or (T, H, W, C).
+    """
+    
+    data = np.asanyarray(data)
+    
+    if data.dtype == np.uint8:
+        return data
+    # Calculate global min/max across all dimensions except the first (Time)
+    # Or global overall for consistency across the video
+    vmin = data.min()
+    vmax = data.max()
+    
+    # vectorized normalization
+    normalized = (255 * (data - vmin) / (vmax - vmin + 1e-12))
+    return np.clip(normalized, 0, 255).astype(np.uint8)
 
-def resize_matlab_slicewise(img, new_h, new_w, xp=np):
-    img = img.astype(xp.float32)
-    h, w = img.shape[:2]
-    rest = img.shape[2:]
-    img = img.reshape(h, w, -1)
-    n_slices = img.shape[-1]
-    out = xp.empty((new_h, new_w, n_slices), dtype=xp.float32)
-    for i in range(n_slices):
-        slice_2d = img[:, :, i]
-        resized = imresize(slice_2d, output_shape=(new_h, new_w))
-        out[:, :, i] = resized
-    return out.reshape(new_h, new_w, *rest)
+def write_video_file(path, frames, fps, fourcc_code="mp4v"):
+    """
+    Writes a video file. 
+    Expects frames as (T, H, W) or (T, H, W, C) in uint8.
+    """
+    if frames.ndim == 3: # (T, H, W)
+        h, w = frames.shape[1:]
+        is_color = False
+    elif frames.ndim == 4: # (T, H, W, C)
+        h, w = frames.shape[1:3]
+        is_color = frames.shape[3] == 3
+        if is_color:
+            # Convert RGB to BGR for OpenCV
+            frames = frames[..., ::-1]
+    else:
+        raise ValueError(f"Invalid frame shape: {frames.shape}")
+
+    out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*fourcc_code), fps, (w, h), isColor=is_color)
+    for frame in frames:
+        out.write(frame)
+    out.release()
+
+
+
+def resize_fft2_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
+    """Spectral resize using FFT. Vectorized across all non-target axes."""
+    # 1. Move target axes to front: (..., H, W, ...) -> (H, W, ...)
+    img_t = np.moveaxis(img, axes, (0, 1))
+    h, w = img_t.shape[:2]
+    
+    # 2. Vectorized FFT across the first two dimensions
+    F = fft.fftshift(fft.fft2(img_t, axes=(0, 1)), axes=(0, 1))
+    
+    # 3. Create zero-padded array and calculate center crop/pad indices
+    F_new = xp.zeros((new_h, new_w, *img_t.shape[2:]), dtype=F.dtype)
+    h_min, w_min = min(h, new_h), min(w, new_w)
+    
+    ho, wo = (h - h_min)//2, (w - w_min)//2
+    hn, wn = (new_h - h_min)//2, (new_w - w_min)//2
+    
+    # 4. Perform center crop/pad (Vectorized)
+    F_new[hn:hn+h_min, wn:wn+w_min, ...] = F[ho:ho+h_min, wo:wo+w_min, ...]
+    
+    # 5. Inverse FFT and Scale
+    res_t = fft.ifftshift(F_new, axes=(0, 1))
+    res_t = fft.ifft2(res_t, axes=(0, 1)).real * (new_h * new_w / (h * w))
+    
+    # 6. Restore original axes positions
+    return np.moveaxis(res_t, (0, 1), axes)
+
+def resize_matlab_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np):
+    """Spatial resize. Loops over remaining dimensions since imresize is 2D."""
+    img_t = np.moveaxis(img, axes, (0, 1))
+    h, w = img_t.shape[:2]
+    
+    # Reshape to (H, W, -1) to loop through all other dimensions as one slice
+    flat_img = img_t.reshape(h, w, -1)
+    out = xp.empty((new_h, new_w, flat_img.shape[-1]), dtype=img.dtype)
+    
+    for i in range(flat_img.shape[-1]):
+        # Assuming imresize is a provided utility function
+        out[:, :, i] = imresize(flat_img[:, :, i], output_shape=(new_h, new_w))
+        
+    # Reshape back to target axes and move axes back
+    res_t = out.reshape(new_h, new_w, *img_t.shape[2:])
+    return np.moveaxis(res_t, (0, 1), axes)
 
 def pad_array_centrally(arr, new_shape, xp):
     """Pad array centrally to new shape"""
