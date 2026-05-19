@@ -538,11 +538,11 @@ class Holodoppler:
             
         if parameters.get("flip_x"):
             # Flip W (axis 2)
-            vid_t = np.flip(vid_t, axis=2)
+            vid_t = np.flip(vid_t, axis=-1)
             
         if parameters.get("flip_y"):
             # Flip H (axis 1)
-            vid_t = np.flip(vid_t, axis=1)
+            vid_t = np.flip(vid_t, axis=-2)
         
         # 6. Save outputs (Passing the optimized vid_t)
         self._save_outputs(
@@ -841,8 +841,8 @@ class Holodoppler:
         """Saves raw data to HDF5 with compression"""
         with h5py.File(target_dir / "h5" / "output.h5", "w") as f:
             f.create_dataset("moment0", data=vid_t[:,0,:,:]) # compression="gzip"
-            f.create_dataset("moment1", data=vid_t[:,0,:,:])
-            f.create_dataset("moment2", data=vid_t[:,0,:,:])
+            f.create_dataset("moment1", data=vid_t[:,1,:,:])
+            f.create_dataset("moment2", data=vid_t[:,2,:,:])
             f.create_dataset("HD_parameters", data=json.dumps(parameters))
             
             if parameters.get("image_registration") and reg_list:
