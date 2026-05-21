@@ -367,13 +367,21 @@ class Holodoppler:
                 frames_sub.shape[0], parameters["sampling_freq"],
                 parameters["low_freq"], parameters.get("high_freq")
             )
-            psd = self.bm.xp.abs(spectrum_f[idxs, :, :]) ** 2
+            psd = self.bm.xp.abs(spectrum_f) ** 2
             
             res_batch = {
-                "M0": self._moment(psd, freqs, 0),
-                "M1": self._moment(psd, freqs, 1),
-                "M2": self._moment(psd, freqs, 2)
+                "M0": self._moment(psd[idxs, :, :], freqs, 0),
+                "M1": self._moment(psd[idxs, :, :], freqs, 1),
+                "M2": self._moment(psd[idxs, :, :], freqs, 2)
             }
+            
+            for k, range_band in enumerate(parameters.get("frequency_bands", [])):
+                idxs_band, _ = self._frequency_filter(
+                    frames_sub.shape[0], parameters["sampling_freq"],
+                    range_band[0], range_band[1]
+                )
+                band = self.bm.xp.mean(psd[idxs_band, :, :], axis=0)
+                res_batch[f"band_{k}_{range_band[0]}_{range_band[1]}"] = band
             
             if parameters.get("debug"):
                 res_batch["spectrum_line"] = self.bm.xp.mean(
@@ -403,6 +411,10 @@ class Holodoppler:
             res["M0"] = self._apply_registration(res["M0"], reg)
             res["M1"] = self._apply_registration(res["M1"], reg)
             res["M2"] = self._apply_registration(res["M2"], reg)
+            
+            for k,v in enumerate(parameters.get("frequency_bands", [])):
+                res[f"band_{k}_{v[0]}_{v[1]}"] = self._apply_registration(res[f"band_{k}_{v[0]}_{v[1]}"], reg)
+                
             res["registration"] = reg
         toc(name="Reg")
         
@@ -498,7 +510,7 @@ class Holodoppler:
                              debug_manager, debug_queue, res_store, lock)
             
         # 1. Stack and move to CPU immediately to free VRAM
-        # stack(out_list, axis=0) creates (T, C, H, W) where C channel is moments 0, 1, 2
+        # stack(out_list, axis=0) creates (T, C, H, W) where C channel is moments 0, 1, 2 and frequency bands in order
         vid_t = self.bm.to_numpy(self.bm.xp.stack(out_list, axis=0))
         
         # 2. Cleanup GPU resources
@@ -577,7 +589,10 @@ class Holodoppler:
             if res is None:
                 break
             
-            out_list.append(self.bm.xp.stack([res["M0"], res["M1"], res["M2"]], axis=2))
+            l = [res["M0"], res["M1"], res["M2"]]
+            for k, v in enumerate(parameters.get("frequency_bands", [])):
+                l.append(res[f"band_{k}_{v[0]}_{v[1]}"])
+            out_list.append(self.bm.xp.stack(l, axis=0))
             
             if "coefs" in res and coefs_list is not None:
                 coefs_list[i] = res["coefs"]
@@ -621,8 +636,11 @@ class Holodoppler:
             if res is None:
                 break
             
-            out_list.append(cp.stack([res["M0"], res["M1"], res["M2"]], axis=2))
-            
+            l = [res["M0"], res["M1"], res["M2"]]
+            for k, v in enumerate(parameters.get("frequency_bands", [])):
+                l.append(res[f"band_{k}_{v[0]}_{v[1]}"])
+            out_list.append(self.bm.xp.stack(l, axis=0))      
+                  
             if "coefs" in res and coefs_list is not None:
                 coefs_list[i] = res["coefs"]
             if "registration" in res and reg_list is not None:
@@ -690,8 +708,10 @@ class Holodoppler:
 
             if res is None:
                 break
-
-            out_list.append(cp.stack([res["M0"], res["M1"], res["M2"]], axis=0))
+            l = [res["M0"], res["M1"], res["M2"]]
+            for k, v in enumerate(parameters.get("frequency_bands", [])):
+                l.append(res[f"band_{k}_{v[0]}_{v[1]}"])
+            out_list.append(self.bm.xp.stack(l, axis=0))
 
             if "coefs" in res and coefs_list is not None:
                 coefs_list[i] = res["coefs"]
@@ -784,6 +804,9 @@ class Holodoppler:
             "moment_0_flatfield": flatfield3D(vid_t[:,0,:,:], parameters["registration_flatfield_gw"]),
         }
         
+        for k, v in enumerate(parameters.get("frequency_bands", [])):
+            save_map[f"band_{v[0]}_{v[1]}"] = vid_t[:,3+k,:,:]
+        
         # Add debug videos to map
         for key, data in vid_debug.items():
             
@@ -843,6 +866,8 @@ class Holodoppler:
             f.create_dataset("moment0", data=vid_t[:,0,:,:]) # compression="gzip"
             f.create_dataset("moment1", data=vid_t[:,1,:,:])
             f.create_dataset("moment2", data=vid_t[:,2,:,:])
+            for k, v in enumerate(parameters.get("frequency_bands", [])):
+                f.create_dataset(f"band_{v[0]}_{v[1]}", data=vid_t[:,3+k,:,:])
             f.create_dataset("HD_parameters", data=json.dumps(parameters))
             
             if parameters.get("image_registration") and reg_list:

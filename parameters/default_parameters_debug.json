@@ -28,6 +28,10 @@
   "sampling_freq": 37037,
   "low_freq": 6000,
   "high_freq": 18300,
+  "frequency_bands": [
+    [4000, 9000],
+    [12000, 18300]
+  ],
   "svd_threshold": 32,
   "square": true,
   "transpose": false,
