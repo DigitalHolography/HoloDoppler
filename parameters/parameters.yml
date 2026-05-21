@@ -1,0 +1,54 @@
+acquisition:
+  first_frame: 0
+  end_frame: 0
+  sampling_freq: 37037
+  wavelength: 8.52e-7
+  pixel_pitch: 2.0e-5
+
+batching:
+  size: 256
+  stride: 256
+  accumulation: 1
+
+propagation:
+  method: Fresnel          # Fresnel | AngularSpectrum (| Franhofer)
+  distance: 0.480
+  zero_padding: false
+
+registration:
+  enabled: true
+  disc_ratio: 0.8
+  flatfield_gw: 35
+  batch_size: 512
+
+shack_hartmann:
+  enabled: true
+  accumulation: 1
+  reference: central_sub_ap  # central_sub_ap | resized_full_reconstruction
+  graph_laplacian: false
+  grid:
+    ny_subap: 5
+    nx_subap: 5
+  thresholds:
+    pupil: 1.2
+    deviation: 3.0
+    shift_range_pixels: 20
+  zernike_fit:
+    enabled: true
+    modes: [4, 5, 6]
+  southwell_phase_integration:
+    enabled: false
+
+filtering:
+  fourier:
+    low_freq: 6000
+    high_freq: 18300
+  svd_threshold: 16
+
+display:
+  square: true
+  transpose: false
+  flip_x: false
+  flip_y: false
+
+debug: false

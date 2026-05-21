@@ -172,6 +172,32 @@ class Holodoppler:
         nt, ny, nx = frames.shape
         res = {}
         
+        
+        # ---- Lightweight Profiler ----
+        class StepTimer:
+            def __init__(self, enabled, bm):
+                self.enabled = enabled
+                self.bm = bm
+                self._last = time.perf_counter()
+                self._logs = []
+
+            def tick(self, name):
+                if not self.enabled: return
+                now = time.perf_counter()
+                dt = (now - self._last) * 1000
+                self._last = now
+                
+                xp = self.bm.xp
+                try:
+                    mem = f"GPU: {xp.get_default_memory_pool().used_bytes()/1e6:.1f}/{xp.get_default_memory_pool().total_bytes()/1e6:.1f} MB"
+                except Exception as e:
+                    mem = f"CPU:  MB"
+                    print(e)
+                    
+                log = f"[{name:18s}] {dt:6.2f} ms | {mem}"
+                print(log)
+                self._logs.append(log)
+        
         class Accumulator:
             def __init__(self, batch_size, xp):
                 self.xp = xp
@@ -196,12 +222,9 @@ class Holodoppler:
         subaps_acc = Accumulator(parameters.get("shack_hartmann_accumulation", 1), self.bm.xp)
         main_acc = Accumulator(parameters.get("accumulation", 1), self.bm.xp)
         
-        t0 = time.perf_counter()
+        prof = StepTimer(tictoc, self.bm)
         
-        def toc(name=""):
-            if tictoc:
-                dt = time.perf_counter() - t0
-                print(name, f"{dt*1000:.3f} ms")
+        prof.tick("PipelineStart")
 
         # Shack-Hartmann phase estimation
         if parameters.get("shack_hartmann", False):
@@ -211,12 +234,15 @@ class Holodoppler:
             for it in range(subaps_acc.batch_size):
                 frames_sub = frames[sub_batch_stride*it:sub_batch_stride*it + sub_batch_size]
                 
+                prof.tick("UsubapsStart")
+                
                 if parameters["spatial_propagation"] == "Fresnel":
                     self.propagation.build_fresnel_kernel(
                         parameters["z"], parameters["pixel_pitch"],
                         parameters["wavelength"], ny, nx,
                         zero_padding=parameters.get("zero_padding")
                     )
+                    prof.tick("build_fresnel_kernel")
                     U_subaps = self.shack_hartmann.construct_subapertures_fresnel(
                         frames_sub, parameters["pixel_pitch"], parameters["pixel_pitch"],
                         parameters["wavelength"], parameters["z"],
@@ -226,6 +252,7 @@ class Holodoppler:
                         parameters["shack_hartmann_ny_subap"],
                         parameters["svd_threshold"]
                     )
+                    prof.tick("construct_subapertures_fresnel")
                 else:  # AngularSpectrum
                     self.propagation.build_angular_kernel(
                         parameters["z"], parameters["pixel_pitch"],
@@ -241,7 +268,7 @@ class Holodoppler:
                         parameters["shack_hartmann_ny_subap"],
                         parameters["svd_threshold"]
                     )
-                
+                    prof.tick("construct_subapertures_angular")
                 subaps_acc.add({"U_subaps": U_subaps})
             
             b = subaps_acc.flush()
@@ -250,6 +277,8 @@ class Holodoppler:
             
             if parameters.get("debug"):
                 res["U_subaps"] = U_subaps
+                
+            prof.tick("saving U_subaps")
             
             # Calculate displacements
             if parameters.get("shack_hartmann_graph_laplacian"):
@@ -259,6 +288,7 @@ class Holodoppler:
                     deviation_threshold=parameters.get("shack_hartmann_deviation_threshold", 3.0),
                     shifts_range=parameters.get("shack_hartmann_shifts_pixel_range_threshold", 20.0)
                 )
+                prof.tick("calculate_displacements_graph_laplacian")
             else:
                 ny_s, nx_s, Ny, Nx = U_subaps.shape
                 imref = parameters.get("shack_hartmann_graph_ref")
@@ -276,7 +306,7 @@ class Holodoppler:
                     shifts_range=parameters.get("shack_hartmann_shifts_pixel_range_threshold", 20.0),
                     ref = imref
                 )
-            
+                prof.tick("calculate_displacements")
             if parameters.get("debug"):
                 res["shifts_y"] = shifts_y
                 res["shifts_x"] = shifts_x
@@ -288,6 +318,7 @@ class Holodoppler:
                     parameters["wavelength"], shifts_y, shifts_x,
                     parameters["shack_hartmann_zernike_fit_modes"]
                 )
+                prof.tick("fit_zernike")
                 res["coefs"] = coefs
                 if parameters.get("debug"):
                     res["phase"] = phase
@@ -297,6 +328,7 @@ class Holodoppler:
                     ny, nx, parameters["pixel_pitch"], parameters["pixel_pitch"],
                     parameters["wavelength"], shifts_y, shifts_x
                 )
+                prof.tick("southwell_phase_integration")
                 if parameters.get("debug"):
                     res["phase"] = phase
             else:
@@ -310,7 +342,8 @@ class Holodoppler:
                     phase_term = pad_array_centrally(phase_term, parameters["zero_padding"], self.bm.xp)
             else:
                 phase_term = None
-        toc("Usubap")
+        prof.tick("Usubaps")
+
         # Main processing loop
         sub_batch_size = nt // main_acc.batch_size
         sub_batch_stride = sub_batch_size
@@ -397,7 +430,7 @@ class Holodoppler:
                     res_batch["M0notfixed"] = self._moment(psd_not_fixed, freqs, 0)
             
             b = main_acc.add(res_batch)
-        toc(name="Propag")
+        prof.tick("Propag")
         
         if b is not None:
             res.update(b)
@@ -416,7 +449,7 @@ class Holodoppler:
                 res[f"band_{k}_{v[0]}_{v[1]}"] = self._apply_registration(res[f"band_{k}_{v[0]}_{v[1]}"], reg)
                 
             res["registration"] = reg
-        toc(name="Reg")
+        prof.tick("Reg")
         
         return res
     
