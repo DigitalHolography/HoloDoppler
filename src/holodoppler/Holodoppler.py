@@ -456,8 +456,9 @@ class Holodoppler:
         if parameters.get("image_registration") and registration_ref is not None:
             M0_ff = gaussian_flatfield(res["M0"], parameters["registration_flatfield_gw"], 
                                         self.bm.gaussian_filter)
-            res["M0_ff_noreg"] = M0_ff
-            reg = self._register(registration_ref, M0_ff, parameters.get("registration_disc_ratio"))
+            if parameters.get("debug"):
+                res["M0_ff_noreg"] = M0_ff
+            reg = self._register(registration_ref, M0_ff, parameters.get("registration_disc_ratio"), estimate_similarity = parameters.get("image_registration_type") == "translation_rotation_scale")
             res["M0"] = self._apply_registration(res["M0"], reg)
             res["M1"] = self._apply_registration(res["M1"], reg)
             res["M2"] = self._apply_registration(res["M2"], reg)
