@@ -9,7 +9,6 @@ import threading
 import queue
 import traceback
 from collections import defaultdict
-from importlib.metadata import version
 
 from pathlib import Path
 import json
@@ -37,6 +36,24 @@ from .plotting import DebugPlotterManager
 from .utils import (gaussian_flatfield, normalize_image, temporal_gaussian_filter, flatfield3D, 
                     pad_array_centrally, crop_array_centrally, elliptical_mask, resize_fft2_slicewise, resize_matlab_slicewise)
 
+from pathlib import Path
+
+def get_version() -> str:
+    # Check if in dev mode (pyproject.toml exists)
+    dev_toml = Path(__file__).parent.parent.parent / "pyproject.toml"
+    
+    if dev_toml.exists():
+        # Development mode - parse version from pyproject.toml as text
+        with open(dev_toml, "r") as f:
+            for line in f:
+                if line.strip().startswith("version"):
+                    version = line.split("=")[1].strip().strip('"').strip("'")
+                    return version
+    
+    # Production mode - use installed metadata
+    from importlib.metadata import version
+    return version("holodoppler")
+
 
 class Holodoppler:
     """
@@ -54,7 +71,7 @@ class Holodoppler:
     """
     
     def __init__(self, backend="numpy", pipeline_version="latest"):
-        self.__version__ = version("holodoppler")
+        self.__version__ = get_version()
         
         
         self.backend_name = backend
@@ -834,7 +851,7 @@ class Holodoppler:
             "moment_0": vid_t[:,0,:,:],
             "moment_1": vid_t[:,1,:,:],
             "moment_2": vid_t[:,2,:,:],
-            "moment_0_flatfield": flatfield3D(vid_t[:,0,:,:], parameters["registration_flatfield_gw"]),
+            # "moment_0_flatfield": flatfield3D(vid_t[:,0,:,:], parameters["registration_flatfield_gw"]), sorry but too slow
         }
         
         for k, v in enumerate(parameters.get("frequency_bands", [])):
