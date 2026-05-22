@@ -406,8 +406,8 @@ class Holodoppler:
                 holograms_not_fixed = None
             
             # SVD filtering
-            # holograms_f = self.filtering.svd_filter(holograms, parameters["svd_threshold"])
-            holograms_f = self.filtering.tucker_filter(holograms, ranks=holograms.shape, temporal_modes_to_remove=parameters["svd_threshold"])
+            holograms_f = self.filtering.svd_filter(holograms, parameters["svd_threshold"])
+            # holograms_f = self.filtering.tucker_filter(holograms, ranks=holograms.shape, temporal_modes_to_remove=parameters["svd_threshold"])
             
             # Temporal FFT
             spectrum_f = self.filtering.fourier_time_transform(holograms_f)

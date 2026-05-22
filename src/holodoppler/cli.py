@@ -11,7 +11,7 @@ import os
 from .plotting import DebugPlotterManager
 
 
-def preview(holo_path, parameters: dict, tictoc=True) -> None:
+def preview(holo_path, parameters: dict, tictoc=False) -> None:
     HD = Holodoppler(backend = "cupyRAM", pipeline_version = "latest")
 
     HD.load_file(holo_path)
@@ -22,7 +22,6 @@ def preview(holo_path, parameters: dict, tictoc=True) -> None:
     print(parameters)
 
     frames = HD.read_frames(0, 1)
-    res = HD.render_moments(parameters, tictoc=tictoc)
     res = HD.render_moments(parameters, tictoc=tictoc)
 
     def plot_debug_safe(HD, res):
