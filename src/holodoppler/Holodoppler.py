@@ -895,13 +895,16 @@ class Holodoppler:
 
     def _save_h5(self, target_dir, vid_t, parameters, reg_list, coefs_list):
         """Saves raw data to HDF5 with compression"""
-        with h5py.File(target_dir / "h5" / "output.h5", "w") as f:
+        target_dir_name = target_dir.name if target_dir.name else "output"
+        with h5py.File(target_dir / "h5" / f"{target_dir_name}_output.h5", "w") as f:
             f.create_dataset("moment0", data=vid_t[:,0,:,:]) # compression="gzip"
             f.create_dataset("moment1", data=vid_t[:,1,:,:])
             f.create_dataset("moment2", data=vid_t[:,2,:,:])
             for k, v in enumerate(parameters.get("frequency_bands", [])):
                 f.create_dataset(f"band_{v[0]}_{v[1]}", data=vid_t[:,3+k,:,:])
             f.create_dataset("HD_parameters", data=json.dumps(parameters))
+            info_text = f"py{self.__version__}  {self.backend_name}  {self.pipeline_version}"
+            f.create_dataset("HD_info", data=info_text)
             
             if parameters.get("image_registration") and reg_list:
                 f.create_dataset("registration", data=np.array(reg_list, dtype=np.float32))
