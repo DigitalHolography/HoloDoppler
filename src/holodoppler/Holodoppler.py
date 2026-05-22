@@ -425,6 +425,8 @@ class Holodoppler:
                 "M2": self._moment(psd[idxs, :, :], freqs, 2)
             }
             
+            res_batch["M0ff"] = gaussian_flatfield(res_batch["M0"], parameters["registration_flatfield_gw"], self.bm.gaussian_filter)
+            
             for k, range_band in enumerate(parameters.get("frequency_bands", [])):
                 idxs_band, _ = self._frequency_filter(
                     frames_sub.shape[0], parameters["sampling_freq"],
@@ -462,6 +464,7 @@ class Holodoppler:
             res["M0"] = self._apply_registration(res["M0"], reg)
             res["M1"] = self._apply_registration(res["M1"], reg)
             res["M2"] = self._apply_registration(res["M2"], reg)
+            res["M0ff"] = self._apply_registration(res["M0ff"], reg)
             
             for k,v in enumerate(parameters.get("frequency_bands", [])):
                 res[f"band_{k}_{v[0]}_{v[1]}"] = self._apply_registration(res[f"band_{k}_{v[0]}_{v[1]}"], reg)
@@ -640,7 +643,7 @@ class Holodoppler:
             if res is None:
                 break
             
-            l = [res["M0"], res["M1"], res["M2"]]
+            l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
             for k, v in enumerate(parameters.get("frequency_bands", [])):
                 l.append(res[f"band_{k}_{v[0]}_{v[1]}"])
             out_list.append(self.bm.xp.stack(l, axis=0))
@@ -687,7 +690,7 @@ class Holodoppler:
             if res is None:
                 break
             
-            l = [res["M0"], res["M1"], res["M2"]]
+            l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
             for k, v in enumerate(parameters.get("frequency_bands", [])):
                 l.append(res[f"band_{k}_{v[0]}_{v[1]}"])
             out_list.append(self.bm.xp.stack(l, axis=0))      
@@ -759,7 +762,7 @@ class Holodoppler:
 
             if res is None:
                 break
-            l = [res["M0"], res["M1"], res["M2"]]
+            l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
             for k, v in enumerate(parameters.get("frequency_bands", [])):
                 l.append(res[f"band_{k}_{v[0]}_{v[1]}"])
             out_list.append(self.bm.xp.stack(l, axis=0))
@@ -815,7 +818,7 @@ class Holodoppler:
         self._save_bundle(
             target_dir=target_dir,
             mode=save_mode,
-            vid_t=vid,
+            vid=vid,
             vid_debug=vid_debug,
             parameters=parameters,
             reg_list=reg_list,
@@ -830,7 +833,7 @@ class Holodoppler:
         base_name = Path(self.file_reader.file_path).stem
         return Path(self.file_reader.file_path).parent / base_name / f"{base_name}_HD"
 
-    def _save_bundle(self, target_dir, mode, vid_t, vid_debug, parameters, 
+    def _save_bundle(self, target_dir, mode, vid, vid_debug, parameters, 
                     reg_list, coefs_list, end_frame, first_frame, num_batch):
         """
         Unified saving engine. 
@@ -846,17 +849,21 @@ class Holodoppler:
             (target_dir / sub).mkdir(parents=True, exist_ok=True)
 
         fps = min((num_batch / (end_frame - first_frame) * parameters["sampling_freq"]), 65)
+        # vid = np.transpose(vid_t, axes=[0,1,3,2]) # flip x-y
+        
+        # vid = np.flip(vid, axis=2) # flip y
 
         # --- 1. Setup Data Map ---
         save_map = {
-            "moment_0": vid_t[:,0,:,:],
-            "moment_1": vid_t[:,1,:,:],
-            "moment_2": vid_t[:,2,:,:],
+            "moment_0": vid[:,0,:,:],
+            "moment_1": vid[:,1,:,:],
+            "moment_2": vid[:,2,:,:],
+            "moment_0_ff": vid[:,3,:,:],
             # "moment_0_flatfield": flatfield3D(vid_t[:,0,:,:], parameters["registration_flatfield_gw"]), sorry but too slow
         }
         
         for k, v in enumerate(parameters.get("frequency_bands", [])):
-            save_map[f"band_{v[0]}_{v[1]}"] = vid_t[:,3+k,:,:]
+            save_map[f"band_{v[0]}_{v[1]}"] = vid[:,4+k,:,:]
         
         # Add debug videos to map
         for key, data in vid_debug.items():
@@ -884,7 +891,7 @@ class Holodoppler:
         
         # --- 4. Save H5 (Only if mode is FULL) ---
         if mode == "FULL":
-            self._save_h5(target_dir, vid_t, parameters, reg_list, coefs_list)
+            self._save_h5(target_dir, vid, parameters, reg_list, coefs_list)
             
         plt.close('all')
 
@@ -911,15 +918,19 @@ class Holodoppler:
             with open(target_dir / "json" / "holovibes_header.json", "w") as f:
                 json.dump(self.file_reader.file_header, f, indent=4)
 
-    def _save_h5(self, target_dir, vid_t, parameters, reg_list, coefs_list):
+    def _save_h5(self, target_dir, vid, parameters, reg_list, coefs_list):
         """Saves raw data to HDF5 with compression"""
+        
         target_dir_name = target_dir.name if target_dir.name else "output"
+        
+        vid_t = np.flip(vid,axis=2) # flip y for doppler view
         with h5py.File(target_dir / "h5" / f"{target_dir_name}_output.h5", "w") as f:
             f.create_dataset("moment0", data=vid_t[:,0,:,:]) # compression="gzip"
             f.create_dataset("moment1", data=vid_t[:,1,:,:])
             f.create_dataset("moment2", data=vid_t[:,2,:,:])
+            f.create_dataset("moment0ff", data=vid_t[:,3,:,:])
             for k, v in enumerate(parameters.get("frequency_bands", [])):
-                f.create_dataset(f"band_{v[0]}_{v[1]}", data=vid_t[:,3+k,:,:])
+                f.create_dataset(f"band_{v[0]}_{v[1]}", data=vid_t[:,4+k,:,:])
             f.create_dataset("HD_parameters", data=json.dumps(parameters))
             info_text = f"py{self.__version__}  {self.backend_name}  {self.pipeline_version}"
             f.create_dataset("HD_info", data=info_text)
