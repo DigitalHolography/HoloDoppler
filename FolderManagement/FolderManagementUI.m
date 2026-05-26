@@ -350,109 +350,77 @@ methods (Access = private)
     end
 
     function saveConfigs(obj)
-        % Save/update the HoloDoppler parameter config for every file in the list.
+        % Save a selected parameter configuration to ALL files in the drawer list.
+        %
+        % A dialog asks the user to pick a .json config file.
+        % That file's parameters are then saved as the per‑file config for every
+        % entry in the drawer_list, overwriting any existing config or creating a
+        % new one where none existed.
+        %
+        % The main app's UI parameters are preserved (restored at the end).
+
         app = obj.MainApp;
         keepZ = obj.KeepZCheckbox.Value;
 
-        % Application root is one level above this class file
-        appRoot = fileparts(fileparts(mfilename('fullpath')));
-        defaultParamPath = fullfile(appRoot, 'StandardConfigs', ...
-        'Phantom S711 37kHz retinal analysis.json');
-
+        % --- Capture original UI parameters (to restore later) ---
         originalParams = app.HD.params;
 
+        % --- Ask user to choose the config file to apply ---
+        figureHandle = obj.Figure;
+        figure(figureHandle);
+
+        [filename, pathname] = uigetfile('*.json', 'Select config file to apply');
+        figure(figureHandle);
+
+        if isequal(filename, 0)
+            % User cancelled
+            return;
+        end
+
+        chosenConfigPath = fullfile(pathname, filename);
+
+        % --- Load the chosen config ---
+        try
+            chosenParams = jsondecode(fileread(chosenConfigPath));
+        catch ME
+            uialert(obj.Figure, ...
+                sprintf('Failed to read the config file:\n%s', ME.message), ...
+            'Invalid Config File');
+            return;
+        end
+
+        % --- Apply it to every file in the drawer list ---
         for i = 1:length(obj.drawerList)
             filePath = obj.drawerList{i};
-            [dirName, name] = fileparts(filePath);
-            configFile = fullfile(dirName, name, sprintf('%s_input_HD_params.json', name));
-
-            if ~isfile(configFile)
-
-                if isfile(defaultParamPath)
-                    app.HD.loadParams(defaultParamPath);
-                else
-                    warning('FolderManagementUI:saveConfigs:NoDefaultConfig', ...
-                        'Default config file "%s" not found. Skipping config creation for %s.', ...
-                        defaultParamPath, filePath);
-                    continue;
-                end
-
-            end
-
+            % Set the main app's params to the chosen ones temporarily,
+            % then call saveParams (which uses app.HD.params internally)
+            app.HD.params = chosenParams;
             app.HD.saveParams(filePath, keepZ);
-            fprintf('Saved config for: %s\n', filePath);
+            fprintf('Config saved for: %s\n', filePath);
         end
 
-        % Restore original parameters
+        % --- Restore the original UI parameters ---
         app.HD.params = originalParams;
-    end
-
-    function fileList = buildDrawerFileList(obj)
-        % Build cell array: {filePath, paramsStruct, configPath}
-        % Each file now has exactly one configuration.
-        fileList = cell(length(obj.drawerList), 3);
-
-        for i = 1:length(obj.drawerList)
-            parentPath = obj.drawerList{i}; % full path to .cine/.holo
-            [parentDir, name] = fileparts(parentPath);
-            configFile = fullfile(parentDir, name, sprintf('%s_input_HD_params.json', name));
-
-            if isfile(configFile)
-
-                try
-                    fid = fopen(configFile, 'r');
-                    raw = fread(fid, inf, '*char')';
-                    fclose(fid);
-                    params = jsondecode(raw);
-                catch
-                    params = struct(); % empty if load fails
-                end
-
-                fileList{i, 1} = parentPath;
-                fileList{i, 2} = params;
-                fileList{i, 3} = configFile;
-            else
-                fileList{i, 1} = parentPath;
-                fileList{i, 2} = struct();
-                fileList{i, 3} = configFile;
-            end
-
-        end
-
     end
 
     function renderVideos(obj)
         app = obj.MainApp;
-        fileList = obj.buildDrawerFileList(); % {filePath, paramsStruct, configPath}
 
-        % Determine number of workers from the first available config
+        % ----- Gestion de la pool (inchangée) -----
         numWorkers = 0;
         cluster = parcluster;
         maxWorkers = cluster.NumWorkers;
 
-        for i = 1:size(fileList, 1)
-
-            if ~isempty(fileList{i, 2})
-                params = fileList{i, 2};
-
-                if isfield(params, 'parforArg')
-                    numWorkers = params.parforArg;
-                    break;
-                end
-
-            end
-
+        if ~isempty(app.HD.params) && isfield(app.HD.params, 'parforArg')
+            numWorkers = app.HD.params.parforArg;
         end
 
-        % Safeguard: ensure at least 1 worker and not exceeding pool maximum
         if numWorkers <= 0
             numWorkers = max(1, maxWorkers - 2);
         else
 
             if numWorkers > maxWorkers
-                warning('FolderManagementUI:parforArgExceedsMaxWorkers', ...
-                    'parforArg (%d) exceeds max workers (%d). Using %d.', ...
-                    numWorkers, maxWorkers, maxWorkers);
+                warning('Ajustement workers...');
                 numWorkers = maxWorkers;
             end
 
@@ -465,37 +433,24 @@ methods (Access = private)
         app.HD.poolManager.acquire();
         cleanupPool = onCleanup(@() app.HD.poolManager.release());
 
-        pool = app.HD.poolManager.Pool;
-        fprintf("Processing %d files with %d workers ...\n", ...
-            size(fileList, 1), pool.NumWorkers);
+        fprintf("Traitement de %d fichiers...\n", length(obj.drawerList));
 
-        % Load the default configuration (empty struct if unavailable)
-        defaultConfig = loadDefaultConfig(obj);
+        for i = 1:length(obj.drawerList)
+            filePath = obj.drawerList{i};
 
-        % === File processing ===
-        for i = 1:size(fileList, 1)
-            filePath = fileList{i, 1};
-            params = fileList{i, 2};
+            try
+                % 1) Charger le fichier (paramètres déterminés par getFileParameters via LoadFile)
+                app.HD.LoadFile(filePath);
 
-            if isempty(params) || isempty(fieldnames(params))
-
-                if isempty(fieldnames(defaultConfig))
-                    warning('FolderManagementUI:noConfig', ...
-                        'No config for %s – and no default config available. Skipping.', filePath);
-                    continue;
-                end
-
-                params = defaultConfig;
+                % 2) Lancer le rendu
+                app.HD.VideoRendering();
+                fprintf("Terminé : %s\n", filePath);
+            catch ME
+                warning('Échec pour %s : %s', filePath, ME.message);
             end
 
-            % Use the single configuration for this file
-            app.HD.LoadFile(filePath, params = params);
-            app.HD.VideoRendering();
-            fprintf("Completed: %s\n", filePath);
         end
 
-        % NOTE: After this loop the main application points to the last rendered file.
-        % Consider saving and restoring the original state if needed.
     end
 
     function deleteAllConfigs(obj)
@@ -514,29 +469,6 @@ methods (Access = private)
         end
 
         fprintf('Deleted %d config files for %d entries\n', n, length(obj.drawerList));
-    end
-
-    function params = loadDefaultConfig(~)
-        % Load the standard default parameter file.
-        % Uses the application root (one level above FolderManagement).
-        try
-            appRoot = fileparts(fileparts(mfilename('fullpath')));
-            defaultParamPath = fullfile(appRoot, 'StandardConfigs', ...
-            'Phantom S711 37kHz retinal analysis.json');
-
-            if isfile(defaultParamPath)
-                fid = fopen(defaultParamPath, 'r');
-                raw = fread(fid, inf, '*char')';
-                fclose(fid);
-                params = jsondecode(raw);
-            else
-                params = struct();
-            end
-
-        catch
-            params = struct();
-        end
-
     end
 
 end
