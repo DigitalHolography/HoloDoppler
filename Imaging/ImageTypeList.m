@@ -50,6 +50,11 @@ properties
     % --- Frequency buckets ----------------------------------------------
     buckets
     full_buckets
+
+    % High and low frequency images
+    HF_M0
+    LF_M0
+    Sum_Image
 end
 
 % -----------------------------------------------------------------------
@@ -68,9 +73,9 @@ methods
         obj.power_adapt = ImageType('power_adapt');
 
         % Moments
-        obj.moment_0 = ImageType('M0');
-        obj.moment_1 = ImageType('M1');
-        obj.moment_2 = ImageType('M2');
+        obj.moment_0 = ImageType('M0'); % .raw
+        obj.moment_1 = ImageType('M1'); % .raw
+        obj.moment_2 = ImageType('M2'); % .raw
         obj.arg_0 = ImageType('arg0');
         obj.f_RMS = ImageType('f_RMS');
 
@@ -95,6 +100,11 @@ methods
         obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', [], ...
             'intervals_2', [], 'M0', []));
         obj.full_buckets = ImageType('full_buckets', struct('SH_full', []));
+
+        % High and low frequency images
+        obj.HF_M0 = ImageType('HF_M0'); % .raw
+        obj.LF_M0 = ImageType('LF_M0'); % .raw
+        obj.Sum_Image = ImageType('Sum_Image');
     end
 
     % ------------------------------------------------------------------
@@ -266,6 +276,19 @@ methods
             M0 = moment0(SH_mod, f1, f2, fs, batchSize);
             M2 = moment2(SH_mod, f1, f2, fs, batchSize);
             obj.f_RMS.image = sqrt(M2 ./ mean(M0, [1, 2]));
+        end
+
+        if obj.HF_M0.is_selected
+            obj.HF_M0.image = moment0(SH_mod, fr2, f2, fs, batchSize);
+        end
+
+        if obj.LF_M0.is_selected
+            obj.LF_M0.image = moment0(SH_mod, fr1, fr2, fs, batchSize);
+        end
+
+        if obj.Sum_Image.is_selected
+            obj.Sum_Image.image = energy_ratio(SH_mod, fr1, f2, fr2, fr2, fs, batchSize) + ...
+                moment0(SH_mod, f1, f2, fs, batchSize);
         end
 
         % --- Spectral statistics ---------------------------------------

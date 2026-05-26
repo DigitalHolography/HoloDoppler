@@ -8,7 +8,10 @@
     "moment_1",
     "moment_2",
     "band_ratio",
-    "broadening"
+    "broadening",
+    "HF_M0",
+    "LF_M0",
+    "Sum_Image"
   ],
   "imageRegistration": true,
   "spatialTransform": "Fresnel",
@@ -25,5 +28,6 @@
   "flip_x": true,
   "square": true,
   "frequencyRangeBandRatio1": 3,
-  "frequencyRangeBandRatio2": 9
+  "frequencyRangeBandRatio2": 9,
+  "CornerCompensation": true
 }

@@ -101,7 +101,7 @@ methods (Access = private)
         obj.KeepZCheckbox = uicheckbox('Parent', buttonGrid, ...
             'FontColor', [1 1 1], ...
             'Text', 'Keep z distance', ...
-            'Value', 0);
+            'Value', 1);
         obj.KeepZCheckbox.Layout.Row = 2;
         obj.KeepZCheckbox.Layout.Column = 3;
 
@@ -350,109 +350,83 @@ methods (Access = private)
     end
 
     function saveConfigs(obj)
-        % Save/update the HoloDoppler parameter config for every file in the list.
+        % Save a selected parameter configuration to ALL files in the drawer list.
+        % If 'Keep Z distance' is checked, the original propagation distance
+        % from each file's metadata is preserved (overriding the config's value).
+
         app = obj.MainApp;
         keepZ = obj.KeepZCheckbox.Value;
 
-        % Application root is one level above this class file
-        appRoot = fileparts(fileparts(mfilename('fullpath')));
-        defaultParamPath = fullfile(appRoot, 'StandardConfigs', ...
-        'Phantom S711 37kHz retinal analysis.json');
-
+        % --- Backup current UI parameters ---
         originalParams = app.HD.params;
 
+        % --- Select config file ---
+        figureHandle = obj.Figure;
+        figure(figureHandle);
+        [filename, pathname] = uigetfile('*.json', 'Select config file to apply');
+        figure(figureHandle);
+
+        if isequal(filename, 0)
+            return;
+        end
+
+        chosenConfigPath = fullfile(pathname, filename);
+
+        % --- Load the chosen config ---
+        try
+            chosenParams = jsondecode(fileread(chosenConfigPath));
+        catch ME
+            uialert(obj.Figure, ...
+                sprintf('Failed to read the config file:\n%s', ME.message), ...
+            'Invalid Config File');
+            return;
+        end
+
+        % --- Apply to each file ---
         for i = 1:length(obj.drawerList)
             filePath = obj.drawerList{i};
-            [dirName, name] = fileparts(filePath);
-            configFile = fullfile(dirName, name, sprintf('%s_input_HD_params.json', name));
 
-            if ~isfile(configFile)
+            % Start from a copy of the chosen parameters
+            paramsToSave = chosenParams;
 
-                if isfile(defaultParamPath)
-                    app.HD.loadParams(defaultParamPath);
-                else
-                    warning('FolderManagementUI:saveConfigs:NoDefaultConfig', ...
-                        'Default config file "%s" not found. Skipping config creation for %s.', ...
-                        defaultParamPath, filePath);
-                    continue;
+            % If keepZ is checked, override spatialPropagation with the file's own distance
+            if keepZ
+                originalZ = getOriginalPropagationDistance(filePath);
+
+                if ~isnan(originalZ)
+                    paramsToSave.spatialPropagation = originalZ;
                 end
 
             end
 
+            % Temporarily set the app's params for saveParams to work with
+            app.HD.params = paramsToSave;
             app.HD.saveParams(filePath, keepZ);
-            fprintf('Saved config for: %s\n', filePath);
+            fprintf('Config saved for: %s\n', filePath);
         end
 
-        % Restore original parameters
+        % --- Restore original UI state ---
         app.HD.params = originalParams;
-    end
-
-    function fileList = buildDrawerFileList(obj)
-        % Build cell array: {filePath, paramsStruct, configPath}
-        % Each file now has exactly one configuration.
-        fileList = cell(length(obj.drawerList), 3);
-
-        for i = 1:length(obj.drawerList)
-            parentPath = obj.drawerList{i}; % full path to .cine/.holo
-            [parentDir, name] = fileparts(parentPath);
-            configFile = fullfile(parentDir, name, sprintf('%s_input_HD_params.json', name));
-
-            if isfile(configFile)
-
-                try
-                    fid = fopen(configFile, 'r');
-                    raw = fread(fid, inf, '*char')';
-                    fclose(fid);
-                    params = jsondecode(raw);
-                catch
-                    params = struct(); % empty if load fails
-                end
-
-                fileList{i, 1} = parentPath;
-                fileList{i, 2} = params;
-                fileList{i, 3} = configFile;
-            else
-                fileList{i, 1} = parentPath;
-                fileList{i, 2} = struct();
-                fileList{i, 3} = configFile;
-            end
-
-        end
-
     end
 
     function renderVideos(obj)
         app = obj.MainApp;
-        fileList = obj.buildDrawerFileList(); % {filePath, paramsStruct, configPath}
 
-        % Determine number of workers from the first available config
+        % ----- Gestion de la pool (inchangée) -----
         numWorkers = 0;
         cluster = parcluster;
         maxWorkers = cluster.NumWorkers;
 
-        for i = 1:size(fileList, 1)
-
-            if ~isempty(fileList{i, 2})
-                params = fileList{i, 2};
-
-                if isfield(params, 'parforArg')
-                    numWorkers = params.parforArg;
-                    break;
-                end
-
-            end
-
+        if ~isempty(app.HD.params) && isfield(app.HD.params, 'parforArg')
+            numWorkers = app.HD.params.parforArg;
         end
 
-        % Safeguard: ensure at least 1 worker and not exceeding pool maximum
         if numWorkers <= 0
             numWorkers = max(1, maxWorkers - 2);
         else
 
             if numWorkers > maxWorkers
-                warning('FolderManagementUI:parforArgExceedsMaxWorkers', ...
-                    'parforArg (%d) exceeds max workers (%d). Using %d.', ...
-                    numWorkers, maxWorkers, maxWorkers);
+                warning('Ajustement workers...');
                 numWorkers = maxWorkers;
             end
 
@@ -465,37 +439,24 @@ methods (Access = private)
         app.HD.poolManager.acquire();
         cleanupPool = onCleanup(@() app.HD.poolManager.release());
 
-        pool = app.HD.poolManager.Pool;
-        fprintf("Processing %d files with %d workers ...\n", ...
-            size(fileList, 1), pool.NumWorkers);
+        fprintf("Traitement de %d fichiers...\n", length(obj.drawerList));
 
-        % Load the default configuration (empty struct if unavailable)
-        defaultConfig = loadDefaultConfig(obj);
+        for i = 1:length(obj.drawerList)
+            filePath = obj.drawerList{i};
 
-        % === File processing ===
-        for i = 1:size(fileList, 1)
-            filePath = fileList{i, 1};
-            params = fileList{i, 2};
+            try
+                % 1) Charger le fichier (paramètres déterminés par getFileParameters via LoadFile)
+                app.HD.LoadFile(filePath);
 
-            if isempty(params) || isempty(fieldnames(params))
-
-                if isempty(fieldnames(defaultConfig))
-                    warning('FolderManagementUI:noConfig', ...
-                        'No config for %s – and no default config available. Skipping.', filePath);
-                    continue;
-                end
-
-                params = defaultConfig;
+                % 2) Lancer le rendu
+                app.HD.VideoRendering();
+                fprintf("Terminé : %s\n", filePath);
+            catch ME
+                warning('Échec pour %s : %s', filePath, ME.message);
             end
 
-            % Use the single configuration for this file
-            app.HD.LoadFile(filePath, params = params);
-            app.HD.VideoRendering();
-            fprintf("Completed: %s\n", filePath);
         end
 
-        % NOTE: After this loop the main application points to the last rendered file.
-        % Consider saving and restoring the original state if needed.
     end
 
     function deleteAllConfigs(obj)
@@ -504,10 +465,22 @@ methods (Access = private)
         for i = 1:length(obj.drawerList)
             filePath = obj.drawerList{i};
             [dirName, name] = fileparts(filePath);
-            configFile = fullfile(dirName, name, sprintf('%s_input_HD_params.json', name));
+            baseOutputDir = fullfile(dirName, name);
 
-            if isfile(configFile)
-                delete(configFile);
+            % First config file (the main one)
+            configFile1 = fullfile(baseOutputDir, sprintf('%s_input_HD_params.json', name));
+
+            if isfile(configFile1)
+                delete(configFile1);
+                n = n + 1;
+            end
+
+            % Second config file (inside the <name>_HD subfolder)
+            configFile2 = fullfile(baseOutputDir, sprintf('%s_HD', name), ...
+                sprintf('%s_HD_input_HD_params.json', name));
+
+            if isfile(configFile2)
+                delete(configFile2);
                 n = n + 1;
             end
 
@@ -516,29 +489,37 @@ methods (Access = private)
         fprintf('Deleted %d config files for %d entries\n', n, length(obj.drawerList));
     end
 
-    function params = loadDefaultConfig(~)
-        % Load the standard default parameter file.
-        % Uses the application root (one level above FolderManagement).
-        try
-            appRoot = fileparts(fileparts(mfilename('fullpath')));
-            defaultParamPath = fullfile(appRoot, 'StandardConfigs', ...
-            'Phantom S711 37kHz retinal analysis.json');
+end
 
-            if isfile(defaultParamPath)
-                fid = fopen(defaultParamPath, 'r');
-                raw = fread(fid, inf, '*char')';
-                fclose(fid);
-                params = jsondecode(raw);
-            else
-                params = struct();
+end
+
+% -------------------------------------------------------------------------
+% Helper: read the propagation distance directly from the raw file metadata
+% -------------------------------------------------------------------------
+function z = getOriginalPropagationDistance(filePath)
+[~, ~, ext] = fileparts(filePath);
+z = NaN;
+
+switch lower(ext)
+    case '.holo'
+
+        try
+            reader = HoloReader(filePath);
+            % Same threshold as in getFileParameters
+            if reader.version >= 5
+                z = reader.footer.compute_settings.image_rendering.propagation_distance;
             end
 
+            clear reader;
         catch
-            params = struct();
+            % Leave as NaN if anything fails
         end
 
-    end
-
+    case '.cine'
+        % .cine files usually have no built-in propagation distance;
+        % we leave it as NaN so the config's value is kept.
+    otherwise
+        % Unsupported extension – do nothing
 end
 
 end
