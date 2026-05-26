@@ -25,7 +25,7 @@ from scipy.ndimage import zoom as scipy_zoom
 
 
 class BackendManager:
-    """Manages numpy/cupy backend switching"""
+    """Manages numpy/cupy backend switching""" # TODO add JAX
     
     def __init__(self, backend="numpy"):
         self.backend_name = backend

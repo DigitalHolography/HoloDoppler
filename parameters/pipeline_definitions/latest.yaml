@@ -1,0 +1,75 @@
+globals: # global parameters used by multiple nodes
+  sampling_freq: 37037 # camera sampling frequency of the aquisition
+  wavelength: 8.52e-7 # laser wavelength
+  pixel_pitch: [2e-5, 2e-5] # camera pixel pitch (distance between two consecutive 
+                            # pixels in y and x direction)
+
+debug:
+  enabled: true
+  figures: all
+
+goals: ["moments_registered"]
+
+saving:
+  square: true
+  transpose: false
+  flip_x: false
+  flip_y: false
+
+runtime:
+  backend: cupy
+
+pipeline_graph: # holds all the nodes
+  frame_reader:
+    type: holoreader
+    in: file_path
+    out: frames
+    params: 
+      first_frame: 0
+      last_frame: -1
+  frame_batcher:
+    type: batcher
+    in: frames
+    out: frame_batches
+    params: 
+      batch_size: 256
+      batch_stride: 256
+  fresnel_kernel_mult:
+    type: fresnel_kernel_mult:
+    in: frame_batches
+    out: frame_batches_kernel
+    params:
+      "propagation_dist": 0.45
+  fresnel_propag:
+    type: fresnel_propag:
+    in: frame_batches_kernel
+    out: propagated_batches
+  spectrum_calc:
+    type: spectrum_calc:
+    in: propagated_batches
+    out: spectrum_batches
+  power_density_calc:
+    type: power_density_calc:
+    in: spectrum_batches
+    out: power_density_batches
+  moments_calc:
+    type: moments_calc:
+    in: power_density_batches
+    out: moments
+    params:
+      low_freq: 6000
+      high_freq: 18300
+      orders: [0,1,2]
+  moments_accumulation:
+    type: accumulator:
+    in: moments
+    out: accu_moments
+    params:
+      window: 8
+      stride: 8
+  registering:
+    type: registerer:
+    in: [moments,accu_moments]
+    out: moments_registered
+    params:
+      ref: first_batch
