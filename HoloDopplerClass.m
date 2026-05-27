@@ -652,10 +652,12 @@ methods
             sprintf('%s_HD', obj.file.name));
         if ~isfolder(result_folder_path), mkdir(result_folder_path); end
 
-        for sub = {'avi', 'h5', 'png'}
+        for sub = {'avi', 'h5', 'png', 'json'}
             subdir = fullfile(result_folder_path, sub{1});
             if ~isfolder(subdir), mkdir(subdir); end
         end
+
+        generateParametersJson(params, obj.file, result_folder_path)
 
         config = getConfigs();
 
