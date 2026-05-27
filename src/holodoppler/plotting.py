@@ -3,6 +3,7 @@ Debug plotting utilities
 """
 
 import numpy as np
+import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 
@@ -18,6 +19,23 @@ def _make_agg_figure(figsize=(8, 6), dpi=100):
     canvas = FigureCanvasAgg(fig)
     ax = fig.add_subplot(111)
     return fig, canvas, ax
+
+class SignalPlotter:
+    """Simple signal plotter"""
+    
+    def __init__(self, figsize=(8, 6), dpi=100):
+        self.fig, self.canvas, self.ax = _make_agg_figure(figsize, dpi)
+    
+    def plot(self, sig):
+        if cp is not None and isinstance(sig, cp.ndarray):
+            sig = sig.get()
+        self.ax.plot(np.squeeze(sig))
+        self.canvas.draw()
+        img = np.asarray(self.canvas.buffer_rgba()).copy()
+        return img[..., :3]
+    
+    def close(self):
+        pass
 
 class ImagePlotter:
     """Simple image plotter"""
@@ -237,9 +255,10 @@ class DebugPlotterManager:
                 fs=parameters["sampling_freq"],
                 f1=parameters["low_freq"],
                 f2=parameters["high_freq"],
-                ylim=(12, 20),
+                ylim=(-1, 20),
                 use_stem=False
             ),
+            "average_signal" : SignalPlotter(),
         }
         
         self.sources = {
@@ -252,6 +271,7 @@ class DebugPlotterManager:
             "M0notfixed": lambda res: (res["M0notfixed"],),
             "M0ffnoreg": lambda res: (res["M0_ff_noreg"],),
             "spectrum": lambda res: (res["spectrum_line"],),
+            "average_signal" : lambda res: (res["average_signal"],),
         }
         
         self.plotters = plotters
