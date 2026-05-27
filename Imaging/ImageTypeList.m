@@ -52,8 +52,8 @@ properties
     full_buckets
 
     % High and low frequency images
-    high_M0
-    low_M0
+    HF_M0
+    LF_M0
     Sum_Image
 end
 
@@ -102,8 +102,8 @@ methods
         obj.full_buckets = ImageType('full_buckets', struct('SH_full', []));
 
         % High and low frequency images
-        obj.high_M0 = ImageType('high_M0');
-        obj.low_M0 = ImageType('low_M0');
+        obj.HF_M0 = ImageType('HF_M0');
+        obj.LF_M0 = ImageType('LF_M0');
         obj.Sum_Image = ImageType('Sum_Image');
     end
 
@@ -278,12 +278,12 @@ methods
             obj.f_RMS.image = sqrt(M2 ./ mean(M0, [1, 2]));
         end
 
-        if obj.high_M0.is_selected
-            obj.high_M0.image = moment0(SH_mod, fr2, f2, fs, batchSize);
+        if obj.HF_M0.is_selected
+            obj.HF_M0.image = moment0(SH_mod, fr2, f2, fs, batchSize);
         end
 
-        if obj.low_M0.is_selected
-            obj.low_M0.image = moment0(SH_mod, fr1, fr2, fs, batchSize);
+        if obj.LF_M0.is_selected
+            obj.LF_M0.image = moment0(SH_mod, fr1, fr2, fs, batchSize);
         end
 
         if obj.Sum_Image.is_selected

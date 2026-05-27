@@ -983,8 +983,8 @@ config.moment_0 = struct('name', 'moment0', 'opts', defaultOpts);
 config.moment_1 = struct('name', 'moment1', 'opts', defaultOpts);
 config.moment_2 = struct('name', 'moment2', 'opts', defaultOpts);
 config.band_ratio = struct('name', 'band_ratio', 'opts', defaultOpts);
-config.M0_low = struct('name', 'M0_low', 'opts', defaultOpts);
-config.M0_high = struct('name', 'M0_high', 'opts', defaultOpts);
+config.LF_M0 = struct('name', 'LF_M0', 'opts', defaultOpts);
+config.HF_M0 = struct('name', 'HF_M0', 'opts', defaultOpts);
 
 opts_pd = defaultOpts;
 opts_pd.export_raw = false;

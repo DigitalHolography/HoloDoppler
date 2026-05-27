@@ -27,7 +27,7 @@ jsonDir = fullfile(result_folder_path, 'json');
 jsonFilePath = fullfile(jsonDir, 'parameters.json');
 fidJson = fopen(jsonFilePath, 'w');
 
-if fidJson ~= -1
+if fidJson ~= -1 % Check if the file was opened successfully
     fwrite(fidJson, jsonencode(params, 'PrettyPrint', true), 'char');
     fclose(fidJson);
 else
