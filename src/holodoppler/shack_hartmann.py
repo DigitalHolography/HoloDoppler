@@ -142,8 +142,11 @@ class ShackHartmann:
         den_y = vm_y - 2 * v0 + vp_y + 1e-12
         den_x = vm_x - 2 * v0 + vp_x + 1e-12
         
-        shift_y = py + 0.5 * (vm_y - vp_y) / den_y - Ny / 2
-        shift_x = px + 0.5 * (vm_x - vp_x) / den_x - Nx / 2
+        cy = (Ny - 1) / 2 if Ny % 2 == 1 else Ny / 2
+        cx = (Nx - 1) / 2 if Nx % 2 == 1 else Nx / 2
+
+        shift_y = py + 0.5 * (vm_y - vp_y) / den_y - cy
+        shift_x = px + 0.5 * (vm_x - vp_x) / den_x - cx
         
         shift_y = shift_y.reshape(ny_s, nx_s)
         shift_x = shift_x.reshape(ny_s, nx_s)
@@ -210,6 +213,9 @@ class ShackHartmann:
         Wd = xp.zeros((B, B), dtype=xp.float32)
 
         ar = xp.arange(B)
+        
+        cy = (Ny - 1) / 2 if Ny % 2 == 1 else Ny / 2
+        cx = (Nx - 1) / 2 if Nx % 2 == 1 else Nx / 2
 
         for i in valid_ids.tolist() if hasattr(valid_ids, "tolist") else list(valid_ids):
             i = int(i)
@@ -228,11 +234,11 @@ class ShackHartmann:
 
             dy = py + 0.5 * (xcorr[ar, py - 1, px] - xcorr[ar, py + 1, px]) / (
                 xcorr[ar, py - 1, px] - 2 * v0 + xcorr[ar, py + 1, px] + eps
-            ) - Ny / 2
+            ) - cy
 
             dx = px + 0.5 * (xcorr[ar, py, px - 1] - xcorr[ar, py, px + 1]) / (
                 xcorr[ar, py, px - 1] - 2 * v0 + xcorr[ar, py, px + 1] + eps
-            ) - Nx / 2
+            ) - cx
 
             ok = (
                 pupil_flat
