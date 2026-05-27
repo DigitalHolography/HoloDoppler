@@ -461,10 +461,11 @@ class Holodoppler:
             if parameters.get("debug"):
                 res["M0_ff_noreg"] = M0_ff
             reg = self._register(registration_ref, M0_ff, parameters.get("registration_disc_ratio"), estimate_similarity = parameters.get("image_registration_type") == "translation_rotation_scale")
-            res["M0"] = self._apply_registration(res["M0"], reg)
-            res["M1"] = self._apply_registration(res["M1"], reg)
-            res["M2"] = self._apply_registration(res["M2"], reg)
-            res["M0ff"] = self._apply_registration(res["M0ff"], reg)
+            if parameters.get("apply_registration"):
+                res["M0"] = self._apply_registration(res["M0"], reg)
+                res["M1"] = self._apply_registration(res["M1"], reg)
+                res["M2"] = self._apply_registration(res["M2"], reg)
+                res["M0ff"] = self._apply_registration(res["M0ff"], reg)
             
             for k,v in enumerate(parameters.get("frequency_bands", [])):
                 res[f"band_{k}_{v[0]}_{v[1]}"] = self._apply_registration(res[f"band_{k}_{v[0]}_{v[1]}"], reg)
