@@ -89,34 +89,18 @@ def save_debug_images(debug_dict, save_dir, prefix="debug"):
 
 def _cmd(args):
     
-    file_path = Path(args.input)
-    file_name = file_path.stem
+    sref = np.fft.fftshift(np.load(Path(args.inputa)))
+    sobj = np.fft.fftshift(np.load(Path(args.inputb)))
+    stot = np.fft.fftshift(np.load(Path(args.inputc)))
     
-    file_reader = FileReaderFactory.create(file_path)
-    file_reader.open()
-    print(file_reader)
-    params_path = Path(r"./parameters/default_parameters_debug.json")
-    parameters = _load_json(params_path)
-    res = calibration_calc_res(file_reader, parameters)
-    file_reader.close()
-    debug_imgs = plot_debug_safe(res,parameters)
+    conv = np.convolve(sref,sobj, mode="same")
     
-    # --- Add M0 ---
-    if "M0" in res:
-        M0 = res["M0"]
-        if cp is not None and isinstance(M0, cp.ndarray):
-            M0 = M0.get()
-        M0 = (M0 - np.min(M0)) / (np.max(M0) - np.min(M0) + 1e-12)
-        debug_imgs["M0"] = (M0 * 255).astype(np.uint8)
-
-    print("DEBUG KEYS:", list(debug_imgs.keys()))
-
-    # --- Save ---
-    save_dir = "./debug_outputs"
-    save_debug_images(debug_imgs, save_dir)
+    fake_tot = sref + sobj + conv
+    import matplotlib.pyplot as plt
     
-    filename = os.path.join(save_dir, f"{file_name}_spectrum_calibration.npy")
-    np.save(filename, res["calibration_spectrum_line"])
+    plt.semilogy(stot)
+    # plt.semilogy(fake_tot)
+    plt.show()
     
     return 0
 
@@ -135,11 +119,27 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
-        "input",
+        "inputa",
         type=_existing_file,
         nargs="?",  
         default=None,
-        help="Input file path.",
+        help="Input file path. Ref",
+    )
+    
+    parser.add_argument(
+        "inputb",
+        type=_existing_file,
+        nargs="?",  
+        default=None,
+        help="Input file path. Obj",
+    )
+    
+    parser.add_argument(
+        "inputc",
+        type=_existing_file,
+        nargs="?",  
+        default=None,
+        help="Input file path. Tot",
     )
     parser.set_defaults(func=_cmd)
     return parser

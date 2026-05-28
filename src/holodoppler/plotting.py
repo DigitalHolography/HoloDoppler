@@ -203,7 +203,7 @@ class CalibrationSpectrumPlotter:
     
     def __init__(self, fs, f1, f2, title="Spectrum",
                  figsize=(8*3, 6*3), dpi=400, show_bands=True,
-                 ylim=None, use_stem=True, find_n_peaks=30, fm=250):
+                 ylim=None, use_stem=True, find_n_peaks=25, fm=250):
         self.fs = fs
         self.f1 = f1
         self.f2 = f2
