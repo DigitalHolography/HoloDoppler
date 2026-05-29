@@ -23,6 +23,10 @@ from scipy.ndimage import gaussian_filter as np_gaussian_filter
 import scipy.ndimage as np_ndi
 from scipy.ndimage import zoom as scipy_zoom
 
+def to_numpy(arr):
+    if isinstance(arr, cp.ndarray):
+        return arr.get()
+    return arr
 
 class BackendManager:
     """Manages numpy/cupy backend switching""" # TODO add JAX
