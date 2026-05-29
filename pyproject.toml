@@ -20,6 +20,8 @@ dependencies = [
   "lblprof>=0.1.8",
   "imageio>=2.37.3",
   "tkinterdnd2",
+  "pyyaml",
+  "dask",
 ]
 
 [project.optional-dependencies]

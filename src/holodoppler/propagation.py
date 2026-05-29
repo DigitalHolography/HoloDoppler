@@ -2,8 +2,9 @@
 Propagation kernels (Fresnel and Angular Spectrum)
 """
 
-from .utils import pad_array_centrally
+
 from functools import cache
+from .utils import pad_array_centrally
 
 @cache
 def build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None):
@@ -13,7 +14,7 @@ def build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding
     #     pixel_pitch = (pixel_pitch, pixel_pitch) Removed for perf
 
     ppy, ppx = pixel_pitch
-
+    
     y = (xp.arange(0, ny) - xp.round(ny / 2)) * ppy
     x = (xp.arange(0, nx) - xp.round(nx / 2)) * ppx
 
@@ -82,12 +83,15 @@ def build_angular_kernel(self, z, pixel_pitch, wavelength, ny, nx, zero_padding=
 
 
 def fresnel_transform(
-    xp, fft, frames, kernel_in, kernel_out, zero_padding=False, use_output_kernel=True
+    xp, fft, frames, z, pixel_pitch, wavelength, zero_padding=False, use_output_kernel=True
 ):
     """Apply Fresnel transform"""
 
+    ny, nx = frames.shape[-2:]
+    kernel_in = build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
+
     if zero_padding:
-        from .utils import pad_array_centrally
+        
 
         frames = pad_array_centrally(frames, zero_padding, xp)
 
@@ -95,7 +99,8 @@ def fresnel_transform(
         fft.fft2(frames * kernel_in, axes=(-1, -2), norm="ortho"), axes=(-1, -2)
     )
 
-    if kernel_out is not None and use_output_kernel:
+    if use_output_kernel:
+        kernel_out = build_fresnel_kernel_out(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
         result = result * kernel_out
 
     return result
@@ -114,7 +119,7 @@ def fresnel_transform_with_phase(
     """Apply Fresnel transform with phase correction"""
 
     if zero_padding:
-        from .utils import pad_array_centrally
+        
 
         frames = pad_array_centrally(frames, zero_padding, xp)
 
@@ -133,7 +138,7 @@ def angular_spectrum_transform(xp, fft, frames, kernel, zero_padding=False):
     """Apply Angular Spectrum transform"""
 
     if zero_padding:
-        from .utils import pad_array_centrally
+        
 
         frames = pad_array_centrally(frames, zero_padding, xp)
 
@@ -149,7 +154,7 @@ def angular_spectrum_transform_with_phase(
     """Apply Angular Spectrum transform with phase correction"""
 
     if zero_padding:
-        from .utils import pad_array_centrally
+        
 
         frames = pad_array_centrally(frames, zero_padding, xp)
 
@@ -220,7 +225,7 @@ class PropagationKernels:
         self.build_fresnel_kernel_out(z, pixel_pitch, wavelength, ny, nx)
 
         if zero_padding:
-            from .utils import pad_array_centrally
+            
 
             self.kernels["Fresnel_in"] = pad_array_centrally(
                 self.kernels["Fresnel_in"], zero_padding, self.bm.xp
@@ -254,7 +259,7 @@ class PropagationKernels:
         self.kernels["AngularSpectrum"] = kernel[xp.newaxis, ...]
 
         if zero_padding:
-            from .utils import pad_array_centrally
+            
 
             self.kernels["AngularSpectrum"] = pad_array_centrally(
                 self.kernels["AngularSpectrum"], zero_padding, self.bm.xp
@@ -266,7 +271,7 @@ class PropagationKernels:
         fft = self.bm.fft
 
         if zero_padding:
-            from .utils import pad_array_centrally
+            
 
             frames = pad_array_centrally(frames, zero_padding, xp)
 
@@ -288,7 +293,7 @@ class PropagationKernels:
         fft = self.bm.fft
 
         if zero_padding:
-            from .utils import pad_array_centrally
+            
 
             frames = pad_array_centrally(frames, zero_padding, xp)
 
@@ -312,7 +317,7 @@ class PropagationKernels:
         fft = self.bm.fft
 
         if zero_padding:
-            from .utils import pad_array_centrally
+            
 
             frames = pad_array_centrally(frames, zero_padding, xp)
 
@@ -329,7 +334,7 @@ class PropagationKernels:
         fft = self.bm.fft
 
         if zero_padding:
-            from .utils import pad_array_centrally
+            
 
             frames = pad_array_centrally(frames, zero_padding, xp)
 

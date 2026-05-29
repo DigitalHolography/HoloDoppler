@@ -2,7 +2,7 @@
 Filtering operations: SVD, frequency filtering
 """
 
-import numpy as np
+from functools import cache
 
 def svd_filter(xp, H, svd_threshold):
         """SVD filtering to remove tissue signal"""
@@ -24,6 +24,7 @@ def svd_filter(xp, H, svd_threshold):
         
         H2 -= H2 @ Vt @ Vt.conj().T
         return H2.T.reshape(sz)
+
 def svd_filter_batched(xp, U_subaps, svd_threshold):
     """Batched SVD filter for subapertures"""
     
@@ -49,6 +50,7 @@ def svd_filter_batched(xp, U_subaps, svd_threshold):
     
     return (H2 - proj).reshape(ny_s, nx_s, sub_ny, sub_nx, nz)
 
+@cache
 def frequency_symmetric_filtering(xp, fft, batch_size, sampling_freq, low_freq, high_freq=None):
     """Create symmetric frequency filter mask"""
     

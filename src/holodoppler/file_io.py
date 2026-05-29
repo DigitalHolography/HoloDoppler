@@ -64,6 +64,9 @@ class HoloFileReader:
                 self.file_footer = {}
         else:
             self.file_footer = {}
+
+    def get_np_memmap(self):
+        return np.memmap(self.file_path, offset=64, order='C')
     
     def read_frames(self, first_frame, frame_size):
         """Read frames from .holo file (returns numpy array)"""
