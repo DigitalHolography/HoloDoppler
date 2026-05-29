@@ -394,7 +394,7 @@ class Holodoppler:
                         zero_padding=parameters.get("zero_padding")
                     )
                     holograms = self.propagation.fresnel_transform(frames_sub, zero_padding=parameters.get("zero_padding"))
-                else:
+                elif parameters["spatial_propagation"] == "AngularSpectrum":
                     self.propagation.build_angular_kernel(
                         parameters["z"], parameters["pixel_pitch"],
                         parameters["wavelength"], ny, nx,
@@ -403,14 +403,34 @@ class Holodoppler:
                     holograms = self.propagation.angular_spectrum_transform(
                         frames_sub, zero_padding=parameters.get("zero_padding")
                     )
+                else :
+                    holograms = frames_sub
+                    
                 holograms_not_fixed = None
             
             # SVD filtering
             holograms_f = self.filtering.svd_filter(holograms, parameters["svd_threshold"])
             # holograms_f = self.filtering.tucker_filter(holograms, ranks=holograms.shape, temporal_modes_to_remove=parameters["svd_threshold"])
             
+            
+            
+            if parameters.get("debug"):
+                sig = self.bm.xp.squeeze(self.bm.xp.mean(holograms_f, axis=(-1,-2)))
+                res_batch = {"average_signal" : sig}
+            else :
+                res_batch = {}
+            
+            
+            
+            
             # Temporal FFT
-            spectrum_f = self.filtering.fourier_time_transform(holograms_f)
+            if parameters["temporal_transformation"] == "FourierTransform":
+                spectrum_f = self.filtering.fourier_time_transform(holograms_f)
+            
+            else :
+                spectrum_f = holograms_f
+                
+            
             
             # Frequency filtering
             idxs, freqs = self._frequency_filter(
@@ -419,11 +439,11 @@ class Holodoppler:
             )
             psd = self.bm.xp.abs(spectrum_f) ** 2
             
-            res_batch = {
+            res_batch.update({
                 "M0": self._moment(psd[idxs, :, :], freqs, 0),
                 "M1": self._moment(psd[idxs, :, :], freqs, 1),
                 "M2": self._moment(psd[idxs, :, :], freqs, 2)
-            }
+            })
             
             res_batch["M0ff"] = gaussian_flatfield(res_batch["M0"], parameters["registration_flatfield_gw"], self.bm.gaussian_filter)
             
@@ -437,7 +457,7 @@ class Holodoppler:
             
             if parameters.get("debug"):
                 res_batch["spectrum_line"] = self.bm.xp.mean(
-                    self.bm.xp.abs(spectrum_f[:, :, :]) ** 2, axis=(-1, -2)
+                    psd , axis=(-1, -2)
                 )
                 res_batch["freqs"] = freqs
                 
@@ -461,10 +481,11 @@ class Holodoppler:
             if parameters.get("debug"):
                 res["M0_ff_noreg"] = M0_ff
             reg = self._register(registration_ref, M0_ff, parameters.get("registration_disc_ratio"), estimate_similarity = parameters.get("image_registration_type") == "translation_rotation_scale")
-            res["M0"] = self._apply_registration(res["M0"], reg)
-            res["M1"] = self._apply_registration(res["M1"], reg)
-            res["M2"] = self._apply_registration(res["M2"], reg)
-            res["M0ff"] = self._apply_registration(res["M0ff"], reg)
+            if parameters.get("apply_registration"):
+                res["M0"] = self._apply_registration(res["M0"], reg)
+                res["M1"] = self._apply_registration(res["M1"], reg)
+                res["M2"] = self._apply_registration(res["M2"], reg)
+                res["M0ff"] = self._apply_registration(res["M0ff"], reg)
             
             for k,v in enumerate(parameters.get("frequency_bands", [])):
                 res[f"band_{k}_{v[0]}_{v[1]}"] = self._apply_registration(res[f"band_{k}_{v[0]}_{v[1]}"], reg)
