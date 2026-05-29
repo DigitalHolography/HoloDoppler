@@ -73,9 +73,9 @@ methods
         obj.power_adapt = ImageType('power_adapt');
 
         % Moments
-        obj.moment_0 = ImageType('M0');
-        obj.moment_1 = ImageType('M1');
-        obj.moment_2 = ImageType('M2');
+        obj.moment_0 = ImageType('M0'); % .raw
+        obj.moment_1 = ImageType('M1'); % .raw
+        obj.moment_2 = ImageType('M2'); % .raw
         obj.arg_0 = ImageType('arg0');
         obj.f_RMS = ImageType('f_RMS');
 
@@ -102,8 +102,8 @@ methods
         obj.full_buckets = ImageType('full_buckets', struct('SH_full', []));
 
         % High and low frequency images
-        obj.HF_M0 = ImageType('HF_M0');
-        obj.LF_M0 = ImageType('LF_M0');
+        obj.HF_M0 = ImageType('HF_M0'); % .raw
+        obj.LF_M0 = ImageType('LF_M0'); % .raw
         obj.Sum_Image = ImageType('Sum_Image');
     end
 

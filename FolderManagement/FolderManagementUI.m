@@ -101,7 +101,7 @@ methods (Access = private)
         obj.KeepZCheckbox = uicheckbox('Parent', buttonGrid, ...
             'FontColor', [1 1 1], ...
             'Text', 'Keep z distance', ...
-            'Value', 0);
+            'Value', 1);
         obj.KeepZCheckbox.Layout.Row = 2;
         obj.KeepZCheckbox.Layout.Column = 3;
 
@@ -351,29 +351,22 @@ methods (Access = private)
 
     function saveConfigs(obj)
         % Save a selected parameter configuration to ALL files in the drawer list.
-        %
-        % A dialog asks the user to pick a .json config file.
-        % That file's parameters are then saved as the per‑file config for every
-        % entry in the drawer_list, overwriting any existing config or creating a
-        % new one where none existed.
-        %
-        % The main app's UI parameters are preserved (restored at the end).
+        % If 'Keep Z distance' is checked, the original propagation distance
+        % from each file's metadata is preserved (overriding the config's value).
 
         app = obj.MainApp;
         keepZ = obj.KeepZCheckbox.Value;
 
-        % --- Capture original UI parameters (to restore later) ---
+        % --- Backup current UI parameters ---
         originalParams = app.HD.params;
 
-        % --- Ask user to choose the config file to apply ---
+        % --- Select config file ---
         figureHandle = obj.Figure;
         figure(figureHandle);
-
         [filename, pathname] = uigetfile('*.json', 'Select config file to apply');
         figure(figureHandle);
 
         if isequal(filename, 0)
-            % User cancelled
             return;
         end
 
@@ -389,17 +382,30 @@ methods (Access = private)
             return;
         end
 
-        % --- Apply it to every file in the drawer list ---
+        % --- Apply to each file ---
         for i = 1:length(obj.drawerList)
             filePath = obj.drawerList{i};
-            % Set the main app's params to the chosen ones temporarily,
-            % then call saveParams (which uses app.HD.params internally)
-            app.HD.params = chosenParams;
+
+            % Start from a copy of the chosen parameters
+            paramsToSave = chosenParams;
+
+            % If keepZ is checked, override spatialPropagation with the file's own distance
+            if keepZ
+                originalZ = getOriginalPropagationDistance(filePath);
+
+                if ~isnan(originalZ)
+                    paramsToSave.spatialPropagation = originalZ;
+                end
+
+            end
+
+            % Temporarily set the app's params for saveParams to work with
+            app.HD.params = paramsToSave;
             app.HD.saveParams(filePath, keepZ);
             fprintf('Config saved for: %s\n', filePath);
         end
 
-        % --- Restore the original UI parameters ---
+        % --- Restore original UI state ---
         app.HD.params = originalParams;
     end
 
@@ -459,10 +465,22 @@ methods (Access = private)
         for i = 1:length(obj.drawerList)
             filePath = obj.drawerList{i};
             [dirName, name] = fileparts(filePath);
-            configFile = fullfile(dirName, name, sprintf('%s_input_HD_params.json', name));
+            baseOutputDir = fullfile(dirName, name);
 
-            if isfile(configFile)
-                delete(configFile);
+            % First config file (the main one)
+            configFile1 = fullfile(baseOutputDir, sprintf('%s_input_HD_params.json', name));
+
+            if isfile(configFile1)
+                delete(configFile1);
+                n = n + 1;
+            end
+
+            % Second config file (inside the <name>_HD subfolder)
+            configFile2 = fullfile(baseOutputDir, sprintf('%s_HD', name), ...
+                sprintf('%s_HD_input_HD_params.json', name));
+
+            if isfile(configFile2)
+                delete(configFile2);
                 n = n + 1;
             end
 
@@ -471,6 +489,37 @@ methods (Access = private)
         fprintf('Deleted %d config files for %d entries\n', n, length(obj.drawerList));
     end
 
+end
+
+end
+
+% -------------------------------------------------------------------------
+% Helper: read the propagation distance directly from the raw file metadata
+% -------------------------------------------------------------------------
+function z = getOriginalPropagationDistance(filePath)
+[~, ~, ext] = fileparts(filePath);
+z = NaN;
+
+switch lower(ext)
+    case '.holo'
+
+        try
+            reader = HoloReader(filePath);
+            % Same threshold as in getFileParameters
+            if reader.version >= 5
+                z = reader.footer.compute_settings.image_rendering.propagation_distance;
+            end
+
+            clear reader;
+        catch
+            % Leave as NaN if anything fails
+        end
+
+    case '.cine'
+        % .cine files usually have no built-in propagation distance;
+        % we leave it as NaN so the config's value is kept.
+    otherwise
+        % Unsupported extension – do nothing
 end
 
 end

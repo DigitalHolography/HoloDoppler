@@ -45,6 +45,7 @@ properties (Access = private)
     imageTypesListBox matlab.ui.control.ListBox
     LoadConfigButton matlab.ui.control.Button
     SaveConfigButton matlab.ui.control.Button
+    ClearConfigsButton matlab.ui.control.Button
     FolderManagerButton matlab.ui.control.Button
     VideoRenderingButton matlab.ui.control.Button
     VideoRenderingLamp matlab.ui.control.Lamp
@@ -265,6 +266,17 @@ methods (Access = private)
         try
             outputPath = app.HD.saveParams();
             fprintf("Config saved successfully to %s\n", outputPath);
+        catch ME
+            MEdisp(ME);
+        end
+
+    end
+
+    function ClearConfigsButtonPushed(app, ~)
+
+        try
+            app.HD.clearParams();
+            fprintf("Config cleared successfully.\n");
         catch ME
             MEdisp(ME);
         end
@@ -522,6 +534,7 @@ methods (Access = private)
         % ---- (B) require a loaded file ------------------------------------
         fileControls = { ...
                             app.SaveConfigButton, ...
+                            app.ClearConfigsButton, ...
                             app.VideoRenderingButton, ...
                             app.RefreshAppButton, ...
                             app.RenderPreviewButton, ...
@@ -563,7 +576,7 @@ methods (Access = private)
                             app.LoadConfigButton, ...
                             app.ImproveContrast, ...
                             app.CornerCompensation, ...
-                            app.FileNameField, ...
+                            app.FileNameField
                         };
 
         for k = 1:numel(fileControls)
@@ -737,6 +750,16 @@ methods (Access = private)
             'FontColor', fontColor);
         app.SaveConfigButton.Layout.Row = 2;
         app.SaveConfigButton.Layout.Column = 2;
+
+        % Clear configs button (under the lamp, row 2, col 3)
+        app.ClearConfigsButton = uibutton(app.mainParametersGrid, 'push', ...
+            'Text', 'Clear configs', ...
+            'ButtonPushedFcn', createCallbackFcn(app, @ClearConfigsButtonPushed, true), ...
+            'Tooltip', {'Delete all saved parameter files for this file'}, ...
+            'BackgroundColor', grayButtonColor, ...
+            'FontColor', fontColor);
+        app.ClearConfigsButton.Layout.Row = 2;
+        app.ClearConfigsButton.Layout.Column = 3;
 
         app.lambdaLabel = uilabel(app.mainParametersGrid);
         app.lambdaLabel.FontColor = fontColor;

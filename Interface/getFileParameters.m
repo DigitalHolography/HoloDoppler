@@ -1,13 +1,13 @@
 function params = getFileParameters(filePath, fileInfo)
-% GETFILEPARAMETERS  Charge les paramètres de rendu (cascade complète).
+% GETFILEPARAMETERS Load rendering parameters (full cascade).
 %
 %   PARAMS = GETFILEPARAMETERS(FILEPATH)
 %   PARAMS = GETFILEPARAMETERS(FILEPATH, FILEINFO)
 %
-%   FILEINFO est un struct contenant les métadonnées déjà lues :
+%   FILEINFO is a struct containing metadata already read:
 %       Nx, Ny, num_frames, lambda, ppx, ppy, fs,
-%       propagation_distance (optionnel), ext (extension)
-%   S'il est absent, la fonction lit le fichier elle‑même.
+%       propagation_distance (optional), ext (extension)
+%   If absent, the function reads the file itself.
 
 if nargin < 2
     fileInfo = [];
@@ -17,7 +17,7 @@ appRoot = fileparts(mfilename('fullpath'));
 [fileDir, fileName, ext] = fileparts(filePath);
 holo_versionThreshold = 5;
 
-% ----- 1) Métadonnées -----
+% ----- 1) Metadata -----
 if isempty(fileInfo)
 
     switch lower(ext)
@@ -68,13 +68,13 @@ if isempty(fileInfo)
             clear reader
 
         otherwise
-            error('Extension non supportée : %s', ext);
+            error('Unsupported extension: %s', ext);
     end
 
     fileInfo.ext = ext;
 end
 
-% ----- 2) Valeurs par défaut du schéma -----
+% ----- 2) Schema defaults -----
 params = HDParamSchema.getDefaults();
 params.lambda = fileInfo.lambda;
 params.ppx = fileInfo.ppx;
@@ -99,7 +99,7 @@ end
 
 params.frequencyRange2 = fileInfo.fs / 2;
 
-% ----- 3) Configuration standard globale -----
+% ----- 3) Global standard configuration -----
 stdConfigFile = fullfile(appRoot, 'StandardConfigs', 'CurrentDefault.txt');
 
 if isfile(stdConfigFile)
@@ -120,10 +120,7 @@ end
 baseOutputDir = fullfile(fileDir, fileName);
 perFileConfigs = {
                   fullfile(baseOutputDir, sprintf('%s_input_HD_params.json', fileName)), ...
-                      fullfile(baseOutputDir, sprintf('%s_HD', fileName), ...
-                      sprintf('%s_HD_input_HD_params.json', fileName)), ...
-                      fullfile(baseOutputDir, sprintf('%s_HDPreview', fileName), ...
-                      sprintf('%s_HDPreview_input_HD_params.json', fileName))
+                      fullfile(baseOutputDir, sprintf('%s_HD', fileName), sprintf('%s_HD_input_HD_params.json', fileName))
                   };
 
 for k = 1:numel(perFileConfigs)
@@ -138,7 +135,7 @@ end
 params = HDParamSchema.validate(params);
 end
 
-% ----- Utilitaire -----
+% ----- Helper function -----
 function params = mergeConfig(params, jsonPath)
 fid = fopen(jsonPath, 'r');
 if fid == -1, return; end

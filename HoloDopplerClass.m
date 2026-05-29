@@ -316,6 +316,48 @@ methods
         fwrite(fid, jsonencode(parms, 'PrettyPrint', true), 'char');
     end
 
+    function clearParams(obj)
+        % CLEARPARAMS Delete per‑file JSON parameter files for the current file.
+
+        if isempty(obj) || isempty(obj.file)
+            warning('clearParams:noFile', 'No file loaded.');
+            return;
+        end
+
+        filePath = obj.file.path;
+        [fileDir, fileName, ~] = fileparts(filePath);
+        baseOutputDir = fullfile(fileDir, fileName);
+
+        % The two per‑file config paths (same logic as getFileParameters)
+        configPaths = {
+                       fullfile(baseOutputDir, sprintf('%s_input_HD_params.json', fileName)), ...
+                           fullfile(baseOutputDir, sprintf('%s_HD', fileName), sprintf('%s_HD_input_HD_params.json', fileName))
+                       };
+
+        % Keep only files that actually exist
+        existing = cell(1, numel(configPaths));
+
+        for k = 1:numel(configPaths)
+
+            if isfile(configPaths{k})
+                existing{k} = configPaths{k};
+            end
+
+        end
+
+        if isempty(existing)
+            fprintf('No parameter files found to delete.\n');
+            return;
+        end
+
+        % Delete each file and record the deleted path
+        for k = 1:numel(existing)
+            delete(existing{k});
+        end
+
+        fprintf('Deleted all parameter file(s).\n');
+    end
+
     % =====================================================================
     function images = PreviewRendering(obj)
         % Render the current frame batch with current params.
