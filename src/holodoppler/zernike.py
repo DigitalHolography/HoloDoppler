@@ -134,7 +134,7 @@ def southwell_phase_integration(
     wavelength,
     shifts_y,
     shifts_x,
-):
+    ):
     """NaN-robust Southwell phase reconstruction using a DCT Poisson solver."""
 
     xp = self.bm.xp

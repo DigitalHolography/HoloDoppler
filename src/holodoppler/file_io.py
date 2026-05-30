@@ -7,6 +7,8 @@ import json
 import numpy as np
 import traceback
 
+from dask import delayed
+
 try:
     import cinereader
     CINE_AVAILABLE = True
@@ -65,9 +67,6 @@ class HoloFileReader:
         else:
             self.file_footer = {}
 
-    def get_np_memmap(self):
-        return np.memmap(self.file_path, offset=64, order='C')
-    
     def read_frames(self, first_frame, frame_size):
         """Read frames from .holo file (returns numpy array)"""
         try:
@@ -104,6 +103,11 @@ class HoloFileReader:
             traceback.print_exc()
             return None
 
+    delayed_read_frames = delayed(read_frames)
+
+    def get_np_memmap(self):
+        return np.memmap(self.file_path, offset=64, order='C')
+    
 
 class CineFileReader:
     """Reader for .cine files"""
