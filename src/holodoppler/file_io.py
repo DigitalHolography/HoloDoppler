@@ -98,7 +98,7 @@ class HoloFileReader:
                 (frame_size, self.file_header["height"], self.file_header["width"]),
                 order="C"
             )
-            return out.astype(np.float32)
+            return out
         except Exception:
             traceback.print_exc()
             return None

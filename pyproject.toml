@@ -22,6 +22,7 @@ dependencies = [
   "tkinterdnd2",
   "pyyaml",
   "dask",
+  "dask[distributed]",
 ]
 
 [project.optional-dependencies]

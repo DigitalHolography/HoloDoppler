@@ -14,7 +14,8 @@ def build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding
     #     pixel_pitch = (pixel_pitch, pixel_pitch) Removed for perf
 
     ppy, ppx = pixel_pitch
-    
+    print(ppy, type(ppy))
+
     y = (xp.arange(0, ny) - xp.round(ny / 2)) * ppy
     x = (xp.arange(0, nx) - xp.round(nx / 2)) * ppx
 

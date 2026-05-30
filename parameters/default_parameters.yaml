@@ -8,11 +8,11 @@ parameters: # pipeline parameters
 
   sampling_freq: 37037 # camera sampling frequency of the aquisition
   wavelength: 8.52e-7 # laser wavelength
-  pixel_pitch: [2e-5, 2e-5] # camera pixel pitch (distance between two consecutive 
+  pixel_pitch: [2.e-5, 2.e-5] # camera pixel pitch (distance between two consecutive 
                             # pixels in y and x direction)
   frame_reader:
     first_frame: 0
-    last_frame: 1024
+    last_frame: 0
   frame_batcher:
     batch_size: 256
     batch_stride: 256
@@ -21,6 +21,7 @@ parameters: # pipeline parameters
     propagation_dist: 0.45
     zero_padding: False
     use_output_kernel: True
+  time_transform: "FourierTransform"
   moments_calc:
     low_freq: 6000
     high_freq: 18300
