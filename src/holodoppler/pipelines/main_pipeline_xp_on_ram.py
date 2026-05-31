@@ -7,6 +7,32 @@ from ..filtering import *
 from ..moments import moment
 from ..registration import *
 from ..plotting import *
+from ..backend import BackendManager
+from ..file_io import FileReaderFactory
+
+
+import os
+import json
+import time
+import threading
+import queue
+import traceback
+from collections import defaultdict
+
+from pathlib import Path
+import json
+import subprocess
+import h5py
+import numpy as np
+import matplotlib.pyplot as plt
+
+import numpy as np
+import cv2
+import h5py
+from tqdm import tqdm
+from pathlib import Path
+
+import imageio as iio
 
 
 # ------------------------------------------------------------
@@ -22,6 +48,28 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
 
     nt, ny, nx = frames.shape
     res = {}
+
+    class Accumulator:
+        def __init__(self, batch_size, xp):
+            self.xp = xp
+            self.batch_size = batch_size
+            self.buffers = defaultdict(list)
+        
+        def add(self, data_dict):
+            for k, v in data_dict.items():
+                self.buffers[k].append(v)
+            if len(next(iter(self.buffers.values()))) >= self.batch_size:
+                return self.flush()
+            return None
+        
+        def flush(self):
+            if not self.buffers:
+                return None
+            batch = {k: self.xp.sum(self.xp.stack(v), axis=0) / self.batch_size 
+                    for k, v in self.buffers.items()}
+            self.buffers.clear()
+            return batch
+
 
     subaps_acc = Accumulator(parameters.get("shack_hartmann_accumulation", 1), bm.xp)
     main_acc = Accumulator(parameters.get("accumulation", 1), bm.xp)
@@ -41,10 +89,9 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
                     xp,
                     fft,
                     frames_sub,
-                    parameters["pixel_pitch"],
-                    parameters["pixel_pitch"],
                     parameters["wavelength"],
                     parameters["z"],
+                    parameters["pixel_pitch"],
                     parameters["low_freq"],
                     parameters["high_freq"],
                     parameters["sampling_freq"],
@@ -128,8 +175,8 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
                 xp,
                 ny,
                 nx,
-                parameters["pixel_pitch"],
-                parameters["pixel_pitch"],
+                parameters["pixel_pitch"][0],
+                parameters["pixel_pitch"][1],
                 parameters["wavelength"],
                 shifts_y,
                 shifts_x,
@@ -182,6 +229,9 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
                     xp,
                     fft,
                     frames_sub,
+                    parameters["z"],
+                    parameters["pixel_pitch"],
+                    parameters["wavelength"],
                     phase_term,
                     zero_padding=parameters.get("zero_padding"),
                 )
@@ -190,6 +240,9 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
                     xp,
                     fft,
                     frames_sub,
+                    parameters["z"],
+                    parameters["pixel_pitch"],
+                    parameters["wavelength"],
                     phase_term,
                     zero_padding=parameters.get("zero_padding"),
                 )
@@ -198,12 +251,16 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
 
             if parameters.get("debug"):
                 if parameters["spatial_propagation"] == "Fresnel":
-                    holograms_not_fixed = self.propagation.fresnel_transform(
-                        frames_sub, zero_padding=parameters.get("zero_padding")
+                    holograms_not_fixed = fresnel_transform(xp, fft, frames_sub, parameters["z"],
+                    parameters["pixel_pitch"],
+                    parameters["wavelength"],
+                    zero_padding=parameters.get("zero_padding")
                     )
                 elif parameters["spatial_propagation"] == "AngularSpectrum":
-                    holograms_not_fixed = self.propagation.angular_spectrum_transform(
-                        frames_sub, zero_padding=parameters.get("zero_padding")
+                    holograms_not_fixed = angular_spectrum_transform(xp, fft, frames_sub, parameters["z"],
+                    parameters["pixel_pitch"],
+                    parameters["wavelength"], 
+                    zero_padding=parameters.get("zero_padding")
                     )
                 else:
                     holograms_not_fixed = frames_sub
@@ -259,7 +316,7 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
         res_batch["M0ff"] = gaussian_flatfield(
             res_batch["M0"],
             parameters["registration_flatfield_gw"],
-            self.bm.gaussian_filter,
+            bm.gaussian_filter,
         )
 
         for k, range_band in enumerate(parameters.get("frequency_bands", [])):
@@ -335,20 +392,25 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
 
 
 def preview_process_moments(file_path, parameters, tictoc=False):
-    backend_name = parameters["runtime"]["backend"]
+    backend_name = parameters["backend"]
     bm = BackendManager(backend=backend_name)
     xp = bm.xp
     fft = bm.fft
     file_reader = FileReaderFactory.create(file_path)
+    file_reader.open()
     if file_reader.ext == ".holo":
-        print("file header :", HD.file_reader.file_header)
+        print("file header :", file_reader.file_header)
     print("parameters : ", parameters)
     batch_size = parameters["batch_size"]
     batch_stride = parameters["batch_stride"]
     first_frame = parameters["first_frame"]
-    end_frame = batch_size
+    
 
-    render_moments(parameters, tictoc=tictoc)
+    frames = file_reader.read_frames(first_frame,batch_size)
+
+    frames = bm.to_backend(frames)
+    res = render_moments(bm, parameters, frames,  tictoc=tictoc)
+    file_reader.close()
 
     def save_debug_images(debug_dict, save_dir, prefix="debug"):
         os.makedirs(save_dir, exist_ok=True)
@@ -357,13 +419,13 @@ def preview_process_moments(file_path, parameters, tictoc=False):
             if img is None:
                 continue
 
-            img_np = HD.bm.to_numpy(img)
+            img_np = bm.to_numpy(img)
 
             if img_np.ndim == 2 and parameters["square"]:
                 H, W = img_np.shape
                 L = max(H, W)
                 # --- Resize ---
-                img_np = imresize(img_np, output_shape=(L, L))
+                img_np = imresize.imresize(img_np, output_shape=(L, L))
 
             if img_np.dtype != np.uint8:
                 img_min = np.min(img_np)
@@ -385,12 +447,12 @@ def preview_process_moments(file_path, parameters, tictoc=False):
     debug_imgs = debug_manager.plot_all(res) if parameters.get("debug") else {}
 
     if parameters["debug"] and parameters["shack_hartmann"] and parameters["shack_hartmann_zernike_fit"]:
-        print("zernike_fit_coeffs (radians):", HD.bm.to_numpy(res["coefs"]) if "coefs" in res else "N/A")
-        print("delta to true z in mm if coef[0] is defocus : ", 4* np.sqrt(3) * parameters["z"]**2 / ((min(frames.shape[1:])* parameters["pixel_pitch"])**2)  * parameters["wavelength"] / (2*np.pi) * (HD.bm.to_numpy(res["coefs"])[0] if "coefs" in res else 0) * 1e3)
+        print("zernike_fit_coeffs (radians):", bm.to_numpy(res["coefs"]) if "coefs" in res else "N/A")
+        print("delta to true z in mm if coef[0] is defocus : ", 4* np.sqrt(3) * parameters["z"]**2 / ((min(frames.shape[1:])* parameters["pixel_pitch"][0])**2)  * parameters["wavelength"] / (2*np.pi) * (bm.to_numpy(res["coefs"])[0] if "coefs" in res else 0) * 1e3)
 
     # --- Add M0 ---
     if "M0" in res:
-        M0 = HD.bm.to_numpy(res["M0"])
+        M0 = bm.to_numpy(res["M0"])
         M0 = (M0 - np.min(M0)) / (np.max(M0) - np.min(M0) + 1e-12)
         debug_imgs["M0"] = (M0 * 255).astype(np.uint8)
 
@@ -421,7 +483,7 @@ def process_moments( file_path,
 ):
     """Process entire video"""
 
-    backend_name = parameters["runtime"]["backend"]
+    backend_name = parameters["backend"]
 
     # Initialize backend
     bm = BackendManager(backend=backend_name)

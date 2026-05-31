@@ -1,5 +1,6 @@
 {
   "pipeline_name" : "preview_moments_main_pipeline",
+  "backend": "cupyRAM",
   "batch_size": 256,
   "batch_stride": 256,
   "accumulation": 1,
@@ -11,7 +12,7 @@
   "first_frame": 0,
   "end_frame": 0,
   "wavelength": 8.52e-7,
-  "pixel_pitch": 2e-5,
+  "pixel_pitch": [2e-5,2e-5],
   "spatial_propagation": "Fresnel",
   "zero_padding": false,
   "z": 0.435,
@@ -28,6 +29,7 @@
   "shack_hartmann_zernike_fit_modes": [4,5,6],
   "shack_hartmann_southwell_phase_integration": false,
   "sampling_freq": 37037,
+  "temporal_transformation" : "FourierTransform",
   "low_freq": 6000,
   "high_freq": 18300,
   "frequency_bands": [

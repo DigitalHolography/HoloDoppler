@@ -3,7 +3,7 @@ holodoppler.pipelines - Holographic Doppler processing library - pipelines lib
 """
 from .dask_xp import process_moments_classical, process_template
 
-from .main_pipeline_xp_on_ram import process_moments, process_moments_preview
+from .main_pipeline_xp_on_ram import process_moments, preview_process_moments
 
 pipelines = {
     "process_moments_latest": process_moments_classical,

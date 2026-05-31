@@ -1,3 +1,5 @@
+from dask import delayed
+
 @delayed
 def stack(bm, l, axis=0):
     return bm.xp.stack(l, axis=axis)

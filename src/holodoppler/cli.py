@@ -8,10 +8,12 @@ import numpy as np
 from matlab_imresize.imresize import imresize
 import os
 from .plotting import DebugPlotterManager
-from .pipelines import pipelines, render_moments
+from .pipelines import pipelines
 import imageio.v3 as iio
 
-def preview(holo_path, parameters: dict, tictoc=False) -> None:
+from .utils import load_config
+
+def preview(file_path, parameters: dict, tictoc=False) -> None:
 
     if not type(parameters) == dict:  # if given a path instead of a dict of parameters
         parameters = load_config(parameters)
@@ -28,12 +30,12 @@ def preview(holo_path, parameters: dict, tictoc=False) -> None:
         raise ValueError(f"Unknown pipeline: {pipeline_name}")
 
     # Execute the function
-    _result = pipeline_func(file_path, parameters)
+    result = pipeline_func(file_path, parameters)
     
     return result
 
 
-def process(holo_path, parameters: dict) -> None:
+def process(file_path, parameters: dict) -> None:
     
     if not type(parameters) == dict:  # if given a path instead of a dict of parameters
         parameters = load_config(parameters)
@@ -111,8 +113,7 @@ def _cmd_preview(args: argparse.Namespace) -> int:
     else:
         config_path = args.config
     
-    config = _load_json(config_path)
-    preview(input_path, config)
+    preview(input_path, config_path)
     return 0
 
 def _cmd_process(args: argparse.Namespace) -> int:
@@ -140,8 +141,7 @@ def _cmd_process(args: argparse.Namespace) -> int:
     else:
         config_path = args.config
     
-    config = _load_json(config_path)
-    process(input_path, config)
+    process(input_path, config_path)
     return 0
 
 

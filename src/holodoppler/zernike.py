@@ -94,6 +94,7 @@ def make_gradient_matrix(xp, zernike_modes, nysubabs, nxsubabs, nx, ny, pixel_pi
                 G[1, iy, ix, k] = xp.nanmean(dZdx_subap)
     
     G *= wavelength / (2 * xp.pi)
+    return G
 
 def fit_zernike(xp, ny, nx, pixel_pitch_y, pixel_pitch_x, wavelength,
                 shifts_y, shifts_x, zernike_modes):

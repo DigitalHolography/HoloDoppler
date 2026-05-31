@@ -15,7 +15,7 @@ def construct_subapertures_fresnel(xp, fft, U0, wavelength, z_prop, pixel_pitch,
     sub_ny, sub_nx = Ny // ny_subabs, Nx // nx_subabs # size of the sub aps
     
     # Frequency filtering
-    idxs, _ = frequency_symmetric_filtering(xp, time_window, fs, low_freq, high_freq=high_freq)
+    idxs, _ = frequency_symmetric_filtering(xp, fft, time_window, fs, low_freq, high_freq=high_freq)
     
     # Fresnel kernel
     kernel_in = build_fresnel_kernel_in(xp, z_prop, pixel_pitch, wavelength, Ny, Nx, zero_padding=None) #TODO accept a shack hartman zero_padding option
