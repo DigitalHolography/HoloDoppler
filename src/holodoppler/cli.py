@@ -5,106 +5,51 @@ import json
 from pathlib import Path
 from typing import Any
 import numpy as np
-from holodoppler.Holodoppler import Holodoppler
 from matlab_imresize.imresize import imresize
 import os
 from .plotting import DebugPlotterManager
-
+from .pipelines import pipelines, render_moments
+import imageio.v3 as iio
 
 def preview(holo_path, parameters: dict, tictoc=False) -> None:
-    HD = Holodoppler(backend = "cupyRAM", pipeline_version = "latest")
 
-    HD.load_file(holo_path)
+    if not type(parameters) == dict:  # if given a path instead of a dict of parameters
+        parameters = load_config(parameters)
+
+    # Get pipeline name and parameters
+    pipeline_name = parameters.get("pipeline_name", "preview_process_moments")
+
+    if "preview" not in pipeline_name:
+        raise(ValueError("Please use preview pipeline for preview"))
     
-    # if HD.ext == ".holo":
-    #     print("file header :", HD.file_header)
+    # Get the pipeline function
+    pipeline_func = pipelines.get(pipeline_name)
+    if pipeline_func is None:
+        raise ValueError(f"Unknown pipeline: {pipeline_name}")
+
+    # Execute the function
+    _result = pipeline_func(file_path, parameters)
     
-    print(parameters)
-
-    frames = HD.read_frames(0, 1)
-    res = HD.render_moments(parameters, tictoc=tictoc)
-
-    def plot_debug_safe(HD, res):
-        debug_manager = DebugPlotterManager(parameters) if parameters.get("debug") else None
-        
-        out = debug_manager.plot_all(res) if parameters.get("debug") else {}
-
-        return out
-
-    import imageio.v3 as iio
-
-    def save_debug_images(debug_dict, save_dir, prefix="debug"):
-        os.makedirs(save_dir, exist_ok=True)
-
-        for key, img in debug_dict.items():
-            if img is None:
-                continue
-
-            img_np = HD.bm.to_numpy(img)
-
-            if img_np.ndim == 2 and parameters["square"]:
-                H, W = img_np.shape
-                L = max(H, W)
-                # --- Resize ---
-                img_np = imresize(img_np, output_shape=(L, L))
-
-            if img_np.dtype != np.uint8:
-                img_min = np.min(img_np)
-                img_max = np.max(img_np)
-
-                if img_max > img_min:
-                    img_np = (img_np - img_min) / (img_max - img_min + 1e-12)
-
-                img_np = (img_np * 255).astype(np.uint8)
-
-            filename = os.path.join(save_dir, f"{prefix}_{key}.png")
-
-            iio.imwrite(filename, img_np)
-
-            print(f"Saved: {filename} | shape={img_np.shape} dtype={img_np.dtype}")
-
-
-    # --- Generate debug safely ---
-    debug_imgs = plot_debug_safe(HD, res)
-
-    if parameters["debug"] and parameters["shack_hartmann"] and parameters["shack_hartmann_zernike_fit"]:
-        print("zernike_fit_coeffs (radians):", HD.bm.to_numpy(res["coefs"]) if "coefs" in res else "N/A")
-        print("delta to true z in mm if coef[0] is defocus : ", 4* np.sqrt(3) * parameters["z"]**2 / ((min(frames.shape[1:])* parameters["pixel_pitch"])**2)  * parameters["wavelength"] / (2*np.pi) * (HD.bm.to_numpy(res["coefs"])[0] if "coefs" in res else 0) * 1e3)
-
-    # --- Add M0 ---
-    if "M0" in res:
-        M0 = HD.bm.to_numpy(res["M0"])
-        M0 = (M0 - np.min(M0)) / (np.max(M0) - np.min(M0) + 1e-12)
-        debug_imgs["M0"] = (M0 * 255).astype(np.uint8)
-
-    print("DEBUG KEYS:", list(debug_imgs.keys()))
-
-    # --- Save ---
-    save_dir = "./debug_outputs"
-    save_debug_images(debug_imgs, save_dir)
-    
-    M0img = debug_imgs.get("M0")
-    if M0img is not None:
-        if M0img.ndim == 2 and parameters["square"]:
-            H, W = M0img.shape
-            L = max(H, W)
-            # --- Resize ---
-            M0img = imresize(M0img, output_shape=(L, L))
-            
-        return M0img
+    return result
 
 
 def process(holo_path, parameters: dict) -> None:
-    HD = Holodoppler(backend = "cupyRAM", pipeline_version = "latest")
+    
+    if not type(parameters) == dict:  # if given a path instead of a dict of parameters
+        parameters = load_config(parameters)
 
-    HD.load_file(holo_path)
+    # Get pipeline name and parameters
+    pipeline_name = parameters.get("pipeline_name", "process_moments_latest")
 
-    if HD.file_reader.ext == ".holo":
-        print("file header :", HD.file_reader.file_header)
-        
-    print("parameters : ", parameters)
+    # Get the pipeline function
+    pipeline_func = pipelines.get(pipeline_name)
+    if pipeline_func is None:
+        raise ValueError(f"Unknown pipeline: {pipeline_name}")
 
-    HD.process_moments(parameters, holodoppler_path = True)
+    # Execute the function
+    _result = pipeline_func(file_path, parameters)
+
+    return result
 
 def _existing_file(value: str) -> Path:
     path = Path(value).expanduser().resolve()

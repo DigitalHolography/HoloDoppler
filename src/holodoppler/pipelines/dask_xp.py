@@ -1,43 +1,17 @@
-import yaml
-import dask
-from dask import delayed
-from pathlib import Path
-from functools import lru_cache
-from collections import defaultdict
-import numpy as np
-import threading
-import queue
-import tqdm
-
-from .backend import BackendManager
-from .file_io import FileReaderFactory
-from .propagation import (
-    fresnel_transform,
-    build_fresnel_kernel_in,
-    build_fresnel_kernel_out,
-)
-from .filtering import fourier_time_transform, frequency_symmetric_filtering
-from .moments import moment
-from .utils import normalize_to_uint8, write_video_file, flatfield3D
-
-
-def process_template(bm, file_path, parameters):
-    """Takes backend manager, filepath and pipeline parameters. Returns a dask delayed result"""
-
-    return delayed(lambda x: x**2)(5)  # -> will return 25 on compute
-
-
 @delayed
-def stack(bm,l,axis=0):
+def stack(bm, l, axis=0):
     return bm.xp.stack(l, axis=axis)
+
 
 @delayed
 def to_backend(bm, arr):
     return bm.to_backend(arr)
 
+
 @delayed
 def to_numpy(bm, arr):
     return bm.to_numpy(arr)
+
 
 @delayed
 def render_moments_classical(bm, A, parameters):
@@ -107,8 +81,15 @@ def render_moments_classical(bm, A, parameters):
     return res
 
 
-def process_moments_classical(bm, file_path, parameters):
-    """Takes backend manager, filepath and pipeline parameters. Main pipeline function"""
+def process_moments_classical(file_path, parameters):
+    """Takes filepath and pipeline parameters. Main pipeline function"""
+
+    # Extract runtime configuration
+    runtime_config = config.get("runtime", {})
+    backend_name = runtime_config.get("backend", "numpy")
+
+    # Initialize backend
+    bm = BackendManager(backend=backend_name)
     xp = bm.xp
     fft = bm.fft
 
@@ -172,12 +153,15 @@ def process_moments_classical(bm, file_path, parameters):
     if use_memmap and reader.ext == ".holo":
         m = reader.get_np_memmap()
         reader.close()
+
         @delayed
         def read_frames(start, size, tqdm=True):
             if tqdm:
                 pbar.update(1)
             return m[start : start + size]
+
     else:
+
         @delayed
         def read_frames(start, size, tqdm=True):
             if tqdm:
@@ -191,7 +175,7 @@ def process_moments_classical(bm, file_path, parameters):
     if registration_params.get("enabled", False):
         ref_first_frame = registration_params.get("ref_first_frame", 0)
         ref_batch_size = registration_params.get("ref_batch_size", 512)
-        frames_reg = read_frames(ref_first_frame, ref_batch_size, tqdm = False)
+        frames_reg = read_frames(ref_first_frame, ref_batch_size, tqdm=False)
         frames_reg = to_backend(bm, frames_reg)
         M0_reg = render_moments_classical(bm, frames_reg, parameters)["M0"]
 
@@ -201,7 +185,7 @@ def process_moments_classical(bm, file_path, parameters):
         frames = read_frames(batch_start, batch_size)
 
         # Move to backend
-        d_frames = to_backend(bm, frames)#.astype(xp.float32)
+        d_frames = to_backend(bm, frames)  # .astype(xp.float32)
 
         res = render_moments_classical(bm, d_frames, parameters)
 
@@ -214,106 +198,29 @@ def process_moments_classical(bm, file_path, parameters):
     # Move to CPU
     vid_t = to_numpy(bm, final_result)
 
-    # # Apply post-processing spatial transforms
-    # if saving_params.get("square", False):
-    #     m_size = max(vid_t.shape[-2], vid_t.shape[-1])
-    #     # Simple center crop to square
-    #     h, w = vid_t.shape[-2], vid_t.shape[-1]
-    #     start_h = (h - m_size) // 2
-    #     start_w = (w - m_size) // 2
-    #     vid_t = vid_t[..., start_h : start_h + m_size, start_w : start_w + m_size]
-
-    # if saving_params.get("transpose", False):
-    #     vid_t = np.transpose(vid_t, axes=(0, 1, 3, 2))
-
-    # if saving_params.get("flip_x", False):
-    #     vid_t = np.flip(vid_t, axis=-1)
-
-    # if saving_params.get("flip_y", False):
-    #     vid_t = np.flip(vid_t, axis=-2)
-
     # Cleanup
     @delayed
     def cleanup():
         if not use_memmap:
             reader.close()
         bm.clear_gpu_memory()
+
     cleanup()
 
-    return vid_t
-
-
-pipelines = {"process_moments_latest": process_moments_classical}
-
-
-# ------------------------------------------------------------------------------
-# Config loading (with tuple conversion)
-# ------------------------------------------------------------------------------
-
-
-def load_config(config_path):
-    config_path = Path(config_path)
-    with open(config_path, "r") as f:
-        config = yaml.safe_load(f) if config_path.suffix == ".yaml" else json.load(f)
-
-    def list_to_tuple(d):
-        for k, v in d.items():
-            if isinstance(v, dict):
-                d[k] = list_to_tuple(v)
-            elif isinstance(v, list):
-                d[k] = tuple(v)
-        return d
-
-    return list_to_tuple(config)
-
-# ------------------------------------------------------------------------------
-# Main pipeline engine
-# ------------------------------------------------------------------------------
-
-
-def pipeline_processing(config_path, file_path):
-    """
-    Defines and executes the Dask delayed graph according to the YAML pipeline.
-    """
-    config = load_config(config_path)
-
-    from dask.distributed import Client
-    client = Client()
-
-    # Extract runtime configuration
-    runtime_config = config.get("runtime", {})
-    backend_name = runtime_config.get("backend", "numpy")
-
-    # Get pipeline name and parameters
-    pipeline_name = config.get("pipeline_name", "process_moments_latest")
-    parameters = config.get("parameters", {})
-
-    # Initialize backend
-    bm = BackendManager(backend=backend_name)
-
-    # Get the pipeline function
-    pipeline_func = pipelines.get(pipeline_name)
-    if pipeline_func is None:
-        raise ValueError(f"Unknown pipeline: {pipeline_name}")
-
-    # Create the delayed computation graph
-    delayed_result = pipeline_func(bm, file_path, parameters)
-
-    # delayed_result.visualize(filename='transpose.svg')
+    # vid_t.visualize(filename='transpose.svg')
 
     # Execute the computation
-    result = dask.compute(delayed_result)
+    vid_t = dask.compute(vid_t)
 
     # If result is a tuple (from dask.compute), extract the first element
     if isinstance(result, tuple):
         result = result[0]
 
-    return result
+    return vid_t
 
 
-if __name__ == "__main__":
-    # Example usage
-    result = pipeline_processing(
-        r"D:\PROJETS\HoloDopplerPython\parameters\default_parameters.yaml",
-        r"D:\PROJETS\DATA\260113_AUZ0752_6.holo",
-    )
+def process_template(file_path, parameters):
+    """Takes filepath and pipeline parameters. Returns a dask delayed result"""
+    return delayed(lambda x: x**2)(5)  # -> will return 25 on compute
+
+

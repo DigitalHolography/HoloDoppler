@@ -208,3 +208,18 @@ def flatfield3D(arr, gw):
             blurred = np_gaussian_filter(arr, sigma=(gw, gw, 1))
             blurred[blurred == 0] = 1
             return arr / blurred
+
+def load_config(config_path):
+    config_path = Path(config_path)
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f) if config_path.suffix == ".yaml" else json.load(f)
+
+    def list_to_tuple(d):
+        for k, v in d.items():
+            if isinstance(v, dict):
+                d[k] = list_to_tuple(v)
+            elif isinstance(v, list):
+                d[k] = tuple(v)
+        return d
+
+    return list_to_tuple(config)

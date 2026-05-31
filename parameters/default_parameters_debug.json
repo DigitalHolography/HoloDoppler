@@ -1,4 +1,5 @@
 {
+  "pipeline_name" : "preview_moments_main_pipeline",
   "batch_size": 256,
   "batch_stride": 256,
   "accumulation": 1,

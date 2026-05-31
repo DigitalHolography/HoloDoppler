@@ -126,7 +126,7 @@ def fit_zernike(xp, ny, nx, pixel_pitch_y, pixel_pitch_x, wavelength,
     return coefs.astype(xp.float32), phase.astype(xp.float32)
 
 def southwell_phase_integration(
-    self,
+    bm,
     ny,
     nx,
     pixel_pitch_y,
@@ -137,15 +137,15 @@ def southwell_phase_integration(
     ):
     """NaN-robust Southwell phase reconstruction using a DCT Poisson solver."""
 
-    xp = self.bm.xp
+    xp = bm.xp
     xp_name = getattr(xp, "__name__", "")
 
     if xp_name == "numpy":
-        shifts_y = self._to_numpy(shifts_y)
-        shifts_x = self._to_numpy(shifts_x)
+        shifts_y = bm._to_numpy(shifts_y)
+        shifts_x = bm._to_numpy(shifts_x)
         
-    zoom = self.bm.zoom
-    fft = self.bm.fft
+    zoom = bm.zoom
+    fft = bm.fft
 
     def dct2(a):
         return fft.dct(fft.dct(a, axis=0, norm="ortho"), axis=1, norm="ortho")

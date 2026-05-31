@@ -23,8 +23,6 @@ from scipy.ndimage import gaussian_filter as np_gaussian_filter
 import scipy.ndimage as np_ndi
 from scipy.ndimage import zoom as scipy_zoom
 
-from dask import delayed
-
 def to_numpy(arr):
     if isinstance(arr, cp.ndarray):
         return arr.get()
@@ -64,8 +62,6 @@ class BackendManager:
             return cp.asarray(arr)
         return arr
 
-    delayed_to_backend = delayed(to_backend)
-    
     def to_numpy(self, arr):
         if "cupy" in self.backend_name and isinstance(arr, cp.ndarray):
             return arr.get()
