@@ -93,7 +93,9 @@ def _read_version() -> str:
         if version:
             return version
 
-    raise RuntimeError(f"Could not read version from {PYPROJECT_FILE} or {VERSION_FILE}")
+    raise RuntimeError(
+        f"Could not read version from {PYPROJECT_FILE} or {VERSION_FILE}"
+    )
 
 
 def _find_iscc(explicit_path: Path | None) -> Path:
