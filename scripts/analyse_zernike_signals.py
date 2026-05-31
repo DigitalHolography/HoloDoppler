@@ -50,10 +50,18 @@ def lowpass_fft(signal, fs, cutoff_hz):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("folder", type=Path)
-    parser.add_argument("--fs", type=float, required=True, help="Sampling frequency in Hz")
-    parser.add_argument("--window", default="hann", help="none, hann, hamming, blackman")
-    parser.add_argument("--window-size", type=int, default=None, help="FFT window size in samples")
-    parser.add_argument("--lowpass", type=float, default=None, help="Optional low-pass cutoff in Hz")
+    parser.add_argument(
+        "--fs", type=float, required=True, help="Sampling frequency in Hz"
+    )
+    parser.add_argument(
+        "--window", default="hann", help="none, hann, hamming, blackman"
+    )
+    parser.add_argument(
+        "--window-size", type=int, default=None, help="FFT window size in samples"
+    )
+    parser.add_argument(
+        "--lowpass", type=float, default=None, help="Optional low-pass cutoff in Hz"
+    )
     args = parser.parse_args()
 
     h5_path = first_h5_in_raw(args.folder)
@@ -73,7 +81,7 @@ def main():
 
     signals = data[:, :3]
     names = ["Defocus", "Astig 1", "Astig 2"]
-    
+
     # -------------------------------------------------------------------------
     # Save signals to CSV (debug)
     # -------------------------------------------------------------------------

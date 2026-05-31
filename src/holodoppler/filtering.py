@@ -4,97 +4,104 @@ Filtering operations: SVD, frequency filtering
 
 from functools import cache
 
+
 def svd_filter(xp, H, svd_threshold):
-        """SVD filtering to remove tissue signal"""
-        
-        if svd_threshold < 0:
-            return H
-        
-        sz = H.shape
-        H2 = H.reshape((sz[0], sz[-1] * sz[-2])).T
-        
-        cov = H2.conj().T @ H2
-        eps = 1e-12
-        cov = cov + eps * xp.eye(cov.shape[0], dtype=cov.dtype)
-        
-        S, V = xp.linalg.eigh(cov)
-        idx = xp.argsort(S)[::-1]
-        V = V[:, idx]
-        Vt = V[:, :svd_threshold]
-        
-        H2 -= H2 @ Vt @ Vt.conj().T
-        return H2.T.reshape(sz)
+    """SVD filtering to remove tissue signal"""
+
+    if svd_threshold < 0:
+        return H
+
+    sz = H.shape
+    H2 = H.reshape((sz[0], sz[-1] * sz[-2])).T
+
+    cov = H2.conj().T @ H2
+    eps = 1e-12
+    cov = cov + eps * xp.eye(cov.shape[0], dtype=cov.dtype)
+
+    S, V = xp.linalg.eigh(cov)
+    idx = xp.argsort(S)[::-1]
+    V = V[:, idx]
+    Vt = V[:, :svd_threshold]
+
+    H2 -= H2 @ Vt @ Vt.conj().T
+    return H2.T.reshape(sz)
+
 
 def svd_filter_batched(xp, U_subaps, svd_threshold):
     """Batched SVD filter for subapertures"""
-    
+
     if svd_threshold < 0:
         return U_subaps
-    
+
     ny_s, nx_s, sub_ny, sub_nx, nz = U_subaps.shape
     B = ny_s * nx_s
-    
+
     H2 = U_subaps.reshape(B, sub_ny * sub_nx, nz)
     eps = 1e-12
-    
-    cov = xp.einsum('bpi,bpj->bij', H2.conj(), H2) + eps * xp.eye(nz, dtype=H2.dtype)
-    
+
+    cov = xp.einsum("bpi,bpj->bij", H2.conj(), H2) + eps * xp.eye(nz, dtype=H2.dtype)
+
     V_list = []
     for b in range(B):
         _, Vb = xp.linalg.eigh(cov[b])
         V_list.append(Vb[:, ::-1])
-    
+
     Vt = xp.stack([Vb[:, :svd_threshold] for Vb in V_list], axis=0)
-    H2_Vt = xp.einsum('bpi,bik->bpk', H2, Vt)
-    proj = xp.einsum('bpk,bjk->bpj', H2_Vt, Vt.conj())
-    
+    H2_Vt = xp.einsum("bpi,bik->bpk", H2, Vt)
+    proj = xp.einsum("bpk,bjk->bpj", H2_Vt, Vt.conj())
+
     return (H2 - proj).reshape(ny_s, nx_s, sub_ny, sub_nx, nz)
 
+
 @cache
-def frequency_symmetric_filtering(xp, fft, batch_size, sampling_freq, low_freq, high_freq=None):
+def frequency_symmetric_filtering(
+    xp, fft, batch_size, sampling_freq, low_freq, high_freq=None
+):
     """Create symmetric frequency filter mask"""
-    
+
     freqs = fft.fftfreq(batch_size, 1 / sampling_freq)
-    
+
     if high_freq is None:
         idxs = xp.abs(freqs) > low_freq
     else:
         idxs = (high_freq > xp.abs(freqs)) & (xp.abs(freqs) > low_freq)
-    
+
     return idxs, freqs[idxs]
+
 
 def fourier_time_transform(xp, fft, H):
     """FFT along time axis"""
     return fft.fft(H, axis=0, norm="ortho")
 
+
 class Filtering:
     """Filtering operations for holographic data"""
-    
+
     def __init__(self, backend_manager):
         self.bm = backend_manager
-    
+
     def svd_filter(self, H, svd_threshold):
         """SVD filtering to remove tissue signal"""
         xp = self.bm.xp
-        
+
         if svd_threshold < 0:
             return H
-        
+
         sz = H.shape
         H2 = H.reshape((sz[0], sz[-1] * sz[-2])).T
-        
+
         cov = H2.conj().T @ H2
         eps = 1e-12
         cov = cov + eps * xp.eye(cov.shape[0], dtype=cov.dtype)
-        
+
         S, V = xp.linalg.eigh(cov)
         idx = xp.argsort(S)[::-1]
         V = V[:, idx]
         Vt = V[:, :svd_threshold]
-        
+
         H2 -= H2 @ Vt @ Vt.conj().T
         return H2.T.reshape(sz)
-    
+
     def tucker_filter(self, H, ranks=None, temporal_modes_to_remove=32):
         """
         Global Tucker/HOSVD filter.
@@ -111,10 +118,10 @@ class Filtering:
         -------
         Filtered tensor with coherent low-rank components removed.
         """
-        
-        if temporal_modes_to_remove <=0 :
+
+        if temporal_modes_to_remove <= 0:
             return H
-        
+
         if ranks is None:
             ranks = H.shape
 
@@ -176,13 +183,7 @@ class Filtering:
         # G = H ×1 Ut^H ×2 Ux^H ×3 Uy^H
         # ============================================================
 
-        G = xp.einsum(
-            'ti,xj,yk,txy->ijk',
-            Ut.conj(),
-            Ux.conj(),
-            Uy.conj(),
-            H
-        )
+        G = xp.einsum("ti,xj,yk,txy->ijk", Ut.conj(), Ux.conj(), Uy.conj(), H)
 
         # ============================================================
         # Remove coherent temporal modes
@@ -195,22 +196,12 @@ class Filtering:
         # Hf = G ×1 Ut ×2 Ux ×3 Uy
         # ============================================================
 
-        Hf = xp.einsum(
-            'ti,xj,yk,ijk->txy',
-            Ut,
-            Ux,
-            Uy,
-            G
-        )
+        Hf = xp.einsum("ti,xj,yk,ijk->txy", Ut, Ux, Uy, G)
 
         return Hf
-    
+
     def hankel_tucker_filter(
-        self,
-        H,
-        ranks=(8, 8, 8),
-        temporal_modes_to_remove=1,
-        hankel_length=16
+        self, H, ranks=(8, 8, 8), temporal_modes_to_remove=1, hankel_length=16
     ):
         """
         Hankel-Tucker coherent artifact filter.
@@ -229,7 +220,6 @@ class Filtering:
         -------
         Filtered tensor
         """
-        
 
         xp = self.bm.xp
 
@@ -250,7 +240,7 @@ class Filtering:
         Hh = xp.zeros((L, K, X, Y), dtype=H.dtype)
 
         for k in range(K):
-            Hh[:, k] = H[k:k + L]
+            Hh[:, k] = H[k : k + L]
 
         # ============================================================
         # Merge K and spatial dimensions for Tucker
@@ -309,13 +299,7 @@ class Filtering:
         # Core tensor
         # ============================================================
 
-        G = xp.einsum(
-            'li,pj,yk,lpy->ijk',
-            Ut.conj(),
-            Ux.conj(),
-            Uy.conj(),
-            Hm
-        )
+        G = xp.einsum("li,pj,yk,lpy->ijk", Ut.conj(), Ux.conj(), Uy.conj(), Hm)
 
         # ============================================================
         # Remove coherent temporal modes
@@ -327,13 +311,7 @@ class Filtering:
         # Reconstruction
         # ============================================================
 
-        Hmf = xp.einsum(
-            'li,pj,yk,ijk->lpy',
-            Ut,
-            Ux,
-            Uy,
-            G
-        )
+        Hmf = xp.einsum("li,pj,yk,ijk->lpy", Ut, Ux, Uy, G)
 
         # ============================================================
         # Undo merged dimensions
@@ -350,54 +328,58 @@ class Filtering:
         counts = xp.zeros(T, dtype=H.real.dtype)
 
         for k in range(K):
-            Hout[k:k + L] += Hhf[:, k]
+            Hout[k : k + L] += Hhf[:, k]
 
-            counts[k:k + L] += 1
+            counts[k : k + L] += 1
 
         Hout /= counts[:, None, None]
 
         return Hout
-    
+
     def svd_filter_batched(self, U_subaps, svd_threshold):
         """Batched SVD filter for subapertures"""
         xp = self.bm.xp
-        
+
         if svd_threshold < 0:
             return U_subaps
-        
+
         ny_s, nx_s, sub_ny, sub_nx, nz = U_subaps.shape
         B = ny_s * nx_s
-        
+
         H2 = U_subaps.reshape(B, sub_ny * sub_nx, nz)
         eps = 1e-12
-        
-        cov = xp.einsum('bpi,bpj->bij', H2.conj(), H2) + eps * xp.eye(nz, dtype=H2.dtype)
-        
+
+        cov = xp.einsum("bpi,bpj->bij", H2.conj(), H2) + eps * xp.eye(
+            nz, dtype=H2.dtype
+        )
+
         V_list = []
         for b in range(B):
             _, Vb = xp.linalg.eigh(cov[b])
             V_list.append(Vb[:, ::-1])
-        
+
         Vt = xp.stack([Vb[:, :svd_threshold] for Vb in V_list], axis=0)
-        H2_Vt = xp.einsum('bpi,bik->bpk', H2, Vt)
-        proj = xp.einsum('bpk,bjk->bpj', H2_Vt, Vt.conj())
-        
+        H2_Vt = xp.einsum("bpi,bik->bpk", H2, Vt)
+        proj = xp.einsum("bpk,bjk->bpj", H2_Vt, Vt.conj())
+
         return (H2 - proj).reshape(ny_s, nx_s, sub_ny, sub_nx, nz)
-    
-    def frequency_symmetric_filtering(self, batch_size, sampling_freq, low_freq, high_freq=None):
+
+    def frequency_symmetric_filtering(
+        self, batch_size, sampling_freq, low_freq, high_freq=None
+    ):
         """Create symmetric frequency filter mask"""
         xp = self.bm.xp
         fft = self.bm.fft
-        
+
         freqs = fft.fftfreq(batch_size, 1 / sampling_freq)
-        
+
         if high_freq is None:
             idxs = xp.abs(freqs) > low_freq
         else:
             idxs = (high_freq > xp.abs(freqs)) & (xp.abs(freqs) > low_freq)
-        
+
         return idxs, freqs[idxs]
-    
+
     def fourier_time_transform(self, H):
         """FFT along time axis"""
         return self.bm.fft.fft(H, axis=0, norm="ortho")

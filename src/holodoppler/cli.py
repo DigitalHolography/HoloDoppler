@@ -12,6 +12,7 @@ import imageio.v3 as iio
 
 from .utils import load_config
 
+
 def preview(file_path, parameters: dict, tictoc=False) -> None:
 
     if not type(parameters) == dict:  # if given a path instead of a dict of parameters
@@ -23,7 +24,7 @@ def preview(file_path, parameters: dict, tictoc=False) -> None:
     if "preview" not in pipeline_name:
         print(ValueError("Please use preview pipeline for preview"))
         pipeline_name = "preview_process_moments"
-    
+
     # Get the pipeline function
     pipeline_func = pipelines.get(pipeline_name)
     if pipeline_func is None:
@@ -31,12 +32,12 @@ def preview(file_path, parameters: dict, tictoc=False) -> None:
 
     # Execute the function
     result = pipeline_func(file_path, parameters)
-    
+
     return result
 
 
 def process(file_path, parameters: dict) -> None:
-    
+
     if not type(parameters) == dict:  # if given a path instead of a dict of parameters
         parameters = load_config(parameters)
 
@@ -52,6 +53,7 @@ def process(file_path, parameters: dict) -> None:
     result = pipeline_func(file_path, parameters)
 
     return result
+
 
 def _existing_file(value: str) -> Path:
     path = Path(value).expanduser().resolve()
@@ -77,25 +79,29 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _load_json(path: Path) -> dict:
     """Load and parse JSON file."""
-    with open(path, 'r') as f:
+    with open(path, "r") as f:
         return json.load(f)
+
 
 def _get_debug_config() -> dict:
     """Load debug configuration if it exists."""
     debug_paths_file = Path(".debug_paths.json")
     if debug_paths_file.exists():
-        with open(debug_paths_file, 'r') as f:
+        with open(debug_paths_file, "r") as f:
             return json.load(f)
     return {}
 
+
 def _cmd_preview(args: argparse.Namespace) -> int:
     debug_config = _get_debug_config()
-    
+
     # Determine input path
     if args.input is None:
         holofilepath = debug_config.get("HOLOFILEPATH")
         if not holofilepath:
-            print("Error: No input file provided and HOLOFILEPATH not found in .debug_paths.json")
+            print(
+                "Error: No input file provided and HOLOFILEPATH not found in .debug_paths.json"
+            )
             return 1
         input_path = Path(holofilepath)
         if not input_path.exists():
@@ -103,27 +109,32 @@ def _cmd_preview(args: argparse.Namespace) -> int:
             return 1
     else:
         input_path = args.input
-    
+
     # Determine config path
     if args.config is None:
         config_path = Path("parameters/default_parameters_debug.json")
         if not config_path.exists():
-            print("Error: No config file provided and parameters/default_parameters_debug.json not found")
+            print(
+                "Error: No config file provided and parameters/default_parameters_debug.json not found"
+            )
             return 1
     else:
         config_path = args.config
-    
+
     preview(input_path, config_path)
     return 0
 
+
 def _cmd_process(args: argparse.Namespace) -> int:
     debug_config = _get_debug_config()
-    
+
     # Determine input path
     if args.input is None:
         holofilepath = debug_config.get("HOLOFILEPATH")
         if not holofilepath:
-            print("Error: No input file provided and HOLOFILEPATH not found in .debug_paths.json")
+            print(
+                "Error: No input file provided and HOLOFILEPATH not found in .debug_paths.json"
+            )
             return 1
         input_path = Path(holofilepath)
         if not input_path.exists():
@@ -131,16 +142,18 @@ def _cmd_process(args: argparse.Namespace) -> int:
             return 1
     else:
         input_path = args.input
-    
+
     # Determine config path
     if args.config is None:
         config_path = Path("parameters/default_parameters_debug.json")
         if not config_path.exists():
-            print("Error: No config file provided and parameters/default_parameters_debug.json not found")
+            print(
+                "Error: No config file provided and parameters/default_parameters_debug.json not found"
+            )
             return 1
     else:
         config_path = args.config
-    
+
     process(input_path, config_path)
     return 0
 

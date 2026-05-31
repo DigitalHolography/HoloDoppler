@@ -490,9 +490,8 @@ def preview_process_moments(file_path, parameters, tictoc=False):
     # --- Save ---
     save_dir = "./debug_outputs"
     save_debug_images(debug_imgs, save_dir)
-    
-        
-    plt.close('all')
+
+    plt.close("all")
 
     M0img = debug_imgs.get("M0")
     if M0img is not None:
@@ -904,8 +903,8 @@ def _process_gpu_streaming_onram(
                 d_frames_next = cp.asarray(frames_next)
 
         with stream_compute:
-            res = render_moments(bm, 
-                parameters, frames=d_frames, registration_ref=M0_reg
+            res = render_moments(
+                bm, parameters, frames=d_frames, registration_ref=M0_reg
             )
 
         stream_compute.synchronize()

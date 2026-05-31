@@ -1,5 +1,6 @@
 from dask import delayed
 
+
 @delayed
 def stack(bm, l, axis=0):
     return bm.xp.stack(l, axis=axis)
@@ -224,5 +225,3 @@ def process_moments_classical(file_path, parameters):
 def process_template(file_path, parameters):
     """Takes filepath and pipeline parameters. Returns a dask delayed result"""
     return delayed(lambda x: x**2)(5)  # -> will return 25 on compute
-
-
