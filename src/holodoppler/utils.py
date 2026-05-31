@@ -57,7 +57,118 @@ def write_video_file(path, frames, fps, fourcc_code="mp4v"):
         out.write(frame)
     out.release()
 
+import numpy as np
 
+def resize_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
+    """
+    Resize using FFT. Vectorized across all non-target axes. Keeping comparable values.
+    
+    Parameters
+    ----------
+    img : ndarray
+        Input image array. The dimensions specified by `axes` will be resized.
+    new_h, new_w : int
+        Target height and width for the resize operation.
+    axes : tuple, optional
+        Axes to resize (height, width). Default is (-2, -1) for last two dimensions.
+    xp : module, optional
+        Array module (numpy or cupy). Default is numpy.
+    fft : module, optional
+        FFT module (numpy.fft or cupyx.scipy.fft). Default is numpy.fft.
+    
+    Returns
+    -------
+    resized : ndarray
+        Resized image with same number of dimensions, but target size on specified axes.
+    """
+    
+    # Get the target axes positions (convert negative indices)
+    axes = tuple(axes)
+    h_axis, w_axis = axes
+    ndim = img.ndim
+    
+    # Convert negative axes to positive indices
+    if h_axis < 0:
+        h_axis = ndim + h_axis
+    if w_axis < 0:
+        w_axis = ndim + w_axis
+    
+    # Get original shape and ensure axes are valid
+    orig_shape = img.shape
+    orig_h = orig_shape[h_axis]
+    orig_w = orig_shape[w_axis]
+    
+    # Create slices for indexing
+    slice_before_h = [slice(None)] * ndim
+    slice_before_w = [slice(None)] * ndim
+    slice_before_h[h_axis] = slice(0, new_h)
+    slice_before_w[w_axis] = slice(0, new_w)
+    
+    # Apply FFT to target axes
+    # Move target axes to the end for easier vectorization
+    axes_to_move = [h_axis, w_axis]
+    other_axes = [i for i in range(ndim) if i not in axes_to_move]
+    new_order = other_axes + axes_to_move
+    inverse_order = list(np.argsort(new_order))
+    
+    # Transpose to bring target axes to the end
+    img_transposed = xp.transpose(img, new_order)
+    
+    # Get shape after transpose
+    transposed_shape = img_transposed.shape
+    batch_shape = transposed_shape[:-2]
+    
+    # Reshape to 2D: (batch_size, orig_h * orig_w) for FFT
+    img_flat = img_transposed.reshape(-1, orig_h, orig_w)
+    
+    # Apply 2D FFT to each slice
+    img_fft = fft.fft2(img_flat, axes=(-2, -1))
+    
+    # Crop or pad in frequency domain
+    # Center the FFT (shift zero frequency to center)
+    img_fft_shifted = fft.fftshift(img_fft, axes=(-2, -1))
+    
+    # Calculate crop/pad regions
+    h_center = orig_h // 2
+    w_center = orig_w // 2
+    h_half_new = new_h // 2
+    w_half_new = new_w // 2
+    
+    # Create output frequency array
+    new_shape_2d = (img_fft.shape[0], new_h, new_w)
+    img_fft_resized = xp.zeros(new_shape_2d, dtype=img_fft.dtype)
+    
+    # Determine source slices
+    h_start_src = max(0, h_center - h_half_new)
+    h_end_src = min(orig_h, h_center + h_half_new + (new_h % 2))
+    w_start_src = max(0, w_center - w_half_new)
+    w_end_src = min(orig_w, w_center + w_half_new + (new_w % 2))
+    
+    # Determine destination slices
+    h_start_dst = max(0, h_half_new - h_center)
+    h_end_dst = h_start_dst + (h_end_src - h_start_src)
+    w_start_dst = max(0, w_half_new - w_center)
+    w_end_dst = w_start_dst + (w_end_src - w_start_src)
+    
+    # Copy frequency components
+    img_fft_resized[:, h_start_dst:h_end_dst, w_start_dst:w_end_dst] = \
+        img_fft_shifted[:, h_start_src:h_end_src, w_start_src:w_end_src]
+    
+    # Inverse shift and inverse FFT
+    img_fft_resized_shifted = fft.ifftshift(img_fft_resized, axes=(-2, -1))
+    img_resized_flat = fft.ifft2(img_fft_resized_shifted, axes=(-2, -1)).real
+    
+    # Reshape back to original batch dimensions
+    img_resized_batch = img_resized_flat.reshape(*batch_shape, new_h, new_w)
+    
+    # Transpose back to original axis order
+    img_resized = xp.transpose(img_resized_batch, inverse_order)
+    
+    # Scale to preserve energy/values
+    scale_factor = (orig_h * orig_w) / (new_h * new_w)
+    img_resized = img_resized * scale_factor
+    
+    return img_resized
 
 def resize_fft2_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
     """Spectral resize using FFT. Vectorized across all non-target axes."""

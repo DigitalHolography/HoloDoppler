@@ -5,7 +5,7 @@ Image registration using phase correlation for Translation, Rotation, and Scale 
 from .utils import elliptical_mask
 from .utils import signed_peak, subpixel_parabola
 
-def register_trs(xp, ndi, fixed, moving, radius=None, estimate_similarity=True,
+def register_trs(xp, fft, ndi, fixed, moving, radius=None, estimate_similarity=True,
                     radial_bins=256, angular_bins=360, return_registered=False):
     """Full TRS (Translation, Rotation, Scale) registration."""
     ny, nx = fixed.shape
@@ -34,7 +34,7 @@ def register_trs(xp, ndi, fixed, moving, radius=None, estimate_similarity=True,
 
     # Use the apply_registration helper for a clean final step
     reg_tuple = (shift_y, shift_x, angle_deg, scale)
-    moving_registered = apply_registration(xp, ndi, moving_f, reg_tuple)
+    moving_registered = apply_registration(xp, fft, ndi, moving_f, reg_tuple)
     
     return shift_y, shift_x, angle_deg, scale, moving_registered
 
@@ -162,7 +162,7 @@ def apply_shifts(xp, fft, img, shift_y, shift_x):
 
     return out.astype(img.dtype, copy=False)
 
-def apply_registration(xp, ndi, img, reg):
+def apply_registration(xp, fft, ndi, img, reg):
     """
     Apply a registration tuple to an image.
 
@@ -191,6 +191,6 @@ def apply_registration(xp, ndi, img, reg):
         out = apply_rotation_scale(xp, ndi, out, angle_deg, scale)
 
     # 2. Apply translation shifts last
-    out = apply_shifts(out, shift_y, shift_x)
+    out = apply_shifts(xp, fft, out, shift_y, shift_x)
 
     return out

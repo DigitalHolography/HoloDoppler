@@ -2,8 +2,12 @@ from pathlib import Path
 import os
 import h5py
 from tqdm import tqdm
+import imageio as iio
 
-def save_outputs(filer_reader, video_path=None, holodoppler_path=None, vid=None, 
+from .utils import *
+from .get_version import get_version
+
+def save_outputs(file_reader, video_path=None, holodoppler_path=None, vid=None, 
                 vid_debug=None, parameters=None, reg_list=None, 
                 coefs_list=None, end_frame=None, first_frame=None, num_batch=None):
     """
@@ -31,6 +35,7 @@ def save_outputs(filer_reader, video_path=None, holodoppler_path=None, vid=None,
 
     # 2. Execute Save Bundle
     _save_bundle(
+        file_reader,
         target_dir=target_dir,
         mode=save_mode,
         vid=vid,
@@ -48,7 +53,7 @@ def _get_default_output_path(file_reader):
     base_name = Path(file_reader.file_path).stem
     return Path(file_reader.file_path).parent / base_name / f"{base_name}_HD"
 
-def _save_bundle(target_dir, mode, vid, vid_debug, parameters, 
+def _save_bundle(file_reader, target_dir, mode, vid, vid_debug, parameters, 
                 reg_list, coefs_list, end_frame, first_frame, num_batch):
     """
     Unified saving engine. 
@@ -89,7 +94,7 @@ def _save_bundle(target_dir, mode, vid, vid_debug, parameters,
             
         if parameters["square"] and key in ["M0ffnoreg", "M0notfixed", "montage", "montagenormalized"]:
             m = max(data.shape[-2], data.shape[-1])
-            data = resize_fft2_slicewise(data, m, m)
+            data = resize_slicewise(data, m, m)
         
         save_map[f"debug_{key}"] = data
 
@@ -99,16 +104,15 @@ def _save_bundle(target_dir, mode, vid, vid_debug, parameters,
         write_video_file(target_dir / "mp4" / f"{name}.mp4", uint8_data, fps, "mp4v")
         write_video_file(target_dir / "avi" / f"{name}.avi", uint8_data, fps, "MJPG")
         if uint8_data.ndim == 3:
-            plt.imsave(target_dir / "png" / f"{name}.png", np.mean(uint8_data, axis=0), cmap="gray")
+            iio.imwrite(target_dir / "png" / f"{name}.png", normalize_to_uint8(np.mean(data, axis=0)))
+            # plt.imsave(target_dir / "png" / f"{name}.png", np.mean(uint8_data, axis=0), cmap="gray")
 
     # --- 3. Save Metadata (JSON, TXT) ---
-    save_metadata(target_dir, parameters)
+    save_metadata(target_dir, file_reader,  parameters)
     
     # --- 4. Save H5 (Only if mode is FULL) ---
     if mode == "FULL":
         save_h5(target_dir, vid, parameters, reg_list, coefs_list)
-        
-    plt.close('all')
 
 def save_metadata(target_dir, file_reader,  parameters):
     """Saves all configuration and versioning files"""

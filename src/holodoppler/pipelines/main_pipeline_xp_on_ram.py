@@ -54,22 +54,23 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
             self.xp = xp
             self.batch_size = batch_size
             self.buffers = defaultdict(list)
-        
+
         def add(self, data_dict):
             for k, v in data_dict.items():
                 self.buffers[k].append(v)
             if len(next(iter(self.buffers.values()))) >= self.batch_size:
                 return self.flush()
             return None
-        
+
         def flush(self):
             if not self.buffers:
                 return None
-            batch = {k: self.xp.sum(self.xp.stack(v), axis=0) / self.batch_size 
-                    for k, v in self.buffers.items()}
+            batch = {
+                k: self.xp.sum(self.xp.stack(v), axis=0) / self.batch_size
+                for k, v in self.buffers.items()
+            }
             self.buffers.clear()
             return batch
-
 
     subaps_acc = Accumulator(parameters.get("shack_hartmann_accumulation", 1), bm.xp)
     main_acc = Accumulator(parameters.get("accumulation", 1), bm.xp)
@@ -148,7 +149,7 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
                     # first iteration caculation of the ref
                     imref = None
                 else:
-                    imref = resize_fft2_slicewise(
+                    imref = resize_slicewise(
                         registration_ref, Ny, Nx, xp=bm.xp, fft=bm.fft
                     )
 
@@ -208,7 +209,7 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
             phase_term = xp.nan_to_num(phase_term, nan=0.0)
             if parameters.get("zero_padding"):
                 phase_term = pad_array_centrally(
-                    phase_term, parameters["zero_padding"], self.bm.xp
+                    phase_term, parameters["zero_padding"], bm.xp
                 )
         else:
             phase_term = None
@@ -251,16 +252,24 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
 
             if parameters.get("debug"):
                 if parameters["spatial_propagation"] == "Fresnel":
-                    holograms_not_fixed = fresnel_transform(xp, fft, frames_sub, parameters["z"],
-                    parameters["pixel_pitch"],
-                    parameters["wavelength"],
-                    zero_padding=parameters.get("zero_padding")
+                    holograms_not_fixed = fresnel_transform(
+                        xp,
+                        fft,
+                        frames_sub,
+                        parameters["z"],
+                        parameters["pixel_pitch"],
+                        parameters["wavelength"],
+                        zero_padding=parameters.get("zero_padding"),
                     )
                 elif parameters["spatial_propagation"] == "AngularSpectrum":
-                    holograms_not_fixed = angular_spectrum_transform(xp, fft, frames_sub, parameters["z"],
-                    parameters["pixel_pitch"],
-                    parameters["wavelength"], 
-                    zero_padding=parameters.get("zero_padding")
+                    holograms_not_fixed = angular_spectrum_transform(
+                        xp,
+                        fft,
+                        frames_sub,
+                        parameters["z"],
+                        parameters["pixel_pitch"],
+                        parameters["wavelength"],
+                        zero_padding=parameters.get("zero_padding"),
                     )
                 else:
                     holograms_not_fixed = frames_sub
@@ -280,7 +289,7 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
 
         # SVD filtering
         holograms_f = svd_filter(xp, holograms, parameters["svd_threshold"])
-        # holograms_f = self.filtering.tucker_filter(holograms, ranks=holograms.shape, temporal_modes_to_remove=parameters["svd_threshold"])
+        # holograms_f = tucker_filter(holograms, ranks=holograms.shape, temporal_modes_to_remove=parameters["svd_threshold"])
 
         if parameters.get("debug"):
             sig = xp.squeeze(xp.mean(holograms_f, axis=(-1, -2)))
@@ -363,6 +372,7 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
         ):
             reg = register_trs(
                 xp,
+                fft,
                 bm.ndi,
                 registration_ref,
                 M0_ff,
@@ -371,6 +381,7 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
         else:
             reg = register_trs(
                 xp,
+                fft,
                 bm.ndi,
                 registration_ref,
                 M0_ff,
@@ -378,13 +389,15 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
                 estimate_similarity=False,
             )
         if parameters.get("apply_registration"):
-            res["M0"] = apply_registration(xp, bm.ndi, res["M0"], reg)
-            res["M1"] = apply_registration(xp, bm.ndi, res["M1"], reg)
-            res["M2"] = apply_registration(xp, bm.ndi, res["M2"], reg)
-            res["M0ff"] = apply_registration(xp, bm.ndi, res["M0ff"], reg)
+            res["M0"] = apply_registration(xp, fft, bm.ndi, res["M0"], reg)
+            res["M1"] = apply_registration(xp, fft, bm.ndi, res["M1"], reg)
+            res["M2"] = apply_registration(xp, fft, bm.ndi, res["M2"], reg)
+            res["M0ff"] = apply_registration(xp, fft, bm.ndi, res["M0ff"], reg)
 
         for k, v in enumerate(parameters.get("frequency_bands", [])):
-            res[f"band_{k}_{v[0]}_{v[1]}"] = apply_registration(xp, bm.ndi,res[f"band_{k}_{v[0]}_{v[1]}"], reg)
+            res[f"band_{k}_{v[0]}_{v[1]}"] = apply_registration(
+                xp, fft, bm.ndi, res[f"band_{k}_{v[0]}_{v[1]}"], reg
+            )
 
         res["registration"] = reg
 
@@ -404,12 +417,11 @@ def preview_process_moments(file_path, parameters, tictoc=False):
     batch_size = parameters["batch_size"]
     batch_stride = parameters["batch_stride"]
     first_frame = parameters["first_frame"]
-    
 
-    frames = file_reader.read_frames(first_frame,batch_size)
+    frames = file_reader.read_frames(first_frame, batch_size)
 
     frames = bm.to_backend(frames)
-    res = render_moments(bm, parameters, frames,  tictoc=tictoc)
+    res = render_moments(bm, parameters, frames, tictoc=tictoc)
     file_reader.close()
 
     def save_debug_images(debug_dict, save_dir, prefix="debug"):
@@ -425,7 +437,7 @@ def preview_process_moments(file_path, parameters, tictoc=False):
                 H, W = img_np.shape
                 L = max(H, W)
                 # --- Resize ---
-                img_np = imresize.imresize(img_np, output_shape=(L, L))
+                img_np = resize_slicewise(img_np, L, L)
 
             if img_np.dtype != np.uint8:
                 img_min = np.min(img_np)
@@ -446,9 +458,26 @@ def preview_process_moments(file_path, parameters, tictoc=False):
     debug_manager = DebugPlotterManager(parameters) if parameters.get("debug") else None
     debug_imgs = debug_manager.plot_all(res) if parameters.get("debug") else {}
 
-    if parameters["debug"] and parameters["shack_hartmann"] and parameters["shack_hartmann_zernike_fit"]:
-        print("zernike_fit_coeffs (radians):", bm.to_numpy(res["coefs"]) if "coefs" in res else "N/A")
-        print("delta to true z in mm if coef[0] is defocus : ", 4* np.sqrt(3) * parameters["z"]**2 / ((min(frames.shape[1:])* parameters["pixel_pitch"][0])**2)  * parameters["wavelength"] / (2*np.pi) * (bm.to_numpy(res["coefs"])[0] if "coefs" in res else 0) * 1e3)
+    if (
+        parameters["debug"]
+        and parameters["shack_hartmann"]
+        and parameters["shack_hartmann_zernike_fit"]
+    ):
+        print(
+            "zernike_fit_coeffs (radians):",
+            bm.to_numpy(res["coefs"]) if "coefs" in res else "N/A",
+        )
+        print(
+            "delta to true z in mm if coef[0] is defocus : ",
+            4
+            * np.sqrt(3)
+            * parameters["z"] ** 2
+            / ((min(frames.shape[1:]) * parameters["pixel_pitch"][0]) ** 2)
+            * parameters["wavelength"]
+            / (2 * np.pi)
+            * (bm.to_numpy(res["coefs"])[0] if "coefs" in res else 0)
+            * 1e3,
+        )
 
     # --- Add M0 ---
     if "M0" in res:
@@ -462,14 +491,17 @@ def preview_process_moments(file_path, parameters, tictoc=False):
     save_dir = "./debug_outputs"
     save_debug_images(debug_imgs, save_dir)
     
+        
+    plt.close('all')
+
     M0img = debug_imgs.get("M0")
     if M0img is not None:
         if M0img.ndim == 2 and parameters["square"]:
             H, W = M0img.shape
             L = max(H, W)
             # --- Resize ---
-            M0img = resize_fft2_slicewise(M0img, L, L)
-            
+            M0img = resize_slicewise(M0img, L, L)
+
         return M0img
 
 
@@ -478,8 +510,8 @@ def preview_process_moments(file_path, parameters, tictoc=False):
 # ------------------------------------------------------------
 
 
-def process_moments( file_path, 
-    parameters, mp4_path=None, return_numpy=False, holodoppler_path=True
+def process_moments(
+    file_path, parameters, mp4_path=None, return_numpy=False, holodoppler_path=True
 ):
     """Process entire video"""
 
@@ -491,9 +523,10 @@ def process_moments( file_path,
     fft = bm.fft
 
     file_reader = FileReaderFactory.create(file_path)
+    file_reader.open()
 
     if file_reader.ext == ".holo":
-        print("file header :", HD.file_reader.file_header)
+        print("file header :", file_reader.file_header)
 
     print("parameters : ", parameters)
 
@@ -556,7 +589,8 @@ def process_moments( file_path,
         frames_reg = file_reader.read_frames(
             first_frame, parameters["batch_size_registration"]
         )
-        M0_reg = render_moments(parameters, frames=frames_reg)["M0"]
+        frames_reg = bm.to_backend(frames_reg)
+        M0_reg = render_moments(bm, parameters, frames=frames_reg)["M0"]
         M0_reg = gaussian_flatfield(
             M0_reg, parameters["registration_flatfield_gw"], bm.gaussian_filter
         )
@@ -570,6 +604,8 @@ def process_moments( file_path,
     # Main processing loop with GPU streaming if enabled
     if backend_name == "cupy":
         _process_gpu_streaming(
+            bm,
+            file_reader,
             parameters,
             num_batch,
             first_frame,
@@ -586,6 +622,8 @@ def process_moments( file_path,
         )
     elif backend_name == "cupyRAM":
         _process_gpu_streaming_onram(
+            bm,
+            file_reader,
             parameters,
             num_batch,
             first_frame,
@@ -602,6 +640,8 @@ def process_moments( file_path,
         )
     else:
         _process_cpu(
+            bm,
+            file_reader,
             parameters,
             num_batch,
             first_frame,
@@ -616,6 +656,8 @@ def process_moments( file_path,
             res_store,
             lock,
         )
+
+    file_reader.close()
 
     # 1. Stack and move to CPU immediately to free VRAM
     # stack(out_list, axis=0) creates (T, C, H, W) where C channel is moments 0, 1, 2 and frequency bands in order
@@ -651,7 +693,7 @@ def process_moments( file_path,
     if parameters.get("square"):
         # m is max of H or W
         m = max(vid_t.shape[-2], vid_t.shape[-1])
-        vid_t = resize_fft2_slicewise(vid_t, m, m)
+        vid_t = resize_slicewise(vid_t, m, m)
 
     if parameters.get("transpose"):
         # Swap Y and X
@@ -666,7 +708,8 @@ def process_moments( file_path,
         vid_t = np.flip(vid_t, axis=-2)
 
     # 6. Save outputs (Passing the optimized vid_t)
-    self._save_outputs(
+    save_outputs(
+        file_reader,
         video_path=mp4_path,
         holodoppler_path=holodoppler_path,
         vid=vid_t,
@@ -678,8 +721,6 @@ def process_moments( file_path,
         first_frame=first_frame,
         num_batch=num_batch,
     )
-
-    self.close_file()
     plt.close("all")
 
     if return_numpy:
@@ -689,7 +730,8 @@ def process_moments( file_path,
 
 
 def _process_cpu(
-    self,
+    bm,
+    file_reader,
     parameters,
     num_batch,
     first_frame,
@@ -706,8 +748,9 @@ def _process_cpu(
 ):
     """CPU processing loop"""
     for i in tqdm(range(num_batch)):
-        frames = self.read_frames(first_frame + i * batch_stride, batch_size)
-        res = self.render_moments(parameters, frames=frames, registration_ref=M0_reg)
+        frames = file_reader.read_frames(first_frame + i * batch_stride, batch_size)
+        frames = bm.to_backend(frames)
+        res = render_moments(bm, parameters, frames=frames, registration_ref=M0_reg)
 
         if res is None:
             break
@@ -715,7 +758,7 @@ def _process_cpu(
         l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
         for k, v in enumerate(parameters.get("frequency_bands", [])):
             l.append(res[f"band_{k}_{v[0]}_{v[1]}"])
-        out_list.append(self.bm.xp.stack(l, axis=0))
+        out_list.append(bm.xp.stack(l, axis=0))
 
         if "coefs" in res and coefs_list is not None:
             coefs_list[i] = res["coefs"]
@@ -729,7 +772,8 @@ def _process_cpu(
 
 
 def _process_gpu_streaming(
-    self,
+    bm,
+    file_reader,
     parameters,
     num_batch,
     first_frame,
@@ -751,7 +795,10 @@ def _process_gpu_streaming(
     stream_compute = cp.cuda.Stream(non_blocking=True)
 
     # Prefetch first batch
-    frames_next = self.read_frames(first_frame, batch_size)
+
+    frames_next = file_reader.read_frames(first_frame + i * batch_stride, batch_size)
+    frames_next = bm.to_backend(frames_next)
+
     with stream_h2d:
         d_frames_next = cp.asarray(frames_next)
 
@@ -761,15 +808,15 @@ def _process_gpu_streaming(
         # Prefetch next batch
         if i + 1 < num_batch:
             with stream_h2d:
-                frames_next = self.read_frames(
+                frames_next = file_reader.read_frames(
                     first_frame + (i + 1) * batch_stride, batch_size
                 )
                 d_frames_next = cp.asarray(frames_next)
 
         # Compute current batch
         with stream_compute:
-            res = self.render_moments(
-                parameters, frames=d_frames, registration_ref=M0_reg
+            res = render_moments(
+                bm, parameters, frames=d_frames, registration_ref=M0_reg
             )
 
         if res is None:
@@ -778,7 +825,7 @@ def _process_gpu_streaming(
         l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
         for k, v in enumerate(parameters.get("frequency_bands", [])):
             l.append(res[f"band_{k}_{v[0]}_{v[1]}"])
-        out_list.append(self.bm.xp.stack(l, axis=0))
+        out_list.append(bm.xp.stack(l, axis=0))
 
         if "coefs" in res and coefs_list is not None:
             coefs_list[i] = res["coefs"]
@@ -797,7 +844,8 @@ def _process_gpu_streaming(
 
 
 def _process_gpu_streaming_onram(
-    self,
+    bm,
+    file_reader,
     parameters,
     num_batch,
     first_frame,
@@ -825,7 +873,8 @@ def _process_gpu_streaming_onram(
         for i in range(num_batch):
             if stop_reader.is_set():
                 break
-            frames = self.read_frames(frame_idx, batch_size)
+            frames = file_reader.read_frames(frame_idx, batch_size)
+            frames = bm.to_backend(frames)
             frame_queue.put((i, frames))
             frame_idx += batch_stride
         frame_queue.put(None)
@@ -855,7 +904,7 @@ def _process_gpu_streaming_onram(
                 d_frames_next = cp.asarray(frames_next)
 
         with stream_compute:
-            res = self.render_moments(
+            res = render_moments(bm, 
                 parameters, frames=d_frames, registration_ref=M0_reg
             )
 
@@ -866,7 +915,7 @@ def _process_gpu_streaming_onram(
         l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
         for k, v in enumerate(parameters.get("frequency_bands", [])):
             l.append(res[f"band_{k}_{v[0]}_{v[1]}"])
-        out_list.append(self.bm.xp.stack(l, axis=0))
+        out_list.append(bm.xp.stack(l, axis=0))
 
         if "coefs" in res and coefs_list is not None:
             coefs_list[i] = res["coefs"]

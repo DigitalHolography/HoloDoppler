@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 from typing import Any
 import numpy as np
-from matlab_imresize.imresize import imresize
 import os
 from .plotting import DebugPlotterManager
 from .pipelines import pipelines
@@ -22,7 +21,8 @@ def preview(file_path, parameters: dict, tictoc=False) -> None:
     pipeline_name = parameters.get("pipeline_name", "preview_process_moments")
 
     if "preview" not in pipeline_name:
-        raise(ValueError("Please use preview pipeline for preview"))
+        print(ValueError("Please use preview pipeline for preview"))
+        pipeline_name = "preview_process_moments"
     
     # Get the pipeline function
     pipeline_func = pipelines.get(pipeline_name)
@@ -49,7 +49,7 @@ def process(file_path, parameters: dict) -> None:
         raise ValueError(f"Unknown pipeline: {pipeline_name}")
 
     # Execute the function
-    _result = pipeline_func(file_path, parameters)
+    result = pipeline_func(file_path, parameters)
 
     return result
 

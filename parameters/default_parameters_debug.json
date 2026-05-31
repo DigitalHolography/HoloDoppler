@@ -1,5 +1,5 @@
 {
-  "pipeline_name" : "preview_moments_main_pipeline",
+  "pipeline_name" : "process_moments_main_pipeline",
   "backend": "cupyRAM",
   "batch_size": 256,
   "batch_stride": 256,
@@ -10,7 +10,7 @@
   "registration_flatfield_gw": 35,
   "batch_size_registration": 512,
   "first_frame": 0,
-  "end_frame": 0,
+  "end_frame": 512,
   "wavelength": 8.52e-7,
   "pixel_pitch": [2e-5,2e-5],
   "spatial_propagation": "Fresnel",
