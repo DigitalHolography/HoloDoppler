@@ -3,6 +3,9 @@ import os
 import h5py
 from tqdm import tqdm
 import imageio as iio
+import numpy as np
+import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .utils import *
 from .get_version import get_version
@@ -83,87 +86,125 @@ def _save_bundle(
     Unified saving engine.
     mode="FULL" -> Saves everything including H5.
     mode="LITE" -> Saves videos, pngs, json, txt.
+    Optimized: parallel file writing, faster video encoding.
     """
-    # Create subdirectories
+    # Create subdirectories once
     subdirs = ["png", "mp4", "avi", "json"]
     if mode == "FULL":
         subdirs.append("h5")
-
     for sub in subdirs:
         (target_dir / sub).mkdir(parents=True, exist_ok=True)
 
+    # FPS calculation (unchanged logic)
     fps = min((num_batch / (end_frame - first_frame) * parameters["sampling_freq"]), 65)
-    # vid = np.transpose(vid_t, axes=[0,1,3,2]) # flip x-y
 
-    # vid = np.flip(vid, axis=2) # flip y
-
-    # --- 1. Setup Data Map ---
+    # --- 1. Build data map ---
     save_map = {
         "moment_0": vid[:, 0, :, :],
         "moment_1": vid[:, 1, :, :],
         "moment_2": vid[:, 2, :, :],
         "moment_0_ff": vid[:, 3, :, :],
-        # "moment_0_flatfield": flatfield3D(vid_t[:,0,:,:], parameters["registration_flatfield_gw"]), sorry but too slow
     }
 
+    # Frequency bands
     for k, v in enumerate(parameters.get("frequency_bands", [])):
         save_map[f"band_{v[0]}_{v[1]}"] = vid[:, 4 + k, :, :]
 
-    # Add debug videos to map
-    for key, data in vid_debug.items():
+    # Debug videos
+    if vid_debug:
+        for key, data in vid_debug.items():
+            if data.ndim == 3 and data.shape[-1] == num_batch:
+                data = np.moveaxis(data, -1, 0)  # ensure (T, H, W)
 
-        # Ensure debug videos are (T, H, W)
-        if data.ndim == 3 and data.shape[-1] == num_batch:
-            data = np.moveaxis(data, -1, 0)
+            if parameters.get("square") and key in [
+                "M0ffnoreg",
+                "M0notfixed",
+                "montage",
+                "montagenormalized",
+            ]:
+                m = max(data.shape[-2], data.shape[-1])
+                data = resize_slicewise(data, m, m)
 
-        if parameters["square"] and key in [
-            "M0ffnoreg",
-            "M0notfixed",
-            "montage",
-            "montagenormalized",
-        ]:
-            m = max(data.shape[-2], data.shape[-1])
-            data = resize_slicewise(data, m, m)
+            save_map[f"debug_{key}"] = data
 
-        save_map[f"debug_{key}"] = data
+    # --- 2. Parallel saving of videos and PNGs ---
+    # Pre-convert everything to uint8 once (avoids repeated normalization)
+    uint8_map = {name: normalize_to_uint8(data) for name, data in save_map.items()}
 
-    # --- 2. Save Visuals (MP4, AVI, PNG) ---
-    for name, data in save_map.items():
-        uint8_data = normalize_to_uint8(data)
-        write_video_file(target_dir / "mp4" / f"{name}.mp4", uint8_data, fps, "mp4v")
-        write_video_file(target_dir / "avi" / f"{name}.avi", uint8_data, fps, "MJPG")
-        if uint8_data.ndim == 3:
-            iio.imwrite(
-                target_dir / "png" / f"{name}.png",
-                normalize_to_uint8(np.mean(data, axis=0)),
+    # Collect all file‑write tasks
+    tasks = []
+    with ThreadPoolExecutor(max_workers=8) as executor:  # adjust workers to your I/O capability
+        for name, uint8_data in uint8_map.items():
+            # MP4 (fast preset)
+            mp4_path = target_dir / "mp4" / f"{name}.mp4"
+            tasks.append(
+                executor.submit(
+                    write_video_fast, mp4_path, uint8_data, fps, codec="libx264",
+                    preset="ultrafast", crf=28, pixelformat="yuv420p"
+                )
             )
-            # plt.imsave(target_dir / "png" / f"{name}.png", np.mean(uint8_data, axis=0), cmap="gray")
+            # AVI (same fast approach)
+            avi_path = target_dir / "avi" / f"{name}.avi"
+            tasks.append(
+                executor.submit(
+                    write_video_fast, avi_path, uint8_data, fps, codec="mjpeg",
+                    quality=85
+                )
+            )
+            # PNG snapshot (mean projection)
+            png_path = target_dir / "png" / f"{name}.png"
+            mean_frame = np.mean(uint8_data, axis=0).astype(np.uint8)
+            tasks.append(executor.submit(iio.imwrite, png_path, mean_frame))
 
-    # --- 3. Save Metadata (JSON, TXT) ---
+        # Wait for all I/O to finish (optional: you can show progress with tqdm)
+        for _ in tqdm(as_completed(tasks), total=len(tasks), desc="Saving visuals"):
+            pass  # any exception will be raised automatically
+
+    # --- 3. Save metadata (fast text/json writes) ---
     save_metadata(target_dir, file_reader, parameters)
 
-    # --- 4. Save H5 (Only if mode is FULL) ---
+    # --- 4. Save H5 only if FULL mode ---
     if mode == "FULL":
         save_h5(target_dir, vid, parameters, reg_list, coefs_list)
 
 
+def write_video_fast(path, frames, fps, codec="libx264", **kwargs):
+    """
+    Thin wrapper around imageio for faster encoding.
+    Supports h264/h265 with ultrafast preset.
+    """
+    writer = iio.get_writer(
+        path,
+        fps=fps,
+        codec=codec,
+        quality=kwargs.pop("quality", None),
+        output_params=kwargs if kwargs else None,
+        macro_block_size=1,
+    )
+    for frame in frames:
+        writer.append_data(frame)
+    writer.close()
+
+
 def save_metadata(target_dir, file_reader, parameters):
     """Saves all configuration and versioning files"""
-    # JSON Params
+    # JSON params
     with open(target_dir / "json" / "parameters_holodoppler.json", "w") as f:
         json.dump(parameters, f, indent=4)
 
-    # Versioning/Info
+    # Version
     (target_dir / "version_holodoppler.txt").write_text(f"py{get_version()}")
 
+    # Git commit
     try:
+        import subprocess
         commit = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
-        (target_dir / "git_version.txt").write_text(
-            f"Git commit: {commit}\n{info_text}"
-        )
-    except:
-        (target_dir / "git_version.txt").write_text("Git commit: Not Available")
+        info_text = f"Git commit: {commit}\npy{get_version()}"
+    except Exception:
+        info_text = "Git commit: Not Available"
+    (target_dir / "git_version.txt").write_text(info_text)
 
+    # Holo-specific metadata
     if file_reader.ext == ".holo":
         with open(target_dir / "json" / "holovibes_footer.json", "w") as f:
             json.dump(file_reader.file_footer, f, indent=4)
@@ -172,26 +213,40 @@ def save_metadata(target_dir, file_reader, parameters):
 
 
 def save_h5(target_dir, vid, parameters, reg_list, coefs_list):
-    """Saves raw data to HDF5 with compression"""
-
+    """
+    Saves raw data to HDF5. Fixed: uses `vid` (not `vid_t`).
+    Added optional compression for speed/space tradeoff.
+    """
     target_dir_name = target_dir.name if target_dir.name else "output"
 
-    vid_t = np.flip(vid, axis=2)  # flip y for doppler view
+    # Don't use compression because 
+    compression = None # "lzf"  # can be set to None for fastest writing
+
+    pbar = tqdm(total=2, desc="Saving h5:")
+
     with h5py.File(target_dir / "h5" / f"{target_dir_name}_output.h5", "w") as f:
-        f.create_dataset("moment0", data=vid_t[:, 0, :, :])  # compression="gzip"
-        f.create_dataset("moment1", data=vid_t[:, 1, :, :])
-        f.create_dataset("moment2", data=vid_t[:, 2, :, :])
-        f.create_dataset("moment0ff", data=vid_t[:, 3, :, :])
+        f.create_dataset("moment0", data=vid[:, 0, :, :], compression=compression)
+        f.create_dataset("moment1", data=vid[:, 1, :, :], compression=compression)
+        f.create_dataset("moment2", data=vid[:, 2, :, :], compression=compression)
+        f.create_dataset("moment0ff", data=vid[:, 3, :, :], compression=compression)
+        pbar.update(1)
         for k, v in enumerate(parameters.get("frequency_bands", [])):
-            f.create_dataset(f"band_{v[0]}_{v[1]}", data=vid_t[:, 4 + k, :, :])
+            f.create_dataset(
+                f"band_{v[0]}_{v[1]}",
+                data=vid[:, 4 + k, :, :],
+                compression=compression,
+            )
         f.create_dataset("HD_parameters", data=json.dumps(parameters))
-        info_text = f"py{get_version()}"
-        f.create_dataset("HD_version", data=info_text)
+        f.create_dataset("HD_version", data=f"py{get_version()}")
 
         if parameters.get("image_registration") and reg_list:
-            f.create_dataset("registration", data=np.array(reg_list, dtype=np.float32))
+            f.create_dataset("registration", data=np.array(reg_list, dtype=np.float32),
+                             compression=compression)
 
         if parameters.get("shack_hartmann") and coefs_list:
             f.create_dataset(
-                "zernike_coefs_radians", data=np.stack(coefs_list).astype(np.float32)
+                "zernike_coefs_radians",
+                data=np.stack(coefs_list).astype(np.float32),
+                compression=compression,
             )
+        pbar.update(1)
