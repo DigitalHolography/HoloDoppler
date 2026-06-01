@@ -94,6 +94,8 @@ def _save_bundle(
         subdirs.append("h5")
     for sub in subdirs:
         (target_dir / sub).mkdir(parents=True, exist_ok=True)
+        
+    print("Saving in : ", target_dir)
 
     # FPS calculation (unchanged logic)
     fps = min((num_batch / (end_frame - first_frame) * parameters["sampling_freq"]), 65)
@@ -132,33 +134,44 @@ def _save_bundle(
     uint8_map = {name: normalize_to_uint8(data) for name, data in save_map.items()}
 
     # Collect all file‑write tasks
-    tasks = []
-    with ThreadPoolExecutor(max_workers=8) as executor:  # adjust workers to your I/O capability
-        for name, uint8_data in uint8_map.items():
-            # MP4 (fast preset)
-            mp4_path = target_dir / "mp4" / f"{name}.mp4"
-            tasks.append(
-                executor.submit(
-                    write_video_fast, mp4_path, uint8_data, fps, codec="libx264",
-                    preset="ultrafast", crf=28, pixelformat="yuv420p"
-                )
-            )
-            # AVI (same fast approach)
-            avi_path = target_dir / "avi" / f"{name}.avi"
-            tasks.append(
-                executor.submit(
-                    write_video_fast, avi_path, uint8_data, fps, codec="mjpeg",
-                    quality=85
-                )
-            )
-            # PNG snapshot (mean projection)
-            png_path = target_dir / "png" / f"{name}.png"
-            mean_frame = np.mean(uint8_data, axis=0).astype(np.uint8)
-            tasks.append(executor.submit(iio.imwrite, png_path, mean_frame))
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        tasks = []
 
-        # Wait for all I/O to finish (optional: you can show progress with tqdm)
-        for _ in tqdm(as_completed(tasks), total=len(tasks), desc="Saving visuals"):
-            pass  # any exception will be raised automatically
+        # Videos: write sequentially, avoids ffmpeg/imageio concurrency issues
+        for name, uint8_data in tqdm(uint8_map.items(), desc="Saving videos"):
+            mp4_path = target_dir / "mp4" / f"{name}.mp4"
+            write_video_fast(
+                mp4_path,
+                uint8_data,
+                fps,
+                codec="libx264",
+                preset="ultrafast",
+                crf=28,
+            )
+
+            avi_path = target_dir / "avi" / f"{name}.avi"
+            write_video_fast(
+                avi_path,
+                uint8_data,
+                fps,
+                codec="mjpeg",
+                quality=8,
+            )
+
+        # PNGs: parallel is fine
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            tasks = []
+
+            for name, uint8_data in uint8_map.items():
+                png_path = target_dir / "png" / f"{name}.png"
+                mean_frame = np.mean(uint8_data, axis=0).astype(np.uint8)
+                tasks.append(executor.submit(iio.imwrite, png_path, mean_frame))
+
+            for fut in tqdm(as_completed(tasks), total=len(tasks), desc="Saving PNGs"):
+                fut.result()
+
+        # for fut in tqdm(as_completed(tasks), total=len(tasks), desc="Saving visuals"):
+        #     fut.result()
 
     # --- 3. Save metadata (fast text/json writes) ---
     save_metadata(target_dir, file_reader, parameters)
@@ -167,23 +180,103 @@ def _save_bundle(
     if mode == "FULL":
         save_h5(target_dir, vid, parameters, reg_list, coefs_list)
 
+def _pad_to_even(frames):
+    """
+    Pads H/W to even size for libx264/yuv420p.
+    Supports:
+      (T, H, W)
+      (T, H, W, C)
+    """
+    h = frames.shape[1]
+    w = frames.shape[2]
 
-def write_video_fast(path, frames, fps, codec="libx264", **kwargs):
-    """
-    Thin wrapper around imageio for faster encoding.
-    Supports h264/h265 with ultrafast preset.
-    """
-    writer = iio.get_writer(
-        path,
-        fps=fps,
-        codec=codec,
-        quality=kwargs.pop("quality", None),
-        output_params=kwargs if kwargs else None,
-        macro_block_size=1,
-    )
-    for frame in frames:
-        writer.append_data(frame)
-    writer.close()
+    pad_h = h % 2
+    pad_w = w % 2
+
+    if pad_h == 0 and pad_w == 0:
+        return frames
+
+    if frames.ndim == 3:
+        pad_width = (
+            (0, 0),      # T
+            (0, pad_h),  # H
+            (0, pad_w),  # W
+        )
+    else:
+        pad_width = (
+            (0, 0),      # T
+            (0, pad_h),  # H
+            (0, pad_w),  # W
+            (0, 0),      # C
+        )
+
+    return np.pad(frames, pad_width, mode="edge")
+
+def write_video_fast(
+    path,
+    frames,
+    fps,
+    codec="libx264",
+    preset=None,
+    crf=None,
+    quality=None,
+    overwrite=True,
+    pad_even=True,
+):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if overwrite and path.exists():
+        path.unlink()
+
+    frames = np.asarray(frames)
+
+    if frames.dtype != np.uint8:
+        frames = np.nan_to_num(frames)
+        frames = np.clip(frames, 0, 255).astype(np.uint8)
+
+    if frames.ndim == 3:
+        # grayscale video: (T, H, W)
+        pass
+
+    elif frames.ndim == 4:
+        # color video: (T, H, W, C)
+        if frames.shape[-1] == 4:
+            frames = frames[..., :3]  # RGBA -> RGB
+        elif frames.shape[-1] != 3:
+            raise ValueError(f"Invalid color channel count: {frames.shape}")
+    else:
+        raise ValueError(f"Invalid video shape: {frames.shape}")
+
+    if frames.shape[0] == 0:
+        raise ValueError(f"Zero-frame video: {path}")
+    
+    if pad_even and codec in ("libx264", "libx265", "h264", "hevc"):
+        frames = _pad_to_even(frames)
+
+    output_params = ["-y"] if overwrite else []
+
+    if preset is not None:
+        output_params += ["-preset", str(preset)]
+    if crf is not None:
+        output_params += ["-crf", str(crf)]
+
+    kwargs = {
+        "fps": float(fps),
+        "codec": codec,
+        "macro_block_size": 1,
+    }
+
+    if output_params:
+        kwargs["output_params"] = output_params
+
+    if quality is not None:
+        kwargs["quality"] = quality
+
+    with iio.get_writer(str(path), **kwargs) as writer:
+        for frame in frames:
+            writer.append_data(frame)
+       
 
 
 def save_metadata(target_dir, file_reader, parameters):

@@ -29,7 +29,14 @@ class SignalPlotter:
     def plot(self, sig):
         if cp is not None and isinstance(sig, cp.ndarray):
             sig = sig.get()
-        self.ax.plot(np.squeeze(sig))
+        
+        sig = np.squeeze(sig)
+        if np.iscomplexobj(sig):
+            self.ax.plot(sig.real, 'b', label='real')
+            self.ax.plot(sig.imag, 'r', label='imag')
+        else:
+            self.ax.plot(sig)
+        
         self.canvas.draw()
         img = np.asarray(self.canvas.buffer_rgba()).copy()
         return img[..., :3]

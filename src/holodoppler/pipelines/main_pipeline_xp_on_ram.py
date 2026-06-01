@@ -11,15 +11,9 @@ from ..backend import BackendManager
 from ..file_io import FileReaderFactory
 
 import os
-import json
-import time
 import threading
 import queue
-import traceback
 from collections import defaultdict
-from pathlib import Path
-import subprocess
-import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 import imageio as iio
@@ -488,6 +482,7 @@ def process_moments(
                     i = debug_queue.get(timeout=0.1)
                     with lock:
                         res = res_store.pop(i)
+                        # print({key : (type(res[key]), res[key].dtype if hasattr(res[key],"dtype") else None) for key in res.keys() })
                     out = debug_manager.plot_all(res)
                     with lock:
                         debug_results[i] = out
