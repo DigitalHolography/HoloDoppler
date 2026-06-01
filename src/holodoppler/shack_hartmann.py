@@ -185,9 +185,12 @@ def calculate_displacements(
 
     den_y = vm_y - 2 * v0 + vp_y + 1e-12
     den_x = vm_x - 2 * v0 + vp_x + 1e-12
+    
+    cy = (Ny - 1) / 2 if Ny % 2 == 1 else Ny / 2
+    cx = (Nx - 1) / 2 if Nx % 2 == 1 else Nx / 2
 
-    shift_y = py + 0.5 * (vm_y - vp_y) / den_y - Ny / 2
-    shift_x = px + 0.5 * (vm_x - vp_x) / den_x - Nx / 2
+    shift_y = py + 0.5 * (vm_y - vp_y) / den_y - cy
+    shift_x = px + 0.5 * (vm_x - vp_x) / den_x - cx
 
     shift_y = shift_y.reshape(ny_s, nx_s)
     shift_x = shift_x.reshape(ny_s, nx_s)
