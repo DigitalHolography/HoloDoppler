@@ -474,7 +474,7 @@ class DebugPlotterManager:
                 fs=parameters["sampling_freq"],
                 f1=parameters["low_freq"],
                 f2=parameters["high_freq"],
-                ylim=(2.5, 12.5),
+                ylim=(-2.5, 12.5),
                 use_stem=False
             ),
             "average_signal" : SignalPlotter(),

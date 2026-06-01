@@ -93,13 +93,59 @@ def _cmd(args):
     sobj = np.fft.fftshift(np.load(Path(args.inputb)))
     stot = np.fft.fftshift(np.load(Path(args.inputc)))
     
-    conv = np.convolve(sref,sobj, mode="same")
+    assert sref.shape == sobj.shape == stot.shape
+
+    n = sref.size
+    freq = np.fft.fftshift(np.fft.fftfreq(n, d=1 / args.fs))
+
+    # sref = np.fft.fftshift(sref)
+    # sobj = np.fft.fftshift(sobj)
+    # stot = np.fft.fftshift(stot)
+
+    sint = stot - sref - sobj
+
+    eref = np.sum(sref)
+    eobj = np.sum(sobj)
+    etot = np.sum(stot)
+    eint = np.sum(sint)
+
+    print(f"Energy reference     : {eref:.6e}")
+    print(f"Energy object        : {eobj:.6e}")
+    print(f"Energy total         : {etot:.6e}")
+    print(f"Energy interference  : {eint:.6e}")
+    print(f"Relative interference: {eint / etot:.6%}")
+
+    eps = 1e-30
+
+    # For log-log, remove f=0 and use positive frequencies only
+    pos = freq > 0
     
-    fake_tot = sref + sobj + conv
     import matplotlib.pyplot as plt
-    
-    plt.semilogy(stot)
-    # plt.semilogy(fake_tot)
+
+    plt.figure(figsize=(9, 5.5))
+    plt.loglog(freq[pos], sref[pos] + eps, label=f"Reference, E={eref:.2e}")
+    plt.loglog(freq[pos], sobj[pos] + eps, label=f"Object, E={eobj:.2e}")
+    plt.loglog(freq[pos], stot[pos] + eps, label=f"Reference + object, E={etot:.2e}")
+
+    plt.xlabel("Frequency [Hz]")
+    plt.ylabel(r"Spectrum $|\mathcal{F}\{I(t)\}|^2$")
+    plt.title("Intensity spectra")
+    plt.grid(True, which="both", alpha=0.35)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+    # Interference spectrum can be negative, so semilog-x is safer than log-log
+    plt.figure(figsize=(9, 5.5))
+    plt.semilogx(freq[pos], sint[pos], label=f"Interference, E={eint:.2e}")
+    plt.axhline(0, color="black", linewidth=0.8)
+
+    plt.xlabel("Frequency [Hz]")
+    plt.ylabel(r"$S_{tot} - S_{ref} - S_{obj}$")
+    plt.title("Estimated interference spectrum")
+    plt.grid(True, which="both", alpha=0.35)
+    plt.legend()
+    plt.tight_layout()
     plt.show()
     
     return 0
@@ -141,6 +187,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Input file path. Tot",
     )
+    
+    parser.add_argument("--fs", type=float, default=37037.0)
     parser.set_defaults(func=_cmd)
     return parser
 
