@@ -76,6 +76,8 @@ def _get_params(parameters):
     p.reg_type = parameters.get("image_registration_type", "translation_rotation_scale")
     p.reg_disc_ratio = parameters.get("registration_disc_ratio")
     p.apply_reg = parameters.get("apply_registration", False)
+    p.registration_integer_translation = parameters.get("registration_integer_translation", False)
+    p.registration_gaussian_sigma = parameters.get("registration_gaussian_sigma", None)
     p.reg_flatfield_gw = parameters.get("registration_flatfield_gw", 1.0)
     p.freq_bands = parameters.get("frequency_bands", [])
     p.square = parameters.get("square", False)
@@ -331,19 +333,17 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
         M0_ff = gaussian_flatfield(res["M0"], p.reg_flatfield_gw, bm.gaussian_filter)
         if p.debug:
             res["M0_ff_noreg"] = M0_ff
-        if p.reg_type == "translation_rotation_scale":
-            reg = register_trs(xp, bm.fft, bm.ndi, registration_ref, M0_ff, p.reg_disc_ratio)
-        else:
-            reg = register_trs(xp, bm.fft, bm.ndi, registration_ref, M0_ff, p.reg_disc_ratio,
-                               estimate_similarity=False)
+            
+        reg = register_trs(xp, bm.fft, bm.ndi, registration_ref, M0_ff, p.reg_disc_ratio, estimate_similarity=(p.reg_type == "translation_rotation_scale"), gaussian_sigma=p.registration_gaussian_sigma, integer_translation = p.registration_integer_translation)
+            
         if p.apply_reg:
-            res["M0"] = apply_registration(xp, bm.fft, bm.ndi, res["M0"], reg)
-            res["M1"] = apply_registration(xp, bm.fft, bm.ndi, res["M1"], reg)
-            res["M2"] = apply_registration(xp, bm.fft, bm.ndi, res["M2"], reg)
-            res["M0ff"] = apply_registration(xp, bm.fft, bm.ndi, res["M0ff"], reg)
+            res["M0"] = apply_registration(xp, bm.fft, bm.ndi, res["M0"], reg, integer_translation = p.registration_integer_translation)
+            res["M1"] = apply_registration(xp, bm.fft, bm.ndi, res["M1"], reg, integer_translation = p.registration_integer_translation)
+            res["M2"] = apply_registration(xp, bm.fft, bm.ndi, res["M2"], reg, integer_translation = p.registration_integer_translation)
+            res["M0ff"] = apply_registration(xp, bm.fft, bm.ndi, res["M0ff"], reg, integer_translation = p.registration_integer_translation)
             for k, (f1, f2) in enumerate(p.freq_bands):
                 key = f"band_{k}_{f1}_{f2}"
-                res[key] = apply_registration(xp, bm.fft, bm.ndi, res[key], reg)
+                res[key] = apply_registration(xp, bm.fft, bm.ndi, res[key], reg, integer_translation = p.registration_integer_translation)
         res["registration"] = reg
 
     if profiler is not None:
@@ -383,7 +383,6 @@ def preview_process_moments(file_path, parameters, tictoc=False):
     
     if file_reader.ext == ".holo":
         print("file header :", file_reader.file_header)
-        print(parameters["z"])
         parameters = update_from_footer(parameters, file_reader.file_footer)
     print("parameters : ", parameters)
     batch_size = parameters["batch_size"]
@@ -476,6 +475,7 @@ def process_moments(
     file_reader.open()
     if file_reader.ext == ".holo":
         print("file header :", file_reader.file_header)
+        parameters = update_from_footer(parameters, file_reader.file_footer)
     print("parameters : ", parameters)
 
     batch_size = parameters["batch_size"]
