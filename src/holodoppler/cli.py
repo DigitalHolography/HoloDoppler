@@ -13,10 +13,10 @@ def preview(file_path, parameters: dict, tictoc=False):
     if not isinstance(parameters, dict):
         parameters = load_config(parameters)
 
-    pipeline_name = parameters.get("pipeline_name", "preview_process_moments")
+    pipeline_name = parameters.get("pipeline_name", "preview_moments_main_pipeline")
     if "preview" not in pipeline_name:
         print(ValueError("Please use preview pipeline for preview"))
-        pipeline_name = "preview_process_moments"
+        pipeline_name = "preview_moments_main_pipeline"
 
     pipeline_func = pipelines.get(pipeline_name)
     if pipeline_func is None:
@@ -29,7 +29,7 @@ def process(file_path, parameters: dict):
     if not isinstance(parameters, dict):
         parameters = load_config(parameters)
 
-    pipeline_name = parameters.get("pipeline_name", "process_moments_latest")
+    pipeline_name = parameters.get("pipeline_name", "process_moments_main_pipeline")
     pipeline_func = pipelines.get(pipeline_name)
     if pipeline_func is None:
         raise ValueError(f"Unknown pipeline: {pipeline_name}")

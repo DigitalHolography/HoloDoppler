@@ -25,6 +25,8 @@ try:
 except ImportError:
     lblprof = None
 
+from ..utils import load_config
+
 
 # ------------------------------------------------------------
 # Helpers for parameter unpacking (readability)
@@ -34,6 +36,17 @@ def _get_params(parameters):
     """Extract commonly used parameters into a simple namespace."""
     class P:
         pass
+    
+    def list_to_tuple(d):
+        for k, v in d.items():
+            if isinstance(v, dict):
+                d[k] = list_to_tuple(v)
+            elif isinstance(v, list):
+                d[k] = tuple(v)
+        return d
+
+    parameters = list_to_tuple(parameters) # ensure
+
     p = P()
     p.wavelength = parameters["wavelength"]
     p.z = parameters["z"]

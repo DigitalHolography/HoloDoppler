@@ -341,9 +341,12 @@ def flatfield3D(arr, gw):
 
 
 def load_config(config_path):
-    config_path = Path(config_path)
-    with open(config_path, "r") as f:
-        config = yaml.safe_load(f) if config_path.suffix == ".yaml" else json.load(f)
+    if not type(config_path==dict):
+        config_path = Path(config_path)
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f) if config_path.suffix == ".yaml" else json.load(f)
+    else :
+        config = config_path
 
     def list_to_tuple(d):
         for k, v in d.items():
