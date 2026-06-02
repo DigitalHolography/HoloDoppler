@@ -15,13 +15,13 @@ python -m pip install -e .
 ### Preview
 
 ```bash
-holodoppler preview "D:\path\to\holo.holo" "./src/holodoppler/default_parameters.json"
+holodoppler "D:\path\to\holo.holo" "./parameters/default_parameters_debug.json" --preview 
 ```
 
 ### Process
 
 ```bash
-holodoppler process "D:\path\to\holo.holo" "./src/holodoppler/default_parameters.json"
+holodoppler "D:\path\to\holo.holo" "./parameters/default_parameters_debug.json"
 ```
 
 ### Building app

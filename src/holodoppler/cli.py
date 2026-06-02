@@ -109,6 +109,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Config file path. Uses parameters/default_parameters_debug.json if not provided.",
     )
+    parser.add_argument(
+        "--preview",
+        action="store_true",
+        help="Run in preview mode, forcing the preview pipeline to be used.",
+    )
     return parser
 
 
@@ -120,6 +125,15 @@ def main() -> int:
 
     debug_config = _get_debug_config()
     
-    process(input_path, config_path)
+    # Load config parameters
+    parameters = _load_json(config_path)
+    
+    # Use preview function if --preview flag is set
+    if args.preview:
+        # Force preview pipeline by overriding pipeline_name in parameters
+        parameters["pipeline_name"] = "preview_moments_main_pipeline"
+        preview(input_path, parameters)
+    else:
+        process(input_path, config_path)
 
     return 0

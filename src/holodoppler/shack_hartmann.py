@@ -227,7 +227,7 @@ def calculate_displacements(
 
 
 def calculate_displacements_graph_laplacian(
-    xp, fft, U_subaps, pupil_threshold=1.0, deviation_threshold=3.0, shifts_range=20.0
+    xp, fft, U_subaps, pupil_threshold=1.0, deviation_threshold=3.0, shifts_range=20.0 , use_corr_weights=False
 ):
     ny_s, nx_s, Ny, Nx = U_subaps.shape
     B = ny_s * nx_s
@@ -303,7 +303,7 @@ def calculate_displacements_graph_laplacian(
 
         S_y[i, ok] = dy[ok].astype(xp.float32)
         S_x[i, ok] = dx[ok].astype(xp.float32)
-        Wd[i, ok] = v0[ok].astype(xp.float32)
+        Wd[i, ok] = v0[ok].astype(xp.float32) if use_corr_weights else 1
 
     upper = xp.triu(xp.ones((B, B), dtype=bool), 1)
     upper &= pupil_flat[:, None] & pupil_flat[None, :]
