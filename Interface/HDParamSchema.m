@@ -262,7 +262,7 @@ methods (Static, Access = private)
         s(end + 1) = HDParamSchema.entry('PaddingNum', 'PaddingNum', 'numeric', 0, 0, []);
 
         % ---- SVD -----------------------------------------------------
-        s(end + 1) = HDParamSchema.entry('svd_filter', 'svd_filter', 'checkbox', false);
+        s(end + 1) = HDParamSchema.entry('svd_filter', 'svd_filter', 'checkbox', true);
         s(end + 1) = HDParamSchema.entry('svdThreshold', 'svdThreshold', 'numeric', 0, 0, []);
         s(end + 1) = HDParamSchema.entry('svdStride', 'svdStride', 'numeric', 1, 1, []);
 
