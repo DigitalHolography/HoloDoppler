@@ -1,5 +1,5 @@
 {
-  "pipeline_name" : "process_moments_main_pipeline",
+  "pipeline_name" : "preview_moments_main_pipeline",
   "backend": "cupyRAM",
   "batch_size": 256,
   "batch_stride": 2560,
@@ -22,7 +22,7 @@
   "shack_hartmann_graph_ref": "central_sub_ap",
   "shack_hartmann_graph_laplacian": true,
   "shack_hartmann_ny_subap": 5,
-  "shack_hartmann_nx_subap": 5,
+  "shack_hartmann_nx_subap": 9,
   "shack_hartmann_pupil_threshold": 2.0,
   "shack_hartmann_deviation_threshold": 1000.0,
   "shack_hartmann_shifts_pixel_range_threshold": 1000,

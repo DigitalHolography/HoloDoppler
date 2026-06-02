@@ -100,7 +100,9 @@ class ShiftsPlotter:
         if self.scale is None:
             mag = np.sqrt(shifts_x**2 + shifts_y**2)
             med = np.median(mag[mag > 0]) if np.any(mag > 0) else 1.0
-            scale = 3.0 / (med + 1e-32) 
+            # print(med)
+            scale = 6.0 / (med + 1e-32) 
+            # print(scale)
         else:
             scale = self.scale
         
