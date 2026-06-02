@@ -341,7 +341,7 @@ def flatfield3D(arr, gw):
 
 
 def load_config(config_path):
-    if not type(config_path==dict):
+    if not isinstance(config_path,dict):
         config_path = Path(config_path)
         with open(config_path, "r") as f:
             config = yaml.safe_load(f) if config_path.suffix == ".yaml" else json.load(f)
