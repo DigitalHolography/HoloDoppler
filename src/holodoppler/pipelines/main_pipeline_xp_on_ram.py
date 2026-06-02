@@ -32,7 +32,7 @@ from ..utils import load_config
 # Helpers for parameter unpacking (readability)
 # ------------------------------------------------------------
 
-def _get_params(parameters, holofooter = None):
+def _get_params(parameters):
     """Extract commonly used parameters into a simple namespace."""
     class P:
         pass
@@ -49,19 +49,11 @@ def _get_params(parameters, holofooter = None):
 
     p = P()
     p.wavelength = parameters["wavelength"]
-    if p.wavelength == "use_holovibes" and holofooter is not None:
-        p.wavelength = holofooter["compute_settings"]["image_rendering"]["lambda"]
     p.z = parameters["z"]
-    if p.z == "use_holovibes" and holofooter is not None:
-        p.z = holofooter["compute_settings"]["image_rendering"]["propagation_distance"]
     p.pixel_pitch = parameters["pixel_pitch"]
-    if p.pixel_pitch == "use_holovibes" and holofooter is not None:
-        p.pixel_pitch = (holofooter["info"]["pixel_pitch"]["y"],holofooter["info"]["pixel_pitch"]["x"])
     p.low_freq = parameters["low_freq"]
     p.high_freq = parameters.get("high_freq")
     p.sampling_freq = parameters["sampling_freq"]
-    if p.sampling_freq == "use_holovibes" and holofooter is not None:
-        p.sampling_freq = holofooter["info"]["camera_fps"]
     p.svd_threshold = parameters["svd_threshold"]
     p.shack_hartmann = parameters.get("shack_hartmann", False)
     p.sh_nx = parameters.get("shack_hartmann_nx_subap")
@@ -360,21 +352,41 @@ def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=Fa
 
     return res
 
+def update_from_footer(parameters, holofooter):
+    try:
+        if parameters["wavelength"] == "use_holovibes" and holofooter is not None:
+            parameters["wavelength"] = holofooter["compute_settings"]["image_rendering"]["lambda"]
+        if parameters["z"] == "use_holovibes" and holofooter is not None:
+                parameters["z"] = holofooter["compute_settings"]["image_rendering"]["propagation_distance"]
+        if parameters["pixel_pitch"] == "use_holovibes" and holofooter is not None:
+                parameters["pixel_pitch"] = (holofooter["info"]["pixel_pitch"]["y"],holofooter["info"]["pixel_pitch"]["x"])
+        if parameters["sampling_freq"] == "use_holovibes" and holofooter is not None:
+                parameters["sampling_freq"] = holofooter["info"]["camera_fps"]
+    except Exception as e:
+        print("Issue from holovibes footer", e)
+    return parameters
 
 # ------------------------------------------------------------
 # Preview (single batch) unchanged but uses refactored render_moments
 # ------------------------------------------------------------
 
 def preview_process_moments(file_path, parameters, tictoc=False):
+    
     backend_name = parameters["backend"]
     bm = BackendManager(backend=backend_name)
     file_reader = FileReaderFactory.create(file_path)
     file_reader.open()
+    
+    # if hasattr(file_reader,"file_footer"):
+    #     update_from_footer(parameters, file_reader.file_footer)
+    
+    
     if file_reader.ext == ".holo":
         print("file header :", file_reader.file_header)
+        print(parameters["z"])
+        parameters = update_from_footer(parameters, file_reader.file_footer)
     print("parameters : ", parameters)
     batch_size = parameters["batch_size"]
-    batch_stride = parameters["batch_stride"]
     first_frame = parameters["first_frame"]
 
     frames = file_reader.read_frames(first_frame, batch_size)
