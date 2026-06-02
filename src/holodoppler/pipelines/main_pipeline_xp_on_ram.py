@@ -32,7 +32,7 @@ from ..utils import load_config
 # Helpers for parameter unpacking (readability)
 # ------------------------------------------------------------
 
-def _get_params(parameters):
+def _get_params(parameters, holofooter = None):
     """Extract commonly used parameters into a simple namespace."""
     class P:
         pass
@@ -49,11 +49,19 @@ def _get_params(parameters):
 
     p = P()
     p.wavelength = parameters["wavelength"]
+    if p.wavelength == "use_holovibes" and holofooter is not None:
+        p.wavelength = holofooter["compute_settings"]["image_rendering"]["lambda"]
     p.z = parameters["z"]
+    if p.z == "use_holovibes" and holofooter is not None:
+        p.z = holofooter["compute_settings"]["image_rendering"]["propagation_distance"]
     p.pixel_pitch = parameters["pixel_pitch"]
+    if p.pixel_pitch == "use_holovibes" and holofooter is not None:
+        p.pixel_pitch = (holofooter["info"]["pixel_pitch"]["y"],holofooter["info"]["pixel_pitch"]["x"])
     p.low_freq = parameters["low_freq"]
     p.high_freq = parameters.get("high_freq")
     p.sampling_freq = parameters["sampling_freq"]
+    if p.sampling_freq == "use_holovibes" and holofooter is not None:
+        p.sampling_freq = holofooter["info"]["camera_fps"]
     p.svd_threshold = parameters["svd_threshold"]
     p.shack_hartmann = parameters.get("shack_hartmann", False)
     p.sh_nx = parameters.get("shack_hartmann_nx_subap")
@@ -664,10 +672,14 @@ def _process_gpu_streaming(bm, file_reader, parameters, num_batch, first_frame, 
     cp.cuda.Device().synchronize()
 
 
-def _process_gpu_streaming_onram(bm, file_reader, parameters, num_batch, first_frame, batch_stride,
-                                 batch_size, M0_reg, out_list, coefs_list, reg_list,
-                                 debug_manager, debug_queue, res_store, lock):
-    import queue as qmod, threading
+def _process_gpu_streaming_onram(
+    bm, file_reader, parameters, num_batch, first_frame, batch_stride,
+    batch_size, M0_reg, out_list, coefs_list, reg_list,
+    debug_manager, debug_queue, res_store, lock
+):
+    import queue as qmod
+    import threading
+    from tqdm import tqdm
     import cupy as cp
 
     frame_queue = qmod.Queue(maxsize=4)
@@ -675,14 +687,18 @@ def _process_gpu_streaming_onram(bm, file_reader, parameters, num_batch, first_f
 
     def reader():
         frame_idx = first_frame
-        for i in range(num_batch):
-            if stop_reader.is_set():
-                break
-            frames = file_reader.read_frames(frame_idx, batch_size)
-            frames = bm.to_backend(frames)
-            frame_queue.put((i, frames))
-            frame_idx += batch_stride
-        frame_queue.put(None)
+        try:
+            for i in range(num_batch):
+                if stop_reader.is_set():
+                    break
+
+                # CPU only. Do NOT call bm.to_backend() here.
+                frames = file_reader.read_frames(frame_idx, batch_size)
+                frame_queue.put((i, frames))
+
+                frame_idx += batch_stride
+        finally:
+            frame_queue.put(None)
 
     reader_thread = threading.Thread(target=reader, daemon=True)
     reader_thread.start()
@@ -690,49 +706,82 @@ def _process_gpu_streaming_onram(bm, file_reader, parameters, num_batch, first_f
     stream_h2d = cp.cuda.Stream(non_blocking=True)
     stream_compute = cp.cuda.Stream(non_blocking=True)
 
-    item = frame_queue.get()
-    if item is None:
-        return
-    _, frames = item
-    with stream_h2d:
-        d_frames = cp.asarray(frames)
-    stream_h2d.synchronize()
+    h2d_done = cp.cuda.Event(disable_timing=True)
 
-    for i in tqdm(range(num_batch)):
-        next_item = frame_queue.get() if i + 1 < num_batch else None
-        d_frames_next = None
-        if next_item is not None:
-            _, frames_next = next_item
-            with stream_h2d:
-                d_frames_next = cp.asarray(frames_next)
+    def enqueue_h2d(frames):
+        if frames is None:
+            return None, None
 
-        with stream_compute:
-            res = render_moments(bm, parameters, frames=d_frames, registration_ref=M0_reg)
-        stream_compute.synchronize()
-        if res is None:
-            break
-        l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
-        for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-            l.append(res[f"band_{k}_{f1}_{f2}"])
-        out_list.append(bm.xp.stack(l, axis=0))
-        if "coefs" in res and coefs_list is not None:
-            coefs_list[i] = res["coefs"]
-        if "registration" in res and reg_list is not None:
-            reg_list[i] = res["registration"]
-        if debug_manager and lock:
-            with lock:
-                res_store[i] = res
-            debug_queue.put(i)
+        with stream_h2d:
+            d_frames = cp.asarray(frames)
+            event = cp.cuda.Event(disable_timing=True)
+            event.record(stream_h2d)
 
-        if d_frames_next is not None:
-            stream_h2d.synchronize()
+        return d_frames, event
+
+    try:
+        item = frame_queue.get()
+        if item is None:
+            return
+
+        _, frames = item
+        d_frames, ready_event = enqueue_h2d(frames)
+
+        for i in tqdm(range(num_batch)):
+            next_item = frame_queue.get() if i + 1 < num_batch else None
+
+            d_frames_next = None
+            ready_event_next = None
+            if next_item is not None:
+                _, frames_next = next_item
+                d_frames_next, ready_event_next = enqueue_h2d(frames_next)
+
+            with stream_compute:
+                stream_compute.wait_event(ready_event)
+                res = render_moments(
+                    bm,
+                    parameters,
+                    frames=d_frames,
+                    registration_ref=M0_reg,
+                )
+
+            # Required because the code below consumes res on the host side
+            # and may enqueue work on the default/current stream.
+            stream_compute.synchronize()
+
+            if res is None:
+                break
+
+            l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
+            for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
+                l.append(res[f"band_{k}_{f1}_{f2}"])
+
+            out_list.append(bm.xp.stack(l, axis=0))
+
+            if "coefs" in res and coefs_list is not None:
+                coefs_list[i] = res["coefs"]
+
+            if "registration" in res and reg_list is not None:
+                reg_list[i] = res["registration"]
+
+            if debug_manager and lock:
+                with lock:
+                    res_store[i] = res
+                debug_queue.put(i)
+
             d_frames = d_frames_next
+            ready_event = ready_event_next
 
-    stop_reader.set()
-    reader_thread.join(timeout=5)
-    stream_h2d.synchronize()
-    stream_compute.synchronize()
-    cp.cuda.Device().synchronize()
+            if d_frames is None:
+                break
+
+    finally:
+        stop_reader.set()
+        reader_thread.join(timeout=5)
+
+        stream_h2d.synchronize()
+        stream_compute.synchronize()
+        cp.cuda.Device().synchronize()
 
 
 def _process_memmap(bm, memmap, parameters, num_batch, first_frame, batch_stride, batch_size,

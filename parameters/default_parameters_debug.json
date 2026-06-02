@@ -2,10 +2,10 @@
   "pipeline_name" : "process_moments_main_pipeline",
   "backend": "cupyRAM",
   "batch_size": 256,
-  "batch_stride": 2560,
+  "batch_stride": 256,
   "accumulation": 1,
   "image_registration": true,
-  "image_registration_type": "translation_rotation_scale",
+  "image_registration_type": "",
   "registration_disc_ratio": 0.8,
   "registration_flatfield_gw": 35,
   "batch_size_registration": 512,
@@ -16,8 +16,8 @@
   "pixel_pitch": [2e-5,2e-5],
   "spatial_propagation": "Fresnel",
   "zero_padding": false,
-  "z": 0.48,
-  "shack_hartmann": true,
+  "z": "use_holovibes",
+  "shack_hartmann": false,
   "shack_hartmann_accumulation": 1,
   "shack_hartmann_graph_ref": "central_sub_ap",
   "shack_hartmann_graph_laplacian": true,
@@ -40,5 +40,5 @@
   "flip_x": false,
   "flip_y": false,
   
-  "debug" : true
+  "debug" : false
 }
