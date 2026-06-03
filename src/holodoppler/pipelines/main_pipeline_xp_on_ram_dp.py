@@ -325,7 +325,7 @@ def render_moments(bm, parameters, frames=None, registration_ref=None):
 
     # --- Image registration ---
     if parameters.get("image_registration", False) and registration_ref is not None:
-        M0_ff = gaussian_flatfield(res["M0"], parameters.get("registration_flatfield_gw", 1.0), bm.gaussian_filter)
+        M0_ff = res["M0ff"]#gaussian_flatfield(res["M0"], parameters.get("registration_flatfield_gw", 1.0), bm.gaussian_filter)
         if compute_debug:
             res["M0_ff_noreg"] = M0_ff
             
@@ -401,6 +401,7 @@ def preview_process_moments(file_path, parameters, tictoc=True):
                     img_np = (img_np - img_min) / (img_max - img_min + 1e-12)
                 img_np = (img_np * 255).astype(np.uint8)
             filename = os.path.join(save_dir, f"{prefix}_{key}.png")
+            print("Saving : ",filename)
             iio.imwrite(filename, img_np)
 
     compute_debug = parameters.get("debug", False)
@@ -420,6 +421,10 @@ def preview_process_moments(file_path, parameters, tictoc=True):
         M0 = bm.to_numpy(res["M0"])
         M0 = (M0 - np.min(M0)) / (np.max(M0) - np.min(M0) + 1e-12)
         debug_imgs["M0"] = (M0 * 255).astype(np.uint8)
+    if "M0ff" in res:
+        M0 = bm.to_numpy(res["M0ff"])
+        M0 = (M0 - np.min(M0)) / (np.max(M0) - np.min(M0) + 1e-12)
+        debug_imgs["M0ff"] = (M0 * 255).astype(np.uint8)
 
     save_debug_images(debug_imgs, "./debug_outputs")
     plt.close("all")
@@ -507,8 +512,8 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     if parameters.get("image_registration"):
         frames_reg = file_reader.read_frames(first_frame, parameters.get("batch_size_registration", batch_size))
         frames_reg = bm.to_backend(frames_reg)
-        M0_reg = render_moments(bm, parameters, frames=frames_reg)["M0"]
-        M0_reg = gaussian_flatfield(M0_reg, parameters.get("registration_flatfield_gw", 1.0), bm.gaussian_filter)
+        M0_reg = render_moments(bm, parameters, frames=frames_reg)["M0ff"]
+        # M0_reg = gaussian_flatfield(M0_reg, parameters.get("registration_flatfield_gw", 1.0), bm.gaussian_filter)
 
     # Dispatch to backend-specific loop
     if memmap is not None:
@@ -534,10 +539,12 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     def collecting(bm,out_list,debug_manager,debug_queue,stop_event,debug_thread,coefs_list,reg_list,compute_debug,debug_results,num_batch,parameters):
 
         # Post-processing
-        t0 = time.time()
+        # t0 = time.time()
         np_list = [bm.to_numpy(xparr) for xparr in out_list]
         # print(f"TransferRAM: {time.time()-t0:.2f}s")
         vid_t = np.stack(np_list, axis=0)
+        # plt.imshow(vid_t[0,3,:,:])
+        # plt.show()
         # print(f"stack CPU: {time.time()-t0:.2f}s")
         bm.clear_gpu_memory()
         # print(f"clear_gpu_memory: {time.time()-t0:.2f}s")
@@ -566,6 +573,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     
     vid_t, vid_debug = collecting(bm,out_list,debug_manager,debug_queue,stop_event,debug_thread,coefs_list,reg_list,compute_debug,debug_results,num_batch,parameters)
     
+    print(vid_t.shape)
     t0 = time.time()
     # Spatial transforms
     if parameters.get("square", False):
@@ -581,6 +589,10 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
         vid_t = np.flip(vid_t, axis=-2)
     
     # print(f"flip: {time.time()-t0:.2f}s")
+    
+    # import matplotlib.pyplot as plt
+    # plt.imshow(vid_t[0,3,:,:])
+    # plt.show()
 
     save_outputs(
         file_reader, video_path=mp4_path, holodoppler_path=holodoppler_path,

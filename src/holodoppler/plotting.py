@@ -456,6 +456,48 @@ class SubapertureMontagePlotter:
     
     def close(self):
         pass
+    
+class SVDeigenvectorimages_plotter:
+    """Montage of SVD eigenvector images """
+    
+    def __init__(self, normalize_per_frame=False):
+        self.normalize_per_frame = normalize_per_frame
+        
+    def plot(self, U):
+        if cp is not None and isinstance(U, cp.ndarray):
+            U = cp.asnumpy(U)
+        
+        rows = []
+        for iy in range(U_subaps.shape[0]):
+            row_imgs = []
+            for ix in range(U_subaps.shape[1]):
+                img = U_subaps[iy, ix]
+                
+                if self.normalize_per_frame:
+                    # Normalize each frame individually
+                    img = normalize_image(img)
+                else:
+                    # Keep as is for global normalization later
+                    img = img.astype(np.float32)
+                
+                row_imgs.append(img)
+            rows.append(np.hstack(row_imgs))
+        
+        # Create the full montage
+        montage = np.vstack(rows)
+        
+        # If not normalizing per frame, apply global normalization
+        if not self.normalize_per_frame:
+            montage = normalize_image(montage)
+        else:
+            # If per-frame normalization was applied, ensure uint8 type
+            if montage.dtype != np.uint8:
+                montage = montage.astype(np.uint8)
+        
+        return montage
+    
+    def close(self):
+        pass
 
 
 class DebugPlotterManager:

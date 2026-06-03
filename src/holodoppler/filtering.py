@@ -5,7 +5,7 @@ Filtering operations: SVD, frequency filtering
 from functools import cache
 
 
-def svd_filter(xp, H, svd_threshold, filter_mode="number_of_values"):
+def svd_filter(xp, H, svd_threshold, filter_mode="number_of_values", debug=False):
     """SVD filtering to remove tissue signal"""
 
     if svd_threshold < 0:
@@ -22,17 +22,24 @@ def svd_filter(xp, H, svd_threshold, filter_mode="number_of_values"):
 
     if filter_mode == "number_of_values":
         idx = xp.argsort(S)[::-1]
-        V = V[:, idx]
-        Vt = V[:, :svd_threshold]
+        idx = idx[:svd_threshold]
+        # V = V[:, idx]
+        Vt = V[:, idx]
     elif filter_mode == "amplitude_threshold":
         S, V = xp.linalg.eigh(cov)
-        idx = S > svd_threshold
+        idx = S < svd_threshold
         Vt = V[:, idx]
     elif filter_mode == "relative_amplitude_threshold":
         S, V = xp.linalg.eigh(cov)
-        idx = S/S.max() > svd_threshold
+        idx = S/S.max() < svd_threshold
         Vt = V[:, idx]
 
+    if debug:
+        Vtbar = V[:, not idx]
+        U = H2 @ Vt
+        H2 -= U @ Vt.conj().T
+        return H2.T.reshape(sz), U, 
+    
     H2 -= H2 @ Vt @ Vt.conj().T
     return H2.T.reshape(sz)
 

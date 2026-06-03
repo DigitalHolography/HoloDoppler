@@ -185,6 +185,7 @@ def zoom_slicewise_fast(arr, new_h, new_w, axes=(-2, -1), use_gpu=True, order=3)
     - Keeps data on GPU when possible
     - Uses prefilter=False for small speed boost (slightly less accurate)
     - Handles 3D and 4D video tensors optimally
+    - Never do prefilter=True because the channels are not contiguous frames or comparable
     """
     
     # Determine if we should use GPU
@@ -203,7 +204,6 @@ def zoom_slicewise_fast(arr, new_h, new_w, axes=(-2, -1), use_gpu=True, order=3)
         # Use CPU
         from scipy.ndimage import zoom
         arr_gpu = arr
-        zoom = scipy_zoom
         to_numpy = False
     
     # Calculate zoom factors
@@ -211,10 +211,12 @@ def zoom_slicewise_fast(arr, new_h, new_w, axes=(-2, -1), use_gpu=True, order=3)
     zoom_factors[axes[0]] = new_h / arr_gpu.shape[axes[0]]
     zoom_factors[axes[1]] = new_w / arr_gpu.shape[axes[1]]
     
-    # Apply zoom (prefilter=False is faster but slightly less accurate)
-    # For video data, prefilter=True (default) is usually worth the small cost
-    result = zoom(arr_gpu, zoom_factors, order=order, prefilter=True)
-    
+    # Apply zoom 
+    # Never do prefilter=True because the channels are not contiguous frames or comparable
+    # print(arr_gpu.shape)
+    # print(zoom_factors)
+    result = zoom(arr_gpu, zoom_factors, order=order, prefilter=False)
+    # print(result.shape)
     # Convert back to numpy if needed
     if to_numpy:
         import cupy as cp
