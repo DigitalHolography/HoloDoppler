@@ -113,7 +113,7 @@ class HoloFileReader:
     delayed_read_frames = delayed(read_frames)
 
     def get_np_memmap(self):
-        return np.memmap(self.file_path, offset=64, order="C")
+        return np.memmap(self.file_path, offset=64, order="C", shape= (self.file_header["num_frames"],self.file_header["height"],self.file_header["width"]))
 
 
 class CineFileReader:

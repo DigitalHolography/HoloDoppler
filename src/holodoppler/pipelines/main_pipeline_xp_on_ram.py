@@ -211,7 +211,7 @@ def _process_sub_batch(bm, p, frames_sub, phase_term, compute_debug):
             )
 
     # SVD filtering
-    holograms_f = svd_filter(xp, holograms, p.svd_threshold)
+    holograms_f = svd_filter(xp, holograms, 1e20, filter_mode= "amplitude_threshold")
 
     batch = {}
     if compute_debug:

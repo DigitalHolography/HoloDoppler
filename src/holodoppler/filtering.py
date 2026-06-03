@@ -5,7 +5,7 @@ Filtering operations: SVD, frequency filtering
 from functools import cache
 
 
-def svd_filter(xp, H, svd_threshold):
+def svd_filter(xp, H, svd_threshold, filter_mode="number_of_values"):
     """SVD filtering to remove tissue signal"""
 
     if svd_threshold < 0:
@@ -19,13 +19,22 @@ def svd_filter(xp, H, svd_threshold):
     cov = cov + eps * xp.eye(cov.shape[0], dtype=cov.dtype)
 
     S, V = xp.linalg.eigh(cov)
-    idx = xp.argsort(S)[::-1]
-    V = V[:, idx]
-    Vt = V[:, :svd_threshold]
+
+    if filter_mode == "number_of_values":
+        idx = xp.argsort(S)[::-1]
+        V = V[:, idx]
+        Vt = V[:, :svd_threshold]
+    elif filter_mode == "amplitude_threshold":
+        S, V = xp.linalg.eigh(cov)
+        idx = S > svd_threshold
+        Vt = V[:, idx]
+    elif filter_mode == "relative_amplitude_threshold":
+        S, V = xp.linalg.eigh(cov)
+        idx = S/S.max() > svd_threshold
+        Vt = V[:, idx]
 
     H2 -= H2 @ Vt @ Vt.conj().T
     return H2.T.reshape(sz)
-
 
 def svd_filter_batched(xp, U_subaps, svd_threshold):
     """Batched SVD filter for subapertures"""

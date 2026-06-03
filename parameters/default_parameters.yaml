@@ -1,7 +1,4 @@
-
-
-
-pipeline_name: "process_moments_latest" # pipeline name
+pipeline_name: "numba_np" # pipeline name
 
 # pipeline parameters 
 runtime:
@@ -13,10 +10,11 @@ pixel_pitch: [2.e-5, 2.e-5] # camera pixel pitch (distance between two consecuti
                           # pixels in y and x direction)
 frame_reader:
   first_frame: 0
-  last_frame: 0
+  last_frame: 1024
 frame_batcher:
   batch_size: 256
   batch_stride: 256
+  use_memmap: False
 propag:
   mode: "Fresnel" # | "AngularSpectrum" | "None" | "Fraunhofer"
   propagation_dist: 0.45

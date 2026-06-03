@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import argparse
 import json
 from pathlib import Path
@@ -12,15 +10,15 @@ from .pipelines import pipelines
 def preview(file_path, parameters: dict, tictoc=False):
     if not isinstance(parameters, dict):
         parameters = load_config(parameters)
+    
+    if "pipeline_name" not in parameters:
+        raise ValueError(f"parameters should have a 'pipeline_name' field")
 
-    pipeline_name = parameters.get("pipeline_name", "preview_moments_main_pipeline")
-    if "preview" not in pipeline_name:
-        print(ValueError("Please use preview pipeline for preview"))
-        pipeline_name = "preview_moments_main_pipeline"
+    pipeline_name = "preview_" + parameters.get("pipeline_name")
 
     pipeline_func = pipelines.get(pipeline_name)
     if pipeline_func is None:
-        raise ValueError(f"Unknown pipeline: {pipeline_name}")
+        raise ValueError(f"Unknown pipeline preview, looking for: {pipeline_name}")
 
     return pipeline_func(file_path, parameters)
 
@@ -29,7 +27,11 @@ def process(file_path, parameters: dict):
     if not isinstance(parameters, dict):
         parameters = load_config(parameters)
 
-    pipeline_name = parameters.get("pipeline_name", "process_moments_main_pipeline")
+    if "pipeline_name" not in parameters:
+        raise ValueError(f"parameters should have a 'pipeline_name' field")
+
+    pipeline_name = parameters.get("pipeline_name", "moments_main_pipeline")
+    
     pipeline_func = pipelines.get(pipeline_name)
     if pipeline_func is None:
         raise ValueError(f"Unknown pipeline: {pipeline_name}")
@@ -126,12 +128,10 @@ def main() -> int:
     debug_config = _get_debug_config()
     
     # Load config parameters
-    parameters = _load_json(config_path)
+    parameters = load_config(config_path)
     
     # Use preview function if --preview flag is set
     if args.preview:
-        # Force preview pipeline by overriding pipeline_name in parameters
-        parameters["pipeline_name"] = "preview_moments_main_pipeline"
         preview(input_path, parameters)
     else:
         process(input_path, config_path)
