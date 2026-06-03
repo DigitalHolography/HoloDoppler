@@ -272,6 +272,8 @@ def _process_sub_batch(bm, p, frames_sub, phase_term, compute_debug):
 
 def render_moments(bm, parameters, frames=None, registration_ref=None, tictoc=False):
     """Process a single batch of frames. Returns dict with moments and optional debug."""
+    
+    print("tictoc:",tictoc)
     p = _get_params(parameters)
     xp = bm.xp
     nt, ny, nx = frames.shape

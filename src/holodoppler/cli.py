@@ -19,11 +19,13 @@ def preview(file_path, parameters: dict, tictoc=False):
     pipeline_func = pipelines.get(pipeline_name)
     if pipeline_func is None:
         raise ValueError(f"Unknown pipeline preview, looking for: {pipeline_name}")
+    if tictoc:
+        return pipeline_func(file_path, parameters, tictoc=tictoc)
+    else:
+        return pipeline_func(file_path, parameters)
 
-    return pipeline_func(file_path, parameters)
 
-
-def process(file_path, parameters: dict):
+def process(file_path, parameters: dict, tictoc=False):
     if not isinstance(parameters, dict):
         parameters = load_config(parameters)
 
@@ -36,7 +38,10 @@ def process(file_path, parameters: dict):
     if pipeline_func is None:
         raise ValueError(f"Unknown pipeline: {pipeline_name}")
 
-    return pipeline_func(file_path, parameters)
+    if tictoc:
+        return pipeline_func(file_path, parameters, tictoc=tictoc)
+    else:
+        return pipeline_func(file_path, parameters)
 
 
 def _existing_file(value: str) -> Path:
@@ -116,6 +121,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run in preview mode, forcing the preview pipeline to be used.",
     )
+    
+    parser.add_argument(
+        "--tictoc",
+        action="store_true",
+        help="Run in preview mode, forcing the preview pipeline to be used.",
+    )
     return parser
 
 
@@ -132,8 +143,8 @@ def main() -> int:
     
     # Use preview function if --preview flag is set
     if args.preview:
-        preview(input_path, parameters)
+        preview(input_path, parameters, tictoc=args.preview)
     else:
-        process(input_path, config_path)
+        process(input_path, config_path, tictoc=args.preview)
 
     return 0

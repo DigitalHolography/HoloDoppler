@@ -1,4 +1,4 @@
-pipeline_name: "numba_np" # pipeline name
+pipeline_name: "daskxp2" # pipeline name
 
 # pipeline parameters 
 runtime:
@@ -10,7 +10,7 @@ pixel_pitch: [2.e-5, 2.e-5] # camera pixel pitch (distance between two consecuti
                           # pixels in y and x direction)
 frame_reader:
   first_frame: 0
-  last_frame: 1024
+  last_frame: -1
 frame_batcher:
   batch_size: 256
   batch_stride: 256

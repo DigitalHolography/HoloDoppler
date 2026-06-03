@@ -103,7 +103,7 @@ def process_moments_daskxp2(file_path, parameters):
     last_frame = frame_reader.get("last_frame")
     batch_size = frame_batcher.get("batch_size")
     batch_stride = frame_batcher.get("batch_stride")
-    # use_memmap = frame_batcher.get("use_memmap")
+    use_memmap = frame_batcher.get("use_memmap")
     # Get propagation parameters
     propag_mode = propag_params.get("mode")
     propag_dist = propag_params.get("propagation_dist")
@@ -178,10 +178,10 @@ def process_moments_daskxp2(file_path, parameters):
         out_list.append(stacked_result)
 
     # Stack all batches (T, C, H, W)
-    final_result = stack(bm, out_list, axis=0)
+    final_result = xp.stack(out_list, axis=0)
 
     # Move to CPU
-    vid_t = to_numpy(bm, final_result)
+    vid_t = bm.to_numpy(final_result)
 
     # Cleanup
     def cleanup():
@@ -197,8 +197,8 @@ def process_moments_daskxp2(file_path, parameters):
     # vid_t = dask.compute(vid_t)
 
     # If result is a tuple (from dask.compute), extract the first element
-    if isinstance(result, tuple):
-        result = result[0]
+    # if isinstance(result, tuple):
+    #     result = result[0]
 
     return vid_t
 

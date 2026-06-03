@@ -177,6 +177,51 @@ def resize_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
 
     return img_resized
 
+def zoom_slicewise_fast(arr, new_h, new_w, axes=(-2, -1), use_gpu=True, order=3):
+    """
+    Fast version with automatic GPU/CPU selection and memory optimization.
+    
+    Special optimizations:
+    - Keeps data on GPU when possible
+    - Uses prefilter=False for small speed boost (slightly less accurate)
+    - Handles 3D and 4D video tensors optimally
+    """
+    
+    # Determine if we should use GPU
+    if use_gpu and hasattr(arr, '__cuda_array_interface__'):
+        # Already on GPU or CuPy array
+        from cupyx.scipy.ndimage import zoom
+        arr_gpu = arr
+        to_numpy = False
+    elif use_gpu and isinstance(arr, np.ndarray):
+        # CPU array but user wants GPU
+        import cupy as cp
+        from cupyx.scipy.ndimage import zoom
+        arr_gpu = cp.asarray(arr)
+        to_numpy = True
+    else:
+        # Use CPU
+        from scipy.ndimage import zoom
+        arr_gpu = arr
+        zoom = scipy_zoom
+        to_numpy = False
+    
+    # Calculate zoom factors
+    zoom_factors = [1.0] * arr_gpu.ndim
+    zoom_factors[axes[0]] = new_h / arr_gpu.shape[axes[0]]
+    zoom_factors[axes[1]] = new_w / arr_gpu.shape[axes[1]]
+    
+    # Apply zoom (prefilter=False is faster but slightly less accurate)
+    # For video data, prefilter=True (default) is usually worth the small cost
+    result = zoom(arr_gpu, zoom_factors, order=order, prefilter=True)
+    
+    # Convert back to numpy if needed
+    if to_numpy:
+        import cupy as cp
+        result = cp.asnumpy(result)
+    
+    return result
+
 
 def resize_fft2_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
     """Spectral resize using FFT. Vectorized across all non-target axes."""
