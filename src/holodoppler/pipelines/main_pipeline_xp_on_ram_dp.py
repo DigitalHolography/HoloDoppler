@@ -98,10 +98,16 @@ class Accumulator:
         if not self.accumulators:
             # Initialize buffers on first call to avoid reallocation
             for k, v in data_dict.items():
+                if v is None:
+                    self.accumulators[k] = None
+                    continue
                 self.accumulators[k] = self.xp.zeros_like(v)
         # In-place addition
         for k, v in data_dict.items():
             if k in self.accumulators:
+                if v is None:
+                    # self.accumulators[k] = None
+                    continue
                 self.xp.add(self.accumulators[k], v, out=self.accumulators[k])
             else:
                 self.accumulators[k] = v.copy()
@@ -115,6 +121,9 @@ class Accumulator:
             return None
         batch = {}
         for k, buf in self.accumulators.items():
+            if buf is None:
+                batch[k] = None
+                continue
             batch[k] = buf / self.count
             buf.fill(0)  # Reuse memory for next cycle
         self.count = 0
@@ -142,14 +151,14 @@ def _process_shack_hartmann(bm, parameters, frames, registration_ref):
                 xp, fft, frames_sub, parameters["wavelength"], parameters["z"], parameters["pixel_pitch"],
                 parameters["low_freq"], parameters.get("high_freq"), parameters["sampling_freq"],
                 frames_sub.shape[0], parameters["shack_hartmann_nx_subap"], parameters["shack_hartmann_ny_subap"],
-                parameters["svd_threshold"]
+                parameters["shack_hartmann_svd_threshold"]
             )
         elif prop_method == "AngularSpectrum":
             U = construct_subapertures_angular(
                 xp, fft, frames_sub, parameters["pixel_pitch"],
                 parameters["wavelength"], parameters["z"], parameters["low_freq"], parameters.get("high_freq"),
                 parameters["sampling_freq"], frames_sub.shape[0], parameters["shack_hartmann_nx_subap"],
-                parameters["shack_hartmann_ny_subap"], parameters["svd_threshold"]
+                parameters["shack_hartmann_ny_subap"], parameters["shack_hartmann_svd_threshold"]
             )
         U_subaps_sum = U if U_subaps_sum is None else (U_subaps_sum + U)
         del U, frames_sub  # Memory footprint reduction
@@ -286,7 +295,7 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
             holo_nofix = fresnel_transform(xp, fft, frames_sub, parameters["z"], parameters["pixel_pitch"], parameters["wavelength"], zero_padding=zero_pad)
         elif prop_method == "AngularSpectrum":
             holo_nofix = angular_spectrum_transform(xp, fft, frames_sub, parameters["z"], parameters["pixel_pitch"], parameters["wavelength"], zero_padding=zero_pad)
-        holo_nofix_f = svd_filter(xp, holo_nofix, parameters["svd_threshold"])
+        holo_nofix_f = svd_filter(xp, holo_nofix, parameters["svd_threshold"], filter_mode=parameters["svd_filter_mode"], remove_dc=parameters["svd_remove_dc"])
         spec_nofix = fourier_time_transform(xp, fft, holo_nofix_f)
         psd_nofix = xp.abs(spec_nofix[idxs]) ** 2
         batch["M0notfixed"] = moment(xp, psd_nofix, freqs, 0)
@@ -304,7 +313,7 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
         batch["freqs"] = freqs
         batch["svd_U"] = removedU
         batch["eigenvalues"] = eigenvalues
-        batch["dc"] = dc
+        batch["svd_dc"] = dc
 
     return batch
 

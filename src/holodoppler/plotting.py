@@ -9,7 +9,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 import numpy as np
 from scipy.signal import find_peaks
 from scipy import stats
-from .utils import normalize_image
+from .utils import normalize_image, complex_to_color
 
 try:
     import cupy as cp
@@ -52,14 +52,26 @@ class SignalPlotter:
 class ImagePlotter:
     """Simple image plotter"""
     
-    def __init__(self):
+    def __init__(self,to_abs=False):
+        self.to_abs = to_abs
         pass
     
     def plot(self, image):
+        if image is None:
+            return None
+
         if cp is not None and isinstance(image, cp.ndarray):
             image = image.get()
-        image = (image - np.min(image)) / (np.max(image) - np.min(image) + 1e-12) * 255
-        return image.astype(np.uint8)
+        
+        if self.to_abs:
+            image = np.abs(image)
+
+        if np.iscomplexobj(image):
+            img = complex_to_color(image, mode="log_amplitude_phase")
+            return img.astype(np.uint8)
+        else:
+            image = (image - np.min(image)) / (np.max(image) - np.min(image) + 1e-12) * 255
+            return image.astype(np.uint8)
     
     def close(self):
         pass
@@ -464,43 +476,59 @@ class SubapertureMontagePlotter:
 class SVDeigenvectorimages_plotter:
     """Montage of SVD eigenvector images """
     
-    def __init__(self, normalize_per_frame=True):
+    def __init__(self, normalize_per_frame=True, to_abs=True):
         self.normalize_per_frame = normalize_per_frame
+        self.to_abs = to_abs
         
     def plot(self, U):
         if cp is not None and isinstance(U, cp.ndarray):
             U = cp.asnumpy(U)
-        print(U.shape)
-        U = np.abs(U)
-
-        N_imgs = U.shape[0]
+        
+        
+        if U.ndim == 2:
+            
+            U = U.reshape(U.shape[0], U.shape[1], 1)
+        
+        N_imgs = U.shape[-1]
         ny = int(np.sqrt(N_imgs))
-
+        nx = N_imgs // ny if ny > 0 else N_imgs
+        
+        imgs = []
+        
         for i in range(N_imgs):
-            img = U[i]
+            img = U[:, :, i] 
+            
+            if self.to_abs:
+                img = np.abs(img)
+                
+                if img.ndim == 2:
+                    img = np.stack([img] * 3, axis=-1)
+            else:
+                
+                img = complex_to_color(img)
             
             if self.normalize_per_frame:
-                # Normalize each frame individually
+                
                 img = normalize_image(img)
-            else:
-                # Keep as is for global normalization later
-                img = img.astype(np.float32)
             
-            imgs = []
             imgs.append(img)
-
-        montage = np.hstack(imgs)
         
-        # Create the full montage
-        # montage = np.vstack(rows)
         
-        # If not normalizing per frame, apply global normalization
+        rows = []
+        for i in range(ny):
+            row_imgs = imgs[i*nx:(i+1)*nx]
+            rows.append(np.hstack(row_imgs))
+        
+        
+        montage = np.vstack(rows)
+        
+        
         if not self.normalize_per_frame:
             montage = normalize_image(montage)
         else:
-            # If per-frame normalization was applied, ensure uint8 type
+            
             if montage.dtype != np.uint8:
-                montage = montage.astype(np.uint8)
+                montage = (montage * 255).astype(np.uint8) if montage.max() <= 1 else montage.astype(np.uint8)
         
         return montage
     
@@ -538,7 +566,8 @@ class DebugPlotterManager:
             "average_signal" : SignalPlotter(),
             "SVD_filtered_features" : SVDeigenvectorimages_plotter(),
             "SVD_M0_inversed_svd_filter" : ImagePlotter(),
-            "SVD_eigenvalues" : SignalPlotter(ylim=(1e17,1e25)),
+            "SVD_eigenvalues" : SignalPlotter(ylim=None),
+            "SVD_dc" : ImagePlotter(),
         }
         
         self.sources = {
@@ -556,6 +585,7 @@ class DebugPlotterManager:
             "SVD_filtered_features": lambda res: (res["svd_U"],),
             "SVD_M0_inversed_svd_filter": lambda res: (res["M0svdbar"],),
             "SVD_eigenvalues": lambda res: (res["eigenvalues"],),
+            "SVD_dc": lambda res: (res["svd_dc"],),
 
         }
         

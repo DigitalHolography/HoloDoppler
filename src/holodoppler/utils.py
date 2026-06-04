@@ -386,6 +386,157 @@ def flatfield3D(arr, gw):
     blurred[blurred == 0] = 1
     return arr / blurred
 
+def complex_to_color(complex_img, mode='hsv', normalize=True):
+    """
+    Convert a complex 2D array to a color image.
+    
+    Parameters:
+    -----------
+    complex_img : np.ndarray
+        2D complex-valued array
+    mode : str
+        Color mapping mode: 'hsv', 'phase_amplitude', 'log_amplitude', or 'amplitude_phase'
+    normalize : bool
+        Whether to normalize amplitude values to [0,1]
+    
+    Returns:
+    --------
+    np.ndarray
+        RGB image (H, W, 3) with values in [0, 255] dtype=uint8
+    """
+    phase = np.angle(complex_img)  # Range: [-π, π]
+    amplitude = np.abs(complex_img)
+    
+    if normalize and mode != 'log_amplitude':
+        amplitude = amplitude / (amplitude.max() + 1e-10)
+    elif mode == 'log_amplitude':
+        amplitude = np.log1p(amplitude)
+        amplitude = amplitude / (amplitude.max() + 1e-10)
+    
+    if mode == 'hsv':
+        # HSV: Hue = phase, Saturation = 1, Value = amplitude
+        hue = (phase + np.pi) / (2 * np.pi)  # Map to [0, 1]
+        saturation = np.ones_like(phase)
+        value = amplitude
+        
+        # Convert HSV to RGB
+        rgb = hsv_to_rgb(np.stack([hue, saturation, value], axis=-1))
+        
+    elif mode == 'phase_amplitude':
+        # RGB: Red = cos(phase), Green = sin(phase), Blue = amplitude
+        r = (np.cos(phase) + 1) / 2
+        g = (np.sin(phase) + 1) / 2
+        b = amplitude
+        rgb = np.stack([r, g, b], axis=-1)
+        
+    elif mode == 'amplitude_phase':
+        # Amplitude modulates intensity, phase modulates color
+        hue = (phase + np.pi) / (2 * np.pi)
+        # Use amplitude as both saturation and value for different effects
+        saturation = np.clip(amplitude * 1.5, 0, 1)
+        value = np.clip(amplitude * 1.2, 0, 1)
+        rgb = hsv_to_rgb(np.stack([hue, saturation, value], axis=-1))
+        
+    elif mode == 'log_amplitude_phase':
+        # Log amplitude with phase coloring
+        amplitude_log = np.log1p(np.abs(complex_img))
+        amplitude_log = amplitude_log / (amplitude_log.max() + 1e-10)
+        hue = (phase + np.pi) / (2 * np.pi)
+        rgb = hsv_to_rgb(np.stack([hue, np.ones_like(phase), amplitude_log], axis=-1))
+        
+    else:
+        raise ValueError(f"Unknown mode: {mode}. Use 'hsv', 'phase_amplitude', 'amplitude_phase', or 'log_amplitude_phase'")
+    
+    # Convert to uint8 in range [0, 255]
+    rgb = (np.clip(rgb, 0, 1) * 255).astype(np.uint8)
+    
+    return rgb
+
+def hsv_to_rgb(hsv):
+    """
+    Convert HSV to RGB.
+    
+    Parameters:
+    -----------
+    hsv : np.ndarray
+        HSV image (H, W, 3) with values in [0, 1]
+    
+    Returns:
+    --------
+    np.ndarray
+        RGB image (H, W, 3) with values in [0, 1]
+    """
+    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    
+    h = h * 6.0  # Scale hue to [0, 6)
+    i = np.floor(h).astype(int)
+    f = h - i
+    p = v * (1 - s)
+    q = v * (1 - s * f)
+    t = v * (1 - s * (1 - f))
+    
+    i = i % 6
+    rgb = np.zeros_like(hsv)
+    
+    # Vectorized assignment
+    mask0 = i == 0
+    rgb[mask0] = np.stack([v[mask0], t[mask0], p[mask0]], axis=-1)
+    
+    mask1 = i == 1
+    rgb[mask1] = np.stack([q[mask1], v[mask1], p[mask1]], axis=-1)
+    
+    mask2 = i == 2
+    rgb[mask2] = np.stack([p[mask2], v[mask2], t[mask2]], axis=-1)
+    
+    mask3 = i == 3
+    rgb[mask3] = np.stack([p[mask3], q[mask3], v[mask3]], axis=-1)
+    
+    mask4 = i == 4
+    rgb[mask4] = np.stack([t[mask4], p[mask4], v[mask4]], axis=-1)
+    
+    mask5 = i == 5
+    rgb[mask5] = np.stack([v[mask5], p[mask5], q[mask5]], axis=-1)
+    
+    return rgb
+
+# Alternative simpler version using only numpy and standard functions
+def complex_to_color_simple(complex_img):
+    """
+    Simple conversion: phase -> hue, amplitude -> value.
+    """
+    phase = np.angle(complex_img)
+    amplitude = np.abs(complex_img)
+    
+    # Normalize amplitude
+    amplitude = amplitude / (amplitude.max() + 1e-10)
+    
+    # Map phase from [-π, π] to [0, 1] for hue
+    hue = (phase + np.pi) / (2 * np.pi)
+    
+    # Create HSV image
+    hsv = np.stack([hue, np.ones_like(hue), amplitude], axis=-1)
+    
+    # Convert to RGB manually (simpler HSV to RGB)
+    rgb = np.zeros((*complex_img.shape, 3))
+    
+    h = hue * 6.0
+    i = np.floor(h).astype(int)
+    f = h - i
+    p = amplitude * (1 - 1)  # saturation=1, so p=0
+    q = amplitude * (1 - f)
+    t = amplitude * f
+    
+    i = i % 6
+    # Apply for each hue sector
+    rgb[i == 0] = np.stack([amplitude[i == 0], t[i == 0], p[i == 0]], axis=-1)
+    rgb[i == 1] = np.stack([q[i == 1], amplitude[i == 1], p[i == 1]], axis=-1)
+    rgb[i == 2] = np.stack([p[i == 2], amplitude[i == 2], t[i == 2]], axis=-1)
+    rgb[i == 3] = np.stack([p[i == 3], q[i == 3], amplitude[i == 3]], axis=-1)
+    rgb[i == 4] = np.stack([t[i == 4], p[i == 4], amplitude[i == 4]], axis=-1)
+    rgb[i == 5] = np.stack([amplitude[i == 5], p[i == 5], q[i == 5]], axis=-1)
+    
+    return (rgb * 255).astype(np.uint8)
+
 
 def load_config(config_path):
     if isinstance(config_path,dict):

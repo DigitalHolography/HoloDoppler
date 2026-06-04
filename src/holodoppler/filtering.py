@@ -39,13 +39,12 @@ def svd_filter(xp, H, svd_threshold, filter_mode="number_of_values", remove_dc=F
         else:
             Vt = V[:,:svd_threshold]
     elif filter_mode == "amplitude_threshold":
-        S, V = xp.linalg.eigh(cov)
-        mask = S < svd_threshold
+        print(S)
+        mask = S > svd_threshold
         Vt = V[:, mask]
         Vtbar = V[:, ~mask]
     elif filter_mode == "relative_amplitude_threshold":
-        S, V = xp.linalg.eigh(cov)
-        mask = S/S.max() < svd_threshold
+        mask = S/S.max() > svd_threshold
         Vt = V[:, mask]
         Vtbar = V[:, ~mask]
 
