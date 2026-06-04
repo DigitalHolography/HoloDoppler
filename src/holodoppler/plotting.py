@@ -6,7 +6,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg
-
+import numpy as np
+from scipy.signal import find_peaks
+from scipy import stats
 from .utils import normalize_image
 
 try:
@@ -23,8 +25,10 @@ def _make_agg_figure(figsize=(8, 6), dpi=100):
 class SignalPlotter:
     """Simple signal plotter"""
     
-    def __init__(self, figsize=(8, 6), dpi=100):
+    def __init__(self, figsize=(8, 6), dpi=100, ylim=None):
         self.fig, self.canvas, self.ax = _make_agg_figure(figsize, dpi)
+        self.ylim = ylim
+
     
     def plot(self, sig):
         self.ax.clear()
@@ -36,6 +40,8 @@ class SignalPlotter:
             self.ax.plot(sig.imag, 'r', label='imag')
         else:
             self.ax.plot(sig)
+        if self.ylim is not None:
+            self.ax.set_ylim(self.ylim)
         self.canvas.draw()
         img = np.asarray(self.canvas.buffer_rgba()).copy()
         return img[..., :3]
@@ -164,6 +170,7 @@ class SpectrumPlotter:
             stemlines.set_color("black")
             stemlines.set_linewidth(1)
         else:
+
             self.ax.plot(freqs_full, signal_log, color="black", linewidth=1)
 
         if self.show_bands:
@@ -202,9 +209,6 @@ class SpectrumPlotter:
     def close(self):
         self.fig.clear()
         
-import numpy as np
-from scipy.signal import find_peaks
-from scipy import stats
 
 class CalibrationSpectrumPlotter:
     """Spectrum plotter with frequency bands and peak analysis"""
@@ -460,31 +464,35 @@ class SubapertureMontagePlotter:
 class SVDeigenvectorimages_plotter:
     """Montage of SVD eigenvector images """
     
-    def __init__(self, normalize_per_frame=False):
+    def __init__(self, normalize_per_frame=True):
         self.normalize_per_frame = normalize_per_frame
         
     def plot(self, U):
         if cp is not None and isinstance(U, cp.ndarray):
             U = cp.asnumpy(U)
-        
-        rows = []
-        for iy in range(U_subaps.shape[0]):
-            row_imgs = []
-            for ix in range(U_subaps.shape[1]):
-                img = U_subaps[iy, ix]
-                
-                if self.normalize_per_frame:
-                    # Normalize each frame individually
-                    img = normalize_image(img)
-                else:
-                    # Keep as is for global normalization later
-                    img = img.astype(np.float32)
-                
-                row_imgs.append(img)
-            rows.append(np.hstack(row_imgs))
+        print(U.shape)
+        U = np.abs(U)
+
+        N_imgs = U.shape[0]
+        ny = int(np.sqrt(N_imgs))
+
+        for i in range(N_imgs):
+            img = U[i]
+            
+            if self.normalize_per_frame:
+                # Normalize each frame individually
+                img = normalize_image(img)
+            else:
+                # Keep as is for global normalization later
+                img = img.astype(np.float32)
+            
+            imgs = []
+            imgs.append(img)
+
+        montage = np.hstack(imgs)
         
         # Create the full montage
-        montage = np.vstack(rows)
+        # montage = np.vstack(rows)
         
         # If not normalizing per frame, apply global normalization
         if not self.normalize_per_frame:
@@ -528,6 +536,9 @@ class DebugPlotterManager:
                 use_stem=False
             ),
             "average_signal" : SignalPlotter(),
+            "SVD_filtered_features" : SVDeigenvectorimages_plotter(),
+            "SVD_M0_inversed_svd_filter" : ImagePlotter(),
+            "SVD_eigenvalues" : SignalPlotter(ylim=(1e17,1e25)),
         }
         
         self.sources = {
@@ -542,6 +553,10 @@ class DebugPlotterManager:
             "spectrum": lambda res: (res["spectrum_line"],),
             "calibration_spectrum": lambda res: (res["calibration_spectrum_line"],),
             "average_signal" : lambda res: (res["average_signal"],),
+            "SVD_filtered_features": lambda res: (res["svd_U"],),
+            "SVD_M0_inversed_svd_filter": lambda res: (res["M0svdbar"],),
+            "SVD_eigenvalues": lambda res: (res["eigenvalues"],),
+
         }
         
         self.plotters = plotters

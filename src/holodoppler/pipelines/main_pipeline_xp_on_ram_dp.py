@@ -146,7 +146,7 @@ def _process_shack_hartmann(bm, parameters, frames, registration_ref):
             )
         elif prop_method == "AngularSpectrum":
             U = construct_subapertures_angular(
-                xp, fft, frames_sub, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
+                xp, fft, frames_sub, parameters["pixel_pitch"],
                 parameters["wavelength"], parameters["z"], parameters["low_freq"], parameters.get("high_freq"),
                 parameters["sampling_freq"], frames_sub.shape[0], parameters["shack_hartmann_nx_subap"],
                 parameters["shack_hartmann_ny_subap"], parameters["svd_threshold"]
@@ -244,7 +244,11 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
             )
 
     # SVD filtering
-    holograms_f = svd_filter(xp, holograms, 1e20, filter_mode="amplitude_threshold")
+    if compute_debug:
+        holograms_f, removedU, holograms_fbar, eigenvalues, _, _, dc = svd_filter(xp, holograms, parameters["svd_threshold"], filter_mode = parameters["svd_filter_mode"], remove_dc = parameters["svd_remove_dc"], debug = compute_debug)
+    else :
+        holograms_f = svd_filter(xp, holograms, parameters["svd_threshold"], filter_mode = parameters["svd_filter_mode"], remove_dc = parameters["svd_remove_dc"])
+
     if not compute_debug:
         del holograms  # Free memory early in non-debug mode
 
@@ -287,10 +291,20 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
         psd_nofix = xp.abs(spec_nofix[idxs]) ** 2
         batch["M0notfixed"] = moment(xp, psd_nofix, freqs, 0)
         del holo_nofix, holo_nofix_f, spec_nofix, psd_nofix
+    
+    # Debug-only recomputation without inversed svd_filtering
+    if compute_debug:
+        spec_fbar = fourier_time_transform(xp, fft, holograms_fbar)
+        psd_fbar = xp.abs(spec_fbar[idxs]) ** 2
+        batch["M0svdbar"] = moment(xp, psd_fbar, freqs, 0)
+        del spec_fbar, psd_fbar
 
     if compute_debug:
         batch["spectrum_line"] = xp.mean(psd, axis=(-1, -2))
         batch["freqs"] = freqs
+        batch["svd_U"] = removedU
+        batch["eigenvalues"] = eigenvalues
+        batch["dc"] = dc
 
     return batch
 

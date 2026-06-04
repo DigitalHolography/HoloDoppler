@@ -5,11 +5,19 @@ Filtering operations: SVD, frequency filtering
 from functools import cache
 
 
-def svd_filter(xp, H, svd_threshold, filter_mode="number_of_values", debug=False):
+def svd_filter(xp, H, svd_threshold, filter_mode="number_of_values", remove_dc=False, debug=False):
     """SVD filtering to remove tissue signal"""
 
     if svd_threshold < 0:
+        if debug:
+            return H, None,  None, None, None, None, None
         return H
+    
+    if remove_dc:
+        dc = xp.mean(H,axis=0)
+        H = H - dc
+    else:
+        dc = None
 
     sz = H.shape
     H2 = H.reshape((sz[0], sz[-1] * sz[-2])).T
@@ -23,22 +31,30 @@ def svd_filter(xp, H, svd_threshold, filter_mode="number_of_values", debug=False
     if filter_mode == "number_of_values":
         idx = xp.argsort(S)[::-1]
         idx = idx[:svd_threshold]
-        # V = V[:, idx]
-        Vt = V[:, idx]
+        if debug:
+            mask = xp.zeros(len(S), dtype=bool)
+            mask[idx] = True
+            Vt = V[:, mask]
+            Vtbar = V[:, ~mask]
+        else:
+            Vt = V[:,:svd_threshold]
     elif filter_mode == "amplitude_threshold":
         S, V = xp.linalg.eigh(cov)
-        idx = S < svd_threshold
-        Vt = V[:, idx]
+        mask = S < svd_threshold
+        Vt = V[:, mask]
+        Vtbar = V[:, ~mask]
     elif filter_mode == "relative_amplitude_threshold":
         S, V = xp.linalg.eigh(cov)
-        idx = S/S.max() < svd_threshold
-        Vt = V[:, idx]
+        mask = S/S.max() < svd_threshold
+        Vt = V[:, mask]
+        Vtbar = V[:, ~mask]
 
     if debug:
-        Vtbar = V[:, not idx]
         U = H2 @ Vt
+        Ht = H2 - H2 @ Vtbar @ Vtbar.conj().T
         H2 -= U @ Vt.conj().T
-        return H2.T.reshape(sz), U, 
+        # filtered H (complex), removed features U (complex), removed H (complex), eigenvalues S (real >=0), cov matrix (complex), eigenvectors (complex), dc image (complex)
+        return H2.T.reshape(sz), U.reshape((sz[-2],sz[-1],-1)), Ht.T.reshape(sz), S, cov, V, dc
     
     H2 -= H2 @ Vt @ Vt.conj().T
     return H2.T.reshape(sz)
