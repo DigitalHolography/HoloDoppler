@@ -48,11 +48,21 @@ def track_time(name):
         return wrapper
     return decorator
 
+_total_time_start = 0.0
+def total_time_start():
+    global _total_time_start
+    _total_time_start = time.perf_counter()
+    print(_total_time_start)
+
 def print_timings_summary():
     """Print cumulated time, calls, ratio, and total for all tracked functions."""
+    print(time.perf_counter(),_total_time_start)
+    total = time.perf_counter() - _total_time_start
+
     with _timings_lock:
-        total = sum(v["cum_time"] for v in _func_timings.values())
-    if total == 0:
+        cumulated = sum(v["cum_time"] for v in _func_timings.values())
+
+    if cumulated == 0:
         return
 
     print("\n[ Timing Summary ]")
@@ -63,8 +73,11 @@ def print_timings_summary():
         ratio = data["cum_time"] / total if total > 0 else 0
         print(f"{fname:<45} | {data['calls']:>5} | {data['cum_time']:>10.4f} | {ratio:>6.2%}")
     print(f"{'TOTAL':<45} | {'':>5} | {total:>10.4f} | 100.00%")
+    print(f"{'CUMULATED':<45} | {'':>5} | {cumulated:>10.4f} | {(cumulated / total if total > 0 else 0) :>6.2%}")
     print("-" * 78)
-    
+
+construct_subapertures_fresnel = track_time('construct_subapertures_fresnel')(construct_subapertures_fresnel)
+construct_subapertures_angular = track_time('construct_subapertures_angular')(construct_subapertures_angular)
 calculate_displacements_graph_laplacian = track_time('calculate_displacements_graph_laplacian')(calculate_displacements_graph_laplacian)
 calculate_displacements = track_time('calculate_displacements')(calculate_displacements)
 fit_zernike = track_time('fit_zernike')(fit_zernike)
@@ -392,6 +405,9 @@ def update_from_footer(parameters, holofooter):
 # Preview (single batch)
 # ------------------------------------------------------------------
 def preview_process_moments(file_path, parameters, tictoc=True):
+    total_time_start()
+
+
     bm = BackendManager(backend=parameters["backend"])
     file_reader = FileReaderFactory.create(file_path)
     file_reader.open()
@@ -467,6 +483,7 @@ def preview_process_moments(file_path, parameters, tictoc=True):
 # Full video processing
 # ------------------------------------------------------------------
 def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, holodoppler_path=True, tictoc=True):
+    total_time_start()
     bm = BackendManager(backend=parameters["backend"])
     file_reader = FileReaderFactory.create(file_path)
     file_reader.open()
