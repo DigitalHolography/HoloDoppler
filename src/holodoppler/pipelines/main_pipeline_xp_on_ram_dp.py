@@ -52,11 +52,10 @@ _total_time_start = 0.0
 def total_time_start():
     global _total_time_start
     _total_time_start = time.perf_counter()
-    print(_total_time_start)
+    # print(_total_time_start)
 
 def print_timings_summary():
     """Print cumulated time, calls, ratio, and total for all tracked functions."""
-    print(time.perf_counter(),_total_time_start)
     total = time.perf_counter() - _total_time_start
 
     with _timings_lock:
@@ -555,6 +554,9 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
         M0_reg = render_moments(bm, parameters, frames=frames_reg)["M0ff"]
         # M0_reg = gaussian_flatfield(M0_reg, parameters.get("registration_flatfield_gw", 1.0), bm.gaussian_filter)
 
+    bm.clear_gpu_memory()
+    bm.print_gpu_used_memory()
+
     # Dispatch to backend-specific loop
     if memmap is not None:
         _process_memmap(bm, memmap, parameters, num_batch, first_frame, batch_stride, batch_size,
@@ -574,6 +576,12 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
                      M0_reg, out_list, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock)
 
     file_reader.close()
+
+    if coefs_list is not None:
+            coefs_list = [bm.to_numpy(c) for c in coefs_list]
+    # print(f"coefs_list: {time.time()-t0:.2f}s")
+    if reg_list is not None:
+        reg_list = [bm.to_numpy(r) for r in reg_list]
     
     @track_time("collecting")
     def collecting(bm,out_list,debug_manager,debug_queue,stop_event,debug_thread,coefs_list,reg_list,compute_debug,debug_results,num_batch,parameters):
@@ -597,29 +605,28 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
         # print(f"debug_manager: {time.time()-t0:.2f}s")
         
 
-        if coefs_list is not None:
-            coefs_list = [bm.to_numpy(c) for c in coefs_list]
-        # print(f"coefs_list: {time.time()-t0:.2f}s")
-        if reg_list is not None:
-            reg_list = [bm.to_numpy(r) for r in reg_list]
+        
         # print(f"reg_list: {time.time()-t0:.2f}s")
 
         vid_debug = {}
         if compute_debug and debug_results:
             for key in debug_results[0].keys():
-                vid_debug[key] = np.stack([bm.to_numpy(debug_results[k][key]) for k in range(num_batch)], axis=0)
+                try:
+                    vid_debug[key] = np.stack([bm.to_numpy(debug_results[k][key]) for k in range(num_batch)], axis=0)
+                except Exception as e:
+                    print(f"Couldn't stack debug output {key}: ", e)
         # print(f"vid_debug: {time.time()-t0:.2f}s")
         return vid_t, vid_debug
     
     vid_t, vid_debug = collecting(bm,out_list,debug_manager,debug_queue,stop_event,debug_thread,coefs_list,reg_list,compute_debug,debug_results,num_batch,parameters)
     
-    print(vid_t.shape)
+    # print(vid_t.shape)
     t0 = time.time()
     # Spatial transforms
     if parameters.get("square", False):
         m = max(vid_t.shape[-2], vid_t.shape[-1])
         vid_t = zoom_slicewise_fast(vid_t, m, m, use_gpu=bm.is_gpu)
-    print(f"square: {time.time()-t0:.2f}s")
+    # print(f"square: {time.time()-t0:.2f}s")
     if parameters.get("transpose", False):
         vid_t = np.transpose(vid_t, axes=(0, 1, 3, 2))
     # print(f"transpose: {time.time()-t0:.2f}s")

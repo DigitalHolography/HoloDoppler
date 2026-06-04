@@ -82,6 +82,13 @@ class BackendManager:
         self.xp.get_default_memory_pool().free_all_blocks()
         self.xp.get_default_pinned_memory_pool().free_all_blocks()
 
+    def print_gpu_used_memory(self):
+        if self.xp is not cp:
+            return
+        used_in_bytes = cp.cuda.runtime.memGetInfo()[1] - cp.cuda.runtime.memGetInfo()[0]
+
+        print(f"Used GPU memory : {used_in_bytes/1e6} MB ")
+
     @property
     def is_gpu(self):
         return "cupy" in self.backend_name and _cupy_available

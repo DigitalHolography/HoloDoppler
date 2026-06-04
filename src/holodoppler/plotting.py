@@ -484,12 +484,12 @@ class SVDeigenvectorimages_plotter:
         if cp is not None and isinstance(U, cp.ndarray):
             U = cp.asnumpy(U)
         
-        
         if U.ndim == 2:
-            
             U = U.reshape(U.shape[0], U.shape[1], 1)
         
         N_imgs = U.shape[-1]
+        if N_imgs == 0:
+            return None
         ny = int(np.sqrt(N_imgs))
         nx = N_imgs // ny if ny > 0 else N_imgs
         

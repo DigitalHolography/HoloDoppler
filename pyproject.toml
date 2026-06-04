@@ -19,6 +19,7 @@ dependencies = [
   "cupy-cuda13x>=14.0.1",
   "lblprof>=0.1.8",
   "imageio>=2.37.3",
+  "imageio[ffmpeg]",
   "tkinterdnd2",
   "pyyaml",
   "dask",
