@@ -129,47 +129,63 @@ def _save_bundle(
                 data = resize_slicewise(data, m, m)
 
             save_map[f"debug_{key}"] = data
+            
+    # Projection  and unsharp mask imaging :
+    from .backend import BackendManager
+    bm = BackendManager(backend=parameters["backend"])
+    # unsharped = {}
+    for name, data in save_map.items():
+        if name in ["moment_0", "moment_1", "moment_2", "moment_0_ff"] or "frequency_bands" in name:
+            # print(data.shape)
+            im = unsharp_projection(bm,data,(1024,1024),radius=2.0,amount=2.0)
+            png_path = target_dir / "png" / f"{name}_unsharped.png"
+            
+            # print(vid.shape)
+            im = normalize_to_uint8(im)
+            # print(im.shape)
+            iio.imwrite(png_path,im)
 
     # --- 2. Parallel saving of videos and PNGs ---
     # Pre-convert everything to uint8 once (avoids repeated normalization)
     uint8_map = {name: normalize_to_uint8(data) for name, data in save_map.items()}
 
-    # Collect all file‑write tasks
+    
+
+    # Videos: write sequentially, avoids ffmpeg/imageio concurrency issues
+    for name, uint8_data in tqdm(uint8_map.items(), desc="Saving videos"):
+        mp4_path = target_dir / "mp4" / f"{name}.mp4"
+        write_video_fast(
+            mp4_path,
+            uint8_data,
+            fps,
+            codec="libx264",
+            preset="ultrafast",
+            crf=28,
+        )
+
+        avi_path = target_dir / "avi" / f"{name}.avi"
+        write_video_fast(
+            avi_path,
+            uint8_data,
+            fps,
+            codec="mjpeg",
+            quality=8,
+        )
+
+    # PNGs: parallel is fine
     with ThreadPoolExecutor(max_workers=8) as executor:
         tasks = []
 
-        # Videos: write sequentially, avoids ffmpeg/imageio concurrency issues
-        for name, uint8_data in tqdm(uint8_map.items(), desc="Saving videos"):
-            mp4_path = target_dir / "mp4" / f"{name}.mp4"
-            write_video_fast(
-                mp4_path,
-                uint8_data,
-                fps,
-                codec="libx264",
-                preset="ultrafast",
-                crf=28,
-            )
+        for name, uint8_data in uint8_map.items():
+            png_path = target_dir / "png" / f"{name}.png"
+            mean_frame = np.mean(uint8_data, axis=0).astype(np.uint8)
+            
+            
+            
+            tasks.append(executor.submit(iio.imwrite, png_path, mean_frame))
 
-            avi_path = target_dir / "avi" / f"{name}.avi"
-            write_video_fast(
-                avi_path,
-                uint8_data,
-                fps,
-                codec="mjpeg",
-                quality=8,
-            )
-
-        # PNGs: parallel is fine
-        with ThreadPoolExecutor(max_workers=8) as executor:
-            tasks = []
-
-            for name, uint8_data in uint8_map.items():
-                png_path = target_dir / "png" / f"{name}.png"
-                mean_frame = np.mean(uint8_data, axis=0).astype(np.uint8)
-                tasks.append(executor.submit(iio.imwrite, png_path, mean_frame))
-
-            for fut in tqdm(as_completed(tasks), total=len(tasks), desc="Saving PNGs"):
-                fut.result()
+        for fut in tqdm(as_completed(tasks), total=len(tasks), desc="Saving PNGs"):
+            fut.result()
 
         # for fut in tqdm(as_completed(tasks), total=len(tasks), desc="Saving visuals"):
         #     fut.result()

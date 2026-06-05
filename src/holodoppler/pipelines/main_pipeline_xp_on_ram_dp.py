@@ -621,11 +621,17 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     vid_t, vid_debug = collecting(bm,out_list,debug_manager,debug_queue,stop_event,debug_thread,coefs_list,reg_list,compute_debug,debug_results,num_batch,parameters)
     
     # print(vid_t.shape)
-    t0 = time.time()
+    # t0 = time.time()
     # Spatial transforms
     if parameters.get("square", False):
         m = max(vid_t.shape[-2], vid_t.shape[-1])
+        print(f"Input shape: {vid_t.shape}")
+        # print(f"Expected axes: {axes}")
+        # print(f"Zoom factors: {zoom_factors}")
         vid_t = zoom_slicewise_fast(vid_t, m, m, use_gpu=bm.is_gpu)
+        # plt.imshow(vid_t[0,1,:,:])
+        # plt.show()
+        print(f"Output shape: {vid_t.shape}")
     # print(f"square: {time.time()-t0:.2f}s")
     if parameters.get("transpose", False):
         vid_t = np.transpose(vid_t, axes=(0, 1, 3, 2))

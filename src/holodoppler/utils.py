@@ -177,15 +177,12 @@ def resize_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
 
     return img_resized
 
-def zoom_slicewise_fast(arr, new_h, new_w, axes=(-2, -1), use_gpu=True, order=3):
+def zoom_slicewise_fast(arr, new_h, new_w, axes=(-2, -1), use_gpu=True):
     """
     Fast version with automatic GPU/CPU selection and memory optimization.
     
     Special optimizations:
-    - Keeps data on GPU when possible
-    - Uses prefilter=False for small speed boost (slightly less accurate)
-    - Handles 3D and 4D video tensors optimally
-    - Never do prefilter=True because the channels are not contiguous frames or comparable
+    - forced to nearest neighbor for speed an no confusion with channels (input can be nt nchannels ny nx in shape)
     """
     
     # Determine if we should use GPU
@@ -215,7 +212,7 @@ def zoom_slicewise_fast(arr, new_h, new_w, axes=(-2, -1), use_gpu=True, order=3)
     # Never do prefilter=True because the channels are not contiguous frames or comparable
     # print(arr_gpu.shape)
     # print(zoom_factors)
-    result = zoom(arr_gpu, zoom_factors, order=order, prefilter=False)
+    result = zoom(arr_gpu, zoom_factors, order=0, prefilter=False)
     # print(result.shape)
     # Convert back to numpy if needed
     if to_numpy:
@@ -555,3 +552,50 @@ def load_config(config_path):
         return d
 
     return list_to_tuple(config)
+
+
+
+
+def unsharp_projection(
+    bm,
+    imgs_arr,
+    output_shape,
+    radius=2.0,
+    amount=2.0,
+    dtype=np.float32,
+):
+
+    imgs_arr = np.asarray(imgs_arr, dtype=dtype)
+
+    if imgs_arr.ndim != 3:
+        raise ValueError("imgs_arr must have shape (nt, nx, ny)")
+
+    nt, nx, ny = imgs_arr.shape
+    out_nx, out_ny = output_shape
+
+    zoom_factors = (out_nx / nx, out_ny / ny)
+    
+    xp = bm.xp
+
+
+    imgs_gpu = xp.asarray(imgs_arr)
+
+    acc = xp.zeros(output_shape, dtype=xp.float32)
+
+    for i in range(nt):
+        img = imgs_gpu[i]
+
+        blurred = bm.gaussian_filter(img, sigma=radius)
+        sharp = img + amount * (img - blurred)
+
+        sharp_resized = bm.zoom(
+            sharp,
+            zoom_factors,
+            order=3,          # bicubic interpolation, prettier / MATLAB like
+            # mode="nearest",
+        )
+
+        acc += sharp_resized
+
+    projection = acc / nt
+    return xp.asnumpy(projection)

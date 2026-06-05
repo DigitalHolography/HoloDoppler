@@ -67,7 +67,7 @@ class ImagePlotter:
             image = np.abs(image)
 
         if np.iscomplexobj(image):
-            img = complex_to_color(image, mode="log_amplitude_phase")
+            img = complex_to_color(image, mode="amplitude_phase")
             return img.astype(np.uint8)
         else:
             image = (image - np.min(image)) / (np.max(image) - np.min(image) + 1e-12) * 255
