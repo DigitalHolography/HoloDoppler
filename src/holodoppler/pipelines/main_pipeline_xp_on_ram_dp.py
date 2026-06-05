@@ -191,7 +191,7 @@ def _process_shack_hartmann(bm, parameters, frames, registration_ref):
         )
         if compute_debug: debug["coefs"] = coefs
     elif parameters.get("shack_hartmann_southwell_phase_integration", False):
-        phase = southwell_phase_integration(
+        phase = southwell_phase_integration2(
             bm, ny, nx, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
             parameters["wavelength"], shifts_y, shifts_x
         )
@@ -402,6 +402,7 @@ def preview_process_moments(file_path, parameters, tictoc=True):
                 img_np = (img_np * 255).astype(np.uint8)
             filename = os.path.join(save_dir, f"{prefix}_{key}.png")
             iio.imwrite(filename, img_np)
+            print("Saved :", filename)
 
     compute_debug = parameters.get("debug", False)
     debug_manager = DebugPlotterManager(parameters) if compute_debug else None

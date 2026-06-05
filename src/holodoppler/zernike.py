@@ -184,6 +184,86 @@ def fit_zernike(
     return coefs.astype(xp.float32), phase.astype(xp.float32)
 
 
+def southwell_phase_integration2(
+    bm,
+    ny,
+    nx,
+    _1,
+    _2,
+    wavelength,
+    shifts_y,
+    shifts_x,
+):
+    """Southwell phase reconstruction using a DCT Poisson solver."""
+    
+    xp = bm.xp
+    xp_name = getattr(xp, "__name__", "")
+    
+    if xp_name == "numpy":
+        shifts_y = bm._to_numpy(shifts_y)
+        shifts_x = bm._to_numpy(shifts_x)
+    
+    zoom = bm.zoom
+    fft = bm.fft
+    
+    # Get the current dimensions of the slope data
+    n_meas_y, n_meas_x = shifts_y.shape
+    
+    # Build the right-hand side of the Poisson equation
+    # For Southwell integration: divergence of the gradient estimates
+    # Using forward differences for slopes
+    div = xp.zeros_like(shifts_y)
+    
+    # Interior points: div = (dx_slopes/dx) + (dy_slopes/dy)
+    # Using central differences for divergence
+    div[1:-1, 1:-1] = (shifts_x[1:-1, 2:] - shifts_x[1:-1, 1:-1]) + \
+                      (shifts_y[2:, 1:-1] - shifts_y[1:-1, 1:-1])
+    
+    # Boundaries (simple forward/backward differences)
+    # Top boundary (y=0)
+    div[0, 1:-1] = (shifts_x[0, 2:] - shifts_x[0, 1:-1]) + shifts_y[1, 1:-1]
+    # Bottom boundary (y=n_meas_y-1)
+    div[-1, 1:-1] = (shifts_x[-1, 2:] - shifts_x[-1, 1:-1]) - shifts_y[-1, 1:-1]
+    # Left boundary (x=0)
+    div[1:-1, 0] = shifts_x[1:-1, 1] + (shifts_y[2:, 0] - shifts_y[1:-1, 0])
+    # Right boundary (x=n_meas_x-1)
+    div[1:-1, -1] = -shifts_x[1:-1, -1] + (shifts_y[2:, -1] - shifts_y[1:-1, -1])
+    # Corners
+    div[0, 0] = shifts_x[0, 1] + shifts_y[1, 0]
+    div[0, -1] = -shifts_x[0, -1] + shifts_y[1, -1]
+    div[-1, 0] = shifts_x[-1, 1] - shifts_y[-1, 0]
+    div[-1, -1] = -shifts_x[-1, -1] - shifts_y[-1, -1]
+    
+    # Solve Poisson equation using DCT (Neumann boundary conditions)
+    # Grid spacing assumed to be 1
+    kx = xp.arange(n_meas_x)
+    ky = xp.arange(n_meas_y)
+    kx = xp.cos(xp.pi * kx / (n_meas_x - 1))
+    ky = xp.cos(xp.pi * ky / (n_meas_y - 1))
+    
+    # DCT of the divergence
+    div_dct = fft.dct(fft.dct(div, type=2, norm='ortho').T, type=2, norm='ortho').T
+    
+    # Solve in frequency domain (avoid division by zero)
+    kx_grid, ky_grid = xp.meshgrid(kx, ky)
+    denom = 2 * (kx_grid + ky_grid - 2)
+    denom[0, 0] = 1  # Avoid division by zero for DC component
+    
+    phase_dct = div_dct / denom
+    phase_dct[0, 0] = 0  # Set DC component to zero
+    
+    # Inverse DCT to get phase
+    phase_meas = fft.dct(fft.dct(phase_dct, type=3, norm='ortho').T, type=3, norm='ortho').T
+    
+    # Convert phase to optical path difference
+    phase_meas = phase_meas * (2.0 * xp.pi / wavelength)
+    
+    # Resize to target dimensions
+    phase = zoom(phase_meas, (ny / n_meas_y, nx / n_meas_x), order=1)
+    
+    return phase
+
+
 def southwell_phase_integration(
     bm,
     ny,
@@ -258,30 +338,45 @@ def southwell_phase_integration(
 
         return phi
 
-    def resize_nan(phi, out_rows, out_cols, order=1):
-        phi = phi.reshape(phi.shape[-2], phi.shape[-1])
-
-        mask = xp.isfinite(phi)
-        phi_filled = xp.where(mask, phi, 0.0)
-
-        zoom_y = out_rows / phi.shape[0]
-        zoom_x = out_cols / phi.shape[1]
-
-        phi_zoom = zoom(phi_filled, (zoom_y, zoom_x), order=order)
-        mask_zoom = zoom(mask.astype(xp.float32), (zoom_y, zoom_x), order=order)
-
-        phi_zoom = phi_zoom / xp.maximum(mask_zoom, 1e-6)
-        phi_zoom = xp.where(mask_zoom > 0.1, phi_zoom, xp.nan)
-
-        return phi_zoom.reshape(out_rows, out_cols)
+    def resize_nan_fast(phi, out_rows, out_cols):
+        """Fast NaN-robust resizing using weighted linear interpolation."""
+        
+        in_rows, in_cols = phi.shape[-2:]
+        
+        # Create weight mask (1 for valid, 0 for NaN)
+        weights = xp.isfinite(phi).astype(xp.float32)
+        
+        # Fill NaNs with 0 for interpolation (we'll reweight later)
+        phi_filled = xp.where(weights > 0, phi, 0)
+        
+        # Resample both data and weights
+        zoom_y = out_rows / in_rows
+        zoom_x = out_cols / in_cols
+        
+        phi_resampled = zoom(phi_filled, (zoom_y, zoom_x), order=1)
+        weights_resampled = zoom(weights, (zoom_y, zoom_x), order=1)
+        
+        # Prevent division by zero
+        weights_resampled = xp.maximum(weights_resampled, 1e-8)
+        
+        # Reconstruct the actual values (this is the key!)
+        phi_reconstructed = phi_resampled / weights_resampled
+        
+        # Mark regions with insufficient valid data as NaN
+        # Threshold based on the original valid pixel density
+        min_weights = 0.25  # Need at least 25% valid contributions
+        phi_reconstructed = xp.where(weights_resampled > min_weights, 
+                                    phi_reconstructed, xp.nan)
+        
+        return phi_reconstructed.reshape(out_rows, out_cols)
 
     # Keep your original calibration convention.
     # Note: pixel_pitch_y and pixel_pitch_x are currently unused.
     slopes_y = shifts_y * wavelength
     slopes_x = shifts_x * wavelength
 
-    phase = southwell_poisson_nan(slopes_y, slopes_x)
+    phase = southwell_poisson_(slopes_y, slopes_x)
     phase = phase * (2.0 * xp.pi / wavelength)
-    phase = resize_nan(phase, ny, nx)
+    phase = resize_(phase, ny, nx)
 
     return phase

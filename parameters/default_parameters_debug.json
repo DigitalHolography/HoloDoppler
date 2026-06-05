@@ -18,19 +18,19 @@
   "pixel_pitch": [2e-5,2e-5],
   "spatial_propagation": "Fresnel",
   "zero_padding": false,
-  "z": "use_holovibes",
-  "shack_hartmann": false,
+  "z": 0.4,
+  "shack_hartmann": true,
   "shack_hartmann_accumulation": 1,
   "shack_hartmann_graph_ref": "central_sub_ap",
   "shack_hartmann_graph_laplacian": true,
   "shack_hartmann_ny_subap": 5,
-  "shack_hartmann_nx_subap": 9,
+  "shack_hartmann_nx_subap": 5,
   "shack_hartmann_pupil_threshold": 2.0,
   "shack_hartmann_deviation_threshold": 1000.0,
   "shack_hartmann_shifts_pixel_range_threshold": 1000,
-  "shack_hartmann_zernike_fit": true,
+  "shack_hartmann_zernike_fit": false,
   "shack_hartmann_zernike_fit_modes": [4,5,6],
-  "shack_hartmann_southwell_phase_integration": false,
+  "shack_hartmann_southwell_phase_integration": true,
   "temporal_transformation": "FourierTransform",
   "sampling_freq": 37037,
   "low_freq": 6000,
@@ -42,5 +42,5 @@
   "flip_x": false,
   "flip_y": false,
   
-  "debug" : false
+  "debug" : true
 }
