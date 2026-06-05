@@ -116,10 +116,11 @@ class ShiftsPlotter:
         shifts_x = np.asarray(shifts_x)
 
         if self.scale is None:
-            mag = np.sqrt(shifts_x**2 + shifts_y**2)
+            mag = np.hypot(shifts_x,shifts_y)
             med = np.median(mag[mag > 0]) if np.any(mag > 0) else 1.0
             # print(med)
-            scale = 6.0 / (med + 1e-32) 
+            ref_arrow_length = 0.1
+            scale = med / ref_arrow_length
             # print(scale)
         else:
             scale = self.scale
@@ -536,6 +537,57 @@ class SVDeigenvectorimages_plotter:
         pass
 
 
+class SVDeigenvalues_plotter:
+    """Simple SVD eigenvalue/singular-value plotter"""
+
+    def __init__(self, figsize=(8, 6), dpi=100, ylim=None, log_plot=True):
+        self.fig, self.canvas, self.ax = _make_agg_figure(figsize, dpi)
+        self.ylim = ylim
+        self.log_plot = log_plot
+
+    def plot(self, eigen_values_list):
+        self.ax.clear()
+
+        if cp is not None and isinstance(eigen_values_list, cp.ndarray):
+            eigen_values_list = eigen_values_list.get()
+
+        vals = np.asarray(eigen_values_list)
+        vals = np.squeeze(vals)
+
+        if vals.ndim != 1:
+            vals = vals.ravel()
+
+        vals = vals[np.isfinite(vals)]
+
+        if self.log_plot:
+            vals = vals[vals > 0]
+
+        x = np.arange(vals.size)
+
+        if self.log_plot:
+            self.ax.semilogy(x, vals, marker="o", linewidth=1.5, markersize=3)
+            self.ax.set_ylabel("SVD eigenvalue / singular value (log scale)")
+        else:
+            self.ax.plot(x, vals, marker="o", linewidth=1.5, markersize=3)
+            self.ax.set_ylabel("SVD eigenvalue / singular value")
+
+        self.ax.set_title("SVD spectrum")
+        self.ax.set_xlabel("Index")
+        self.ax.grid(True, linestyle="--", alpha=0.7)
+
+        if self.ylim is not None:
+            self.ax.set_ylim(self.ylim)
+
+        self.fig.tight_layout()
+        self.canvas.draw()
+
+        img = np.asarray(self.canvas.buffer_rgba()).copy()
+        return img[..., :3]
+
+    def close(self):
+        import matplotlib.pyplot as plt
+        plt.close(self.fig)
+
 class DebugPlotterManager:
     """Manages debug plotters"""
     
@@ -566,7 +618,7 @@ class DebugPlotterManager:
             "average_signal" : SignalPlotter(),
             "SVD_filtered_features" : SVDeigenvectorimages_plotter(),
             "SVD_M0_inversed_svd_filter" : ImagePlotter(),
-            "SVD_eigenvalues" : SignalPlotter(ylim=None),
+            "SVD_eigenvalues" : SVDeigenvalues_plotter(ylim=(1,1e25), log_plot=True),
             "SVD_dc" : ImagePlotter(),
         }
         
