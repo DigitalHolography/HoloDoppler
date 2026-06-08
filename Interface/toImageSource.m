@@ -15,7 +15,8 @@ end
 if ~isempty(app) && isvalid(app) && ismethod(app, 'getWidgetValue')
 
     if app.getWidgetValue('ImproveContrast')
-        image = rescale(image);
+        low_high = stretchlim(image, [0.0001 0.9999]); % ignore only 0.1 % extremes
+        image = imadjust(image, low_high, [0 1]);
     end
 
 end

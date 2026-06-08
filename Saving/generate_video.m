@@ -77,9 +77,22 @@ if opt.contrast_inversion
     video = -1.0 * video;
 end
 
-% --- Normalise to [0,1] and write final video ---
-video = mat2gray(video);
+% --- Normalise to [0,1] and optionally enhance contrast ---
+if opt.enhance_contrast
+    % Apply percentile-based stretch per frame (avoids flashes)
+    for f = 1:size(video, 4)
+        frame = video(:, :, :, f);
+        % Use a very low low-percentile to keep dark parts bright
+        low_high = stretchlim(frame, [0.001 0.999]); % ignore 0.1 % extremes
+        video(:, :, :, f) = imadjust(frame, low_high, [0 1]);
+    end
 
+else
+    % Global normalization
+    video = mat2gray(video);
+end
+
+% Write final video
 avi_dir = fullfile(output_path, 'avi');
 if ~exist(avi_dir, 'dir'), mkdir(avi_dir); end
 w = VideoWriter(fullfile(avi_dir, output_filename));
@@ -90,15 +103,6 @@ for i = 1:size(video, 4)
 end
 
 close(w);
-
-% --- Contrast enhancement (move BEFORE writing to affect the video) ---
-if opt.enhance_contrast
-
-    for f = 1:size(video, 4)
-        video(:, :, :, f) = imadjust(video(:, :, :, f), stretchlim(video(:, :, :, f)));
-    end
-
-end
 
 % --- Save temporal average image ---
 if opt.export_avg_img
