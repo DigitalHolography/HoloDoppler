@@ -204,7 +204,7 @@ methods
 
         SubapI = obj.I(y1:y2, x1:x2, :);
 
-        switch obj.Params.spatialTransformation
+        switch obj.Params.spatialTransform
             case "angular spectrum"
                 [NY, NX, ~] = size(SubapI);
                 SpatialKernel = propagation_kernelAngularSpectrum(NX, NY, obj.Params.spatialPropagation, obj.Params.lambda, obj.Params.ppx, obj.Params.ppy, 0);
@@ -217,7 +217,7 @@ methods
                 FH = [];
         end
 
-        switch obj.Params.spatialTransformation
+        switch obj.Params.spatialTransform
             case "angular spectrum"
                 H = ifft2(FH);
             case "Fresnel"

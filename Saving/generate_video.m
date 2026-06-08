@@ -1,16 +1,4 @@
 function generate_video(video, output_path, name, opt)
-% Saves a raw pixel array to a video file, with some post processing
-% commonly done for rendering hologram videos
-%
-% video: a 4D array containing a raw video to save to a file
-% output_path: path of the output directory
-% name: name of the generated video, e.g. M0, not the full file name
-% contrast_enhancement_tol: a parameter to adjust video contrast ([] if not wanted)
-% temporalFilter_sigma: magnitude of temporal gaussian filter ([] if no filter is wanted)
-% contrast_inversion: if true, contrast of the video will be inverted
-% export_raw: if true, the video is also exported as a raw file in the raw directory
-% export_avg_img: if true, save the temporal average of the video as a png
-%                 file in the 'png' directory
 
 arguments
     video
@@ -29,83 +17,94 @@ end
 [~, output_dirname] = fileparts(output_path);
 output_filename = sprintf('%s_%s.%s', output_dirname, name, 'avi');
 
-if size(video, 3) == 1 % if not colored
+% If grayscale, ensure it's 3D+time
+if size(video, 3) == 1
     video = reshape(video, size(video, 1), size(video, 2), 1, []);
 end
 
+% Optional square resizing (applies to raw export as well)
 if opt.square
     sdim = max(size(video, 1), size(video, 2));
     video = imresize(video, [sdim, sdim]);
 end
 
-% save to raw format
+% --- Export raw data (before any intensity processing) ---
 if opt.export_raw
-    output_filename_h5 = sprintf('%s_%s.h5', output_dirname, 'output');
-    export_h5_video(fullfile(output_path, 'raw', output_filename_h5), name, (video));
+    h5_dir = fullfile(output_path, 'h5');
+    if ~exist(h5_dir, 'dir'), mkdir(h5_dir); end
+    % Fixed: use 'name' instead of hardcoded 'output'
+    output_filename_h5 = sprintf('%s_output.h5', output_dirname);
+    export_h5_video(fullfile(h5_dir, output_filename_h5), name, single(video));
 
     output_filename_raw = sprintf('%s_%s_raw.%s', output_dirname, name, 'avi');
-    w = VideoWriter(fullfile(output_path, 'raw', output_filename_raw));
-    w.Quality = 50;
-    open(w);
+    w_raw = VideoWriter(fullfile(h5_dir, output_filename_raw));
+    w_raw.Quality = 50;
+    open(w_raw);
 
     for i = 1:size(video, 4)
-        writeVideo(w, mat2gray(video(:, :, :, i)));
+        writeVideo(w_raw, mat2gray(video(:, :, :, i)));
     end
 
-    close(w);
+    close(w_raw);
 end
 
-% temporal filter
+% --- Temporal filter ---
 if ~isempty(opt.temporalFilter)
-    sigma = [0.0001 0.0001 opt.temporalFilter];
+    sigma_t = opt.temporalFilter;
 
     for c = 1:size(video, 3)
-        video(:, :, c, :) = imgaussfilt3(squeeze(video(:, :, c, :)), sigma);
+        video(:, :, c, :) = imgaussfilt(squeeze(video(:, :, c, :)), sigma_t, ...
+            'FilterDomain', 'spatial');
     end
 
 end
 
-% fix intensity flashes
+% --- Flash subtraction ---
 if opt.substractFlash
     video = video - mean(video, [1 2]);
 end
 
-% corner normalizations
-if opt.cornerNorm > 0
+% --- Corner normalisation ---
+if opt.cornerNorm
     [numX, numY, ~] = size(video);
     disk_ratio = opt.cornerNorm;
     disk = diskMask(numX, numY, disk_ratio);
     video = video ./ mean(video .* ~disk, [1, 2]);
 end
 
-% contrast inversion
+% --- Contrast inversion ---
 if opt.contrast_inversion
     video = -1.0 * video;
 end
 
-% prepare for writing
-video = mat2gray(video);
+% --- Normalise to [0,1] and optionally enhance contrast ---
+if opt.enhance_contrast
+    % Apply percentile-based stretch per frame (avoids flashes)
+    for f = 1:size(video, 4)
+        frame = video(:, :, :, f);
+        % Use a very low low-percentile to keep dark parts bright
+        low_high = stretchlim(frame, [0.001 0.999]); % ignore 0.1 % extremes
+        video(:, :, :, f) = imadjust(frame, low_high, [0 1]);
+    end
 
-[~, ~, ~, numFrames] = size(video);
+else
+    % Global normalization
+    video = mat2gray(video);
+end
 
-w = VideoWriter(sprintf('%s\\avi\\%s', output_path, output_filename));
+% Write final video
+avi_dir = fullfile(output_path, 'avi');
+if ~exist(avi_dir, 'dir'), mkdir(avi_dir); end
+w = VideoWriter(fullfile(avi_dir, output_filename));
 open(w);
 
 for i = 1:size(video, 4)
     writeVideo(w, video(:, :, :, i));
 end
 
-close(w)
+close(w);
 
-if opt.enhance_contrast
-
-    for f = 1:numFrames
-        video(:, :, :, f) = imadjust(video(:, :, :, f), stretchlim(video(:, :, :, f)));
-    end
-
-end
-
-% save temporal average to png
+% --- Save temporal average image ---
 if opt.export_avg_img
     generate_image(video, output_path, name);
 end

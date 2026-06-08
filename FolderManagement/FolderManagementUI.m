@@ -4,6 +4,8 @@ classdef FolderManagementUI < handle
 %   FM = FolderManagementUI(APP) creates a non-modal figure that allows
 %   managing a list of .cine/.holo files and their rendering configurations.
 %   APP is the main HoloDoppler application object.
+%
+%   Each file in the list has exactly one associated configuration.
 
 properties (Access = private)
     MainApp % Reference to the main HoloDoppler app
@@ -32,19 +34,25 @@ methods (Access = private)
 
     function createUI(obj)
         % Create the figure and all UI components.
-        app = obj.MainApp; % local alias for brevity
 
         % Calculate initial height based on number of files
         initialHeight = 260 + length(obj.drawerList) * 14;
 
-        % Position figure next to the main app if possible
-        if isvalid(app.HoloDopplerUIFigure)
-            mainPos = app.HoloDopplerUIFigure.Position;
-            xPos = mainPos(1) + mainPos(3) + 20;
-            yPos = mainPos(2);
+        mainApp = obj.MainApp;
+
+        if isvalid(mainApp) && ismethod(mainApp, 'getMainFigure')
+            mainFig = mainApp.getMainFigure();
+
+            if isvalid(mainFig)
+                mainPos = mainFig.Position;
+                xPos = mainPos(1) + mainPos(3) + 20;
+                yPos = mainPos(2);
+            else
+                xPos = 300; yPos = 300;
+            end
+
         else
-            xPos = 300;
-            yPos = 300;
+            xPos = 300; yPos = 300;
         end
 
         obj.Figure = uifigure('Position', [xPos, yPos, 700, initialHeight], ...
@@ -93,7 +101,7 @@ methods (Access = private)
         obj.KeepZCheckbox = uicheckbox('Parent', buttonGrid, ...
             'FontColor', [1 1 1], ...
             'Text', 'Keep z distance', ...
-            'Value', 0);
+            'Value', 1);
         obj.KeepZCheckbox.Layout.Row = 2;
         obj.KeepZCheckbox.Layout.Column = 3;
 
@@ -154,11 +162,8 @@ methods (Access = private)
 
         obj.TextArea.Value = displayValue;
 
-        newHeight = 100 + length(obj.drawerList) * 14;
-
-        if newHeight > obj.Figure.Position(4)
-            obj.Figure.Position(4) = newHeight;
-        end
+        newHeight = 188 + length(obj.drawerList) * 18;
+        obj.Figure.Position(4) = max(newHeight, 206);
 
     end
 
@@ -173,35 +178,41 @@ methods (Access = private)
     % -----------------------------------------------------------------
 
     function selectFile(obj)
-        app = obj.MainApp;
+        % Select a single .cine or .holo file.
+        filters = { ...
+                       '*.cine;*.holo', 'Supported Video Files (*.cine, *.holo)'; ...
+                       '*.cine', 'Cine Files (*.cine)'; ...
+                       '*.holo', 'Holo Files (*.holo)'; ...
+                   };
 
-        figureHandle = obj.Figure;
-        figure(figureHandle);
+        % Bring the FolderManagement figure to focus
+        figure(obj.Figure);
 
         if ~isempty(obj.drawerList)
-            [file, path] = uigetfile(obj.drawerList{end}, ...
-                'Select File', '*.holo;*.cine');
+            startFolder = fileparts(obj.drawerList{end});
+            [file, path] = uigetfile(filters, 'Select File', startFolder);
         else
-            [file, path] = uigetfile('Select File', '*.holo;*.cine');
+            [file, path] = uigetfile(filters, 'Select File');
         end
 
-        figure(figureHandle);
+        figure(obj.Figure);
 
         if isequal(file, 0), return; end
 
         [~, ~, ext] = fileparts(file);
 
-        if ismember(ext, {'.cine', '.holo'})
-            obj.drawerList{end + 1} = fullfile(path, file);
+        if ismember(ext, {'.cine', '.holo', '.h5'})
+            obj.addUniqueFile(fullfile(path, file));
         else
-            uialert(obj.Figure, 'File must be .cine or .holo', 'Invalid File Type');
+            uialert(obj.Figure, 'File must be .cine, .holo, .raw or .h5', 'Invalid File Type');
         end
 
-        app.HD.drawer_list = obj.drawerList;
+        obj.MainApp.HD.drawer_list = obj.drawerList;
         obj.updateDisplay();
     end
 
     function selectCurrent(obj)
+        % Add the currently loaded file in the main application.
         app = obj.MainApp;
 
         if isempty(app.HD.file)
@@ -213,7 +224,7 @@ methods (Access = private)
         [~, ~, ext] = fileparts(filePath);
 
         if ismember(ext, {'.cine', '.holo'})
-            obj.drawerList{end + 1} = filePath;
+            obj.addUniqueFile(filePath);
         else
             uialert(obj.Figure, 'File must be .cine or .holo', 'Invalid File Type');
         end
@@ -223,6 +234,7 @@ methods (Access = private)
     end
 
     function selectCurrentFolder(obj)
+        % Add all supported files from the folder of the currently loaded file.
         app = obj.MainApp;
 
         if isempty(app.HD.file)
@@ -236,8 +248,7 @@ methods (Access = private)
     end
 
     function selectFolder(obj)
-        app = obj.MainApp;
-
+        % Let the user pick a folder and add all supported files.
         figureHandle = obj.Figure;
         figure(figureHandle);
 
@@ -254,11 +265,12 @@ methods (Access = private)
         if folder == 0, return; end
         obj.addFilesFromFolder(folder);
 
-        app.HD.drawer_list = obj.drawerList;
+        obj.MainApp.HD.drawer_list = obj.drawerList;
         obj.updateDisplay();
     end
 
     function addFilesFromFolder(obj, folder)
+        % Append all .cine / .holo files from a folder, avoiding duplicates.
         entries = dir(folder);
 
         for i = 1:numel(entries)
@@ -267,11 +279,19 @@ methods (Access = private)
                 [~, ~, ext] = fileparts(entries(i).name);
 
                 if ismember(ext, {'.cine', '.holo'})
-                    obj.drawerList{end + 1} = fullfile(folder, entries(i).name);
+                    obj.addUniqueFile(fullfile(folder, entries(i).name));
                 end
 
             end
 
+        end
+
+    end
+
+    function addUniqueFile(obj, fullFilePath)
+        % Add the file only if it is not already in the list.
+        if ~any(strcmp(obj.drawerList, fullFilePath))
+            obj.drawerList{end + 1} = fullFilePath;
         end
 
     end
@@ -282,7 +302,6 @@ methods (Access = private)
     end
 
     function saveToTxt(obj)
-
         figureHandle = obj.Figure;
         figure(figureHandle);
 
@@ -315,7 +334,7 @@ methods (Access = private)
                     [~, ~, ext] = fileparts(lines(i));
 
                     if ismember(ext, {'.cine', '.holo'})
-                        obj.drawerList{end + 1} = lines{i};
+                        obj.addUniqueFile(lines{i}); % avoid duplicates
                     end
 
                 catch e
@@ -331,84 +350,109 @@ methods (Access = private)
     end
 
     function saveConfigs(obj)
+        % Save a selected parameter configuration to ALL files in the drawer list.
+        % If 'Keep Z distance' is checked, the original propagation distance
+        % from each file's metadata is preserved (overriding the config's value).
+
         app = obj.MainApp;
         keepZ = obj.KeepZCheckbox.Value;
-        defaultParamPath = "StandardConfigs\Phantom S711 37kHz retinal analysis.json";
 
+        % --- Backup current UI parameters ---
         originalParams = app.HD.params;
 
+        % --- Select config file ---
+        figureHandle = obj.Figure;
+        figure(figureHandle);
+        [filename, pathname] = uigetfile('*.json', 'Select config file to apply');
+        figure(figureHandle);
+
+        if isequal(filename, 0)
+            return;
+        end
+
+        chosenConfigPath = fullfile(pathname, filename);
+
+        % --- Load the chosen config ---
+        try
+            chosenParams = jsondecode(fileread(chosenConfigPath));
+        catch ME
+            uialert(obj.Figure, ...
+                sprintf('Failed to read the config file:\n%s', ME.message), ...
+            'Invalid Config File');
+            return;
+        end
+
+        % --- Apply to each file ---
         for i = 1:length(obj.drawerList)
             filePath = obj.drawerList{i};
-            [dirName, name] = fileparts(filePath);
-            existing = dir(fullfile(dirName, sprintf('%s_input_HD_params_*.json', name)));
 
-            if isempty(existing) && ~isempty(defaultParamPath)
-                app.HD.loadParams(defaultParamPath);
-                app.HD.saveParams(filePath, keepZ);
-            else
-                app.HD.saveParams(filePath, keepZ);
+            % Start from a copy of the chosen parameters
+            paramsToSave = chosenParams;
+
+            % If keepZ is checked, override spatialPropagation with the file's own distance
+            if keepZ
+                originalZ = getOriginalPropagationDistance(filePath);
+
+                if ~isnan(originalZ)
+                    paramsToSave.spatialPropagation = originalZ;
+                end
+
             end
 
-            fprintf('Saved config for: %s\n', filePath);
+            % Temporarily set the app's params for saveParams to work with
+            app.HD.params = paramsToSave;
+            app.HD.saveParams(filePath, keepZ);
+            fprintf('Config saved for: %s\n', filePath);
         end
 
+        % --- Restore original UI state ---
         app.HD.params = originalParams;
-    end
-
-    function fileList = buildDrawerFileList(obj)
-        % BUILDRAWERFILELIST   Retrieve config files for each drawer entry
-        fileList = cell(size(obj.drawerList));
-
-        for i = 1:length(obj.drawerList)
-            [config_list, path_list] = get_config_files(obj.drawerList{i});
-
-            if ~isempty(config_list)
-                fileList{i} = {obj.drawerList{i}, config_list, path_list};
-            end
-
-        end
-
     end
 
     function renderVideos(obj)
         app = obj.MainApp;
-        fileList = obj.buildDrawerFileList(); % external helper function
 
-        if ~isempty(fileList) && ~isempty(fileList{1}) && ~isempty(fileList{1}{2})
-            firstParams = fileList{1}{2}{1};
-            numWorkers = firstParams.parforArg;
-        else
-            numWorkers = 0;
+        % ----- Gestion de la pool (inchangée) -----
+        numWorkers = 0;
+        cluster = parcluster;
+        maxWorkers = cluster.NumWorkers;
+
+        if ~isempty(app.HD.params) && isfield(app.HD.params, 'parforArg')
+            numWorkers = app.HD.params.parforArg;
         end
 
-        if numWorkers > 0
+        if numWorkers <= 0
+            numWorkers = max(1, maxWorkers - 2);
+        else
 
-            if isempty(app.HD.poolManager)
-                app.HD.poolManager = ParallelPoolManager(numWorkers);
+            if numWorkers > maxWorkers
+                warning('Ajustement workers...');
+                numWorkers = maxWorkers;
             end
 
-            app.HD.poolManager.acquire();
-            cleanupPool = onCleanup(@() app.HD.poolManager.release());
-
-            pool = app.HD.poolManager.Pool;
-            fprintf("Processing %d files with %d workers ...\n", ...
-                length(fileList), pool.NumWorkers);
-        else
-            fprintf("Processing %d files in serial mode...\n", length(fileList));
         end
 
-        % === Traitement des fichiers ===
-        for i = 1:length(fileList)
-            entry = fileList{i};
+        if isempty(app.HD.poolManager)
+            app.HD.poolManager = ParallelPoolManager(numWorkers);
+        end
 
-            if ~isempty(entry) && ~isempty(entry{2})
+        app.HD.poolManager.acquire();
+        cleanupPool = onCleanup(@() app.HD.poolManager.release());
 
-                for j = 1:length(entry{2})
-                    app.HD.LoadFile(entry{1}, params = entry{2}{j});
-                    app.HD.VideoRendering();
-                    fprintf("Completed: %s [%d/%d]\n", entry{1}, j, length(entry{2}));
-                end
+        fprintf("Traitement de %d fichiers...\n", length(obj.drawerList));
 
+        for i = 1:length(obj.drawerList)
+            filePath = obj.drawerList{i};
+
+            try
+                % 1) Charger le fichier (paramètres déterminés par getFileParameters via LoadFile)
+                app.HD.LoadFile(filePath);
+
+                % 2) Lancer le rendu
+                app.HD.VideoRendering();
+                fprintf("Terminé : %s\n", filePath);
+            catch ME
+                warning('Échec pour %s : %s', filePath, ME.message);
             end
 
         end
@@ -416,27 +460,66 @@ methods (Access = private)
     end
 
     function deleteAllConfigs(obj)
-        fileList = obj.buildDrawerFileList(); % external helper function
         n = 0;
 
-        for i = 1:length(fileList)
-            entry = fileList{i};
+        for i = 1:length(obj.drawerList)
+            filePath = obj.drawerList{i};
+            [dirName, name] = fileparts(filePath);
+            baseOutputDir = fullfile(dirName, name);
 
-            if ~isempty(entry) && ~isempty(entry{3})
+            % First config file (the main one)
+            configFile1 = fullfile(baseOutputDir, sprintf('%s_input_HD_params.json', name));
 
-                for j = 1:length(entry{3})
-                    delete(entry{3}{j});
-                    n = n + 1;
-                end
+            if isfile(configFile1)
+                delete(configFile1);
+                n = n + 1;
+            end
 
+            % Second config file (inside the <name>_HD subfolder)
+            configFile2 = fullfile(baseOutputDir, sprintf('%s_HD', name), ...
+                sprintf('%s_HD_input_HD_params.json', name));
+
+            if isfile(configFile2)
+                delete(configFile2);
+                n = n + 1;
             end
 
         end
 
-        fprintf('Deleted %d config files for %d entries\n', n, length(fileList));
-
+        fprintf('Deleted %d config files for %d entries\n', n, length(obj.drawerList));
     end
 
+end
+
+end
+
+% -------------------------------------------------------------------------
+% Helper: read the propagation distance directly from the raw file metadata
+% -------------------------------------------------------------------------
+function z = getOriginalPropagationDistance(filePath)
+[~, ~, ext] = fileparts(filePath);
+z = NaN;
+
+switch lower(ext)
+    case '.holo'
+
+        try
+            reader = HoloReader(filePath);
+            % Same threshold as in getFileParameters
+            if reader.version >= 5
+                z = reader.footer.compute_settings.image_rendering.propagation_distance;
+            end
+
+            clear reader;
+        catch
+            % Leave as NaN if anything fails
+        end
+
+    case '.cine'
+        % .cine files usually have no built-in propagation distance;
+        % we leave it as NaN so the config's value is kept.
+    otherwise
+        % Unsupported extension – do nothing
 end
 
 end

@@ -50,6 +50,11 @@ properties
     % --- Frequency buckets ----------------------------------------------
     buckets
     full_buckets
+
+    % High and low frequency images
+    HF_M0
+    LF_M0
+    Sum_Image
 end
 
 % -----------------------------------------------------------------------
@@ -68,9 +73,9 @@ methods
         obj.power_adapt = ImageType('power_adapt');
 
         % Moments
-        obj.moment_0 = ImageType('M0');
-        obj.moment_1 = ImageType('M1');
-        obj.moment_2 = ImageType('M2');
+        obj.moment_0 = ImageType('M0'); % .raw
+        obj.moment_1 = ImageType('M1'); % .raw
+        obj.moment_2 = ImageType('M2'); % .raw
         obj.arg_0 = ImageType('arg0');
         obj.f_RMS = ImageType('f_RMS');
 
@@ -95,6 +100,11 @@ methods
         obj.buckets = ImageType('buckets', struct('intervals_0', [], 'intervals_1', [], ...
             'intervals_2', [], 'M0', []));
         obj.full_buckets = ImageType('full_buckets', struct('SH_full', []));
+
+        % High and low frequency images
+        obj.HF_M0 = ImageType('HF_M0'); % .raw
+        obj.LF_M0 = ImageType('LF_M0'); % .raw
+        obj.Sum_Image = ImageType('Sum_Image');
     end
 
     % ------------------------------------------------------------------
@@ -176,8 +186,8 @@ methods
 
         f1 = Params.frequencyRange1;
         f2 = Params.frequencyRange2;
-        fi1 = Params.frequencyRangeInter1;
-        fi2 = Params.frequencyRangeInter2;
+        fr1 = Params.frequencyRangeBandRatio1;
+        fr2 = Params.frequencyRangeBandRatio2;
         [Nx, Ny, batchSize] = size(SHin);
         fs = Params.fs;
         gw = Params.flatfield_gw;
@@ -191,7 +201,7 @@ methods
             largeMask = repmat(outsideMask, [1 1 batchSize]);
             SH_outside = SH_mod;
             SH_outside(~largeMask) = NaN;
-            SH_mod = SH_mod - mean(SH_outside, [1 2], 'omitnan');
+            SH_mod = SH_mod ./ mean(SH_outside, [1 2], 'omitnan');
         end
 
         % --- Power Doppler variants ------------------------------------
@@ -220,9 +230,8 @@ methods
 
         % --- Color / directional Doppler --------------------------------
         if obj.color_Doppler.is_selected
-            f3 = obj.midOrExtra(fi1, fi2, Params.frequencyRange_extra);
             M0 = moment0(SH_mod, f1, f2, fs, batchSize, gw);
-            [M0_low, M0_high] = composite(SH_mod, f1, f3, f2, fs, batchSize, gw);
+            [M0_low, M0_high] = composite(SH_mod, f1, fr2, f2, fs, batchSize, gw);
             obj.color_Doppler.image = construct_colored_image(M0, M0_low, M0_high);
         end
 
@@ -269,17 +278,30 @@ methods
             obj.f_RMS.image = sqrt(M2 ./ mean(M0, [1, 2]));
         end
 
+        if obj.HF_M0.is_selected
+            obj.HF_M0.image = moment0(SH_mod, fr2, f2, fs, batchSize);
+        end
+
+        if obj.LF_M0.is_selected
+            obj.LF_M0.image = moment0(SH_mod, fr1, fr2, fs, batchSize);
+        end
+
+        if obj.Sum_Image.is_selected
+            obj.Sum_Image.image = energy_ratio(SH_mod, fr1, f2, fr2, fr2, fs, batchSize) + ...
+                moment0(SH_mod, f1, f2, fs, batchSize);
+        end
+
         % --- Spectral statistics ---------------------------------------
         if obj.cumulative_distribution.is_selected
             obj.cumulative_distribution.image = cdf(SH_mod, f1, f2, fs, 0.5, batchSize);
         end
 
         if obj.band_ratio.is_selected
-            obj.band_ratio.image = energy_ratio(SH_mod, f1, f2, fi1, fi2, fs, batchSize);
+            obj.band_ratio.image = energy_ratio(SH_mod, fr1, f2, fr2, fr2, fs, batchSize);
         end
 
         if obj.color_band_ratio.is_selected
-            obj.color_band_ratio.image = color_energy_ratio(SH_mod, f1, f2, fi1, fi2, fs, batchSize, gw);
+            obj.color_band_ratio.image = color_energy_ratio(SH_mod, f1, f2, fr1, fr2, fs, batchSize, gw);
         end
 
         if obj.entropy.is_selected
@@ -307,7 +329,7 @@ methods
 
         if isempty(FHin), return, end
 
-        isAngular = strcmp(Params.spatialTransformation, 'angular spectrum');
+        isAngular = strcmp(Params.spatialTransform, 'angular spectrum');
 
         if obj.FH_modulus_mean.is_selected
             m = mean(abs(FHin), 3);
@@ -373,17 +395,6 @@ methods (Access = private)
             targets = fieldnames(obj);
         else
             targets = args;
-        end
-
-    end
-
-    % ------------------------------------------------------------------
-    function f3 = midOrExtra(~, f1, f2, extra)
-
-        if extra < 0
-            f3 = (f1 + f2) / 2;
-        else
-            f3 = extra;
         end
 
     end

@@ -20,7 +20,7 @@ else
 
 end
 
-% if strcmp(cache.spatialTransformation, 'Fresnel') && (numX ~= numY)
+% if strcmp(cache.spatialTransform, 'Fresnel') && (numX ~= numY)
 %
 % end
 image = imresize3(image, [max(numX, numY) max(numX, numY), 3]);
