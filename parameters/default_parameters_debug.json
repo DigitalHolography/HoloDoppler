@@ -17,8 +17,9 @@
   "wavelength": 8.52e-7,
   "pixel_pitch": [2e-5,2e-5],
   "spatial_propagation": "Fresnel",
+  "Fresnel_use_ouput_kernel": false,
   "zero_padding": false,
-  "z": "use_holovibes",
+  "z": 0.447,
   "shack_hartmann": true,
   "shack_hartmann_accumulation": 1,
   "shack_hartmann_svd_threshold": 10,
@@ -47,5 +48,5 @@
   "flip_x": false,
   "flip_y": false,
   
-  "debug" : false
+  "debug" : true
 }

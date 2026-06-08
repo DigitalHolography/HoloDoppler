@@ -245,7 +245,7 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
         if prop_method == "Fresnel":
             holograms = fresnel_transform_with_phase(
                 xp, fft, frames_sub, parameters["z"], parameters["pixel_pitch"], parameters["wavelength"],
-                phase_term, zero_padding=zero_pad
+                phase_term, zero_padding=zero_pad, use_output_kernel=parameters["Fresnel_use_ouput_kernel"]
             )
         elif prop_method == "AngularSpectrum":
             holograms = angular_spectrum_transform_with_phase(
@@ -256,7 +256,7 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
         if prop_method == "Fresnel":
             holograms = fresnel_transform(
                 xp, fft, frames_sub, parameters["z"], parameters["pixel_pitch"], parameters["wavelength"],
-                zero_padding=zero_pad
+                zero_padding=zero_pad, use_output_kernel=parameters["Fresnel_use_ouput_kernel"]
             )
         elif prop_method == "AngularSpectrum":
             holograms = angular_spectrum_transform(
@@ -304,7 +304,7 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
     # Debug-only recomputation without phase fix
     if compute_debug and phase_term is not None:
         if prop_method == "Fresnel":
-            holo_nofix = fresnel_transform(xp, fft, frames_sub, parameters["z"], parameters["pixel_pitch"], parameters["wavelength"], zero_padding=zero_pad)
+            holo_nofix = fresnel_transform(xp, fft, frames_sub, parameters["z"], parameters["pixel_pitch"], parameters["wavelength"], zero_padding=zero_pad, use_output_kernel=parameters["Fresnel_use_ouput_kernel"])
         elif prop_method == "AngularSpectrum":
             holo_nofix = angular_spectrum_transform(xp, fft, frames_sub, parameters["z"], parameters["pixel_pitch"], parameters["wavelength"], zero_padding=zero_pad)
         holo_nofix_f = svd_filter(xp, holo_nofix, parameters["svd_threshold"], filter_mode=parameters["svd_filter_mode"], remove_dc=parameters["svd_remove_dc"])
