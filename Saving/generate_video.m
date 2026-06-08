@@ -81,9 +81,9 @@ end
 if opt.enhance_contrast
     % Apply percentile-based stretch per frame (avoids flashes)
     for f = 1:size(video, 4)
-        frame = video(:, :, :, f);
+        frame = rescale(video(:, :, :, f));
         % Use a very low low-percentile to keep dark parts bright
-        low_high = stretchlim(frame, [0.001 0.999]); % ignore 0.1 % extremes
+        low_high = stretchlim(frame, [0.0001 0.9999]); % ignore 0.01 % extremes
         video(:, :, :, f) = imadjust(frame, low_high, [0 1]);
     end
 
