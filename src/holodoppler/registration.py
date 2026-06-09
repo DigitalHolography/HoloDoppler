@@ -358,3 +358,33 @@ def apply_registration(
     )
 
     return out
+
+def apply_registration3D(
+    xp,
+    fft,
+    ndi,
+    img3D,
+    reg,
+    integer_translation=False,
+    translation_method=None,
+):
+    """
+    Apply a registration tuple to every image of a 3D image.
+
+    reg can be:
+        (shift_y, shift_x)
+        (shift_y, shift_x, angle_deg, scale)
+    """
+    if len(reg) == 2:
+        shift_y, shift_x = reg
+        angle_deg = 0.0
+        scale = 1.0
+    elif len(reg) == 4:
+        shift_y, shift_x, angle_deg, scale = reg
+    else:
+        raise ValueError("reg must have 2 or 4 elements.")
+
+    for i in range(img3D.shape[0]):
+        img3D[i] = apply_registration(xp,fft,ndi,img3D[i],reg,integer_translation=integer_translation,translation_method=translation_method)
+
+    return img3D

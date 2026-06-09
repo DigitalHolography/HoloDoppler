@@ -599,3 +599,20 @@ def unsharp_projection(
 
     projection = acc / nt
     return xp.asnumpy(projection)
+    
+# ------------------------------------------------------------------
+# Footer parameter update
+# ------------------------------------------------------------------
+def update_from_footer(parameters, holofooter):
+    try:
+        if parameters.get("wavelength") == "use_holovibes" and holofooter is not None:
+            parameters["wavelength"] = holofooter["compute_settings"]["image_rendering"]["lambda"]
+        if parameters.get("z") == "use_holovibes" and holofooter is not None:
+            parameters["z"] = holofooter["compute_settings"]["image_rendering"]["propagation_distance"]
+        if parameters.get("pixel_pitch") == "use_holovibes" and holofooter is not None:
+            parameters["pixel_pitch"] = (holofooter["info"]["pixel_pitch"]["y"], holofooter["info"]["pixel_pitch"]["x"])
+        if parameters.get("sampling_freq") == "use_holovibes" and holofooter is not None:
+            parameters["sampling_freq"] = holofooter["info"]["camera_fps"]
+    except Exception as e:
+        print(f"Issue from holovibes footer: {e}")
+    return parameters
