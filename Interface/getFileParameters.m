@@ -97,8 +97,6 @@ switch fileInfo.ext
         params.spatialPropagation = 1.13;
 end
 
-params.frequencyRange2 = fileInfo.fs / 2;
-
 % ----- 3) Global standard configuration -----
 stdConfigFile = fullfile(appRoot, 'StandardConfigs', 'CurrentDefault.txt');
 

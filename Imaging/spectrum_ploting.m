@@ -55,6 +55,8 @@ end
 fontsize(gca, 12, "points");
 xlabel('frequency (kHz)', 'FontSize', 14);
 ylabel('log10 S', 'FontSize', 14);
+grid on
+axis on
 box on
 pbaspect([1.618 1 1]);
 set(gca, 'LineWidth', 2);
