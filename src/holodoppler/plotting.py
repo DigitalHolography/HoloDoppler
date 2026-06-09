@@ -151,12 +151,13 @@ class SpectrumPlotter:
     
     def __init__(self, fs, f1, f2, title="Spectrum",
                  figsize=(8, 6), dpi=400, show_bands=True,
-                 ylim=None, use_stem=False):
+                 ylim=None, freqs_log=False, use_stem=False):
         self.fs = fs
         self.f1 = f1
         self.f2 = f2
         self.show_bands = show_bands
         self.ylim = ylim
+        self.freqs_log = freqs_log
         self.use_stem = use_stem
         self.title = title
 
@@ -221,6 +222,44 @@ class SpectrumPlotter:
     
     def close(self):
         self.fig.clear()
+
+class SpectrumPlotterLogLog:
+    """Simple spectrum plotter with log-log scale (positive frequencies only)"""
+    
+    def __init__(self, fs, title="Spectrum", dpi=100, figsize=(8, 6)):
+        self.fs = fs
+        self.title = title
+        self.fig, self.canvas, self.ax = _make_agg_figure(figsize, dpi)
+    
+    def plot(self, spectrum_line):
+        if cp is not None and isinstance(spectrum_line, cp.ndarray):
+            spectrum_line = cp.asnumpy(spectrum_line)
+        spectrum_line = np.asarray(spectrum_line).copy()
+        
+        # Positive frequencies only
+        freqs = np.fft.fftfreq(len(spectrum_line), d=1/self.fs)
+        pos_mask = freqs > 0
+        freqs_pos = freqs[pos_mask]
+        spectrum_pos = spectrum_line[pos_mask]
+        
+        # Log-log plot
+        self.ax.clear()
+        self.ax.loglog(freqs_pos, spectrum_pos, color="black", linewidth=1)
+        
+        self.ax.set_title(self.title)
+        self.ax.set_xlabel("Frequency (Hz)")
+        self.ax.set_ylabel("Magnitude")
+        self.ax.grid(True, linestyle="--", alpha=0.5)
+        
+        self.fig.tight_layout()
+
+        self.canvas.draw()
+        img = np.asarray(self.canvas.buffer_rgba()).copy()
+        return img[..., :3]
+        # return self.fig
+    
+    def close(self):
+        plt.close(self.fig)
         
 
 class CalibrationSpectrumPlotter:
@@ -601,6 +640,7 @@ class DebugPlotterManager:
             "phase_rel": PhasePlotter(relative=True),
             "M0notfixed": ImagePlotter(),
             "M0ffnoreg": ImagePlotter(),
+            "spectrumloglog": SpectrumPlotterLogLog(parameters["sampling_freq"]),
             "spectrum": SpectrumPlotter(
                 fs=parameters["sampling_freq"],
                 f1=parameters["low_freq"],
@@ -632,6 +672,7 @@ class DebugPlotterManager:
             "M0notfixed": lambda res: (res["M0notfixed"],),
             "M0ffnoreg": lambda res: (res["M0_ff_noreg"],),
             "spectrum": lambda res: (res["spectrum_line"],),
+            "spectrumloglog": lambda res: (res["spectrum_line"],),
             "calibration_spectrum": lambda res: (res["calibration_spectrum_line"],),
             "average_signal" : lambda res: (res["average_signal"],),
             "SVD_filtered_features": lambda res: (res["svd_U"],),

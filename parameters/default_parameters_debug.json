@@ -37,7 +37,7 @@
   "low_freq": 6000,
   "high_freq": 18300,
   "frequency_bands": [],
-  "svd_threshold": 0.5e20,
+  "svd_threshold": 0,
   
   "svd_filter_mode": "amplitude_threshold",
   "svd_remove_dc": true,
@@ -47,5 +47,5 @@
   "flip_x": false,
   "flip_y": false,
   
-  "debug" : false
+  "debug" : true
 }
