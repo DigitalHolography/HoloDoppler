@@ -39,7 +39,7 @@
   "frequency_bands": [],
   "svd_threshold": 0,
   
-  "svd_filter_mode": "amplitude_threshold",
+  "svd_filter_mode": "number_of_values",
   "svd_remove_dc": true,
   
   "square": true,
@@ -47,5 +47,6 @@
   "flip_x": false,
   "flip_y": false,
   
-  "debug" : true
+  "debug" : false,
+  "tictoc" : false
 }

@@ -403,8 +403,10 @@ def update_from_footer(parameters, holofooter):
 # ------------------------------------------------------------------
 # Preview (single batch)
 # ------------------------------------------------------------------
-def preview_process_moments(file_path, parameters, tictoc=True):
+def preview_process_moments(file_path, parameters):
     total_time_start()
+
+    tictoc = parameters["tictoc"]
 
 
     bm = BackendManager(backend=parameters["backend"])
@@ -481,7 +483,9 @@ def preview_process_moments(file_path, parameters, tictoc=True):
 # ------------------------------------------------------------------
 # Full video processing
 # ------------------------------------------------------------------
-def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, holodoppler_path=True, tictoc=True):
+def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, holodoppler_path=True):
+    tictoc = parameters["tictoc"]
+
     total_time_start()
     bm = BackendManager(backend=parameters["backend"])
     file_reader = FileReaderFactory.create(file_path)

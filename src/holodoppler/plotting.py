@@ -228,13 +228,14 @@ class SpectrumPlotter:
 class SpectrumPlotterLogLog:
     """Simple spectrum plotter with log-log scale (positive frequencies only)"""
     
-    def __init__(self, fs, title="Spectrum", dpi=100, figsize=(8, 6), is_magnitude_squared=True, fit_f1=None, fit_f2=None):
+    def __init__(self, fs, title="Spectrum", dpi=100, figsize=(8, 6), is_magnitude_squared=True, fit_f1=None, fit_f2=None, ylim=None):
         self.fs = fs
         self.title = title
         self.is_magnitude_squared = is_magnitude_squared
         self.fig, self.canvas, self.ax = _make_agg_figure(figsize, dpi)
         self.fit_f1 = fit_f1
         self.fit_f2 = fit_f2
+        self.ylim = ylim
     
     def plot(self, spectrum_line):
         if cp is not None and isinstance(spectrum_line, cp.ndarray):
@@ -253,6 +254,9 @@ class SpectrumPlotterLogLog:
         # Log-log plot
         self.ax.clear()
         self.ax.loglog(freqs_pos, spectrum_pos, color="black", linewidth=1, label="Spectrum")
+
+        if self.ylim is not None:
+            self.ax.set_ylim(self.ylim)
         
         # Fit a line in log-log space if frequency range is specified
         if fit_f1 is not None and fit_f2 is not None:
@@ -275,18 +279,19 @@ class SpectrumPlotterLogLog:
                              color="red", linestyle="--", linewidth=1.5,
                              label=f"Fit: slope={slope:.2f}, offset={intercept:.2f}")
                 
-                # Add text annotation with proper units
-                if self.is_magnitude_squared:
-                    units = "dB (mag²)/decade"
-                    offset_units = "dB (mag²)"
-                else:
-                    units = "dB/decade"
-                    offset_units = "dB"
                 
-                text = f"slope: {slope:.2f} {units}\noffset: {intercept:.2f} {offset_units}"
-                self.ax.text(0.05, 0.95, text, transform=self.ax.transAxes,
-                           verticalalignment='top', bbox=dict(boxstyle='round', 
-                           facecolor='white', alpha=0.8), fontsize=8)
+                # # Add text annotation with proper units
+                # if self.is_magnitude_squared:
+                #     units = "dB (mag²)/decade"
+                #     offset_units = "dB (mag²)"
+                # else:
+                #     units = "dB/decade"
+                #     offset_units = "dB"
+                
+                # text = f"slope: {slope:.2f} {units}\noffset: {intercept:.2f} {offset_units}"
+                # self.ax.text(0.05, 0.95, text, transform=self.ax.transAxes,
+                #            verticalalignment='top', bbox=dict(boxstyle='round', 
+                #            facecolor='white', alpha=0.8), fontsize=8)
         
         # Set ylabel based on is_magnitude_squared flag
         if self.is_magnitude_squared:
@@ -688,7 +693,7 @@ class DebugPlotterManager:
             "phase_rel": PhasePlotter(relative=True),
             "M0notfixed": ImagePlotter(),
             "M0ffnoreg": ImagePlotter(),
-            "spectrumloglog": SpectrumPlotterLogLog(parameters["sampling_freq"], fit_f1=1000,fit_f2=15000),
+            "spectrumloglog": SpectrumPlotterLogLog(parameters["sampling_freq"], fit_f1=1000,fit_f2=15000, ylim=(1e12, 1e16),),
             "spectrum": SpectrumPlotter(
                 fs=parameters["sampling_freq"],
                 f1=parameters["low_freq"],

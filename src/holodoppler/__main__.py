@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import sys
 
 from holodoppler.cli import main as cli_main
