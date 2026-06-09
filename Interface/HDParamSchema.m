@@ -236,8 +236,8 @@ methods (Static, Access = private)
         s(end + 1) = HDParamSchema.entry('parforArg', 'parforArg', 'numeric', 10, -1, []);
 
         % ---- batch ---------------------------------------------------
-        s(end + 1) = HDParamSchema.entry('batchSize', 'batchSize', 'numeric', 512, 1, []);
-        s(end + 1) = HDParamSchema.entry('batchStride', 'batchStride', 'numeric', 512, 1, []);
+        s(end + 1) = HDParamSchema.entry('batchSize', 'batchSize', 'numeric', 256, 1, []);
+        s(end + 1) = HDParamSchema.entry('batchStride', 'batchStride', 'numeric', 256, 1, []);
         s(end + 1) = HDParamSchema.entry('refBatchSize', 'refBatchSize', 'numeric', 512, 1, []);
         s(end + 1) = HDParamSchema.entry('framePosition', 'framePosition', 'numeric', 1, 1, []);
         s(end + 1) = HDParamSchema.entry('first_frame', '', 'numeric', 1, 1, []);
@@ -245,10 +245,10 @@ methods (Static, Access = private)
 
         % ---- image types ---------------------------------------------
         s(end + 1) = HDParamSchema.entry('imageTypes', 'imageTypesListBox', 'listbox', ...
-            {{'power_Doppler', 'moment_0', 'moment_1', 'moment_2', 'band_ratio'}});
+            {{'power_Doppler', 'moment_0', 'moment_1', 'moment_2', 'HF_M0', 'LF_M0'}});
 
         % ---- registration --------------------------------------------
-        s(end + 1) = HDParamSchema.entry('imageRegistration', 'imageRegistration', 'checkbox', false);
+        s(end + 1) = HDParamSchema.entry('imageRegistration', 'imageRegistration', 'checkbox', true);
         s(end + 1) = HDParamSchema.entry('registrationDiskRatio', 'registrationDiskRatio', 'numeric', 0.8, 0, 1000);
         s(end + 1) = HDParamSchema.entry('autofocusRange1', 'autofocusRange1', 'numeric', 0, 0, []);
         s(end + 1) = HDParamSchema.entry('autofocusRange2', 'autofocusRange2', 'numeric', 1, 0, []);
@@ -263,13 +263,13 @@ methods (Static, Access = private)
 
         % ---- SVD -----------------------------------------------------
         s(end + 1) = HDParamSchema.entry('svd_filter', 'svd_filter', 'checkbox', true);
-        s(end + 1) = HDParamSchema.entry('svdThreshold', 'svdThreshold', 'numeric', 0, 0, []);
+        s(end + 1) = HDParamSchema.entry('svdThreshold', 'svdThreshold', 'numeric', 32, 0, []);
         s(end + 1) = HDParamSchema.entry('svdStride', 'svdStride', 'numeric', 1, 1, []);
 
         % ---- time transform ------------------------------------------
         s(end + 1) = HDParamSchema.entry('timeTransform', 'timeTransform', 'dropdown', 'FFT');
-        s(end + 1) = HDParamSchema.entry('frequencyRange1', 'frequencyRange1', 'numeric', 0, 0, []);
-        s(end + 1) = HDParamSchema.entry('frequencyRange2', 'frequencyRange2', 'numeric', 100, 0, []);
+        s(end + 1) = HDParamSchema.entry('frequencyRange1', 'frequencyRange1', 'numeric', 6, 0, []);
+        s(end + 1) = HDParamSchema.entry('frequencyRange2', 'frequencyRange2', 'numeric', 18, 0, []);
         s(end + 1) = HDParamSchema.entry('indexRange1', 'indexRange1', 'numeric', 1, 1, []);
         s(end + 1) = HDParamSchema.entry('indexRange2', 'indexRange2', 'numeric', 100, 1, []);
 
@@ -279,10 +279,10 @@ methods (Static, Access = private)
         s(end + 1) = HDParamSchema.entry('frequencyRangeBandRatio2', 'frequencyRangeBandRatio2', 'numeric', 9, 0, []);
 
         % ---- post-processing -----------------------------------------
-        s(end + 1) = HDParamSchema.entry('flatfield_gw', 'flat_field_gw', 'numeric', 0, 0, []);
+        s(end + 1) = HDParamSchema.entry('flatfield_gw', 'flat_field_gw', 'numeric', 35, 0, []);
         s(end + 1) = HDParamSchema.entry('flip_y', 'flip_y', 'checkbox', false);
-        s(end + 1) = HDParamSchema.entry('flip_x', 'flip_x', 'checkbox', false);
-        s(end + 1) = HDParamSchema.entry('square', 'square', 'checkbox', false);
+        s(end + 1) = HDParamSchema.entry('flip_x', 'flip_x', 'checkbox', true);
+        s(end + 1) = HDParamSchema.entry('square', 'square', 'checkbox', true);
         s(end + 1) = HDParamSchema.entry('ImproveContrast', 'ImproveContrast', 'checkbox', false);
         s(end + 1) = HDParamSchema.entry('CornerCompensation', 'CornerCompensation', 'checkbox', true);
 
