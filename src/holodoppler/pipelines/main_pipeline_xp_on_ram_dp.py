@@ -503,7 +503,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     first_frame = parameters["first_frame"]
     end_frame = parameters.get("end_frame", 0)
     if end_frame <= 0:
-        end_frame = file_reader.file_header["num_frames"] if file_reader.ext == ".holo" else file_reader.metadata["ImageCount"]
+        end_frame = file_reader.file_header["num_frames"] if file_reader.ext == ".holo" else file_reader.metadata_json["ImageCount"]
 
     if batch_stride >= (end_frame - first_frame):
         num_batch = 1 if batch_size <= (end_frame - first_frame) else 0
@@ -772,8 +772,8 @@ def _process_gpu_streaming_onram(bm, file_reader, parameters, num_batch, first_f
             if d_frames is None: break
 
     finally:
-        for key in accumulation.keys():
-            accumulation[key] /= num_batch
+        for key in out_accumulation.keys():
+            out_accumulation[key] /= num_batch
 
         stop_reader.set()
         reader_thread.join(timeout=5)

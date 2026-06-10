@@ -170,7 +170,7 @@ class SpectrumPlotter:
 
         spectrum_line = np.asarray(spectrum_line).copy()
         
-        print(spectrum_line[1])
+        # print(spectrum_line[1])
 
         freqs_full = np.fft.fftfreq(len(spectrum_line), d=1 / self.fs)
         freqs_full = np.fft.fftshift(freqs_full)
@@ -686,22 +686,23 @@ class DebugPlotterManager:
     """Manages debug plotters"""
     
     def __init__(self, parameters):
+        plot_params = parameters["debug_plot_parameters"]
         plotters = {
             "montage": SubapertureMontagePlotter(),
             "montagenormalized": SubapertureMontagePlotter(normalize_per_frame = True),
-            "shifts": ShiftsPlotter(scale=30),
+            "shifts": ShiftsPlotter(scale=plot_params["shifts"]["scale"]),
             "shifts_rel": ShiftsPlotter(scale=None),
             "phase": PhasePlotter(),
             "phase_rel": PhasePlotter(relative=True),
             "M0notfixed": ImagePlotter(),
             "M0ffnoreg": ImagePlotter(),
-            "spectrumloglog": SpectrumPlotterLogLog(parameters["sampling_freq"], fit_f1=1000,fit_f2=15000, ylim=(1e12, 1e16),),
+            "spectrumloglog": SpectrumPlotterLogLog(parameters["sampling_freq"], fit_f1=plot_params["spectrumloglog"]["fit_f1"],fit_f2=plot_params["spectrumloglog"]["fit_f2"], ylim=plot_params["spectrumloglog"]["ylim"],),
             "spectrum": SpectrumPlotter(
                 fs=parameters["sampling_freq"],
                 f1=parameters["low_freq"],
                 f2=parameters["high_freq"],
-                ylim=(-1, 20),
-                use_stem=False
+                ylim=plot_params["spectrum"]["ylim"],
+                use_stem=plot_params["spectrum"]["use_stem"]
             ),
             "calibration_spectrum": CalibrationSpectrumPlotter(
                 fs=parameters["sampling_freq"],
@@ -713,7 +714,7 @@ class DebugPlotterManager:
             "average_signal" : SignalPlotter(),
             "SVD_filtered_features" : SVDeigenvectorimages_plotter(),
             "SVD_M0_inversed_svd_filter" : ImagePlotter(),
-            "SVD_eigenvalues" : SVDeigenvalues_plotter(ylim=(1,1e25), log_plot=True),
+            "SVD_eigenvalues" : SVDeigenvalues_plotter(ylim=plot_params["SVD_eigenvalues"]["ylim"], log_plot=plot_params["SVD_eigenvalues"]["log_plot"]),
             "SVD_dc" : ImagePlotter(),
         }
         
