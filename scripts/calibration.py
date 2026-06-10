@@ -41,6 +41,8 @@ def calibration_calc_res(file_reader, parameters):
     
     N = frames.shape[0] * 1
     
+    # frames = np.ones_like(frames)
+    
     
     res["average_signal"] = np.mean(frames, axis=(-1,-2))
     
@@ -48,7 +50,7 @@ def calibration_calc_res(file_reader, parameters):
     
     psd = np.abs(ft) ** 2
     
-    res["calibration_spectrum_line"] = np.mean(psd, axis=(-1,-2))
+    res["spectrum_line"] = np.mean(psd, axis=(-1,-2))
     
     freqs = np.fft.fftfreq(N, 1 / parameters["sampling_freq"])
     
@@ -116,7 +118,7 @@ def _cmd(args):
     save_debug_images(debug_imgs, save_dir)
     
     filename = os.path.join(save_dir, f"{file_name}_spectrum_calibration.npy")
-    np.save(filename, res["calibration_spectrum_line"])
+    np.save(filename, res["spectrum_line"])
     
     return 0
 

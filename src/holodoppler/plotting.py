@@ -167,13 +167,15 @@ class SpectrumPlotter:
             spectrum_line = cp.asnumpy(spectrum_line)
 
         spectrum_line = np.asarray(spectrum_line).copy()
+        
+        print(spectrum_line[1])
 
         freqs_full = np.fft.fftfreq(len(spectrum_line), d=1 / self.fs)
         freqs_full = np.fft.fftshift(freqs_full)
         spectrum_line = np.fft.fftshift(spectrum_line)
 
-        spectrum_line[spectrum_line <= 0] = np.nan
-        signal_log = np.log10(spectrum_line)
+        spectrum_line[spectrum_line < 0] = np.nan
+        signal_log = np.log10(spectrum_line+1) # 1 is for 0db <=> inf
 
         self.ax.clear()
 
@@ -212,7 +214,7 @@ class SpectrumPlotter:
 
         self.ax.set_title(self.title)
         self.ax.set_xlabel("frequency (Hz)")
-        self.ax.set_ylabel("log10 S")
+        self.ax.set_ylabel("log_{10}(S)")
         self.ax.grid(True, linestyle="--", alpha=0.5)
 
         self.canvas.draw()
