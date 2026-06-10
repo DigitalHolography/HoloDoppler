@@ -8,7 +8,7 @@ from holodoppler.moments import moment
 from holodoppler.registration import *
 from holodoppler.plotting import *
 from holodoppler.backend import BackendManager
-from holodoppler.file_io import FileReaderFactory
+from holodoppler.file_io import FileReaderFactory, CineFileReader, HoloFileReader
 
 import os
 import time
@@ -96,7 +96,9 @@ apply_registration = track_time('apply_registration')(apply_registration)
 save_outputs = track_time('save_outputs')(save_outputs)
 zoom_slicewise_fast = track_time('zoom_slicewise_fast')(zoom_slicewise_fast)
 
-DebugPlotterManager.plot_all = track_time('debug_plot_all')(DebugPlotterManager.plot_all)
+DebugPlotterManager.plot_all = track_time('DebugPlotterManager.debug_plot_all')(DebugPlotterManager.plot_all)
+CineFileReader.read_frames = track_time('CineFileReader.read_frames')(CineFileReader.read_frames)
+HoloFileReader.read_frames = track_time('HoloFileReader.read_frames')(HoloFileReader.read_frames)
 
 # ------------------------------------------------------------------
 # Optimized Accumulator (In-place addition, no list stacking)
@@ -513,14 +515,14 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
         return None
 
     # Memmap support
-    if parameters.get("use_memmap", False) and hasattr(file_reader, "get_np_memmap"):
-        try:
-            memmap = file_reader.get_np_memmap()[first_frame:end_frame]
-        except Exception as e:
-            print(f"Memmap loading failed: {e}, falling back to regular reads.")
-            memmap = None
-    else:
-        memmap = None
+    # if parameters.get("use_memmap", False) and hasattr(file_reader, "get_np_memmap"):
+    #     try:
+    #         memmap = file_reader.get_np_memmap()[first_frame:end_frame]
+    #     except Exception as e:
+    #         print(f"Memmap loading failed: {e}, falling back to regular reads.")
+    #         memmap = None
+    # else:
+    #     memmap = None
 
     out_list = []
     out_accumulation = {}
