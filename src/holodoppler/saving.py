@@ -124,18 +124,25 @@ def _save_bundle(
                 "M0notfixed",
                 "montage",
                 "montagenormalized",
+                "psd_map_avg",
+                "SVD_M0_inversed_svd_filter"
             ]:
                 m = max(data.shape[-2], data.shape[-1])
                 data = resize_slicewise(data, m, m)
 
-            save_map[f"debug_{key}"] = data
+            if key == "psd_map_avg": # special treatement
+                for i in range(data.shape[0]):
+                    data[i] = normalize_to_uint8(data[i])
+
+            if data.ndim == 3 or data.ndim == 4:
+                save_map[f"debug_{key}"] = data
             
     # Projection  and unsharp mask imaging :
     from .backend import BackendManager
     bm = BackendManager(backend=parameters["backend"])
     # unsharped = {}
     for name, data in save_map.items():
-        if name in ["moment_0", "moment_1", "moment_2", "moment_0_ff"] or "frequency_bands" in name:
+        if name in ["moment_0", "moment_1", "moment_2", "moment_0_ff", "montage", "montagenormalized"] or "frequency_bands" in name:
             # print(data.shape)
             im = unsharp_projection(bm,data,(1024,1024),radius=2.0,amount=2.0)
             png_path = target_dir / "png" / f"{name}_unsharped.png"

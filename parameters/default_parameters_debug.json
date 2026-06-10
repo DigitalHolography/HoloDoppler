@@ -2,10 +2,10 @@
   "pipeline_name" : "moments_main_pipeline",
   "backend": "cupy",
   "batch_size": 256,
-  "batch_stride": 25600,
+  "batch_stride": 256,
   "accumulation": 1,
   "image_registration": true,
-  "image_registration_type": "",
+  "image_registration_type": "translation_rotation_scale",
   "registration_disc_ratio": 0.8,
   "registration_flatfield_gw": 35,
   "registration_gaussian_sigma": null,
@@ -38,15 +38,16 @@
   "low_freq": 6000,
   "high_freq": 18300,
   "frequency_bands": [],
-  "svd_threshold": 0.5e20,
-  
-  "svd_filter_mode": "amplitude_threshold",
+  "svd_threshold": 3,
+  "svd_filter_mode": "number_of_values",
   "svd_remove_dc": true,
+  "save_psd_avg": true,
   
   "square": true,
   "transpose": false,
   "flip_x": false,
   "flip_y": false,
   
-  "debug" : true
+  "debug" : false,
+  "tictoc" : false
 }

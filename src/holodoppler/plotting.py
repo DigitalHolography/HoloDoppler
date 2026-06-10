@@ -10,6 +10,7 @@ import numpy as np
 from scipy.signal import find_peaks
 from scipy import stats
 from .utils import normalize_image, complex_to_color
+from scipy import stats
 
 try:
     import cupy as cp
@@ -151,12 +152,13 @@ class SpectrumPlotter:
     
     def __init__(self, fs, f1, f2, title="Spectrum",
                  figsize=(8, 6), dpi=400, show_bands=True,
-                 ylim=None, use_stem=False):
+                 ylim=None, freqs_log=False, use_stem=False):
         self.fs = fs
         self.f1 = f1
         self.f2 = f2
         self.show_bands = show_bands
         self.ylim = ylim
+        self.freqs_log = freqs_log
         self.use_stem = use_stem
         self.title = title
 
@@ -223,6 +225,96 @@ class SpectrumPlotter:
     
     def close(self):
         self.fig.clear()
+
+
+class SpectrumPlotterLogLog:
+    """Simple spectrum plotter with log-log scale (positive frequencies only)"""
+    
+    def __init__(self, fs, title="Spectrum", dpi=100, figsize=(8, 6), is_magnitude_squared=True, fit_f1=None, fit_f2=None, ylim=None):
+        self.fs = fs
+        self.title = title
+        self.is_magnitude_squared = is_magnitude_squared
+        self.fig, self.canvas, self.ax = _make_agg_figure(figsize, dpi)
+        self.fit_f1 = fit_f1
+        self.fit_f2 = fit_f2
+        self.ylim = ylim
+    
+    def plot(self, spectrum_line):
+        if cp is not None and isinstance(spectrum_line, cp.ndarray):
+            spectrum_line = cp.asnumpy(spectrum_line)
+
+        fit_f1 = self.fit_f1
+        fit_f2 = self.fit_f2
+        spectrum_line = np.asarray(spectrum_line).copy()
+        
+        # Positive frequencies only
+        freqs = np.fft.fftfreq(len(spectrum_line), d=1/self.fs)
+        pos_mask = freqs > 0
+        freqs_pos = freqs[pos_mask]
+        spectrum_pos = spectrum_line[pos_mask]
+        
+        # Log-log plot
+        self.ax.clear()
+        self.ax.loglog(freqs_pos, spectrum_pos, color="black", linewidth=1, label="Spectrum")
+
+        if self.ylim is not None:
+            self.ax.set_ylim(self.ylim)
+        
+        # Fit a line in log-log space if frequency range is specified
+        if fit_f1 is not None and fit_f2 is not None:
+            fit_mask = (freqs_pos >= fit_f1) & (freqs_pos <= fit_f2)
+            freqs_fit = freqs_pos[fit_mask]
+            spectrum_fit = spectrum_pos[fit_mask]
+            
+            if len(freqs_fit) > 1:
+                # Convert to log space
+                log_freqs = np.log10(freqs_fit)
+                log_spectrum = np.log10(spectrum_fit)
+                
+                # Linear regression
+                slope, intercept, r_value, p_value, std_err = stats.linregress(log_freqs, log_spectrum)
+                
+                # Plot fit line
+                log_freqs_line = np.array([np.log10(fit_f1), np.log10(fit_f2)])
+                log_fit_line = intercept + slope * log_freqs_line
+                self.ax.loglog(10**log_freqs_line, 10**log_fit_line, 
+                             color="red", linestyle="--", linewidth=1.5,
+                             label=f"Fit: slope={slope:.2f}, offset={intercept:.2f}")
+                
+                
+                # # Add text annotation with proper units
+                # if self.is_magnitude_squared:
+                #     units = "dB (mag²)/decade"
+                #     offset_units = "dB (mag²)"
+                # else:
+                #     units = "dB/decade"
+                #     offset_units = "dB"
+                
+                # text = f"slope: {slope:.2f} {units}\noffset: {intercept:.2f} {offset_units}"
+                # self.ax.text(0.05, 0.95, text, transform=self.ax.transAxes,
+                #            verticalalignment='top', bbox=dict(boxstyle='round', 
+                #            facecolor='white', alpha=0.8), fontsize=8)
+        
+        # Set ylabel based on is_magnitude_squared flag
+        if self.is_magnitude_squared:
+            ylabel = "Magnitude²"
+        else:
+            ylabel = "Magnitude"
+        
+        self.ax.set_title(self.title)
+        self.ax.set_xlabel("Frequency (Hz)")
+        self.ax.set_ylabel(ylabel)
+        self.ax.grid(True, linestyle="--", alpha=0.5)
+        self.ax.legend(loc='upper right', fontsize=8)
+        
+        self.fig.tight_layout()
+
+        self.canvas.draw()
+        img = np.asarray(self.canvas.buffer_rgba()).copy()
+        return img[..., :3]
+    
+    def close(self):
+        plt.close(self.fig)
         
 
 class CalibrationSpectrumPlotter:
@@ -603,6 +695,7 @@ class DebugPlotterManager:
             "phase_rel": PhasePlotter(relative=True),
             "M0notfixed": ImagePlotter(),
             "M0ffnoreg": ImagePlotter(),
+            "spectrumloglog": SpectrumPlotterLogLog(parameters["sampling_freq"], fit_f1=1000,fit_f2=15000, ylim=(1e12, 1e16),),
             "spectrum": SpectrumPlotter(
                 fs=parameters["sampling_freq"],
                 f1=parameters["low_freq"],
@@ -634,6 +727,7 @@ class DebugPlotterManager:
             "M0notfixed": lambda res: (res["M0notfixed"],),
             "M0ffnoreg": lambda res: (res["M0_ff_noreg"],),
             "spectrum": lambda res: (res["spectrum_line"],),
+            "spectrumloglog": lambda res: (res["spectrum_line"],),
             "calibration_spectrum": lambda res: (res["calibration_spectrum_line"],),
             "average_signal" : lambda res: (res["average_signal"],),
             "SVD_filtered_features": lambda res: (res["svd_U"],),

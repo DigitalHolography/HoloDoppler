@@ -96,6 +96,8 @@ apply_registration = track_time('apply_registration')(apply_registration)
 save_outputs = track_time('save_outputs')(save_outputs)
 zoom_slicewise_fast = track_time('zoom_slicewise_fast')(zoom_slicewise_fast)
 
+DebugPlotterManager.plot_all = track_time('debug_plot_all')(DebugPlotterManager.plot_all)
+
 # ------------------------------------------------------------------
 # Optimized Accumulator (In-place addition, no list stacking)
 # ------------------------------------------------------------------
@@ -289,6 +291,9 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
     )
     psd = xp.abs(spectrum_f) ** 2
 
+    if compute_debug and parameters["save_psd_avg"]:
+        batch["psd"] = psd
+
     # Moments
     batch["M0"] = moment(xp, psd[idxs], freqs, 0)
     batch["M1"] = moment(xp, psd[idxs], freqs, 1)
@@ -314,17 +319,20 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
         del holo_nofix, holo_nofix_f, spec_nofix, psd_nofix
     
     # Debug-only recomputation without inversed svd_filtering
-    if compute_debug:
+    if compute_debug and holograms_fbar is not None:
         spec_fbar = fourier_time_transform(xp, fft, holograms_fbar)
         psd_fbar = xp.abs(spec_fbar[idxs]) ** 2
         batch["M0svdbar"] = moment(xp, psd_fbar, freqs, 0)
         del spec_fbar, psd_fbar
 
-    if compute_debug:
+    if compute_debug :
         batch["spectrum_line"] = xp.mean(psd, axis=(-1, -2))
         batch["freqs"] = freqs
+    if compute_debug and removedU is not None :
         batch["svd_U"] = removedU
+    if compute_debug and eigenvalues is not None :
         batch["eigenvalues"] = eigenvalues
+    if compute_debug and dc is not None :
         batch["svd_dc"] = dc
 
     return batch
@@ -336,6 +344,7 @@ def render_moments(bm, parameters, frames=None, registration_ref=None):
     xp = bm.xp
     nt, ny, nx = frames.shape
     res = {}
+    accu = {}
     compute_debug = parameters.get("debug", False)
 
     # --- Shack‑Hartmann phase correction ---
@@ -357,10 +366,14 @@ def render_moments(bm, parameters, frames=None, registration_ref=None):
         if out is not None:
             res.update(out)
         del frames_sub  # Reduce memory footprint
+    
+    if compute_debug and 'psd' in res:
+        accu["psd_map_avg"] = res.pop('psd') # transfer to the accu dict where results are accumulated through all iterations
+
 
     # --- Image registration ---
     if parameters.get("image_registration", False) and registration_ref is not None:
-        M0_ff = res["M0ff"]#gaussian_flatfield(res["M0"], parameters.get("registration_flatfield_gw", 1.0), bm.gaussian_filter)
+        M0_ff = res["M0ff"] #gaussian_flatfield(res["M0"], parameters.get("registration_flatfield_gw", 1.0), bm.gaussian_filter)
         if compute_debug:
             res["M0_ff_noreg"] = M0_ff
             
@@ -379,32 +392,23 @@ def render_moments(bm, parameters, frames=None, registration_ref=None):
             for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
                 key = f"band_{k}_{f1}_{f2}"
                 res[key] = apply_registration(xp, bm.fft, bm.ndi, res[key], reg, integer_translation=parameters.get("registration_integer_translation", False))
+            if "M0svdbar" in res:
+                res["M0svdbar"] = apply_registration(xp, bm.fft, bm.ndi, res["M0svdbar"], reg, integer_translation=parameters.get("registration_integer_translation", False))
+            if "psd_map_avg" in accu:
+                accu["psd_map_avg"] = apply_registration3D(xp, bm.fft, bm.ndi, accu["psd_map_avg"], reg, integer_translation=parameters.get("registration_integer_translation", False))
         res["registration"] = reg
 
-    return res
+    return res, accu
 
-# ------------------------------------------------------------------
-# Footer parameter update
-# ------------------------------------------------------------------
-def update_from_footer(parameters, holofooter):
-    try:
-        if parameters.get("wavelength") == "use_holovibes" and holofooter is not None:
-            parameters["wavelength"] = holofooter["compute_settings"]["image_rendering"]["lambda"]
-        if parameters.get("z") == "use_holovibes" and holofooter is not None:
-            parameters["z"] = holofooter["compute_settings"]["image_rendering"]["propagation_distance"]
-        if parameters.get("pixel_pitch") == "use_holovibes" and holofooter is not None:
-            parameters["pixel_pitch"] = (holofooter["info"]["pixel_pitch"]["y"], holofooter["info"]["pixel_pitch"]["x"])
-        if parameters.get("sampling_freq") == "use_holovibes" and holofooter is not None:
-            parameters["sampling_freq"] = holofooter["info"]["camera_fps"]
-    except Exception as e:
-        print(f"Issue from holovibes footer: {e}")
-    return parameters
+
 
 # ------------------------------------------------------------------
 # Preview (single batch)
 # ------------------------------------------------------------------
-def preview_process_moments(file_path, parameters, tictoc=True):
+def preview_process_moments(file_path, parameters):
     total_time_start()
+
+    tictoc = parameters["tictoc"]
 
 
     bm = BackendManager(backend=parameters["backend"])
@@ -420,7 +424,7 @@ def preview_process_moments(file_path, parameters, tictoc=True):
     first_frame = parameters["first_frame"]
     frames = file_reader.read_frames(first_frame, batch_size)
     frames = bm.to_backend(frames)
-    res = render_moments(bm, parameters, frames=frames)
+    res, accu = render_moments(bm, parameters, frames=frames)
     file_reader.close()
 
     def save_debug_images(debug_dict, save_dir, prefix="debug"):
@@ -481,7 +485,9 @@ def preview_process_moments(file_path, parameters, tictoc=True):
 # ------------------------------------------------------------------
 # Full video processing
 # ------------------------------------------------------------------
-def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, holodoppler_path=True, tictoc=True):
+def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, holodoppler_path=True):
+    tictoc = parameters["tictoc"]
+
     total_time_start()
     bm = BackendManager(backend=parameters["backend"])
     file_reader = FileReaderFactory.create(file_path)
@@ -517,11 +523,14 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
         memmap = None
 
     out_list = []
+    out_accumulation = {}
     coefs_list = [None] * num_batch if parameters.get("shack_hartmann") else None
     reg_list = [None] * num_batch if parameters.get("image_registration") else None
 
     compute_debug = parameters.get("debug", False)
     debug_manager = DebugPlotterManager(parameters) if compute_debug else None
+
+    
     debug_queue = queue.Queue(maxsize=14) if debug_manager else None
     res_store = {} if debug_manager else None
     lock = threading.Lock() if debug_manager else None
@@ -529,6 +538,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     debug_results = {}
 
     if debug_manager:
+        debug_manager.plot_all = track_time("debug_manager_plot_all")(debug_manager.plot_all)
         def plotting_worker():
             while not stop_event.is_set() or not debug_queue.empty():
                 try:
@@ -551,29 +561,19 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     if parameters.get("image_registration"):
         frames_reg = file_reader.read_frames(first_frame, parameters.get("batch_size_registration", batch_size))
         frames_reg = bm.to_backend(frames_reg)
-        M0_reg = render_moments(bm, parameters, frames=frames_reg)["M0ff"]
+        M0_reg = render_moments(bm, parameters, frames=frames_reg)[0]["M0ff"]
         # M0_reg = gaussian_flatfield(M0_reg, parameters.get("registration_flatfield_gw", 1.0), bm.gaussian_filter)
 
     bm.clear_gpu_memory()
     bm.print_gpu_used_memory()
 
     # Dispatch to backend-specific loop
-    if memmap is not None:
-        _process_memmap(bm, memmap, parameters, num_batch, first_frame, batch_stride, batch_size,
-                        M0_reg, out_list, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock)
-    elif parameters["backend"] == "cupy":
-        _process_gpu_streaming(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
-                               M0_reg, out_list, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock)
-    elif parameters["backend"] == "cupyRAM":
+    if parameters["backend"] == "cupyRAM":
         _process_gpu_streaming_onram(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
-                                     M0_reg, out_list, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock)
-    elif parameters["backend"] == "cupyRAMmultistream":
-        _process_gpu_streaming_onram_multistream(bm, file_reader, parameters, num_batch, first_frame, batch_stride,
-                                                 batch_size, M0_reg, out_list, coefs_list, reg_list,
-                                                 debug_manager, debug_queue, res_store, lock, end_frame)
+                                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock)
     else:
         _process_cpu(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
-                     M0_reg, out_list, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock)
+                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock)
 
     file_reader.close()
 
@@ -584,7 +584,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
         reg_list = [bm.to_numpy(r) for r in reg_list]
     
     @track_time("collecting")
-    def collecting(bm,out_list,debug_manager,debug_queue,stop_event,debug_thread,coefs_list,reg_list,compute_debug,debug_results,num_batch,parameters):
+    def collecting(bm,out_list,out_accumulation,debug_manager,debug_queue,stop_event,debug_thread,coefs_list,reg_list,compute_debug,debug_results,num_batch,parameters):
 
         # Post-processing
         # t0 = time.time()
@@ -615,10 +615,14 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
                     vid_debug[key] = np.stack([bm.to_numpy(debug_results[k][key]) for k in range(num_batch)], axis=0)
                 except Exception as e:
                     print(f"Couldn't stack debug output {key}: ", e)
+        if compute_debug and out_accumulation:
+            for key in out_accumulation.keys():
+                if out_accumulation[key].ndim == 3:
+                    vid_debug[key] = bm.to_numpy(out_accumulation[key])
         # print(f"vid_debug: {time.time()-t0:.2f}s")
         return vid_t, vid_debug
     
-    vid_t, vid_debug = collecting(bm,out_list,debug_manager,debug_queue,stop_event,debug_thread,coefs_list,reg_list,compute_debug,debug_results,num_batch,parameters)
+    vid_t, vid_debug = collecting(bm,out_list,out_accumulation,debug_manager,debug_queue,stop_event,debug_thread,coefs_list,reg_list,compute_debug,debug_results,num_batch,parameters)
     
     # print(vid_t.shape)
     # t0 = time.time()
@@ -666,11 +670,18 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
 # Specialised loops
 # ------------------------------------------------------------------
 def _process_cpu(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
-                 M0_reg, out_list, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock):
+                 M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock):
     for i in tqdm(range(num_batch)):
         frames = file_reader.read_frames(first_frame + i * batch_stride, batch_size)
         frames = bm.to_backend(frames)
-        res = render_moments(bm, parameters, frames=frames, registration_ref=M0_reg)
+        res, accu = render_moments(bm, parameters, frames=frames, registration_ref=M0_reg)
+
+        for key in accu.keys():
+            if key not in out_accumulation:
+                out_accumulation[key] = accu[key]
+            else : 
+                out_accumulation[key] += accu[key]
+
         if res is None: break
         l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
         for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
@@ -681,44 +692,10 @@ def _process_cpu(bm, file_reader, parameters, num_batch, first_frame, batch_stri
         if debug_manager and lock:
             with lock: res_store[i] = res
             debug_queue.put(i)
-
-def _process_gpu_streaming(bm, file_reader, parameters, num_batch, first_frame, batch_stride,
-                           batch_size, M0_reg, out_list, coefs_list, reg_list,
-                           debug_manager, debug_queue, res_store, lock):
-    import cupy as cp
-    stream_h2d = cp.cuda.Stream(non_blocking=True)
-    stream_compute = cp.cuda.Stream(non_blocking=True)
-
-    frames_next = file_reader.read_frames(first_frame, batch_size)
-    frames_next = bm.to_backend(frames_next)
-    with stream_h2d:
-        d_frames_next = cp.asarray(frames_next)
-
-    for i in tqdm(range(num_batch)):
-        d_frames = d_frames_next
-        if i + 1 < num_batch:
-            with stream_h2d:
-                frames_next = file_reader.read_frames(first_frame + (i+1) * batch_stride, batch_size)
-                d_frames_next = cp.asarray(frames_next)
-        with stream_compute:
-            res = render_moments(bm, parameters, frames=d_frames, registration_ref=M0_reg)
-        if res is None: break
-        l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
-        for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-            l.append(res[f"band_{k}_{f1}_{f2}"])
-        out_list.append(bm.xp.stack(l, axis=0))
-        if "coefs" in res and coefs_list is not None: coefs_list[i] = res["coefs"]
-        if "registration" in res and reg_list is not None: reg_list[i] = res["registration"]
-        if debug_manager and lock:
-            with lock: res_store[i] = res
-            debug_queue.put(i)
-        stream_compute.synchronize()
-    stream_h2d.synchronize()
-    cp.cuda.Device().synchronize()
 
 @track_time("_process_gpu_streaming_onram")
 def _process_gpu_streaming_onram(bm, file_reader, parameters, num_batch, first_frame, batch_stride,
-                                 batch_size, M0_reg, out_list, coefs_list, reg_list,
+                                 batch_size, M0_reg, out_list, out_accumulation, coefs_list, reg_list,
                                  debug_manager, debug_queue, res_store, lock):
     import queue as qmod
     import threading
@@ -770,8 +747,15 @@ def _process_gpu_streaming_onram(bm, file_reader, parameters, num_batch, first_f
 
             with stream_compute:
                 stream_compute.wait_event(ready_event)
-                res = render_moments(bm, parameters, frames=d_frames, registration_ref=M0_reg)
+                res, accu = render_moments(bm, parameters, frames=d_frames, registration_ref=M0_reg)
             stream_compute.synchronize()
+
+            for key in accu.keys():
+                if key not in out_accumulation:
+                    out_accumulation[key] = accu[key]
+                else : 
+                    out_accumulation[key] += accu[key]
+
             if res is None: break
 
             l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
@@ -788,29 +772,32 @@ def _process_gpu_streaming_onram(bm, file_reader, parameters, num_batch, first_f
             if d_frames is None: break
 
     finally:
+        for key in accumulation.keys():
+            accumulation[key] /= num_batch
+
         stop_reader.set()
         reader_thread.join(timeout=5)
         stream_h2d.synchronize()
         stream_compute.synchronize()
         cp.cuda.Device().synchronize()
 
-def _process_memmap(bm, memmap, parameters, num_batch, first_frame, batch_stride, batch_size,
-                    M0_reg, out_list, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock):
-    for i in tqdm(range(num_batch)):
-        start = i * batch_stride
-        frames_np = memmap[start:start + batch_size]
-        frames = bm.to_backend(frames_np)
-        res = render_moments(bm, parameters, frames=frames, registration_ref=M0_reg)
-        if res is None: break
-        l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
-        for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-            l.append(res[f"band_{k}_{f1}_{f2}"])
-        out_list.append(bm.xp.stack(l, axis=0))
-        if "coefs" in res and coefs_list is not None: coefs_list[i] = res["coefs"]
-        if "registration" in res and reg_list is not None: reg_list[i] = res["registration"]
-        if debug_manager and lock:
-            with lock: res_store[i] = res
-            debug_queue.put(i)
+# def _process_memmap(bm, memmap, parameters, num_batch, first_frame, batch_stride, batch_size,
+#                     M0_reg, out_list, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock):
+#     for i in tqdm(range(num_batch)):
+#         start = i * batch_stride
+#         frames_np = memmap[start:start + batch_size]
+#         frames = bm.to_backend(frames_np)
+#         res, accu = render_moments(bm, parameters, frames=frames, registration_ref=M0_reg)
+#         if res is None: break
+#         l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
+#         for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
+#             l.append(res[f"band_{k}_{f1}_{f2}"])
+#         out_list.append(bm.xp.stack(l, axis=0))
+#         if "coefs" in res and coefs_list is not None: coefs_list[i] = res["coefs"]
+#         if "registration" in res and reg_list is not None: reg_list[i] = res["registration"]
+#         if debug_manager and lock:
+#             with lock: res_store[i] = res
+#             debug_queue.put(i)
 
 def _process_gpu_streaming_onram_multistream(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
                                               M0_reg, out_list, coefs_list, reg_list,
@@ -833,7 +820,7 @@ def _process_gpu_streaming_onram_multistream(bm, file_reader, parameters, num_ba
             stream = cp.cuda.Stream(non_blocking=True)
             with stream:
                 d_frames = cp.asarray(frames_sub)
-                res = render_moments(bm, parameters, frames=d_frames, registration_ref=M0_reg)
+                res, accu = render_moments(bm, parameters, frames=d_frames, registration_ref=M0_reg)
             streams.append(stream)
             batch_results[j] = res
 
