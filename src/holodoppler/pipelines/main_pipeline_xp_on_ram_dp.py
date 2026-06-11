@@ -19,8 +19,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import imageio as iio
 from tqdm import tqdm
-import queue as qmod
 import cupy as cp
+import multiprocessing as mp
+from multiprocessing import shared_memory
 
 # ------------------------------------------------------------------
 # Timing & Profiling Utilities
@@ -564,7 +565,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     bm.print_gpu_used_memory()
 
     # Dispatch to backend-specific loop
-    if parameters["backend"] == "cupyRAM":
+    if parameters["backend"] == "cupy":
         _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, first_frame, batch_stride, batch_size,
                                      M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock)
     else:
@@ -689,156 +690,527 @@ def _process_cpu(bm, file_reader, parameters, num_batch, first_frame, batch_stri
         if debug_manager and lock:
             with lock: res_store[i] = res
             debug_queue.put(i)
+            
+            
+def _fetch_batch_worker_sharedmem(worker_id,
+                                  batch_indices,
+                                  file_path,
+                                  first_frame,
+                                  batch_stride,
+                                  batch_size,
+                                  shm_names,
+                                  frame_shape,
+                                  frame_dtype_str,
+                                  free_queue,
+                                  ready_queue):
+    """
+    Worker process:
+      - waits for a free shared-memory slot
+      - reads one batch
+      - copies it into that slot
+      - sends only metadata to main process
+    """
+
+    dtype = np.dtype(frame_dtype_str)
+
+    shm_objects = []
+    shm_arrays = []
+
+    try:
+        for name in shm_names:
+            shm = shared_memory.SharedMemory(name=name)
+            arr = np.ndarray(frame_shape, dtype=dtype, buffer=shm.buf)
+            shm_objects.append(shm)
+            shm_arrays.append(arr)
+
+        file_reader = FileReaderFactory.create(file_path)
+        file_reader.open()
+
+        try:
+            for batch_index in batch_indices:
+                t0 = time.perf_counter()
+                frames_batch = file_reader.read_frames(
+                    first_frame + batch_index * batch_stride,
+                    batch_size
+                )
+                read_dt = time.perf_counter() - t0
+
+                if frames_batch.shape != frame_shape:
+                    raise RuntimeError(
+                        f"Worker {worker_id}: unexpected batch shape "
+                        f"{frames_batch.shape}, expected {frame_shape}"
+                    )
+
+                if frames_batch.dtype != dtype:
+                    frames_batch = frames_batch.astype(dtype, copy=False)
+
+                slot_id = free_queue.get()
+
+                t0 = time.perf_counter()
+                np.copyto(shm_arrays[slot_id], frames_batch)
+                copy_dt = time.perf_counter() - t0
+
+                ready_queue.put((
+                    slot_id,
+                    batch_index,
+                    read_dt,
+                    copy_dt,
+                    int(frames_batch.nbytes),
+                    None,
+                ))
+
+        finally:
+            file_reader.close()
+
+    except Exception as e:
+        ready_queue.put((
+            None,
+            None,
+            0.0,
+            0.0,
+            0,
+            repr(e),
+        ))
+
+    finally:
+        for shm in shm_objects:
+            shm.close()
 
 @track_time("_process_gpu_streaming_onram")
 def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, first_frame, batch_stride,
                                  batch_size, M0_reg, out_list, out_accumulation, coefs_list, reg_list,
                                  debug_manager, debug_queue, res_store, lock):
-    
-    # # Set pinned memory allocator as default
-    # cp.cuda.set_allocator(cp.cuda.MemoryPool(cp.cuda.PinnedMemoryAllocator()))
-    
-    FETCH_NUM_WORKERS = 8
 
-    def fetch_batch_worker(worker_id, batch_indices, file_path, first_frame, batch_stride, batch_size, batch_queue):
-        """Each worker processes a subset of batch indices"""
-        file_reader = FileReaderFactory.create(file_path)
-        file_reader.open()
-        for batch_index in batch_indices:
-            frames_batch = file_reader.read_frames(first_frame + batch_index * batch_stride, batch_size)
-            batch_queue.put((batch_index, frames_batch))
-        file_reader.close()
+    tictoc = bool(parameters.get("tictoc", False))
 
-    # Split all batch indices among workers
-    all_batch_indices = list(range(num_batch))
-    batch_indices_per_worker = [[] for _ in range(FETCH_NUM_WORKERS)]
+    prof_sum = defaultdict(float)
+    prof_cnt = defaultdict(int)
+    prof_max = defaultdict(float)
+    prof_bytes = defaultdict(int)
 
-    for i, batch_index in enumerate(all_batch_indices):
-        worker_id = i % FETCH_NUM_WORKERS
-        batch_indices_per_worker[worker_id].append(batch_index)
+    def now():
+        return time.perf_counter()
 
-    # Use multiprocessing Manager for shared queue
-    manager = mp.Manager()
-    batch_queue = manager.Queue(maxsize=40)
+    def prof_add(name, dt):
+        if not tictoc:
+            return
+        prof_sum[name] += float(dt)
+        prof_cnt[name] += 1
+        prof_max[name] = max(prof_max[name], float(dt))
 
-    processes = []
-    for worker_id in range(FETCH_NUM_WORKERS):
-        p = mp.Process(
-            target=fetch_batch_worker,
-            args=(worker_id, batch_indices_per_worker[worker_id], file_path, first_frame, batch_stride, batch_size, batch_queue)
-        )
-        processes.append(p)
-        p.start()
-        
-    # # Reset to default (non-pinned) allocator
-    # cp.cuda.set_allocator(cp.cuda.MemoryPool())
-        
-    # # Wait for all threads to complete
-    # for t in threads:
-    #     t.join()
-    
-    
+    def prof_add_bytes(name, nbytes):
+        if not tictoc:
+            return
+        prof_bytes[name] += int(nbytes)
+
+    t_total0 = now()
+
+    if num_batch <= 0:
+        return
+
+    FETCH_NUM_WORKERS = int(parameters.get("fetch_num_workers", 8))
+    SHM_NUM_SLOTS = int(parameters.get("shm_num_slots", max(2 * FETCH_NUM_WORKERS, 8)))
+
     stream_h2d = cp.cuda.Stream(non_blocking=True)
-    # stream_d2h = cp.cuda.Stream(non_blocking=True)
     stream_compute = cp.cuda.Stream(non_blocking=True)
-    # h2d_done = cp.cuda.Event(disable_timing=True)
 
-    def enqueue_h2d(frames):
-        if frames is None: 
-            return None, None
-        
-        # Allocate pinned memory and copy frames to it
-        pinned_frames = cp.cuda.alloc_pinned_memory(frames.nbytes)
-        pinned_frames_array = np.frombuffer(pinned_frames, dtype=frames.dtype).reshape(frames.shape)
-        np.copyto(pinned_frames_array, frames)
-        
-        # Transfer from pinned memory to GPU using h2d stream
+    shm_objects = []
+    shm_arrays = []
+    processes = []
+
+    free_queue = None
+    ready_queue = None
+
+    processed_batches = 0
+    normal_exit = False
+
+    def print_profile():
+        if not tictoc:
+            return
+
+        total_dt = now() - t_total0
+
+        print("\n[tictoc] _process_gpu_streaming_onram shared_memory profile")
+        print(f"processed_batches: {processed_batches}/{num_batch}")
+        print(f"total wall time:    {total_dt:.3f} s")
+
+        def print_row(name):
+            s = prof_sum.get(name, 0.0)
+            c = prof_cnt.get(name, 0)
+            m = prof_max.get(name, 0.0)
+            avg = s / c if c else 0.0
+            pct = 100.0 * s / total_dt if total_dt > 0 else 0.0
+            print(
+                f"{name:36s} "
+                f"total={s:9.3f}s  "
+                f"avg={avg * 1e3:9.3f}ms  "
+                f"max={m * 1e3:9.3f}ms  "
+                f"n={c:6d}  "
+                f"{pct:6.1f}%"
+            )
+
+        ordered = [
+            "first_batch_read_for_shape",
+            "shared_memory_create_total",
+            "first_batch_copy_to_shm",
+            "worker_process_start_total",
+            "ready_queue_get",
+            "worker_read_frames",
+            "worker_copy_to_shm",
+            "h2d_enqueue_cpu",
+            "h2d_wait_cpu",
+            "h2d_gpu_elapsed",
+            "compute_enqueue_cpu",
+            "compute_wait_cpu",
+            "compute_gpu_elapsed",
+            "postprocess_accumulate_and_store",
+            "debug_manager_store",
+            "final_average_accumulation",
+            "worker_join_total",
+            "final_cuda_synchronize",
+            "shared_memory_cleanup",
+        ]
+
+        for name in ordered:
+            if name in prof_cnt:
+                print_row(name)
+
+        input_gb = prof_bytes.get("input_bytes", 0) / 1e9
+        h2d_gb = prof_bytes.get("h2d_bytes", 0) / 1e9
+
+        print(f"input bytes:        {input_gb:.3f} GB")
+        print(f"h2d bytes:          {h2d_gb:.3f} GB")
+
+        if prof_sum.get("h2d_gpu_elapsed", 0.0) > 0:
+            print(f"h2d GPU bandwidth:  {h2d_gb / prof_sum['h2d_gpu_elapsed']:.3f} GB/s")
+
+        if total_dt > 0:
+            print(f"end-to-end input throughput: {input_gb / total_dt:.3f} GB/s")
+
+        print("")
+
+    def enqueue_h2d_from_slot(slot_id):
+        host_arr = shm_arrays[slot_id]
+        prof_add_bytes("h2d_bytes", host_arr.nbytes)
+
+        if tictoc:
+            h2d_start = cp.cuda.Event()
+            h2d_end = cp.cuda.Event()
+        else:
+            h2d_start = None
+            h2d_end = cp.cuda.Event(disable_timing=True)
+
+        t0 = now()
         with stream_h2d:
-            d_frames = cp.asarray(pinned_frames_array)
-            event = cp.cuda.Event(disable_timing=True)
-            event.record(stream_h2d)
-        
-        return d_frames, event, pinned_frames  # Return pinned memory to free later
+            if tictoc:
+                h2d_start.record(stream_h2d)
+
+            # This copies from shared host memory to GPU.
+            # Note: shared_memory is not CUDA pinned memory, so this may not have
+            # the same async behavior as a true pinned host buffer.
+            d_frames = cp.asarray(host_arr)
+
+            h2d_end.record(stream_h2d)
+
+        prof_add("h2d_enqueue_cpu", now() - t0)
+
+        return d_frames, h2d_end, h2d_start, slot_id
+
+    def get_ready_item():
+        t0 = now()
+        item = ready_queue.get()
+        prof_add("ready_queue_get", now() - t0)
+
+        slot_id, batch_index, read_dt, copy_dt, nbytes, err = item
+
+        if err is not None:
+            raise RuntimeError(f"Shared-memory fetch worker failed: {err}")
+
+        prof_add("worker_read_frames", read_dt)
+        prof_add("worker_copy_to_shm", copy_dt)
+        prof_add_bytes("input_bytes", nbytes)
+
+        return slot_id, batch_index
 
     try:
-        # Get first batch
-        item = batch_queue.get()  # Changed from frame_queue to batch_queue
-        if item is None: 
-            raise StopIteration("No batches available")
-        _, frames = item
-        d_frames, ready_event, pinned_mem = enqueue_h2d(frames)
-        
-        for i in tqdm(range(num_batch)):
-            # Prefetch next batch
-            next_item = batch_queue.get() if i + 1 < num_batch else None  # Changed from frame_queue to batch_queue
+        # ------------------------------------------------------------
+        # 1. Read the first batch in the main process to infer shape/dtype.
+        # ------------------------------------------------------------
+        t0 = now()
+        file_reader = FileReaderFactory.create(file_path)
+        file_reader.open()
+        try:
+            first_frames = file_reader.read_frames(first_frame, batch_size)
+        finally:
+            file_reader.close()
+
+        prof_add("first_batch_read_for_shape", now() - t0)
+        prof_add_bytes("input_bytes", first_frames.nbytes)
+
+        frame_shape = tuple(first_frames.shape)
+        frame_dtype = first_frames.dtype
+        frame_dtype_str = frame_dtype.str
+        frame_nbytes = int(first_frames.nbytes)
+
+        # ------------------------------------------------------------
+        # 2. Allocate shared-memory slots.
+        # ------------------------------------------------------------
+        t0 = now()
+        for _ in range(SHM_NUM_SLOTS):
+            shm = shared_memory.SharedMemory(create=True, size=frame_nbytes)
+            arr = np.ndarray(frame_shape, dtype=frame_dtype, buffer=shm.buf)
+            shm_objects.append(shm)
+            shm_arrays.append(arr)
+
+        prof_add("shared_memory_create_total", now() - t0)
+
+        shm_names = [shm.name for shm in shm_objects]
+
+        # ------------------------------------------------------------
+        # 3. Fill slot 0 with the first batch.
+        # ------------------------------------------------------------
+        t0 = now()
+        np.copyto(shm_arrays[0], first_frames)
+        prof_add("first_batch_copy_to_shm", now() - t0)
+
+        del first_frames
+
+        # ------------------------------------------------------------
+        # 4. Queues carry only small metadata now.
+        # ------------------------------------------------------------
+        free_queue = mp.Queue(maxsize=SHM_NUM_SLOTS)
+        ready_queue = mp.Queue(maxsize=SHM_NUM_SLOTS)
+
+        # Slot 0 is already occupied by batch 0.
+        for slot_id in range(1, SHM_NUM_SLOTS):
+            free_queue.put(slot_id)
+
+        # Manually enqueue first batch metadata.
+        ready_queue.put((0, 0, 0.0, 0.0, frame_nbytes, None))
+
+        # ------------------------------------------------------------
+        # 5. Launch workers for batches 1..num_batch-1.
+        # ------------------------------------------------------------
+        remaining_batch_indices = list(range(1, num_batch))
+        batch_indices_per_worker = [[] for _ in range(FETCH_NUM_WORKERS)]
+
+        for i, batch_index in enumerate(remaining_batch_indices):
+            worker_id = i % FETCH_NUM_WORKERS
+            batch_indices_per_worker[worker_id].append(batch_index)
+
+        t0 = now()
+        for worker_id in range(FETCH_NUM_WORKERS):
+            indices = batch_indices_per_worker[worker_id]
+            if not indices:
+                continue
+
+            p = mp.Process(
+                target=_fetch_batch_worker_sharedmem,
+                args=(
+                    worker_id,
+                    indices,
+                    file_path,
+                    first_frame,
+                    batch_stride,
+                    batch_size,
+                    shm_names,
+                    frame_shape,
+                    frame_dtype_str,
+                    free_queue,
+                    ready_queue,
+                )
+            )
+            processes.append(p)
+            p.start()
+
+        prof_add("worker_process_start_total", now() - t0)
+
+        # ------------------------------------------------------------
+        # 6. Prime first H2D.
+        # ------------------------------------------------------------
+        slot_id, batch_index = get_ready_item()
+        d_frames, ready_event, h2d_start, active_slot_id = enqueue_h2d_from_slot(slot_id)
+        active_batch_index = batch_index
+
+        # ------------------------------------------------------------
+        # 7. Streaming loop.
+        # ------------------------------------------------------------
+        for _ in tqdm(range(num_batch)):
+            # Wait for current H2D.
+            t0 = now()
+            ready_event.synchronize()
+            prof_add("h2d_wait_cpu", now() - t0)
+
+            if tictoc and h2d_start is not None:
+                h2d_ms = cp.cuda.get_elapsed_time(h2d_start, ready_event)
+                prof_add("h2d_gpu_elapsed", h2d_ms / 1000.0)
+
+            # H2D from this shared-memory slot is complete.
+            # The slot can be reused by a worker.
+            free_queue.put(active_slot_id)
+
+            # Enqueue next H2D before compute if a next batch exists.
+            # This lets H2D of next batch overlap with compute of current batch.
             d_frames_next = None
             ready_event_next = None
-            pinned_mem_next = None
-            
-            if next_item is not None:
-                _, frames_next = next_item
-                d_frames_next, ready_event_next, pinned_mem_next = enqueue_h2d(frames_next)
-            
-            # Wait for current H2D transfer to complete
-            ready_event.synchronize()  # Wait for H2D to finish
-            
-            # Compute on current batch
+            h2d_start_next = None
+            active_slot_id_next = None
+            active_batch_index_next = None
+
+            if processed_batches + 1 < num_batch:
+                slot_id_next, batch_index_next = get_ready_item()
+                d_frames_next, ready_event_next, h2d_start_next, active_slot_id_next = enqueue_h2d_from_slot(slot_id_next)
+                active_batch_index_next = batch_index_next
+
+            # Compute current batch.
+            if tictoc:
+                compute_start = cp.cuda.Event()
+                compute_end = cp.cuda.Event()
+            else:
+                compute_start = None
+                compute_end = cp.cuda.Event(disable_timing=True)
+
+            t0 = now()
             with stream_compute:
-                res, accu = render_moments(bm, parameters, frames=d_frames, registration_ref=M0_reg)
-            stream_compute.synchronize()
-            
-            # Free pinned memory of current batch after transfer is done
-            del pinned_mem
-            
+                if tictoc:
+                    compute_start.record(stream_compute)
+
+                res, accu = render_moments(
+                    bm,
+                    parameters,
+                    frames=d_frames,
+                    registration_ref=M0_reg
+                )
+
+                compute_end.record(stream_compute)
+
+            prof_add("compute_enqueue_cpu", now() - t0)
+
+            t0 = now()
+            compute_end.synchronize()
+            prof_add("compute_wait_cpu", now() - t0)
+
+            if tictoc:
+                compute_ms = cp.cuda.get_elapsed_time(compute_start, compute_end)
+                prof_add("compute_gpu_elapsed", compute_ms / 1000.0)
+
+            if res is None:
+                break
+
+            # Store results.
+            t0 = now()
+
             for key in accu.keys():
                 if key not in out_accumulation:
                     out_accumulation[key] = accu[key]
-                else: 
+                else:
                     out_accumulation[key] += accu[key]
-            
-            if res is None: 
-                break
-            
+
             l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
             for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
                 l.append(res[f"band_{k}_{f1}_{f2}"])
+
+            # Warning: appending still stores in arrival order, not necessarily batch_index order.
             out_list.append(bm.xp.stack(l, axis=0))
-            
-            if "coefs" in res and coefs_list is not None: 
-                coefs_list[i] = res["coefs"]
-            if "registration" in res and reg_list is not None: 
-                reg_list[i] = res["registration"]
+
+            if "coefs" in res and coefs_list is not None:
+                coefs_list[active_batch_index] = res["coefs"]
+
+            if "registration" in res and reg_list is not None:
+                reg_list[active_batch_index] = res["registration"]
+
+            prof_add("postprocess_accumulate_and_store", now() - t0)
+
             if debug_manager and lock:
-                with lock: 
-                    res_store[i] = res
-                debug_queue.put(i)
-            
-            # Move to next batch
+                t0 = now()
+                with lock:
+                    res_store[active_batch_index] = res
+                debug_queue.put(active_batch_index)
+                prof_add("debug_manager_store", now() - t0)
+
+            processed_batches += 1
+
             d_frames = d_frames_next
             ready_event = ready_event_next
-            pinned_mem = pinned_mem_next
-            
-            if d_frames is None: 
+            h2d_start = h2d_start_next
+            active_slot_id = active_slot_id_next
+            active_batch_index = active_batch_index_next
+
+            if d_frames is None:
                 break
 
+        normal_exit = True
+
     finally:
-        # Average accumulation
+        # ------------------------------------------------------------
+        # Final accumulation.
+        # ------------------------------------------------------------
+        t0 = now()
+        denom = max(processed_batches, 1)
         for key in out_accumulation.keys():
-            out_accumulation[key] /= num_batch
-        
-        # Wait for all fetch threads to complete
-        for t in processes:
-            t.join()
-        
-        # Synchronize all streams
+            out_accumulation[key] /= denom
+        prof_add("final_average_accumulation", now() - t0)
+
+        # ------------------------------------------------------------
+        # Stop workers safely on abnormal exit.
+        # ------------------------------------------------------------
+        t0 = now()
+        if not normal_exit:
+            for p in processes:
+                if p.is_alive():
+                    p.terminate()
+
+        for p in processes:
+            p.join()
+
+        prof_add("worker_join_total", now() - t0)
+
+        # ------------------------------------------------------------
+        # CUDA sync.
+        # ------------------------------------------------------------
+        t0 = now()
         stream_h2d.synchronize()
         stream_compute.synchronize()
-        # stream_d2h.synchronize()
         cp.cuda.Device().synchronize()
-        
-        # Clean up pinned memory allocator if needed
-        cp.cuda.set_allocator(cp.cuda.MemoryPool())
+        prof_add("final_cuda_synchronize", now() - t0)
 
+        # ------------------------------------------------------------
+        # Queue cleanup.
+        # ------------------------------------------------------------
+        try:
+            if free_queue is not None:
+                free_queue.close()
+                free_queue.join_thread()
+        except Exception:
+            pass
+
+        try:
+            if ready_queue is not None:
+                ready_queue.close()
+                ready_queue.join_thread()
+        except Exception:
+            pass
+
+        # ------------------------------------------------------------
+        # Shared-memory cleanup.
+        # ------------------------------------------------------------
+        t0 = now()
+        for shm in shm_objects:
+            try:
+                shm.close()
+            except Exception:
+                pass
+
+            try:
+                shm.unlink()
+            except FileNotFoundError:
+                pass
+            except Exception:
+                pass
+
+        prof_add("shared_memory_cleanup", now() - t0)
+
+        print_profile()
 # def _process_memmap(bm, memmap, parameters, num_batch, first_frame, batch_stride, batch_size,
 #                     M0_reg, out_list, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock):
 #     for i in tqdm(range(num_batch)):
