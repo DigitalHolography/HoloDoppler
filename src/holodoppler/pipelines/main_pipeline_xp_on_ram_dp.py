@@ -19,14 +19,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import imageio as iio
 from tqdm import tqdm
-
-# Optional line profiler
-try:
-    import lblprof
-except ImportError:
-    lblprof = None
-
-from holodoppler.utils import load_config
+import queue as qmod
+import cupy as cp
 
 # ------------------------------------------------------------------
 # Timing & Profiling Utilities
@@ -505,7 +499,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     first_frame = parameters["first_frame"]
     end_frame = parameters.get("end_frame", 0)
     if end_frame <= 0:
-        end_frame = file_reader.file_header["num_frames"] if file_reader.ext == ".holo" else file_reader.metadata_json["ImageCount"]
+        end_frame = file_reader.file_header["num_frames"] if file_reader.ext == ".holo" else file_reader.metadata["ImageCount"]
 
     if batch_stride >= (end_frame - first_frame):
         num_batch = 1 if batch_size <= (end_frame - first_frame) else 0
@@ -571,7 +565,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
 
     # Dispatch to backend-specific loop
     if parameters["backend"] == "cupyRAM":
-        _process_gpu_streaming_onram(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
+        _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, first_frame, batch_stride, batch_size,
                                      M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock)
     else:
         _process_cpu(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
@@ -673,6 +667,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
 # ------------------------------------------------------------------
 def _process_cpu(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
                  M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock):
+    
     for i in tqdm(range(num_batch)):
         frames = file_reader.read_frames(first_frame + i * batch_stride, batch_size)
         frames = bm.to_backend(frames)
@@ -696,92 +691,154 @@ def _process_cpu(bm, file_reader, parameters, num_batch, first_frame, batch_stri
             debug_queue.put(i)
 
 @track_time("_process_gpu_streaming_onram")
-def _process_gpu_streaming_onram(bm, file_reader, parameters, num_batch, first_frame, batch_stride,
+def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, first_frame, batch_stride,
                                  batch_size, M0_reg, out_list, out_accumulation, coefs_list, reg_list,
                                  debug_manager, debug_queue, res_store, lock):
-    import queue as qmod
-    import threading
-    from tqdm import tqdm
-    import cupy as cp
+    
+    # # Set pinned memory allocator as default
+    # cp.cuda.set_allocator(cp.cuda.MemoryPool(cp.cuda.PinnedMemoryAllocator()))
+    
+    FETCH_NUM_WORKERS = 8
+    
+    batch_queue = queue.Queue(maxsize=40) # max number of batchs be careful with batchs
+    
+    def fetch_batch(file_reader, batch_index):
+        frames_batch = file_reader.read_frames(first_frame + batch_index * batch_stride, batch_size)
+        batch_queue.put((batch_index, frames_batch))
+        
+    def worker(worker_id, batch_indices):
+        """Each worker processes a subset of batch indices"""
+        file_reader = FileReaderFactory.create(file_path)
+        file_reader.open()
+        for batch_index in batch_indices:
+            fetch_batch(file_reader, batch_index)
+        file_reader.close()
 
-    frame_queue = qmod.Queue(maxsize=4)
-    stop_reader = threading.Event()
+    # Split all batch indices among workers
+    all_batch_indices = list(range(num_batch))
+    batch_indices_per_worker = [[] for _ in range(FETCH_NUM_WORKERS)]
 
-    def reader():
-        frame_idx = first_frame
-        try:
-            for i in range(num_batch):
-                if stop_reader.is_set(): break
-                frames = file_reader.read_frames(frame_idx, batch_size)
-                frame_queue.put((i, frames))
-                frame_idx += batch_stride
-        finally:
-            frame_queue.put(None)
+    for i, batch_index in enumerate(all_batch_indices):
+        worker_id = i % FETCH_NUM_WORKERS
+        batch_indices_per_worker[worker_id].append(batch_index)
 
-    reader_thread = threading.Thread(target=reader, daemon=True)
-    reader_thread.start()
-
+    threads = []
+    for worker_id in range(FETCH_NUM_WORKERS):
+        t = threading.Thread(
+            target=worker, 
+            args=(worker_id, batch_indices_per_worker[worker_id])
+        )
+        threads.append(t)
+        t.start()
+        
+    # # Reset to default (non-pinned) allocator
+    # cp.cuda.set_allocator(cp.cuda.MemoryPool())
+        
+    # # Wait for all threads to complete
+    # for t in threads:
+    #     t.join()
+    
+    
     stream_h2d = cp.cuda.Stream(non_blocking=True)
+    # stream_d2h = cp.cuda.Stream(non_blocking=True)
     stream_compute = cp.cuda.Stream(non_blocking=True)
-    h2d_done = cp.cuda.Event(disable_timing=True)
+    # h2d_done = cp.cuda.Event(disable_timing=True)
 
     def enqueue_h2d(frames):
-        if frames is None: return None, None
+        if frames is None: 
+            return None, None
+        
+        # Allocate pinned memory and copy frames to it
+        pinned_frames = cp.cuda.alloc_pinned_memory(frames.nbytes)
+        pinned_frames_array = np.frombuffer(pinned_frames, dtype=frames.dtype).reshape(frames.shape)
+        np.copyto(pinned_frames_array, frames)
+        
+        # Transfer from pinned memory to GPU using h2d stream
         with stream_h2d:
-            d_frames = cp.asarray(frames)
+            d_frames = cp.asarray(pinned_frames_array)
             event = cp.cuda.Event(disable_timing=True)
             event.record(stream_h2d)
-        return d_frames, event
+        
+        return d_frames, event, pinned_frames  # Return pinned memory to free later
 
     try:
-        item = frame_queue.get()
-        if item is None: return
+        # Get first batch
+        item = batch_queue.get()  # Changed from frame_queue to batch_queue
+        if item is None: 
+            raise StopIteration("No batches available")
         _, frames = item
-        d_frames, ready_event = enqueue_h2d(frames)
-
+        d_frames, ready_event, pinned_mem = enqueue_h2d(frames)
+        
         for i in tqdm(range(num_batch)):
-            next_item = frame_queue.get() if i + 1 < num_batch else None
+            # Prefetch next batch
+            next_item = batch_queue.get() if i + 1 < num_batch else None  # Changed from frame_queue to batch_queue
             d_frames_next = None
             ready_event_next = None
+            pinned_mem_next = None
+            
             if next_item is not None:
                 _, frames_next = next_item
-                d_frames_next, ready_event_next = enqueue_h2d(frames_next)
-
+                d_frames_next, ready_event_next, pinned_mem_next = enqueue_h2d(frames_next)
+            
+            # Wait for current H2D transfer to complete
+            ready_event.synchronize()  # Wait for H2D to finish
+            
+            # Compute on current batch
             with stream_compute:
-                stream_compute.wait_event(ready_event)
                 res, accu = render_moments(bm, parameters, frames=d_frames, registration_ref=M0_reg)
             stream_compute.synchronize()
-
+            
+            # Free pinned memory of current batch after transfer is done
+            del pinned_mem
+            
             for key in accu.keys():
                 if key not in out_accumulation:
                     out_accumulation[key] = accu[key]
-                else : 
+                else: 
                     out_accumulation[key] += accu[key]
-
-            if res is None: break
-
+            
+            if res is None: 
+                break
+            
             l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
             for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
                 l.append(res[f"band_{k}_{f1}_{f2}"])
             out_list.append(bm.xp.stack(l, axis=0))
-            if "coefs" in res and coefs_list is not None: coefs_list[i] = res["coefs"]
-            if "registration" in res and reg_list is not None: reg_list[i] = res["registration"]
+            
+            if "coefs" in res and coefs_list is not None: 
+                coefs_list[i] = res["coefs"]
+            if "registration" in res and reg_list is not None: 
+                reg_list[i] = res["registration"]
             if debug_manager and lock:
-                with lock: res_store[i] = res
+                with lock: 
+                    res_store[i] = res
                 debug_queue.put(i)
+            
+            # Move to next batch
             d_frames = d_frames_next
             ready_event = ready_event_next
-            if d_frames is None: break
+            pinned_mem = pinned_mem_next
+            
+            if d_frames is None: 
+                break
 
     finally:
+        # Average accumulation
         for key in out_accumulation.keys():
             out_accumulation[key] /= num_batch
-
-        stop_reader.set()
-        reader_thread.join(timeout=5)
+        
+        # Wait for all fetch threads to complete
+        for t in threads:
+            t.join()
+        
+        # Synchronize all streams
         stream_h2d.synchronize()
         stream_compute.synchronize()
+        # stream_d2h.synchronize()
         cp.cuda.Device().synchronize()
+        
+        # Clean up pinned memory allocator if needed
+        cp.cuda.set_allocator(cp.cuda.MemoryPool())
 
 # def _process_memmap(bm, memmap, parameters, num_batch, first_frame, batch_stride, batch_size,
 #                     M0_reg, out_list, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock):

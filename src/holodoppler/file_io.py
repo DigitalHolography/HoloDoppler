@@ -261,7 +261,7 @@ class CineFileReader:
             self.close()
         self.fid = open(self.file_path, "rb")
         self.metadata = dict(cinereader.read_metadata(self.file_path).__dict__)
-        print(self.metadata)
+        # print(self.metadata)
 
     def close(self):
         if self.fid is not None:
@@ -390,8 +390,8 @@ class CineFileReader:
         return np.stack(images, axis=0).astype(np.float32)
     
     read_frames = read_frames_fastest
-
-
+    
+    
 class FileReaderFactory:
     """Factory to create appropriate file reader"""
 
