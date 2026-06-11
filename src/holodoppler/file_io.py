@@ -127,6 +127,8 @@ def _unpack_12bitL(data: bytes, width: int, height: int) -> np.ndarray:
 def unpack_12bitL_vectorized(data: bytes, width: int, height: int) -> np.ndarray:
     # data length must be (width * height * 3) // 2
     byte_array = np.frombuffer(data, dtype=np.uint8)
+    # print(byte_array.shape)
+    # print((width * height * 3) // 2)
     # Group into 3‑byte chunks
     groups = byte_array.reshape(-1, 3)          # shape (N, 3)
     # First pixel: (byte0 << 4) | (byte1 >> 4)
@@ -138,6 +140,100 @@ def unpack_12bitL_vectorized(data: bytes, width: int, height: int) -> np.ndarray
     pixels[0::2] = pixel0
     pixels[1::2] = pixel1
     return pixels.reshape(height, width)
+
+def unpack_12bitL_batch_to_uint16(
+    packed: np.ndarray,
+    width: int,
+    height: int,
+) -> np.ndarray:
+    packed = np.asarray(packed, dtype=np.uint8)
+
+    nframes = packed.shape[0]
+    n_pixels = width * height
+    groups = packed.reshape(nframes, -1, 3)
+
+    out = np.empty((nframes, n_pixels), dtype=np.uint16)
+
+    b0 = groups[:, :, 0].astype(np.uint16)
+    b1 = groups[:, :, 1].astype(np.uint16)
+    b2 = groups[:, :, 2].astype(np.uint16)
+
+    out[:, 0::2] = (b0 << 4) | (b1 >> 4)
+    out[:, 1::2] = ((b1 & 0x0F) << 8) | b2
+
+    return out.reshape(nframes, height, width)
+
+import mmap
+import struct
+import numpy as np
+
+
+def unpack_12bitL_batch_to_float32(
+    packed: np.ndarray,
+    width: int,
+    height: int,
+) -> np.ndarray:
+    """
+    Vectorized Phantom P12L unpacking across multiple frames.
+
+    Parameters
+    ----------
+    packed : np.ndarray, shape (nframes, packed_bytes), dtype=uint8
+        Packed 12-bit data. Each 3 bytes encode 2 pixels.
+    width, height : int
+
+    Returns
+    -------
+    frames : np.ndarray, shape (nframes, height, width), dtype=float32
+    """
+    packed = np.asarray(packed, dtype=np.uint8)
+
+    nframes = packed.shape[0]
+    n_pixels = width * height
+    expected_bytes = (n_pixels * 3) // 2
+
+    if packed.shape[1] != expected_bytes:
+        raise ValueError(
+            f"Expected {expected_bytes} packed bytes per frame, "
+            f"got {packed.shape[1]}"
+        )
+
+    if n_pixels % 2 != 0:
+        raise ValueError("12-bit packed format requires an even number of pixels")
+
+    groups = packed.reshape(nframes, -1, 3)
+
+    out = np.empty((nframes, n_pixels), dtype=np.float32)
+
+    b0 = groups[:, :, 0].astype(np.uint16)
+    b1 = groups[:, :, 1].astype(np.uint16)
+    b2 = groups[:, :, 2].astype(np.uint16)
+
+    out[:, 0::2] = (b0 << 4) | (b1 >> 4)
+    out[:, 1::2] = ((b1 & 0x0F) << 8) | b2
+
+    return out.reshape(nframes, height, width)
+
+def unpack_12bitL_batch_to_float32_fast(
+    packed: np.ndarray,
+    width: int,
+    height: int,
+) -> np.ndarray:
+    packed = np.asarray(packed, dtype=np.uint8)
+
+    nframes = packed.shape[0]
+    n_pixels = width * height
+    groups = packed.reshape(nframes, -1, 3)
+
+    out = np.empty((nframes, n_pixels), dtype=np.float32)
+
+    b0 = groups[:, :, 0].astype(np.uint16)
+    b1 = groups[:, :, 1].astype(np.uint16)
+
+    out[:, 0::2] = (b0 << 4) | (b1 >> 4)
+    out[:, 1::2] = ((b1 & 0x0F) << 8) | groups[:, :, 2]
+
+    return out.reshape(nframes, height, width)
 
 # def unpack_12bit_to_8bit_vectorized(data: bytes, width: int, height: int) -> np.ndarray:
 #     byte_array = np.frombuffer(data, dtype=np.uint8)
@@ -174,9 +270,63 @@ class CineFileReader:
             self.metadata = None
             self.fid = None
             
+    def read_frames_fastest(self, first_frame, frame_batchsize):
+        """
+        Read a batch of consecutive uncompressed frames as fast as possible.
+
+        Returns
+        -------
+        np.ndarray, shape (frame_batchsize, height, width), dtype=np.float32
+        """
+        md = self.metadata
+
+        h = md["biHeight"]
+        w = md["biWidth"]
+        compression = md["biCompression"]
+        frame_image_size = md["biSizeImage"]
+        num_frames = md["TotalImageCount"]
+
+        offset_table_pos = md["OffImageOffsets"]
+        first_frame_corrected = first_frame - num_frames + 1 - md["FirstImageNo"]
+
+        self.fid.seek(offset_table_pos + first_frame_corrected * 8)
+        offsets_bytes = self.fid.read(frame_batchsize * 8)
+
+        if len(offsets_bytes) != frame_batchsize * 8:
+            raise EOFError("Could not read enough frame offsets")
+
+        offsets = np.frombuffer(offsets_bytes, dtype=np.int64)
+
+        if compression != 1024:
+            raise NotImplementedError(
+                f"Only Phantom P12L 12-bit packed compression=1024 is implemented, "
+                f"got {compression}"
+            )
+
+        packed = np.empty((frame_batchsize, frame_image_size), dtype=np.uint8)
+
+        with mmap.mmap(self.fid.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+            for i, img_start in enumerate(offsets):
+                if img_start == 0:
+                    raise ValueError(f"Invalid offset for frame {first_frame + i}")
+
+                ann_size = struct.unpack_from("I", mm, img_start)[0]
+                data_start = img_start + ann_size
+
+                packed[i] = np.frombuffer(
+                    mm,
+                    dtype=np.uint8,
+                    count=frame_image_size,
+                    offset=data_start,
+                )
+
+        frames = unpack_12bitL_batch_to_uint16(packed, w, h)
+
+        return frames
+            
     
 
-    def read_frames(self, first_frame, frame_batchsize):
+    def read_frames_fast(self, first_frame, frame_batchsize):
         """
         Read a batch of consecutive uncompressed frames as fast as possible.
         
@@ -196,43 +346,12 @@ class CineFileReader:
         h, w = md['biHeight'], md['biWidth']
         # bpp = md['RealBPP']          # 12 for this file
         compression = md['biCompression']  # 1024 for 12-bit packed
-        frame_image_size = md['biSizeImage']  # bytes of raw pixel data per frame
-
+        frame_image_size = md['biSizeImage']  
         
-        print(first_frame)
+        num_frames = md['TotalImageCount']
         
         offset_table_pos = md['OffImageOffsets']
-        first_frame_corrected = first_frame - md['FirstImageNo']
-        
-        print(first_frame_corrected)
-        
-        self.fid.seek(offset_table_pos + first_frame_corrected * 8)
-        image_start = struct.unpack("q", self.fid.read(8))[0]
-        if image_start == 0:
-            raise ValueError("image_start is null")
-        
-        print(image_start)
-
-        self.fid.seek(image_start)
-        annotationSize = struct.unpack("I", self.fid.read(4))[0]  # unit32, 4bytes
-        if annotationSize == 0:
-            raise ValueError("annotationSize is null")
-        
-        print(annotationSize)
-
-        self.fid.seek(image_start + annotationSize)
-
-        img = np.frombuffer(
-            self.fid.read(md['biSizeImage']),
-                dtype={8: np.uint8, 10: "u2", 12: np.uint16, 0: np.uint16}[
-                md['RealBPP']
-            ],
-        )
-
-        img = unpack_12bitL_vectorized(img, w, h)
-
-        plt.imshow(img)
-        plt.show()
+        first_frame_corrected = first_frame - num_frames + 1 - md['FirstImageNo']
         
         self.fid.seek(offset_table_pos + first_frame_corrected * 8)
         offsets_bytes = self.fid.read(frame_batchsize * 8)
@@ -240,83 +359,37 @@ class CineFileReader:
         if len(offsets_bytes) != frame_batchsize * 8:
             raise EOFError("Could not read enough frame offsets")
         offsets = struct.unpack(f'{frame_batchsize}q', offsets_bytes)
-        
-        print(offsets[0])
-
         frames = np.empty((frame_batchsize, h, w), dtype=np.float32)
-
+        
         with mmap.mmap(self.fid.fileno(), 0, access=mmap.ACCESS_READ) as mm:
             for i, img_start in enumerate(offsets):
                 if img_start == 0:
                     raise ValueError(f"Invalid offset for frame {first_frame + i}")
-
-                # Read annotation size (4 bytes) at img_start
                 ann_size = struct.unpack('I', mm[img_start:img_start+4])[0]
-                print(ann_size)
-                
-                
-                
-                # Image data starts after the annotation
-                data_start = img_start + 4 + ann_size
-                data_end = data_start + frame_image_size
+                data_start = img_start + ann_size
+                data_end = data_start + frame_image_size 
 
-                raw = np.frombuffer(mm[data_start:data_end], dtype=np.uint8)
+                # raw = np.frombuffer(mm[data_start:data_end], dtype=np.uint16)
 
                 if compression == 256:          # 10-bit packed
-                    img = _unpack_10bit(raw, w, h)
-                    img = md['LUT_P10'][img].astype(np.uint16)
+                    pass
+                    # img = _unpack_10bit(raw, w, h)
                 elif compression == 1024:       # 12-bit packed (Phantom P12L)
-                    img = _unpack_12bitL(raw, w, h)
+                    img = unpack_12bitL_vectorized(mm[data_start:data_end], w, h)
                 else:
-                    dtype = np.uint8 if md['biBitCount'] == 8 else np.uint16
-                    img = np.frombuffer(raw, dtype=dtype).reshape(h, w)[::-1]
-                    
-                plt.imshow(img)
-                plt.show()
+                    pass
 
-                frames[i] = img.astype(np.float32)  # optionally / max_val if needed
+                frames[i] = img.astype(np.float32)
 
         return frames
-            
-    # def read_frames(self, first_frame, frame_size):
-    #     """Custom version of frame reading implemented home for not compressed cine frames"""
-    #     fId = self.fid
-    #     fId.seek(self.metadata["OffImageOffsets"] + 0 * 8)
-    #     print(fId.read(8))
-
-    #     image_start = s.unpack("q", fId.read(8))[0]
-    #     if image_start == 0:
-    #         raise ValueError("image_start is null")
-
-    #     fId.seek(image_start)
-    #     annotationSize = s.unpack("I", fId.read(4))[0]  # unit32, 4bytes
-    #     if annotationSize == 0:
-    #         raise ValueError("annotationSize is null")
-
-    #     fId.seek(image_start + annotationSize)
-
-    #     img = np.frombuffer(
-    #         fId.read(metadata.biSizeImage),
-    #         dtype={8: np.uint8, 10: "u2", 12: np.uint16, 0: np.uint16}[
-    #             metadata.RealBPP
-    #         ],
-    #     )
-
-    #     if metadata.biCompression == 256:  # 10bit / P10 compressed
-    #         img = _unpack_10bit(img, metadata.biWidth, metadata.biHeight)
-    #         img = metadata.LUT_P10[img].astype(np.uint16)
-    #     elif metadata.biCompression == 1024:  # P12L compressed
-    #         img = _unpack_12bitL(img, metadata.biWidth, metadata.biHeight)
-    #     else:
-    #         img = img.reshape(metadata.biHeight, metadata.biWidth)[::-1]
-
-    #     return img.astype(np.float32)
-        
+    
     def read_frames_cinereader(self, first_frame, frame_size):
         _, images, _ = cinereader.read(
-            self.file_path, self.metadata.FirstImageNo + first_frame, frame_size
+            self.file_path, self.metadata['FirstImageNo'] + first_frame, frame_size
         )
         return np.stack(images, axis=0).astype(np.float32)
+    
+    read_frames = read_frames_fastest
 
 
 class FileReaderFactory:

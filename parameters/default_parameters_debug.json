@@ -54,7 +54,7 @@
   "debug_plot_parameters": {
     "spectrumloglog": {
       "ylim": [1e2, 1e5],
-      "fit_f1" : 1000,
+      "fit_f1" : 4000,
       "fit_f2" : 18000
     },
     "spectrum": {

@@ -743,7 +743,6 @@ class DebugPlotterManager:
     
     def plot_all(self, res):
         """Plot all available debug outputs"""
-        raise("Should not")
         if not self.active:
             return {}
         
