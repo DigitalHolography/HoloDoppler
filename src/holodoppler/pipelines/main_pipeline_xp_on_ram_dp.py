@@ -699,19 +699,14 @@ def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, first_fra
     # cp.cuda.set_allocator(cp.cuda.MemoryPool(cp.cuda.PinnedMemoryAllocator()))
     
     FETCH_NUM_WORKERS = 8
-    
-    batch_queue = queue.Queue(maxsize=40) # max number of batchs be careful with batchs
-    
-    def fetch_batch(file_reader, batch_index):
-        frames_batch = file_reader.read_frames(first_frame + batch_index * batch_stride, batch_size)
-        batch_queue.put((batch_index, frames_batch))
-        
-    def worker(worker_id, batch_indices):
+
+    def fetch_batch_worker(worker_id, batch_indices, file_path, first_frame, batch_stride, batch_size, batch_queue):
         """Each worker processes a subset of batch indices"""
         file_reader = FileReaderFactory.create(file_path)
         file_reader.open()
         for batch_index in batch_indices:
-            fetch_batch(file_reader, batch_index)
+            frames_batch = file_reader.read_frames(first_frame + batch_index * batch_stride, batch_size)
+            batch_queue.put((batch_index, frames_batch))
         file_reader.close()
 
     # Split all batch indices among workers
@@ -722,14 +717,18 @@ def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, first_fra
         worker_id = i % FETCH_NUM_WORKERS
         batch_indices_per_worker[worker_id].append(batch_index)
 
-    threads = []
+    # Use multiprocessing Manager for shared queue
+    manager = mp.Manager()
+    batch_queue = manager.Queue(maxsize=40)
+
+    processes = []
     for worker_id in range(FETCH_NUM_WORKERS):
-        t = threading.Thread(
-            target=worker, 
-            args=(worker_id, batch_indices_per_worker[worker_id])
+        p = mp.Process(
+            target=fetch_batch_worker,
+            args=(worker_id, batch_indices_per_worker[worker_id], file_path, first_frame, batch_stride, batch_size, batch_queue)
         )
-        threads.append(t)
-        t.start()
+        processes.append(p)
+        p.start()
         
     # # Reset to default (non-pinned) allocator
     # cp.cuda.set_allocator(cp.cuda.MemoryPool())
@@ -828,7 +827,7 @@ def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, first_fra
             out_accumulation[key] /= num_batch
         
         # Wait for all fetch threads to complete
-        for t in threads:
+        for t in processes:
             t.join()
         
         # Synchronize all streams
