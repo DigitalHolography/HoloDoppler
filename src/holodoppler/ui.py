@@ -2,18 +2,12 @@ from __future__ import annotations
 
 import json
 import queue
+import sys
 import threading
 from pathlib import Path
 
-import tkinter as tk
-from tkinter import filedialog, ttk
-from tkinter.scrolledtext import ScrolledText
-
-try:
-    from PIL import Image, ImageTk
-except Exception:
-    Image = None
-    ImageTk = None
+import pyqtgraph as pg
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from holodoppler.cli import preview, process
 
@@ -21,198 +15,289 @@ APP_NAME = "HoloDoppler"
 SUPPORTED = {".holo", ".cine", ".txt"}
 DEFAULT_CONFIG = Path("./parameters/default_parameters_debug.json")
 
-# ------------------------------------------------------------------
-# DND availability check – root window will inherit from TkinterDnD.Tk if present
-# ------------------------------------------------------------------
-try:
-    from tkinterdnd2 import TkinterDnD
-    DND_AVAILABLE = True
-except ImportError:
-    DND_AVAILABLE = False
-    TkinterDnD = tk.Tk  # fallback (no DND)
+
+def _ensure_app() -> QtWidgets.QApplication:
+    app = QtWidgets.QApplication.instance()
+    if app is None:
+        app = QtWidgets.QApplication(sys.argv)
+        app.setApplicationName(APP_NAME)
+    return app
 
 
-class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
+class UI(QtWidgets.QMainWindow):
     def __init__(self):
+        self._app = _ensure_app()
         super().__init__()
-        self.title(APP_NAME)
-        self.geometry("800x720")
-        self.minsize(700, 600)
+
+        self.setWindowTitle(APP_NAME)
+        self.resize(800, 720)
+        self.setMinimumSize(700, 600)
+        self.setAcceptDrops(True)
 
         self.paths: list[Path] = []
         self.config_path = DEFAULT_CONFIG
-        self.config_var = tk.StringVar(value=str(DEFAULT_CONFIG))
-        self.status_var = tk.StringVar(value="Ready")
-
-        self.q = queue.Queue()
+        self.q: queue.Queue[tuple[str, object]] = queue.Queue()
         self.stop = threading.Event()
-        self.worker = None
+        self.worker: threading.Thread | None = None
 
         self._setup_theme()
         self._build()
-        self.after(50, self._poll)
-        self._enable_dnd()
+        self._set_status("Ready - drop .holo/.cine/.txt anywhere")
+
+        self.timer = QtCore.QTimer(self)
+        self.timer.timeout.connect(self._poll)
+        self.timer.start(50)
+
+    def mainloop(self) -> int:
+        self.show()
+        return self._app.exec()
 
     # ------------------------------------------------------------------
-    # THEME
+    # Theme
     # ------------------------------------------------------------------
 
-    def _setup_theme(self):
-        style = ttk.Style(self)
-        try:
-            self.tk.call("source", "sun-valley.tcl")
-            self.tk.call("set_theme", "dark")
-        except Exception:
-            style.theme_use("clam")
-            bg = "#1e1e1e"
-            fg = "#f0f0f0"
-            style.configure(".", background=bg, foreground=fg)
-            style.configure("TLabel", background=bg, foreground=fg)
-            style.configure("TFrame", background=bg)
-            style.configure("TLabelframe", background=bg, foreground=fg)
-            style.configure("TLabelframe.Label", background=bg, foreground=fg)
-            style.configure("TButton", background="#2d2d2d", foreground=fg, borderwidth=1)
-            style.map("TButton", background=[("active", "#3c3c3c")])
-            style.configure("Accent.TButton", background="#0a5c8e", foreground="white")
-            style.map("Accent.TButton", background=[("active", "#0f6ba3")])
+    def _setup_theme(self) -> None:
+        self._app.setStyle("Fusion")
 
-            # Custom style for readonly Entry (gray background, white text)
-            style.configure("Readonly.TEntry",
-                            fieldbackground="#3c3c3c",   # gray background
-                            foreground="white",
-                            borderwidth=1,
-                            relief="solid")
+        palette = QtGui.QPalette()
+        palette.setColor(QtGui.QPalette.ColorRole.Window, QtGui.QColor("#1e1e1e"))
+        palette.setColor(QtGui.QPalette.ColorRole.WindowText, QtGui.QColor("#f0f0f0"))
+        palette.setColor(QtGui.QPalette.ColorRole.Base, QtGui.QColor("#252526"))
+        palette.setColor(QtGui.QPalette.ColorRole.AlternateBase, QtGui.QColor("#2d2d2d"))
+        palette.setColor(QtGui.QPalette.ColorRole.Text, QtGui.QColor("#f0f0f0"))
+        palette.setColor(QtGui.QPalette.ColorRole.Button, QtGui.QColor("#2d2d2d"))
+        palette.setColor(QtGui.QPalette.ColorRole.ButtonText, QtGui.QColor("#f0f0f0"))
+        palette.setColor(QtGui.QPalette.ColorRole.Highlight, QtGui.QColor("#0a5c8e"))
+        palette.setColor(QtGui.QPalette.ColorRole.HighlightedText, QtGui.QColor("#ffffff"))
+        self._app.setPalette(palette)
 
-        # Use a font that is guaranteed to exist, avoid tuple issues
-        default_font = ("TkDefaultFont", 10)
-        self.option_add("*Font", default_font)
+        pg.setConfigOptions(antialias=True, imageAxisOrder="row-major")
 
-    # ------------------------------------------------------------------
-    # UI BUILD – clean grid layout, centered
-    # ------------------------------------------------------------------
-
-    def _build(self):
-        main = ttk.Frame(self, padding="15 15 15 15")
-        main.pack(fill="both", expand=True)
-        main.columnconfigure(1, weight=1)   # middle column expands
-        main.rowconfigure(2, weight=1)       # preview area expands
-
-        # ----- ROW 0: Input files (label, scrollable list, button) -----
-        ttk.Label(main, text="Input files", font="TkDefaultFont 10 bold").grid(
-            row=0, column=0, sticky="nw", padx=(0, 10), pady=(5, 0)
+        self.setStyleSheet(
+            """
+            QWidget {
+                background: #1e1e1e;
+                color: #f0f0f0;
+                font-size: 10pt;
+            }
+            QPlainTextEdit, QLineEdit {
+                background: #252526;
+                color: #e0e0e0;
+                border: 1px solid #3c3c3c;
+                border-radius: 4px;
+                padding: 6px;
+            }
+            QLineEdit[readOnly="true"] {
+                background: #3c3c3c;
+            }
+            QPushButton {
+                background: #2d2d2d;
+                border: 1px solid #4b5563;
+                border-radius: 4px;
+                padding: 7px 12px;
+            }
+            QPushButton:hover {
+                background: #3c3c3c;
+            }
+            QPushButton:disabled {
+                color: #7a7a7a;
+                background: #252526;
+                border-color: #333333;
+            }
+            QPushButton#accentButton {
+                background: #0a5c8e;
+                border-color: #0f6ba3;
+                color: white;
+                font-weight: 600;
+            }
+            QPushButton#accentButton:hover {
+                background: #0f6ba3;
+            }
+            QGroupBox {
+                border: 1px solid #3c3c3c;
+                border-radius: 4px;
+                margin-top: 14px;
+                padding-top: 12px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 4px;
+            }
+            QProgressBar {
+                border: 1px solid #3c3c3c;
+                border-radius: 4px;
+                height: 10px;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background: #0a5c8e;
+                border-radius: 3px;
+            }
+            """
         )
-        files_frame = ttk.Frame(main)
-        files_frame.grid(row=0, column=1, sticky="ew", pady=(5, 5))
-        files_frame.columnconfigure(0, weight=1)
-        self.filelist_text = ScrolledText(
-            files_frame, height=5, wrap="word", relief="flat", borderwidth=0,
-            bg="#252526", fg="#e0e0e0"
-        )
-        self.filelist_text.grid(row=0, column=0, sticky="ew")
-        self.filelist_text.config(state="disabled")
-
-        ttk.Button(main, text="📂 Open files", command=self.open_files).grid(
-            row=0, column=2, padx=(10, 0), pady=(5, 0), sticky="n"
-        )
-
-        # ----- ROW 1: Config path (label, readonly entry, button) -----
-        ttk.Label(main, text="Config JSON", font="TkDefaultFont 10 bold").grid(
-            row=1, column=0, sticky="nw", padx=(0, 10), pady=(10, 0)
-        )
-        config_frame = ttk.Frame(main)
-        config_frame.grid(row=1, column=1, sticky="ew", pady=(10, 0))
-        config_frame.columnconfigure(0, weight=1)
-
-        # Use a custom style to give the readonly entry a gray background
-        config_entry = ttk.Entry(config_frame, textvariable=self.config_var,
-                                 state="readonly", style="Readonly.TEntry")
-        config_entry.grid(row=0, column=0, sticky="ew")
-
-        ttk.Button(main, text="⚙️ Change", command=self.choose_config).grid(
-            row=1, column=2, padx=(10, 0), pady=(10, 0), sticky="n"
-        )
-
-        # ----- ROW 2: Preview area (centered, expands) -----
-        preview_frame = ttk.LabelFrame(main, text="Preview", padding=8)
-        preview_frame.grid(row=2, column=0, columnspan=3, sticky="nsew", pady=15)
-        preview_frame.columnconfigure(0, weight=1)
-        preview_frame.rowconfigure(0, weight=1)
-        self.preview_label = ttk.Label(preview_frame, text="Drop files or select input", anchor="center")
-        self.preview_label.grid(row=0, column=0, sticky="nsew")
-
-        # ----- ROW 3: Action buttons (centered) -----
-        btn_frame = ttk.Frame(main)
-        btn_frame.grid(row=3, column=0, columnspan=3, pady=10)
-        self.run_btn = ttk.Button(btn_frame, text="▶ RUN", command=self.run, state="disabled", style="Accent.TButton")
-        self.run_btn.pack(side="left", padx=8)
-        self.stop_btn = ttk.Button(btn_frame, text="⏹ STOP", command=self.stop_work, state="disabled")
-        self.stop_btn.pack(side="left", padx=8)
-
-        # ----- ROW 4: Progress & Status -----
-        self.progress = ttk.Progressbar(main, mode="indeterminate")
-        self.progress.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(5, 5))
-
-        status_frame = ttk.Frame(main)
-        status_frame.grid(row=5, column=0, columnspan=3, sticky="ew")
-        self.status_label = ttk.Label(status_frame, textvariable=self.status_var, anchor="center", font="TkDefaultFont 9 italic")
-        self.status_label.pack(fill="x")
 
     # ------------------------------------------------------------------
-    # INPUT HANDLING
+    # UI build
     # ------------------------------------------------------------------
 
-    def open_files(self):
-        paths = filedialog.askopenfilenames(
-            filetypes=[("HoloDoppler inputs", "*.holo *.cine *.txt"), ("All files", "*.*")]
+    def _build(self) -> None:
+        central = QtWidgets.QWidget(self)
+        central.setAcceptDrops(True)
+        self.setCentralWidget(central)
+
+        main = QtWidgets.QGridLayout(central)
+        main.setContentsMargins(15, 15, 15, 15)
+        main.setHorizontalSpacing(10)
+        main.setVerticalSpacing(10)
+        main.setColumnStretch(1, 1)
+        main.setRowStretch(2, 1)
+
+        title_font = QtGui.QFont()
+        title_font.setBold(True)
+
+        files_label = QtWidgets.QLabel("Input files")
+        files_label.setFont(title_font)
+        files_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        main.addWidget(files_label, 0, 0)
+
+        self.filelist_text = QtWidgets.QPlainTextEdit()
+        self.filelist_text.setReadOnly(True)
+        self.filelist_text.setAcceptDrops(False)
+        self.filelist_text.setMinimumHeight(105)
+        self.filelist_text.setPlainText("No files selected")
+        main.addWidget(self.filelist_text, 0, 1)
+
+        open_btn = QtWidgets.QPushButton("Open files")
+        open_btn.setIcon(self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DirOpenIcon))
+        open_btn.clicked.connect(self.open_files)
+        main.addWidget(open_btn, 0, 2, alignment=QtCore.Qt.AlignmentFlag.AlignTop)
+
+        config_label = QtWidgets.QLabel("Config JSON")
+        config_label.setFont(title_font)
+        config_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        main.addWidget(config_label, 1, 0)
+
+        self.config_edit = QtWidgets.QLineEdit(str(DEFAULT_CONFIG))
+        self.config_edit.setReadOnly(True)
+        main.addWidget(self.config_edit, 1, 1)
+
+        config_btn = QtWidgets.QPushButton("Change")
+        config_btn.setIcon(self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_FileDialogDetailedView))
+        config_btn.clicked.connect(self.choose_config)
+        main.addWidget(config_btn, 1, 2, alignment=QtCore.Qt.AlignmentFlag.AlignTop)
+
+        preview_group = QtWidgets.QGroupBox("Preview")
+        preview_layout = QtWidgets.QVBoxLayout(preview_group)
+        preview_layout.setContentsMargins(8, 8, 8, 8)
+        main.addWidget(preview_group, 2, 0, 1, 3)
+
+        self.preview_plot = pg.PlotWidget()
+        self.preview_plot.setBackground("#111111")
+        self.preview_plot.setMenuEnabled(False)
+        self.preview_plot.hideAxis("left")
+        self.preview_plot.hideAxis("bottom")
+        self.preview_viewbox = self.preview_plot.getViewBox()
+        self.preview_viewbox.setAspectLocked(True)
+        self.preview_viewbox.invertY(True)
+        self.preview_item = pg.ImageItem()
+        self.preview_plot.addItem(self.preview_item)
+        self.preview_message = pg.TextItem(
+            "Drop files or select input",
+            anchor=(0.5, 0.5),
+            color="#b8b8b8",
+        )
+        self.preview_plot.addItem(self.preview_message)
+        self.preview_viewbox.setRange(xRange=(-1, 1), yRange=(-1, 1), padding=0)
+        preview_layout.addWidget(self.preview_plot)
+
+        buttons = QtWidgets.QHBoxLayout()
+        buttons.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        main.addLayout(buttons, 3, 0, 1, 3)
+
+        self.run_btn = QtWidgets.QPushButton("RUN")
+        self.run_btn.setObjectName("accentButton")
+        self.run_btn.setIcon(self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DialogApplyButton))
+        self.run_btn.setEnabled(False)
+        self.run_btn.clicked.connect(self.run)
+        buttons.addWidget(self.run_btn)
+
+        self.stop_btn = QtWidgets.QPushButton("STOP")
+        self.stop_btn.setIcon(self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MediaStop))
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.clicked.connect(self.stop_work)
+        buttons.addWidget(self.stop_btn)
+
+        self.progress = QtWidgets.QProgressBar()
+        self.progress.setRange(0, 1)
+        self.progress.setValue(0)
+        self.progress.setTextVisible(False)
+        main.addWidget(self.progress, 4, 0, 1, 3)
+
+        self.status_label = QtWidgets.QLabel()
+        self.status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        status_font = self.status_label.font()
+        status_font.setItalic(True)
+        status_font.setPointSize(max(status_font.pointSize() - 1, 8))
+        self.status_label.setFont(status_font)
+        main.addWidget(self.status_label, 5, 0, 1, 3)
+
+    # ------------------------------------------------------------------
+    # Input handling
+    # ------------------------------------------------------------------
+
+    def open_files(self) -> None:
+        paths, _ = QtWidgets.QFileDialog.getOpenFileNames(
+            self,
+            "Open input files",
+            "",
+            "HoloDoppler inputs (*.holo *.cine *.txt);;All files (*)",
         )
         if paths:
             self._set_paths([Path(p) for p in paths])
 
-    def _set_paths(self, paths):
-        out = []
-        for p in paths:
-            if p.suffix.lower() == ".txt":
-                out += self._read_txt(p)
-            elif p.suffix.lower() in {".holo", ".cine"}:
-                out.append(p)
+    def _set_paths(self, paths: list[Path]) -> None:
+        out: list[Path] = []
+        for path in paths:
+            suffix = path.suffix.lower()
+            if suffix == ".txt":
+                out += self._read_txt(path)
+            elif suffix in {".holo", ".cine"}:
+                out.append(path)
 
-        self.paths = [p.resolve() for p in out if p.exists()]
+        self.paths = [path.resolve() for path in out if path.exists()]
         self._update_filelist_display()
-        self.run_btn["state"] = "normal" if self.paths else "disabled"
+        self.run_btn.setEnabled(bool(self.paths) and not self._busy())
 
         if self.paths:
-            self.status_var.set(f"Loaded {len(self.paths)} file(s)")
+            self._set_status(f"Loaded {len(self.paths)} file(s)")
             self._start_preview(self.paths[0])
         else:
-            self.status_var.set("No valid input")
-            self.preview_label.config(text="No preview", image="")
+            self._set_status("No valid input")
+            self._set_preview_message("No preview")
 
-    def _update_filelist_display(self):
-        self.filelist_text.config(state="normal")
-        self.filelist_text.delete(1.0, tk.END)
+    def _update_filelist_display(self) -> None:
         if self.paths:
-            for p in self.paths:
-                self.filelist_text.insert(tk.END, f"{p}\n")
+            self.filelist_text.setPlainText("\n".join(str(path) for path in self.paths))
         else:
-            self.filelist_text.insert(tk.END, "No files selected")
-        self.filelist_text.config(state="disabled")
+            self.filelist_text.setPlainText("No files selected")
 
-    def _read_txt(self, path: Path):
+    def _read_txt(self, path: Path) -> list[Path]:
         base = path.parent
-        res = []
+        res: list[Path] = []
         for line in path.read_text(encoding="utf-8").splitlines():
             line = line.strip().strip('"')
             if not line or line.startswith("#"):
                 continue
-            p = Path(line)
-            res.append(p if p.is_absolute() else base / p)
+            candidate = Path(line)
+            res.append(candidate if candidate.is_absolute() else base / candidate)
         return res
 
     # ------------------------------------------------------------------
-    # PREVIEW
+    # Preview
     # ------------------------------------------------------------------
 
-    def _start_preview(self, path):
+    def _start_preview(self, path: Path) -> None:
         if self._busy():
             return
         self.stop.clear()
@@ -220,45 +305,82 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
         self.worker = threading.Thread(target=self._preview_worker, args=(path,), daemon=True)
         self.worker.start()
 
-    def _preview_worker(self, path):
+    def _preview_worker(self, path: Path) -> None:
         try:
             params = self._load_params()
             img = preview(str(path), params)
             self.q.put(("img", img))
-        except Exception as e:
-            self.q.put(("err", str(e)))
+        except Exception as exc:
+            self.q.put(("err", str(exc)))
         finally:
             self.q.put(("done", None))
 
-    def _show_preview(self, arr):
-        if arr is None or Image is None:
-            self.preview_label.config(text="Preview not available", image="")
+    def _show_preview(self, arr: object) -> None:
+        image = self._prepare_preview_array(arr)
+        if image is None:
+            self._set_preview_message("Preview not available")
             return
+
+        self.preview_message.setVisible(False)
+        self.preview_item.setVisible(True)
+
+        if image.ndim == 2:
+            self.preview_item.setImage(image, autoLevels=False, levels=(0, 255))
+            height, width = image.shape
+        else:
+            self.preview_item.setImage(image, autoLevels=False)
+            height, width = image.shape[:2]
+
+        self.preview_item.setRect(QtCore.QRectF(0, 0, width, height))
+        self.preview_viewbox.setRange(xRange=(0, width), yRange=(0, height), padding=0.02)
+
+    def _prepare_preview_array(self, arr: object):
+        if arr is None:
+            return None
 
         import numpy as np
 
-        arr = np.asarray(arr).squeeze()
+        if hasattr(arr, "get"):
+            arr = arr.get()
 
-        if arr.dtype == np.uint8:
-            img_arr = arr
+        image = np.asarray(arr).squeeze()
+        if image.ndim not in {2, 3}:
+            return None
+
+        if image.ndim == 3 and image.shape[-1] not in {3, 4}:
+            return None
+
+        if image.dtype == np.uint8:
+            return np.ascontiguousarray(image)
+
+        image = image.astype("float32", copy=False)
+        finite = np.isfinite(image)
+        if not finite.any():
+            return np.zeros(image.shape, dtype=np.uint8)
+
+        mn = float(np.nanmin(image[finite]))
+        mx = float(np.nanmax(image[finite]))
+        if mx > mn:
+            image = (image - mn) * 255.0 / (mx - mn)
         else:
-            arr = arr.astype("float32")
-            mn, mx = float(np.nanmin(arr)), float(np.nanmax(arr))
-            img_arr = ((arr - mn) * 255.0 / (mx - mn)).clip(0, 255).astype("uint8") if mx > mn else np.zeros_like(arr, dtype="uint8")
+            image = np.zeros_like(image)
 
-        img = Image.fromarray(img_arr).convert("RGB")
-        max_w, max_h = 680, 320
-        w, h = img.size
-        scale = min(max_w / w, max_h / h)
-        img = img.resize((int(w * scale), int(h * scale)))
-        self._img = ImageTk.PhotoImage(img)
-        self.preview_label.config(image=self._img, text="")
+        image = np.nan_to_num(image, nan=0.0, posinf=255.0, neginf=0.0)
+        return np.ascontiguousarray(image.clip(0, 255).astype(np.uint8))
+
+    def _set_preview_message(self, text: str) -> None:
+        self.preview_item.clear()
+        self.preview_item.setVisible(False)
+        self.preview_message.setText(text)
+        self.preview_message.setVisible(True)
+        self.preview_message.setPos(0, 0)
+        self.preview_viewbox.setRange(xRange=(-1, 1), yRange=(-1, 1), padding=0)
 
     # ------------------------------------------------------------------
-    # PROCESSING
+    # Processing
     # ------------------------------------------------------------------
 
-    def run(self):
+    def run(self) -> None:
         if self._busy():
             return
         self.stop.clear()
@@ -266,101 +388,142 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
         self.worker = threading.Thread(target=self._run_worker, daemon=True)
         self.worker.start()
 
-    def _run_worker(self):
+    def _run_worker(self) -> None:
         try:
             params = self._load_params()
-            for i, p in enumerate(self.paths, 1):
+            for index, path in enumerate(self.paths, 1):
                 if self.stop.is_set():
                     self.q.put(("status", "Stopped"))
                     return
-                self.q.put(("status", f"Processing {i}/{len(self.paths)}"))
-                print(f"Processing {p} with parameters:")
-                process(str(p), params)
-            self.q.put(("status", "Done ヽ(^o^)丿"))
-        except Exception as e:
+                self.q.put(("status", f"Processing {index}/{len(self.paths)}"))
+                print(f"Processing {path} with parameters:")
+                process(str(path), params)
+            self.q.put(("status", "Done"))
+        except Exception as exc:
             import traceback
+
             print(traceback.format_exc())
-            self.q.put(("err", str(e)))
+            self.q.put(("err", str(exc)))
         finally:
             self.q.put(("done", None))
 
-    def stop_work(self):
+    def stop_work(self) -> None:
         self.stop.set()
-        self.status_var.set("Stopping after current file...")
+        self._set_status("Stopping after current file...")
 
     # ------------------------------------------------------------------
-    # CONFIG
+    # Config
     # ------------------------------------------------------------------
 
-    def choose_config(self):
-        p = filedialog.askopenfilename(filetypes=[("JSON config", "*.json"), ("All files", "*.*")], initialdir=self.config_path.parent)
-        if p:
-            self.config_path = Path(p)
-            self.config_var.set(str(self.config_path))
+    def choose_config(self) -> None:
+        initial_dir = self.config_path.parent if self.config_path.parent.exists() else Path.cwd()
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select JSON config",
+            str(initial_dir),
+            "JSON config (*.json);;All files (*)",
+        )
+        if path:
+            self.config_path = Path(path)
+            self.config_edit.setText(str(self.config_path))
 
-    def _load_params(self):
-        return json.loads(self.config_path.read_text(encoding="utf-8")) if self.config_path.exists() else {}
-
-    # ------------------------------------------------------------------
-    # DRAG & DROP (full window, no separate label)
-    # ------------------------------------------------------------------
-
-    def _enable_dnd(self):
-        if not DND_AVAILABLE:
-            self.status_var.set("Drag & drop not available (install tkinterdnd2)")
-            return
-
-        try:
-            # Register the whole window as a drop target
-            self.drop_target_register("DND_Files")
-            self.dnd_bind("<<Drop>>", self._on_drop)
-            self.status_var.set("Ready – drop .holo/.cine/.txt anywhere")
-        except Exception as e:
-            print(f"DND registration error: {e}")
-            self.status_var.set("Drag & drop failed to initialize")
-
-    def _on_drop(self, e):
-        # e.data may contain space-separated paths, possibly with curly braces for spaces.
-        # splitlist handles that correctly.
-        files = self.tk.splitlist(e.data)
-        if files:
-            self._set_paths([Path(p) for p in files])
+    def _load_params(self) -> dict:
+        if not self.config_path.exists():
+            return {}
+        return json.loads(self.config_path.read_text(encoding="utf-8"))
 
     # ------------------------------------------------------------------
-    # QUEUE POLLING & BUSY STATE
+    # Drag and drop
     # ------------------------------------------------------------------
 
-    def _poll(self):
+    def dragEnterEvent(self, event: QtGui.QDragEnterEvent) -> None:
+        if self._paths_from_mime(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event: QtGui.QDragMoveEvent) -> None:
+        if self._paths_from_mime(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event: QtGui.QDropEvent) -> None:
+        paths = self._paths_from_mime(event.mimeData())
+        if paths:
+            self._set_paths(paths)
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def _paths_from_mime(self, mime: QtCore.QMimeData) -> list[Path]:
+        paths: list[Path] = []
+
+        if mime.hasUrls():
+            for url in mime.urls():
+                if url.isLocalFile():
+                    path = Path(url.toLocalFile())
+                    if path.suffix.lower() in SUPPORTED:
+                        paths.append(path)
+
+        if not paths and mime.hasText():
+            for line in mime.text().splitlines():
+                value = line.strip().strip('"')
+                if value.startswith("file:///"):
+                    value = QtCore.QUrl(value).toLocalFile()
+                if value:
+                    path = Path(value)
+                    if path.suffix.lower() in SUPPORTED:
+                        paths.append(path)
+
+        return paths
+
+    # ------------------------------------------------------------------
+    # Queue polling and busy state
+    # ------------------------------------------------------------------
+
+    def _poll(self) -> None:
         try:
             while True:
-                k, v = self.q.get_nowait()
-                if k == "img":
-                    self._show_preview(v)
-                elif k == "err":
-                    self.status_var.set("Error")
-                    self.preview_label.config(text=v, image="")
-                elif k == "status":
-                    self.status_var.set(v)
-                elif k == "done":
+                kind, value = self.q.get_nowait()
+                if kind == "img":
+                    self._show_preview(value)
+                elif kind == "err":
+                    self._set_status("Error")
+                    self._set_preview_message(str(value))
+                elif kind == "status":
+                    self._set_status(str(value))
+                elif kind == "done":
                     self._set_busy(False)
         except queue.Empty:
             pass
-        self.after(50, self._poll)
 
-    def _set_busy(self, busy, status="Ready"):
+    def _set_busy(self, busy: bool, status: str = "Ready") -> None:
         if busy:
-            self.status_var.set(status)
-            self.progress.start(10)
-            self.run_btn["state"] = "disabled"
-            self.stop_btn["state"] = "normal"
+            self._set_status(status)
+            self.progress.setRange(0, 0)
+            self.run_btn.setEnabled(False)
+            self.stop_btn.setEnabled(True)
         else:
-            self.progress.stop()
-            self.run_btn["state"] = "normal" if self.paths else "disabled"
-            self.stop_btn["state"] = "disabled"
+            self.progress.setRange(0, 1)
+            self.progress.setValue(0)
+            self.run_btn.setEnabled(bool(self.paths))
+            self.stop_btn.setEnabled(False)
 
-    def _busy(self):
-        return self.worker and self.worker.is_alive()
+    def _busy(self) -> bool:
+        return self.worker is not None and self.worker.is_alive()
+
+    def _set_status(self, text: str) -> None:
+        self.status_label.setText(text)
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        self.stop.set()
+        event.accept()
+
+
+def run_ui() -> int:
+    return UI().mainloop()
 
 
 if __name__ == "__main__":
-    UI().mainloop()
+    raise SystemExit(run_ui())

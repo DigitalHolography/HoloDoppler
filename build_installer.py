@@ -168,12 +168,12 @@ def _write_pyinstaller_entrypoint() -> Path:
             import sys
 
             from holodoppler.cli import main as cli_main
-            from holodoppler.ui import UI
 
             def main() -> int:
                 if len(sys.argv) == 1:
-                    UI().mainloop()
-                    return 0
+                    from holodoppler.ui import run_ui
+
+                    return run_ui()
 
                 return cli_main()
 
@@ -220,9 +220,13 @@ def _run_pyinstaller(console: bool) -> None:
         "--collect-submodules",
         "h5py",
         "--collect-submodules",
-        "tkinterdnd2",
+        "PySide6",
         "--collect-data",
-        "tkinterdnd2",
+        "PySide6",
+        "--collect-submodules",
+        "pyqtgraph",
+        "--collect-data",
+        "pyqtgraph",
     ]
 
     if console:

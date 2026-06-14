@@ -19,7 +19,8 @@ dependencies = [
   "cupy-cuda13x>=14.0.1",
   "lblprof>=0.1.8",
   "imageio>=2.37.3",
-  "tkinterdnd2",
+  "PySide6>=6.8.0",
+  "pyqtgraph>=0.13.7",
 ]
 
 [project.optional-dependencies]
