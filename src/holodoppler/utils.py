@@ -63,10 +63,6 @@ def write_video_file(path, frames, fps, fourcc_code="mp4v"):
         out.write(frame)
     out.release()
 
-
-import numpy as np
-
-
 def resize_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
     """
     Resize using FFT. Vectorized across all non-target axes. Keeping comparable values.
