@@ -582,7 +582,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
         _process_cpu(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
                      M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock)
 
-    file_reader.close()
+    
 
     if coefs_list is not None:
             coefs_list = [bm.to_numpy(c) for c in coefs_list]
@@ -665,6 +665,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
         end_frame=end_frame, first_frame=first_frame, num_batch=num_batch
     )
     plt.close("all")
+    file_reader.close()
 
     if tictoc:
         print_timings_summary()

@@ -31,6 +31,7 @@ def save_outputs(
 
     # 1. Path and Mode Resolution
     # Default path generation
+    print(file_reader.file_path)
     default_path = _get_default_output_path(file_reader)
 
     if holodoppler_path:
