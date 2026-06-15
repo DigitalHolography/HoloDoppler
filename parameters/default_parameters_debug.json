@@ -13,7 +13,7 @@
   "batch_size_registration": 512,
   "apply_registration": true,
   "first_frame": 0,
-  "end_frame": -1,
+  "end_frame": 1024,
   "wavelength": 8.52e-7,
   "pixel_pitch": [2e-5,2e-5],
   "spatial_propagation": "Fresnel",

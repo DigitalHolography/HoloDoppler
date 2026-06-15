@@ -22,6 +22,7 @@ from tqdm import tqdm
 import cupy as cp
 import multiprocessing as mp
 from multiprocessing import shared_memory
+from multiprocessing import Process, Queue, Event, JoinableQueue
 
 # ------------------------------------------------------------------
 # Timing & Profiling Utilities
@@ -489,6 +490,57 @@ def preview_process_moments(file_path, parameters):
             M0img = resize_slicewise(M0img, L, L)
         return M0img
 
+
+def _debug_plotting_worker(input_q, output_q, stop_ev, params):
+    """
+    Runs in a separate process. Creates its own DebugPlotterManager,
+    optionally times plot_all, and processes tasks until a None sentinel.
+    """
+    # Prevent GPU usage in this worker process
+    os.environ['CUDA_VISIBLE_DEVICES'] = ''
+
+    mgr = DebugPlotterManager(params)
+
+    if track_time is not None:
+        mgr.plot_all = track_time("debug_manager_plot_all")(mgr.plot_all)
+
+    while True:
+        try:
+            item = input_q.get(timeout=0.1)
+        except queue.Empty:
+            if stop_ev.is_set() and input_q.empty():
+                break
+            continue
+
+        if item is None:            # sentinel → shut down after this task
+            input_q.task_done()     # mark sentinel as done
+            break
+
+        i, res = item
+        try:
+            out = mgr.plot_all(res)
+            output_q.put((i, out))
+        except Exception as e:
+            output_q.put((i, e))
+        finally:
+            input_q.task_done()     # mark actual task as done
+
+    # Drain any remaining items that arrived after the sentinel
+    while not input_q.empty():
+        try:
+            item = input_q.get_nowait()
+            if item is None:
+                input_q.task_done()
+                continue
+            i, res = item
+            out = mgr.plot_all(res)
+            output_q.put((i, out))
+            input_q.task_done()
+        except queue.Empty:
+            break
+
+    mgr.close_all()
+
 # ------------------------------------------------------------------
 # Full video processing
 # ------------------------------------------------------------------
@@ -528,40 +580,65 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     #         memmap = None
     # else:
     #     memmap = None
+    debug_manager = parameters.get("debug")
 
     out_list = []
     out_accumulation = {}
     coefs_list = [None] * num_batch if parameters.get("shack_hartmann") else None
     reg_list = [None] * num_batch if parameters.get("image_registration") else None
 
-    compute_debug = parameters.get("debug", False)
-    debug_manager = DebugPlotterManager(parameters) if compute_debug else None
-
-    
-    debug_queue = queue.Queue(maxsize=14) if debug_manager else None
-    res_store = {} if debug_manager else None
-    lock = threading.Lock() if debug_manager else None
-    stop_event = threading.Event() if debug_manager else None
     debug_results = {}
+    debug_input_queue = None
+    debug_output_queue = None
+    debug_plot_process = None
+    _stop_event = None
 
     if debug_manager:
-        debug_manager.plot_all = track_time("debug_manager_plot_all")(debug_manager.plot_all)
-        def plotting_worker():
-            while not stop_event.is_set() or not debug_queue.empty():
+        _stop_event = Event()
+        debug_input_queue = JoinableQueue(maxsize=14)   # <-- JoinableQueue now
+        debug_output_queue = Queue()
+
+        debug_plot_process = Process(
+            target=_debug_plotting_worker,
+            args=(debug_input_queue, debug_output_queue, _stop_event, parameters),
+            daemon=False
+        )
+        debug_plot_process.start()
+
+        # ---- Helper functions (used by the main loop) ----
+        def submit_debug_task(i, res_dict):
+            """Enqueue a debug task. Converts any GPU arrays to CPU numpy arrays."""
+            cpu_res = {}
+            for k, v in res_dict.items():
+                if hasattr(v, 'get'):        # cupy array
+                    cpu_res[k] = v.get()
+                else:
+                    cpu_res[k] = v
+            debug_input_queue.put((i, cpu_res))
+
+        def collect_debug_results():
+            """Drain output queue and update the global debug_results dict."""
+            while True:
                 try:
-                    i = debug_queue.get(timeout=0.1)
-                    with lock:
-                        res = res_store.pop(i)
-                    out = debug_manager.plot_all(res)
-                    with lock:
-                        debug_results[i] = out
-                    debug_queue.task_done()
+                    i, out = debug_output_queue.get_nowait()
+                    debug_results[i] = out
                 except queue.Empty:
-                    continue
-        debug_thread = threading.Thread(target=plotting_worker, daemon=True)
-        debug_thread.start()
+                    break
+
+        def shutdown_debug_plotter():
+            """Gracefully stop the worker process and collect remaining results."""
+            _stop_event.set()
+            debug_input_queue.put(None)               # sentinel
+            debug_input_queue.join()                  # wait until all tasks done
+            collect_debug_results()                   # gather final outputs
+            debug_plot_process.join(timeout=5)
+            if debug_plot_process.is_alive():
+                debug_plot_process.terminate()
+
     else:
-        debug_thread = None
+        submit_debug_task = None
+        collect_debug_results = None
+        shutdown_debug_plotter = None
 
     # Registration reference
     M0_reg = None
@@ -577,10 +654,10 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     # Dispatch to backend-specific loop
     if parameters["backend"] == "cupy":
         _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, first_frame, batch_stride, batch_size,
-                                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock)
+                                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, submit_debug_task, lock)
     else:
         _process_cpu(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
-                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock)
+                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, submit_debug_task)
 
     
 
@@ -591,7 +668,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
         reg_list = [bm.to_numpy(r) for r in reg_list]
     
     @track_time("collecting")
-    def collecting(bm,out_list,out_accumulation,debug_manager,debug_queue,stop_event,debug_thread,coefs_list,reg_list,compute_debug,debug_results,num_batch,parameters):
+    def collecting(bm,out_list,out_accumulation,debug_manager,coefs_list,reg_list,num_batch,parameters):
 
         # Post-processing
         # t0 = time.time()
@@ -605,10 +682,8 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
         # print(f"clear_gpu_memory: {time.time()-t0:.2f}s")
 
         if debug_manager:
-            debug_queue.join()
-            stop_event.set()
-            debug_thread.join()
-            debug_manager.close_all()
+            collect_debug_results()           # pull outputs into debug_results dict
+            shutdown_debug_plotter()
         # print(f"debug_manager: {time.time()-t0:.2f}s")
         
 
@@ -616,20 +691,20 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
         # print(f"reg_list: {time.time()-t0:.2f}s")
 
         vid_debug = {}
-        if compute_debug and debug_results:
+        if debug_manager and debug_results:
             for key in debug_results[0].keys():
                 try:
                     vid_debug[key] = np.stack([bm.to_numpy(debug_results[k][key]) for k in range(num_batch)], axis=0)
                 except Exception as e:
                     print(f"Couldn't stack debug output {key}: ", e)
-        if compute_debug and out_accumulation:
+        if debug_manager and out_accumulation:
             for key in out_accumulation.keys():
                 if out_accumulation[key].ndim == 3:
                     vid_debug[key] = bm.to_numpy(out_accumulation[key])
         # print(f"vid_debug: {time.time()-t0:.2f}s")
         return vid_t, vid_debug
     
-    vid_t, vid_debug = collecting(bm,out_list,out_accumulation,debug_manager,debug_queue,stop_event,debug_thread,coefs_list,reg_list,compute_debug,debug_results,num_batch,parameters)
+    vid_t, vid_debug = collecting(bm,out_list,out_accumulation,debug_manager,coefs_list,reg_list,num_batch,parameters)
     
     # print(vid_t.shape)
     # t0 = time.time()
@@ -678,7 +753,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
 # Specialised loops
 # ------------------------------------------------------------------
 def _process_cpu(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
-                 M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock):
+                 M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, submit_debug_task):
     
     for i in tqdm(range(num_batch)):
         frames = file_reader.read_frames(first_frame + i * batch_stride, batch_size)
@@ -698,9 +773,7 @@ def _process_cpu(bm, file_reader, parameters, num_batch, first_frame, batch_stri
         out_list.append(bm.xp.stack(l, axis=0))
         if "coefs" in res and coefs_list is not None: coefs_list[i] = res["coefs"]
         if "registration" in res and reg_list is not None: reg_list[i] = res["registration"]
-        if debug_manager and lock:
-            with lock: res_store[i] = res
-            debug_queue.put(i)
+        submit_debug_task(i, res)
             
             
 def _fetch_batch_worker_sharedmem(worker_id,
@@ -790,7 +863,7 @@ def _fetch_batch_worker_sharedmem(worker_id,
 @track_time("_process_gpu_streaming_onram")
 def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, first_frame, batch_stride,
                                  batch_size, M0_reg, out_list, out_accumulation, coefs_list, reg_list,
-                                 debug_manager, debug_queue, res_store, lock):
+                                 debug_manager, submit_debug_task, lock):
 
     tictoc = bool(parameters.get("tictoc", False))
 
@@ -1134,9 +1207,7 @@ def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, first_fra
 
             if debug_manager and lock:
                 t0 = now()
-                with lock:
-                    res_store[active_batch_index] = res
-                debug_queue.put(active_batch_index)
+                submit_debug_task(i, res)
                 prof_add("debug_manager_store", now() - t0)
 
             processed_batches += 1
@@ -1222,62 +1293,3 @@ def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, first_fra
         prof_add("shared_memory_cleanup", now() - t0)
 
         print_profile()
-# def _process_memmap(bm, memmap, parameters, num_batch, first_frame, batch_stride, batch_size,
-#                     M0_reg, out_list, coefs_list, reg_list, debug_manager, debug_queue, res_store, lock):
-#     for i in tqdm(range(num_batch)):
-#         start = i * batch_stride
-#         frames_np = memmap[start:start + batch_size]
-#         frames = bm.to_backend(frames_np)
-#         res, accu = render_moments(bm, parameters, frames=frames, registration_ref=M0_reg)
-#         if res is None: break
-#         l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
-#         for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-#             l.append(res[f"band_{k}_{f1}_{f2}"])
-#         out_list.append(bm.xp.stack(l, axis=0))
-#         if "coefs" in res and coefs_list is not None: coefs_list[i] = res["coefs"]
-#         if "registration" in res and reg_list is not None: reg_list[i] = res["registration"]
-#         if debug_manager and lock:
-#             with lock: res_store[i] = res
-#             debug_queue.put(i)
-
-def _process_gpu_streaming_onram_multistream(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
-                                              M0_reg, out_list, coefs_list, reg_list,
-                                              debug_manager, debug_queue, res_store, lock, end_frame):
-    import cupy as cp
-    all_frames = file_reader.read_frames(first_frame, end_frame - first_frame)
-    all_frames = np.asarray(all_frames)
-    n_streams = parameters.get("gpu_multistream_count", 8)
-    batch_starts = [i * batch_stride for i in range(num_batch)]
-
-    for chunk_start in tqdm(range(0, num_batch, n_streams)):
-        chunk_size = min(n_streams, num_batch - chunk_start)
-        streams = []
-        batch_results = [None] * chunk_size
-
-        for j in range(chunk_size):
-            i = chunk_start + j
-            start = batch_starts[i]
-            frames_sub = all_frames[start : start + batch_size]
-            stream = cp.cuda.Stream(non_blocking=True)
-            with stream:
-                d_frames = cp.asarray(frames_sub)
-                res, accu = render_moments(bm, parameters, frames=d_frames, registration_ref=M0_reg)
-            streams.append(stream)
-            batch_results[j] = res
-
-        for stream in streams:
-            stream.synchronize()
-
-        for j in range(chunk_size):
-            i = chunk_start + j
-            res = batch_results[j]
-            if res is None: break
-            l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
-            for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-                l.append(res[f"band_{k}_{f1}_{f2}"])
-            out_list.append(bm.xp.stack(l, axis=0))
-            if "coefs" in res and coefs_list is not None: coefs_list[i] = res["coefs"]
-            if "registration" in res and reg_list is not None: reg_list[i] = res["registration"]
-            if debug_manager is not None and lock is not None:
-                with lock: res_store[i] = res
-                debug_queue.put(i)
