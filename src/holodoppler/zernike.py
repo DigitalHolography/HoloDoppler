@@ -134,7 +134,7 @@ def make_gradient_matrix(
     return G
 
 
-def fit_zernike(
+def fit_zernike_fresnel(
     xp,
     ny,
     nx,
@@ -182,6 +182,56 @@ def fit_zernike(
         phase += coef * Z
 
     return coefs.astype(xp.float32), phase.astype(xp.float32)
+
+def fit_zernike_angular_spectrum(
+    xp,
+    ny,
+    nx,
+    pixel_pitch_y,
+    pixel_pitch_x,
+    wavelength,
+    z_prop,
+    shifts_y,
+    shifts_x,
+    zernike_modes,
+):
+    """Fit Zernike polynomials to displacement data"""
+
+    nysubabs, nxsubabs = shifts_y.shape
+
+    slopes_y = (shifts_y) * pixel_pitch_y * nysubabs / z_prop # much simpler in angularsp
+    slopes_x = (shifts_x) * pixel_pitch_x * nxsubabs / z_prop
+
+    s = xp.stack([slopes_y, slopes_x])
+
+    # Build gradient matrix
+    G = make_gradient_matrix(
+        xp,
+        zernike_modes,
+        nysubabs,
+        nxsubabs,
+        nx,
+        ny,
+        pixel_pitch_x,
+        pixel_pitch_y,
+        wavelength,
+    )
+
+    # Solve linear system
+    n_modes = len(zernike_modes)
+    A = G.reshape(-1, n_modes)
+    b = s.reshape(-1)
+    valid = ~xp.isnan(b) & ~xp.isnan(A).any(1)
+
+    coefs, _, _, _ = xp.linalg.lstsq(A[valid], b[valid], rcond=None)
+
+    # Reconstruct phase
+    phase = xp.zeros((ny, nx), dtype=xp.float32)
+    for idx, coef in zip(zernike_modes, coefs):
+        Z = get_zernike_mode(xp, idx, nx, ny, radius=2)
+        phase += coef * Z
+
+    return coefs.astype(xp.float32), -phase.astype(xp.float32)
 
 
 def southwell_phase_integration(

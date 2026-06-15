@@ -16,6 +16,8 @@ from pathlib import Path
 import yaml
 import json
 
+from functools import cache
+
 
 def normalize_to_uint8(data):
     """
@@ -314,7 +316,7 @@ def crop_array_centrally(arr, target_shape, xp):
 
     return arr[tuple(slices)]
 
-
+@cache
 def elliptical_mask(ny, nx, radius_frac, xp):
     """Create elliptical boolean mask"""
     radius_frac = max(0.0, min(1.0, float(radius_frac)))

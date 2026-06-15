@@ -74,7 +74,8 @@ construct_subapertures_fresnel = track_time('construct_subapertures_fresnel')(co
 construct_subapertures_angular = track_time('construct_subapertures_angular')(construct_subapertures_angular)
 calculate_displacements_graph_laplacian = track_time('calculate_displacements_graph_laplacian')(calculate_displacements_graph_laplacian)
 calculate_displacements = track_time('calculate_displacements')(calculate_displacements)
-fit_zernike = track_time('fit_zernike')(fit_zernike)
+fit_zernike_fresnel = track_time('fit_zernike_fresnel')(fit_zernike_fresnel)
+fit_zernike_angular_spectrum = track_time('fit_zernike_angular_spectrum')(fit_zernike_angular_spectrum)
 southwell_phase_integration = track_time('southwell_phase_integration')(southwell_phase_integration)
 pad_array_centrally = track_time('pad_array_centrally')(pad_array_centrally)
 fresnel_transform_with_phase = track_time('fresnel_transform_with_phase')(fresnel_transform_with_phase)
@@ -166,8 +167,8 @@ def _process_shack_hartmann(bm, parameters, frames, registration_ref):
             )
         elif prop_method == "AngularSpectrum":
             U = construct_subapertures_angular(
-                xp, fft, frames_sub, parameters["pixel_pitch"],
-                parameters["wavelength"], parameters["z"], parameters["low_freq"], parameters.get("high_freq"),
+                xp, fft, frames_sub, parameters["wavelength"],
+                parameters["z"], parameters["pixel_pitch"], parameters["low_freq"], parameters.get("high_freq"),
                 parameters["sampling_freq"], frames_sub.shape[0], parameters["shack_hartmann_nx_subap"],
                 parameters["shack_hartmann_ny_subap"], parameters["shack_hartmann_svd_threshold"]
             )
@@ -205,10 +206,16 @@ def _process_shack_hartmann(bm, parameters, frames, registration_ref):
     # Phase reconstruction
     phase = None
     if parameters.get("shack_hartmann_zernike_fit", False):
-        coefs, phase = fit_zernike(
-            xp, ny, nx, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
-            parameters["wavelength"], shifts_y, shifts_x, parameters.get("shack_hartmann_zernike_fit_modes")
-        )
+        if prop_method == "Fresnel":
+            coefs, phase = fit_zernike_fresnel(
+                xp, ny, nx, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
+                parameters["wavelength"], shifts_y, shifts_x, parameters.get("shack_hartmann_zernike_fit_modes")
+            )
+        elif prop_method == "AngularSpectrum":
+            coefs, phase = fit_zernike_angular_spectrum(
+                xp, ny, nx, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
+                parameters["wavelength"], parameters["z"], shifts_y, shifts_x, parameters.get("shack_hartmann_zernike_fit_modes")
+            )
         if compute_debug: debug["coefs"] = coefs
     elif parameters.get("shack_hartmann_southwell_phase_integration", False):
         phase = southwell_phase_integration(
@@ -415,6 +422,9 @@ def preview_process_moments(file_path, parameters):
     if file_reader.ext == ".holo":
         print("file header :", file_reader.file_header)
         parameters = update_from_footer(parameters, file_reader.file_footer)
+
+    if file_reader.ext == ".cine":
+        print("file header :", file_reader.metadata)
     print("parameters : ", parameters)
     
     batch_size = parameters["batch_size"]

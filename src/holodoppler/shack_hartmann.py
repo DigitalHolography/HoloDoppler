@@ -15,7 +15,7 @@ from .filtering import (
     frequency_symmetric_filtering,
     fourier_time_transform,
 )
-from .utils import crop_array_centrally
+from .utils import crop_array_centrally, elliptical_mask
 
 
 def construct_subapertures_fresnel(
@@ -100,16 +100,11 @@ def construct_subapertures_angular(
     Nz, Ny, Nx = U0.shape
     sub_ny, sub_nx = Ny // ny_subabs, Nx // nx_subabs
 
-    # Frequency filtering
-    idxs, _ = frequency_symmetric_filtering(
-        xp, time_window, fs, low_freq, high_freq=high_freq
-    )
-
     kernel = build_angular_kernel(
         xp, z_prop, pixel_pitch, wavelength, Ny, Nx, zero_padding=None
     )  # TODO accept a shack hartman zero_padding option
 
-    U_fft = fft.fft2(U0, axes=(-2, -1)) * fft.fftshift(kernel, axes=(-2, -1))
+    U_fft = fft.fft2(U0.astype(xp.complex64), axes=(-2, -1)) * fft.fftshift(kernel, axes=(-2, -1))
 
     crop_ny, crop_nx = sub_ny * ny_subabs, sub_nx * nx_subabs
     y0, x0 = (Ny - crop_ny) // 2, (Nx - crop_nx) // 2
@@ -125,15 +120,18 @@ def construct_subapertures_angular(
     U_subap_all = fft.ifft2(U_subap_all, axes=(-2, -1))
 
     U_subap_all = U_subap_all.transpose(1, 2, 3, 4, 0)
-    U_subap_all = xp.ascontiguousarray(U_subap_all)
 
     # SVD filtering
-    U_subap_all = filter.svd_filter_batched(U_subap_all, svd_threshold)
+    U_subap_all = svd_filter_batched(xp, U_subap_all, svd_threshold)
 
     B = ny_subabs * nx_subabs
     U_subap_all = U_subap_all.reshape(B, sub_ny, sub_nx, Nz).transpose(0, 3, 1, 2)
 
-    U_ft = fourier_time_transform(U_subap_all)[:, idxs, :, :]
+    # Frequency filtering
+    idxs, _ = frequency_symmetric_filtering(
+        xp, fft, time_window, fs, low_freq, high_freq=high_freq
+    )
+    U_ft = fft.fft(U_subap_all, axis=1, norm="ortho")[:, idxs, :, :]
     M0 = xp.mean(xp.abs(U_ft) ** 2, axis=1)
 
     return M0.reshape(ny_subabs, nx_subabs, sub_ny, sub_nx).astype(xp.float32)
@@ -147,6 +145,7 @@ def calculate_displacements(
     deviation_threshold=3.0,
     shifts_range=20.0,
     ref=None,
+    mask_disk_ratio=None,
 ):
     """Calculate subaperture displacements using phase correlation"""
     ny_s, nx_s, Ny, Nx = U_subaps.shape
@@ -156,8 +155,30 @@ def calculate_displacements(
 
     moving_stack = U_subaps.reshape(ny_s * nx_s, Ny, Nx)
 
-    ref_zm = ref - xp.mean(ref)
-    moving_zm = moving_stack - xp.mean(moving_stack, axis=(1, 2), keepdims=True)
+    if mask_disk_ratio is not None:
+        mask = elliptical_mask(Ny, Nx, mask_disk_ratio, xp)
+        
+        ref_masked = ref * mask
+        moving_masked = moving_stack * mask
+        
+        masked_pixels_ref = ref_masked[mask]
+        if len(masked_pixels_ref) > 0:
+            ref_mean = xp.mean(masked_pixels_ref)
+        else:
+            ref_mean = 0.0
+        ref_zm = ref_masked - ref_mean
+        
+        moving_zm = xp.zeros_like(moving_masked)
+        for i in range(moving_masked.shape[0]):
+            masked_pixels_moving = moving_masked[i][mask]
+            if len(masked_pixels_moving) > 0:
+                moving_mean = xp.mean(masked_pixels_moving)
+            else:
+                moving_mean = 0.0
+            moving_zm[i] = moving_masked[i] - moving_mean
+    else:
+        ref_zm = ref - xp.mean(ref)
+        moving_zm = moving_stack - xp.mean(moving_stack, axis=(1, 2), keepdims=True)
 
     F_ref = fft.fft2(ref_zm)
     F_moving = fft.fft2(moving_zm)

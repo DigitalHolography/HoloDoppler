@@ -53,12 +53,11 @@ def build_fresnel_kernel_out(xp, z, pixel_pitch, wavelength, ny, nx, zero_paddin
     if zero_padding:
         kernel = pad_array_centrally(kernel, zero_padding, xp)
 
-    return kernel[xp.newaxis, :, :]
+    return kernel[xp.newaxis, :, :].astype(xp.complex64)
 
 @cache
-def build_angular_kernel(self, z, pixel_pitch, wavelength, ny, nx, zero_padding=None):
+def build_angular_kernel(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None):
     """Build Angular Spectrum kernel"""
-    xp = self.bm.xp
 
     # if isinstance(pixel_pitch, (float, int)):
     #     pixel_pitch = (pixel_pitch, pixel_pitch) Removed for perf
@@ -81,6 +80,8 @@ def build_angular_kernel(self, z, pixel_pitch, wavelength, ny, nx, zero_padding=
 
     if zero_padding:
         kernel = pad_array_centrally(kernel, zero_padding, xp)
+
+    return kernel[xp.newaxis, :, :].astype(xp.complex64)
 
 
 def fresnel_transform(
@@ -163,12 +164,21 @@ def angular_spectrum_transform_with_phase(
     ny, nx = frames.shape[-2:]
     kernel = build_angular_kernel(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
 
+    # print("multiplying frames")
+
+    frames = frames * phase_term
+
+    # print(frames.dtype)
+
+    # import matplotlib.pyplot as plt
+    # plt.imshow(xp.angle(frames[0]).get())
+    # plt.show()
+
     if zero_padding:
-        
 
         frames = pad_array_centrally(frames, zero_padding, xp)
 
     return fft.ifft2(
-        fft.fft2(frames, axes=(-1, -2))
-        * fft.fftshift(kernel * phase_term, axes=(-1, -2))
+        fft.fft2(frames, axes=(-1, -2), norm="ortho")
+        * fft.fftshift(kernel, axes=(-1, -2)), norm="ortho"
     )
