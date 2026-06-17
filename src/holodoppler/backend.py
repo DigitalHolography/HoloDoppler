@@ -92,29 +92,3 @@ class BackendManager:
     @property
     def is_gpu(self):
         return "cupy" in self.backend_name and _cupy_available
-
-    class StreamManager:
-        def __init__(self, num_streams=3):
-            self.streams = [cp.cuda.Stream() for _ in range(num_streams)]
-        
-        def process_async(self, stream_idx, func, *args):
-            with self.streams[stream_idx]:
-                result = func(*args)
-            return result
-    class GPUMemoryContext:
-        def __init__(self, xp):
-            self.xp = xp
-            self.start_mem = None
-        
-        def __enter__(self):
-            if self.xp is cp:
-                self.start_mem = self.xp.cuda.Device().mem_info[0]
-                return self
-        
-        def __exit__(self, *args):
-            if self.start_mem is None:
-                return
-            end_mem = self.xp.cuda.Device().mem_info[0]
-            leaked = self.start_mem - end_mem
-            if leaked > 10 * 1024 * 1024:  # 10MB threshold
-                print(f"WARNING: Potential memory leak of {leaked/1024/1024:.2f}MB")

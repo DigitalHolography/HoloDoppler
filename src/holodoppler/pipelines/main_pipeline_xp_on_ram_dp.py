@@ -3,7 +3,7 @@ from holodoppler.propagation import build_fresnel_kernel_in,build_fresnel_kernel
 from holodoppler.shack_hartmann import construct_subapertures_fresnel, construct_subapertures_angular, calculate_displacements, calculate_displacements_graph_laplacian
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum, southwell_phase_integration
 from holodoppler.utils import normalize_to_uint8, write_video_file, resize_slicewise, zoom_slicewise_fast, resize_fft2_slicewise, resize_matlab_slicewise, pad_array_centrally, crop_array_centrally, elliptical_mask, gaussian_flatfield, flatfield3D, complex_to_color, load_config, unsharp_projection, update_from_footer
-from holodoppler.filtering import svd_filter, svd_filter_batched, frequency_symmetric_filtering, fourier_time_transform
+from holodoppler.filtering import svd_filter, svd_filter_stdmeanratio, svd_filter_batched, frequency_symmetric_filtering, fourier_time_transform
 from holodoppler.moments import moment
 from holodoppler.registration import register_trs, apply_registration
 from holodoppler.plotting import DebugPlotterManager
@@ -273,9 +273,9 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
 
     # SVD filtering
     if compute_debug:
-        holograms_f, removedU, holograms_fbar, eigenvalues, _, _, dc = svd_filter(xp, holograms, parameters["svd_threshold"], filter_mode = parameters["svd_filter_mode"], remove_dc = parameters["svd_remove_dc"], debug = compute_debug)
+        holograms_f, removedU, holograms_fbar, eigenvalues, _, _, dc = svd_filter_stdmeanratio(xp, holograms, parameters["svd_threshold"], filter_mode = parameters["svd_filter_mode"], remove_dc = parameters["svd_remove_dc"], debug = compute_debug)
     else :
-        holograms_f = svd_filter(xp, holograms, parameters["svd_threshold"], filter_mode = parameters["svd_filter_mode"], remove_dc = parameters["svd_remove_dc"])
+        holograms_f = svd_filter_stdmeanratio(xp, holograms, parameters["svd_threshold"], filter_mode = parameters["svd_filter_mode"], remove_dc = parameters["svd_remove_dc"])
 
     if not compute_debug:
         del holograms  # Free memory early in non-debug mode
@@ -287,14 +287,20 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
     # Temporal transform
     if parameters.get("temporal_transformation") == "FourierTransform":
         spectrum_f = fourier_time_transform(xp, fft, holograms_f)
+        # if compute_debug:
+        #     spectrum_f_angle = fourier_time_transform(xp, fft, xp.angle(holograms_f))
     else:
         spectrum_f = holograms_f
+        # if compute_debug:
+        #     spectrum_f_angle = None
 
     # Frequency selection
     idxs, freqs = frequency_symmetric_filtering(
         xp, fft, nt_sub, parameters["sampling_freq"], parameters["low_freq"], parameters.get("high_freq")
     )
     psd = xp.abs(spectrum_f) ** 2
+    # if compute_debug:
+    #     psd_angle = xp.abs(spectrum_f_angle) ** 2
 
     if compute_debug and parameters["save_psd_avg"]:
         batch["psd"] = psd
@@ -430,7 +436,7 @@ def preview_process_moments(file_path, parameters):
     
     batch_size = parameters["batch_size"]
     first_frame = parameters["first_frame"]
-    frames = file_reader.read_frames(first_frame, batch_size)
+    frames = file_reader.read_frames(first_frame=first_frame, batch_size=batch_size)
     frames = bm.to_backend(frames)
     res, accu = render_moments(bm, parameters, frames=frames)
     file_reader.close()
@@ -497,49 +503,67 @@ def _debug_plotting_worker(input_q, output_q, stop_ev, params):
     optionally times plot_all, and processes tasks until a None sentinel.
     """
     # Prevent GPU usage in this worker process
-    os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
-    mgr = DebugPlotterManager(params)
+    try:
+        os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
-    if track_time is not None:
-        mgr.plot_all = track_time("debug_manager_plot_all")(mgr.plot_all)
+        mgr = DebugPlotterManager(params)
 
-    while True:
-        try:
-            item = input_q.get(timeout=0.1)
-        except queue.Empty:
-            if stop_ev.is_set() and input_q.empty():
-                break
-            continue
+        if track_time is not None:
+            mgr.plot_all = track_time("debug_manager_plot_all")(mgr.plot_all)
 
-        if item is None:            # sentinel → shut down after this task
-            input_q.task_done()     # mark sentinel as done
-            break
-
-        i, res = item
-        try:
-            out = mgr.plot_all(res)
-            output_q.put((i, out))
-        except Exception as e:
-            output_q.put((i, e))
-        finally:
-            input_q.task_done()     # mark actual task as done
-
-    # Drain any remaining items that arrived after the sentinel
-    while not input_q.empty():
-        try:
-            item = input_q.get_nowait()
-            if item is None:
-                input_q.task_done()
+        while True:
+            # print("hey")
+            try:
+                item = input_q.get(timeout=0.1)
+            except queue.Empty:
+                if stop_ev.is_set() and input_q.empty():
+                    break
                 continue
-            i, res = item
-            out = mgr.plot_all(res)
-            output_q.put((i, out))
-            input_q.task_done()
-        except queue.Empty:
-            break
+            # print("ho")
 
-    mgr.close_all()
+
+            if item is None:            # sentinel → shut down after this task
+                input_q.task_done()     # mark sentinel as done
+                output_q.put(None)     # sentinel
+                break
+
+            i, res = item
+            # print(i)
+            try:
+                # print(f"plotting {i}")
+                out = mgr.plot_all(res)
+                output_q.put((i, out))
+                # print(i)
+            except Exception as e:
+                output_q.put((i, e))
+            finally:
+                input_q.task_done()     # mark actual task as done
+
+        # Drain any remaining items that arrived after the sentinel
+        while not input_q.empty():
+            try:
+                item = input_q.get_nowait()
+                if item is None:
+                    input_q.task_done()
+                    output_q.put(None)
+                    continue
+                i, res = item
+                out = mgr.plot_all(res)
+                output_q.put((i, out))
+                input_q.task_done()
+            except queue.Empty:
+                break
+        # print("close_all")
+        mgr.close_all()
+        # print("bye")
+    except Exception as e:
+        import traceback
+        traceback_str = traceback.format_exc()
+        print(traceback_str)
+    finally:
+        pass
+        # print("bye")
 
 # ------------------------------------------------------------------
 # Full video processing
@@ -562,7 +586,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     first_frame = parameters["first_frame"]
     end_frame = parameters.get("end_frame", 0)
     if end_frame <= 0:
-        end_frame = file_reader.file_header["num_frames"] if file_reader.ext == ".holo" else file_reader.metadata["ImageCount"]
+        end_frame = file_reader.file_header.num_frames if file_reader.ext == ".holo" else file_reader.TotalImageCount
 
     if batch_stride >= (end_frame - first_frame):
         num_batch = 1 if batch_size <= (end_frame - first_frame) else 0
@@ -571,16 +595,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     if num_batch <= 0:
         return None
 
-    # Memmap support
-    # if parameters.get("use_memmap", False) and hasattr(file_reader, "get_np_memmap"):
-    #     try:
-    #         memmap = file_reader.get_np_memmap()[first_frame:end_frame]
-    #     except Exception as e:
-    #         print(f"Memmap loading failed: {e}, falling back to regular reads.")
-    #         memmap = None
-    # else:
-    #     memmap = None
-    debug_manager = parameters.get("debug")
+    debug = parameters.get("debug")
 
     out_list = []
     out_accumulation = {}
@@ -593,7 +608,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     debug_plot_process = None
     _stop_event = None
 
-    if debug_manager:
+    if debug:
         _stop_event = Event()
         debug_input_queue = JoinableQueue(maxsize=14)   # <-- JoinableQueue now
         debug_output_queue = Queue()
@@ -601,7 +616,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
         debug_plot_process = Process(
             target=_debug_plotting_worker,
             args=(debug_input_queue, debug_output_queue, _stop_event, parameters),
-            daemon=False
+            daemon=True
         )
         debug_plot_process.start()
 
@@ -610,30 +625,28 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
             """Enqueue a debug task. Converts any GPU arrays to CPU numpy arrays."""
             cpu_res = {}
             for k, v in res_dict.items():
-                if hasattr(v, 'get'):        # cupy array
+                if hasattr(v, 'get'):# cupy array
                     cpu_res[k] = v.get()
-                else:
-                    cpu_res[k] = v
-            debug_input_queue.put((i, cpu_res))
 
-        def collect_debug_results():
-            """Drain output queue and update the global debug_results dict."""
-            while True:
-                try:
-                    i, out = debug_output_queue.get_nowait()
-                    debug_results[i] = out
-                except queue.Empty:
-                    break
+            debug_input_queue.put((i, cpu_res))
 
         def shutdown_debug_plotter():
             """Gracefully stop the worker process and collect remaining results."""
-            _stop_event.set()
-            debug_input_queue.put(None)               # sentinel
-            debug_input_queue.join()                  # wait until all tasks done
-            collect_debug_results()                   # gather final outputs
-            debug_plot_process.join(timeout=5)
-            if debug_plot_process.is_alive():
-                debug_plot_process.terminate()
+            debug_input_queue.put(None)# sentinel
+            debug_input_queue.join()# wait until last input sent
+
+            # wait until last output received (sentinel)
+            print("Collecting the debug plotting process videos...")
+            while True:
+                item = debug_output_queue.get()
+
+                if item is None: #sentinel
+                    break
+
+                i, out = item
+                debug_results[i] = out
+            
+            debug_plot_process.join()
 
     else:
         submit_debug_task = None
@@ -643,95 +656,68 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     # Registration reference
     M0_reg = None
     if parameters.get("image_registration"):
-        frames_reg = file_reader.read_frames(first_frame, parameters.get("batch_size_registration", batch_size))
+        frames_reg = file_reader.read_frames(first_frame=first_frame, batch_size=parameters.get("batch_size_registration", batch_size))
         frames_reg = bm.to_backend(frames_reg)
         M0_reg = render_moments(bm, parameters, frames=frames_reg)[0]["M0ff"]
         # M0_reg = gaussian_flatfield(M0_reg, parameters.get("registration_flatfield_gw", 1.0), bm.gaussian_filter)
 
     bm.clear_gpu_memory()
-    bm.print_gpu_used_memory()
+    # bm.print_gpu_used_memory()
 
     # Dispatch to backend-specific loop
-    if parameters["backend"] == "cupy":
-        _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, first_frame, batch_stride, batch_size,
-                                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, submit_debug_task, lock)
-    else:
-        _process_cpu(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
-                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, submit_debug_task)
-
-    
+    if parameters["backend"] == "cupyRAM":
+        _process_gpu_streaming_onram(bm, file_reader.file_path, parameters, num_batch, end_frame, first_frame, batch_stride, batch_size,
+                                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task)
+    elif parameters["backend"] == "numpy":
+        _process_streaming(bm, file_reader, parameters, num_batch, end_frame, first_frame, batch_stride, batch_size,
+                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task)
+    elif "cupy" in parameters["backend"]:
+        (bm, file_reader, parameters, num_batch, end_frame, first_frame, batch_stride, batch_size,
+                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task)
+    else : 
+        raise ValueError(f"backend requested not implemented :{parameters["backend"]}")
 
     if coefs_list is not None:
             coefs_list = [bm.to_numpy(c) for c in coefs_list]
     # print(f"coefs_list: {time.time()-t0:.2f}s")
     if reg_list is not None:
         reg_list = [bm.to_numpy(r) for r in reg_list]
+
+    
     
     @track_time("collecting")
-    def collecting(bm,out_list,out_accumulation,debug_manager,coefs_list,reg_list,num_batch,parameters):
-
-        # Post-processing
-        # t0 = time.time()
+    def collecting(bm,out_list,out_accumulation,debug,coefs_list,reg_list,num_batch,parameters):
         np_list = [bm.to_numpy(xparr) for xparr in out_list]
-        # print(f"TransferRAM: {time.time()-t0:.2f}s")
         vid_t = np.stack(np_list, axis=0)
-        # plt.imshow(vid_t[0,3,:,:])
-        # plt.show()
-        # print(f"stack CPU: {time.time()-t0:.2f}s")
         bm.clear_gpu_memory()
-        # print(f"clear_gpu_memory: {time.time()-t0:.2f}s")
-
-        if debug_manager:
-            collect_debug_results()           # pull outputs into debug_results dict
+        if debug:
             shutdown_debug_plotter()
-        # print(f"debug_manager: {time.time()-t0:.2f}s")
-        
-
-        
-        # print(f"reg_list: {time.time()-t0:.2f}s")
-
         vid_debug = {}
-        if debug_manager and debug_results:
+        if debug and debug_results:
             for key in debug_results[0].keys():
                 try:
                     vid_debug[key] = np.stack([bm.to_numpy(debug_results[k][key]) for k in range(num_batch)], axis=0)
                 except Exception as e:
+                    # import traceback
+                    # print(traceback.format_exc())
                     print(f"Couldn't stack debug output {key}: ", e)
-        if debug_manager and out_accumulation:
+        if debug and out_accumulation:
             for key in out_accumulation.keys():
                 if out_accumulation[key].ndim == 3:
                     vid_debug[key] = bm.to_numpy(out_accumulation[key])
-        # print(f"vid_debug: {time.time()-t0:.2f}s")
         return vid_t, vid_debug
+
+    vid_t, vid_debug = collecting(bm,out_list,out_accumulation,debug,coefs_list,reg_list,num_batch,parameters)
     
-    vid_t, vid_debug = collecting(bm,out_list,out_accumulation,debug_manager,coefs_list,reg_list,num_batch,parameters)
-    
-    # print(vid_t.shape)
-    # t0 = time.time()
-    # Spatial transforms
     if parameters.get("square", False):
         m = max(vid_t.shape[-2], vid_t.shape[-1])
-        print(f"Input shape: {vid_t.shape}")
-        # print(f"Expected axes: {axes}")
-        # print(f"Zoom factors: {zoom_factors}")
         vid_t = zoom_slicewise_fast(vid_t, m, m, use_gpu=bm.is_gpu)
-        # plt.imshow(vid_t[0,1,:,:])
-        # plt.show()
-        print(f"Output shape: {vid_t.shape}")
-    # print(f"square: {time.time()-t0:.2f}s")
     if parameters.get("transpose", False):
         vid_t = np.transpose(vid_t, axes=(0, 1, 3, 2))
-    # print(f"transpose: {time.time()-t0:.2f}s")
     if parameters.get("flip_x", False):
         vid_t = np.flip(vid_t, axis=-1)
     if parameters.get("flip_y", False):
         vid_t = np.flip(vid_t, axis=-2)
-    
-    # print(f"flip: {time.time()-t0:.2f}s")
-    
-    # import matplotlib.pyplot as plt
-    # plt.imshow(vid_t[0,3,:,:])
-    # plt.show()
 
     save_outputs(
         file_reader, video_path=mp4_path, holodoppler_path=holodoppler_path,
@@ -752,11 +738,11 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
 # ------------------------------------------------------------------
 # Specialised loops
 # ------------------------------------------------------------------
-def _process_cpu(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
-                 M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug_manager, submit_debug_task):
-    
+def _process_cpu_streaming(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
+                 M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task):
     for i in tqdm(range(num_batch)):
-        frames = file_reader.read_frames(first_frame + i * batch_stride, batch_size)
+
+        frames = file_reader.read_frames(first_frame=first_frame+i*batch_stride, batch_size=batch_size)
         frames = bm.to_backend(frames)
         res, accu = render_moments(bm, parameters, frames=frames, registration_ref=M0_reg)
 
@@ -773,523 +759,199 @@ def _process_cpu(bm, file_reader, parameters, num_batch, first_frame, batch_stri
         out_list.append(bm.xp.stack(l, axis=0))
         if "coefs" in res and coefs_list is not None: coefs_list[i] = res["coefs"]
         if "registration" in res and reg_list is not None: reg_list[i] = res["registration"]
-        submit_debug_task(i, res)
-            
-            
-def _fetch_batch_worker_sharedmem(worker_id,
-                                  batch_indices,
-                                  file_path,
-                                  first_frame,
-                                  batch_stride,
-                                  batch_size,
-                                  shm_names,
-                                  frame_shape,
-                                  frame_dtype_str,
-                                  free_queue,
-                                  ready_queue):
-    """
-    Worker process:
-      - waits for a free shared-memory slot
-      - reads one batch
-      - copies it into that slot
-      - sends only metadata to main process
-    """
+        if debug:
+            submit_debug_task(i, res)
 
-    dtype = np.dtype(frame_dtype_str)
 
-    shm_objects = []
-    shm_arrays = []
-
-    try:
-        for name in shm_names:
-            shm = shared_memory.SharedMemory(name=name)
-            arr = np.ndarray(frame_shape, dtype=dtype, buffer=shm.buf)
-            shm_objects.append(shm)
-            shm_arrays.append(arr)
-
-        file_reader = FileReaderFactory.create(file_path)
-        file_reader.open()
-
-        try:
-            for batch_index in batch_indices:
-                t0 = time.perf_counter()
-                frames_batch = file_reader.read_frames(
-                    first_frame + batch_index * batch_stride,
-                    batch_size
-                )
-                read_dt = time.perf_counter() - t0
-
-                if frames_batch.shape != frame_shape:
-                    raise RuntimeError(
-                        f"Worker {worker_id}: unexpected batch shape "
-                        f"{frames_batch.shape}, expected {frame_shape}"
-                    )
-
-                if frames_batch.dtype != dtype:
-                    frames_batch = frames_batch.astype(dtype, copy=False)
-
-                slot_id = free_queue.get()
-
-                t0 = time.perf_counter()
-                np.copyto(shm_arrays[slot_id], frames_batch)
-                copy_dt = time.perf_counter() - t0
-
-                ready_queue.put((
-                    slot_id,
-                    batch_index,
-                    read_dt,
-                    copy_dt,
-                    int(frames_batch.nbytes),
-                    None,
-                ))
-
-        finally:
-            file_reader.close()
-
-    except Exception as e:
-        ready_queue.put((
-            None,
-            None,
-            0.0,
-            0.0,
-            0,
-            repr(e),
-        ))
-
-    finally:
-        for shm in shm_objects:
-            shm.close()
+class PrefetchBuffer:
+    """Double-buffer for CPU→GPU transfers with prefetch capability."""
+    
+    def __init__(self, num_slots=2):
+        self.num_slots = num_slots
+        self.slots = [None] * num_slots  # Each slot: (np_array, cuda_array, event)
+        self.write_idx = 0
+        self.read_idx = 0
+        self.ready_count = 0
+        self.stream = cp.cuda.Stream(non_blocking=True)
+    
+    def put(self, np_array, block=True):
+        """Copy numpy array to a GPU buffer slot asynchronously."""
+        slot = self.write_idx % self.num_slots
+        
+        with self.stream:
+            d_array = cp.asarray(np_array)
+            event = cp.cuda.Event()
+            event.record(self.stream)
+        
+        self.slots[slot] = (np_array, d_array, event)
+        self.write_idx += 1
+        self.ready_count += 1
+    
+    def get(self):
+        """Get the next available GPU buffer (blocks until ready)."""
+        while self.ready_count == 0:
+            time.sleep(0)  # Yield to other threads
+        
+        slot = self.read_idx % self.num_slots
+        np_array, d_array, event = self.slots[slot]
+        
+        # Wait for the async copy to complete
+        event.synchronize()
+        
+        self.read_idx += 1
+        self.ready_count -= 1
+        
+        return np_array, d_array
+    
+    def synchronize(self):
+        """Synchronize the transfer stream."""
+        self.stream.synchronize()
 
 @track_time("_process_gpu_streaming_onram")
-def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, first_frame, batch_stride,
+def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, end_frame, first_frame, batch_stride,
                                  batch_size, M0_reg, out_list, out_accumulation, coefs_list, reg_list,
-                                 debug_manager, submit_debug_task, lock):
-
+                                 debug, submit_debug_task):
+    """
+    GPU streaming pipeline using iterator-based frame reading with double-buffering.
+    """
+    
     tictoc = bool(parameters.get("tictoc", False))
-
-    prof_sum = defaultdict(float)
-    prof_cnt = defaultdict(int)
-    prof_max = defaultdict(float)
-    prof_bytes = defaultdict(int)
-
-    def now():
-        return time.perf_counter()
-
-    def prof_add(name, dt):
-        if not tictoc:
-            return
-        prof_sum[name] += float(dt)
-        prof_cnt[name] += 1
-        prof_max[name] = max(prof_max[name], float(dt))
-
-    def prof_add_bytes(name, nbytes):
-        if not tictoc:
-            return
-        prof_bytes[name] += int(nbytes)
-
-    t_total0 = now()
-
+    
     if num_batch <= 0:
         return
-
-    FETCH_NUM_WORKERS = int(parameters.get("fetch_num_workers", 8))
-    SHM_NUM_SLOTS = int(parameters.get("shm_num_slots", max(2 * FETCH_NUM_WORKERS, 8)))
-
-    stream_h2d = cp.cuda.Stream(non_blocking=True)
-    stream_compute = cp.cuda.Stream(non_blocking=True)
-
-    shm_objects = []
-    shm_arrays = []
-    processes = []
-
-    free_queue = None
-    ready_queue = None
-
-    processed_batches = 0
-    normal_exit = False
-
-    def print_profile():
-        if not tictoc:
-            return
-
-        total_dt = now() - t_total0
-
-        print("\n[tictoc] _process_gpu_streaming_onram shared_memory profile")
-        print(f"processed_batches: {processed_batches}/{num_batch}")
-        print(f"total wall time:    {total_dt:.3f} s")
-
-        def print_row(name):
-            s = prof_sum.get(name, 0.0)
-            c = prof_cnt.get(name, 0)
-            m = prof_max.get(name, 0.0)
-            avg = s / c if c else 0.0
-            pct = 100.0 * s / total_dt if total_dt > 0 else 0.0
-            print(
-                f"{name:36s} "
-                f"total={s:9.3f}s  "
-                f"avg={avg * 1e3:9.3f}ms  "
-                f"max={m * 1e3:9.3f}ms  "
-                f"n={c:6d}  "
-                f"{pct:6.1f}%"
-            )
-
-        ordered = [
-            "first_batch_read_for_shape",
-            "shared_memory_create_total",
-            "first_batch_copy_to_shm",
-            "worker_process_start_total",
-            "ready_queue_get",
-            "worker_read_frames",
-            "worker_copy_to_shm",
-            "h2d_enqueue_cpu",
-            "h2d_wait_cpu",
-            "h2d_gpu_elapsed",
-            "compute_enqueue_cpu",
-            "compute_wait_cpu",
-            "compute_gpu_elapsed",
-            "postprocess_accumulate_and_store",
-            "debug_manager_store",
-            "final_average_accumulation",
-            "worker_join_total",
-            "final_cuda_synchronize",
-            "shared_memory_cleanup",
-        ]
-
-        for name in ordered:
-            if name in prof_cnt:
-                print_row(name)
-
-        input_gb = prof_bytes.get("input_bytes", 0) / 1e9
-        h2d_gb = prof_bytes.get("h2d_bytes", 0) / 1e9
-
-        print(f"input bytes:        {input_gb:.3f} GB")
-        print(f"h2d bytes:          {h2d_gb:.3f} GB")
-
-        if prof_sum.get("h2d_gpu_elapsed", 0.0) > 0:
-            print(f"h2d GPU bandwidth:  {h2d_gb / prof_sum['h2d_gpu_elapsed']:.3f} GB/s")
-
-        if total_dt > 0:
-            print(f"end-to-end input throughput: {input_gb / total_dt:.3f} GB/s")
-
-        print("")
-
-    def enqueue_h2d_from_slot(slot_id):
-        host_arr = shm_arrays[slot_id]
-        prof_add_bytes("h2d_bytes", host_arr.nbytes)
-
-        if tictoc:
-            h2d_start = cp.cuda.Event()
-            h2d_end = cp.cuda.Event()
-        else:
-            h2d_start = None
-            h2d_end = cp.cuda.Event(disable_timing=True)
-
-        t0 = now()
-        with stream_h2d:
-            if tictoc:
-                h2d_start.record(stream_h2d)
-
-            # This copies from shared host memory to GPU.
-            # Note: shared_memory is not CUDA pinned memory, so this may not have
-            # the same async behavior as a true pinned host buffer.
-            d_frames = cp.asarray(host_arr)
-
-            h2d_end.record(stream_h2d)
-
-        prof_add("h2d_enqueue_cpu", now() - t0)
-
-        return d_frames, h2d_end, h2d_start, slot_id
-
-    def get_ready_item():
-        t0 = now()
-        item = ready_queue.get()
-        prof_add("ready_queue_get", now() - t0)
-
-        slot_id, batch_index, read_dt, copy_dt, nbytes, err = item
-
-        if err is not None:
-            raise RuntimeError(f"Shared-memory fetch worker failed: {err}")
-
-        prof_add("worker_read_frames", read_dt)
-        prof_add("worker_copy_to_shm", copy_dt)
-        prof_add_bytes("input_bytes", nbytes)
-
-        return slot_id, batch_index
-
+    
+    # Open file reader and get the frame iterator
+    file_reader = FileReaderFactory.create(file_path)
+    file_reader.open()
+    
     try:
-        # ------------------------------------------------------------
-        # 1. Read the first batch in the main process to infer shape/dtype.
-        # ------------------------------------------------------------
-        t0 = now()
-        file_reader = FileReaderFactory.create(file_path)
-        file_reader.open()
-        try:
-            first_frames = file_reader.read_frames(first_frame, batch_size)
-        finally:
-            file_reader.close()
-
-        prof_add("first_batch_read_for_shape", now() - t0)
-        prof_add_bytes("input_bytes", first_frames.nbytes)
-
-        frame_shape = tuple(first_frames.shape)
-        frame_dtype = first_frames.dtype
-        frame_dtype_str = frame_dtype.str
-        frame_nbytes = int(first_frames.nbytes)
-
-        # ------------------------------------------------------------
-        # 2. Allocate shared-memory slots.
-        # ------------------------------------------------------------
-        t0 = now()
-        for _ in range(SHM_NUM_SLOTS):
-            shm = shared_memory.SharedMemory(create=True, size=frame_nbytes)
-            arr = np.ndarray(frame_shape, dtype=frame_dtype, buffer=shm.buf)
-            shm_objects.append(shm)
-            shm_arrays.append(arr)
-
-        prof_add("shared_memory_create_total", now() - t0)
-
-        shm_names = [shm.name for shm in shm_objects]
-
-        # ------------------------------------------------------------
-        # 3. Fill slot 0 with the first batch.
-        # ------------------------------------------------------------
-        t0 = now()
-        np.copyto(shm_arrays[0], first_frames)
-        prof_add("first_batch_copy_to_shm", now() - t0)
-
-        del first_frames
-
-        # ------------------------------------------------------------
-        # 4. Queues carry only small metadata now.
-        # ------------------------------------------------------------
-        free_queue = mp.Queue(maxsize=SHM_NUM_SLOTS)
-        ready_queue = mp.Queue(maxsize=SHM_NUM_SLOTS)
-
-        # Slot 0 is already occupied by batch 0.
-        for slot_id in range(1, SHM_NUM_SLOTS):
-            free_queue.put(slot_id)
-
-        # Manually enqueue first batch metadata.
-        ready_queue.put((0, 0, 0.0, 0.0, frame_nbytes, None))
-
-        # ------------------------------------------------------------
-        # 5. Launch workers for batches 1..num_batch-1.
-        # ------------------------------------------------------------
-        remaining_batch_indices = list(range(1, num_batch))
-        batch_indices_per_worker = [[] for _ in range(FETCH_NUM_WORKERS)]
-
-        for i, batch_index in enumerate(remaining_batch_indices):
-            worker_id = i % FETCH_NUM_WORKERS
-            batch_indices_per_worker[worker_id].append(batch_index)
-
-        t0 = now()
-        for worker_id in range(FETCH_NUM_WORKERS):
-            indices = batch_indices_per_worker[worker_id]
-            if not indices:
-                continue
-
-            p = mp.Process(
-                target=_fetch_batch_worker_sharedmem,
-                args=(
-                    worker_id,
-                    indices,
-                    file_path,
-                    first_frame,
-                    batch_stride,
-                    batch_size,
-                    shm_names,
-                    frame_shape,
-                    frame_dtype_str,
-                    free_queue,
-                    ready_queue,
-                )
-            )
-            processes.append(p)
-            p.start()
-
-        prof_add("worker_process_start_total", now() - t0)
-
-        # ------------------------------------------------------------
-        # 6. Prime first H2D.
-        # ------------------------------------------------------------
-        slot_id, batch_index = get_ready_item()
-        d_frames, ready_event, h2d_start, active_slot_id = enqueue_h2d_from_slot(slot_id)
-        active_batch_index = batch_index
-
-        # ------------------------------------------------------------
-        # 7. Streaming loop.
-        # ------------------------------------------------------------
-        for _ in tqdm(range(num_batch)):
-            # Wait for current H2D.
-            t0 = now()
-            ready_event.synchronize()
-            prof_add("h2d_wait_cpu", now() - t0)
-
-            if tictoc and h2d_start is not None:
-                h2d_ms = cp.cuda.get_elapsed_time(h2d_start, ready_event)
-                prof_add("h2d_gpu_elapsed", h2d_ms / 1000.0)
-
-            # H2D from this shared-memory slot is complete.
-            # The slot can be reused by a worker.
-            free_queue.put(active_slot_id)
-
-            # Enqueue next H2D before compute if a next batch exists.
-            # This lets H2D of next batch overlap with compute of current batch.
-            d_frames_next = None
-            ready_event_next = None
-            h2d_start_next = None
-            active_slot_id_next = None
-            active_batch_index_next = None
-
-            if processed_batches + 1 < num_batch:
-                slot_id_next, batch_index_next = get_ready_item()
-                d_frames_next, ready_event_next, h2d_start_next, active_slot_id_next = enqueue_h2d_from_slot(slot_id_next)
-                active_batch_index_next = batch_index_next
-
-            # Compute current batch.
-            if tictoc:
-                compute_start = cp.cuda.Event()
-                compute_end = cp.cuda.Event()
-            else:
-                compute_start = None
-                compute_end = cp.cuda.Event(disable_timing=True)
-
-            t0 = now()
-            with stream_compute:
-                if tictoc:
-                    compute_start.record(stream_compute)
-
+        # Create CUDA streams
+        h2d_stream = cp.cuda.Stream(non_blocking=True)
+        compute_stream = cp.cuda.Stream(non_blocking=True)
+        
+        processed_batches = 0
+        
+        # Use simple double-buffering with explicit state
+        d_current = None
+        d_next = None
+        h2d_event_current = None
+        h2d_event_next = None
+        
+        # Start reading frames
+        for i, frames in enumerate(tqdm(file_reader.iter_frames(
+            first_frame=first_frame,
+            end_frame = end_frame,
+            batch_size=batch_size,
+            batch_stride=batch_stride
+        ), total=num_batch)):
+            
+            # Start async H2D transfer for this batch
+            with h2d_stream:
+                d_next = cp.asarray(frames)
+                h2d_event_next = cp.cuda.Event()
+                h2d_event_next.record(h2d_stream)
+            
+            # If we have a previous batch, wait for its H2D and compute it
+            if d_current is not None:
+                # Wait for H2D of current batch to complete
+                h2d_event_current.synchronize()
+                
+                # Compute current batch on compute stream
+                with compute_stream:
+                    res, accu = render_moments(
+                        bm, parameters,
+                        frames=d_current,
+                        registration_ref=M0_reg
+                    )
+                    compute_event = cp.cuda.Event()
+                    compute_event.record(compute_stream)
+                
+                # Wait for compute to finish
+                compute_event.synchronize()
+                
+                if res is None:
+                    break
+                
+                # Store results
+                for key, value in accu.items():
+                    if key not in out_accumulation:
+                        out_accumulation[key] = value
+                    else:
+                        out_accumulation[key] += value
+                
+                l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
+                for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
+                    l.append(res[f"band_{k}_{f1}_{f2}"])
+                
+                out_list.append(bm.xp.stack(l, axis=0))
+                
+                if "coefs" in res and coefs_list is not None:
+                    coefs_list[processed_batches] = res["coefs"]
+                if "registration" in res and reg_list is not None:
+                    reg_list[processed_batches] = res["registration"]
+                
+                if debug:
+                    submit_debug_task(processed_batches, res)
+                
+                processed_batches += 1
+            
+            # Advance: next becomes current
+            d_current = d_next
+            h2d_event_current = h2d_event_next
+        
+        # Process the last batch
+        if d_current is not None:
+            h2d_event_current.synchronize()
+            
+            with compute_stream:
                 res, accu = render_moments(
-                    bm,
-                    parameters,
-                    frames=d_frames,
+                    bm, parameters,
+                    frames=d_current,
                     registration_ref=M0_reg
                 )
-
-                compute_end.record(stream_compute)
-
-            prof_add("compute_enqueue_cpu", now() - t0)
-
-            t0 = now()
-            compute_end.synchronize()
-            prof_add("compute_wait_cpu", now() - t0)
-
-            if tictoc:
-                compute_ms = cp.cuda.get_elapsed_time(compute_start, compute_end)
-                prof_add("compute_gpu_elapsed", compute_ms / 1000.0)
-
-            if res is None:
-                break
-
-            # Store results.
-            t0 = now()
-
-            for key in accu.keys():
-                if key not in out_accumulation:
-                    out_accumulation[key] = accu[key]
-                else:
-                    out_accumulation[key] += accu[key]
-
-            l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
-            for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-                l.append(res[f"band_{k}_{f1}_{f2}"])
-
-            # Warning: appending still stores in arrival order, not necessarily batch_index order.
-            out_list.append(bm.xp.stack(l, axis=0))
-
-            if "coefs" in res and coefs_list is not None:
-                coefs_list[active_batch_index] = res["coefs"]
-
-            if "registration" in res and reg_list is not None:
-                reg_list[active_batch_index] = res["registration"]
-
-            prof_add("postprocess_accumulate_and_store", now() - t0)
-
-            if debug_manager and lock:
-                t0 = now()
-                submit_debug_task(i, res)
-                prof_add("debug_manager_store", now() - t0)
-
-            processed_batches += 1
-
-            d_frames = d_frames_next
-            ready_event = ready_event_next
-            h2d_start = h2d_start_next
-            active_slot_id = active_slot_id_next
-            active_batch_index = active_batch_index_next
-
-            if d_frames is None:
-                break
-
-        normal_exit = True
-
+                compute_event = cp.cuda.Event()
+                compute_event.record(compute_stream)
+            
+            compute_event.synchronize()
+            
+            if res is not None:
+                for key, value in accu.items():
+                    if key not in out_accumulation:
+                        out_accumulation[key] = value
+                    else:
+                        out_accumulation[key] += value
+                
+                l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
+                for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
+                    l.append(res[f"band_{k}_{f1}_{f2}"])
+                
+                out_list.append(bm.xp.stack(l, axis=0))
+                
+                if "coefs" in res and coefs_list is not None:
+                    coefs_list[processed_batches] = res["coefs"]
+                if "registration" in res and reg_list is not None:
+                    reg_list[processed_batches] = res["registration"]
+                
+                if debug:
+                    submit_debug_task(processed_batches, res)
+                
+                processed_batches += 1
+        
     finally:
-        # ------------------------------------------------------------
-        # Final accumulation.
-        # ------------------------------------------------------------
-        t0 = now()
-        denom = max(processed_batches, 1)
-        for key in out_accumulation.keys():
-            out_accumulation[key] /= denom
-        prof_add("final_average_accumulation", now() - t0)
-
-        # ------------------------------------------------------------
-        # Stop workers safely on abnormal exit.
-        # ------------------------------------------------------------
-        t0 = now()
-        if not normal_exit:
-            for p in processes:
-                if p.is_alive():
-                    p.terminate()
-
-        for p in processes:
-            p.join()
-
-        prof_add("worker_join_total", now() - t0)
-
-        # ------------------------------------------------------------
-        # CUDA sync.
-        # ------------------------------------------------------------
-        t0 = now()
-        stream_h2d.synchronize()
-        stream_compute.synchronize()
+        # Finalize accumulations
+        if processed_batches > 0:
+            denom = processed_batches
+            for key in out_accumulation:
+                out_accumulation[key] /= denom
+        
+        # Synchronize CUDA
+        h2d_stream.synchronize()
+        compute_stream.synchronize()
         cp.cuda.Device().synchronize()
-        prof_add("final_cuda_synchronize", now() - t0)
-
-        # ------------------------------------------------------------
-        # Queue cleanup.
-        # ------------------------------------------------------------
+        
+        # Close file reader
         try:
-            if free_queue is not None:
-                free_queue.close()
-                free_queue.join_thread()
+            file_reader.close()
         except Exception:
             pass
-
-        try:
-            if ready_queue is not None:
-                ready_queue.close()
-                ready_queue.join_thread()
-        except Exception:
-            pass
-
-        # ------------------------------------------------------------
-        # Shared-memory cleanup.
-        # ------------------------------------------------------------
-        t0 = now()
-        for shm in shm_objects:
-            try:
-                shm.close()
-            except Exception:
-                pass
-
-            try:
-                shm.unlink()
-            except FileNotFoundError:
-                pass
-            except Exception:
-                pass
-
-        prof_add("shared_memory_cleanup", now() - t0)
-
-        print_profile()
+        

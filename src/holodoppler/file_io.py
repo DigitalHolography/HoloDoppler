@@ -3,21 +3,16 @@ File I/O for .holo and .cine files
 """
 
 import os
-import json
-import numpy as np
-import traceback
 import cinereader
-import struct
-import mmap
 from numba import njit, prange
 import matplotlib.pyplot as plt
-
-import struct
 import json
 import traceback
-import numpy as np
 from typing import Optional, Iterator, Tuple, List
 from dataclasses import dataclass
+import mmap
+import struct
+import numpy as np
 
 @dataclass
 class FileHeader:
@@ -63,6 +58,8 @@ class HoloFileReader:
         self.file_path = file_path
         self.file_header: Optional[FileHeader] = None
         self.file_footer: Optional[dict] = None
+        self._read_header()
+        self._read_footer()
 
     def open(self):
         """Compatibility method - does nothing, kept for backward compatibility."""
@@ -143,12 +140,12 @@ class HoloFileReader:
             traceback.print_exc()
             return None
 
-    def read_frames(
+    def iter_frames(
         self,
         batch_size: int = 1,
         batch_stride: Optional[int] = None,
         skip_every: Optional[int] = None,
-        max_batches: Optional[int] = None,
+        end_frame: Optional[int] = None,
         first_frame: int = 0,
         num_frames: Optional[int] = None,
     ) -> Iterator[np.ndarray]:
@@ -160,7 +157,7 @@ class HoloFileReader:
             batch_stride: Stride between batch starts (default: batch_size, non-overlapping)
                          Set < batch_size for overlapping batches
             skip_every: Read only 1 out of N frames (e.g., 4 = every 4th frame)
-            max_batches: Maximum number of batches to yield
+            end_frame: Index of last frame to take into account in the file
             first_frame: Index of first frame to read (0-based)
             num_frames: Total number of frames to consider (default: all from first_frame)
         
@@ -182,7 +179,9 @@ class HoloFileReader:
             batch_stride = batch_size
         
         # Calculate frame range
-        total_available = self.header.num_frames - first_frame
+        if end_frame is None:
+            end_frame = self.header.num_frames
+        total_available = end_frame - first_frame
         if num_frames is not None:
             total_available = min(num_frames, total_available)
         
@@ -196,8 +195,6 @@ class HoloFileReader:
             total_frames_encountered = 0
             
             for frame_idx in range(total_available):
-                if max_batches is not None and batches_yielded >= max_batches:
-                    return
                 
                 # Apply frame skipping
                 total_frames_encountered += 1
@@ -229,6 +226,7 @@ class HoloFileReader:
                     
                     batches_yielded += 1
                     
+                    
                     # Prepare for next batch
                     if batch_stride < batch_size:
                         # Keep overlap frames
@@ -240,6 +238,15 @@ class HoloFileReader:
                         frames_in_buffer = 0
                     
                     frames_since_last_batch = 0
+    
+    def read_frames(
+        self,
+        first_frame: int = 0,
+        batch_size: int = 1,
+        skip_every: Optional[int] = None
+    ) -> np.ndarray:
+        return next(self.iter_frames( batch_size= batch_size, skip_every = skip_every, first_frame = first_frame))
+
 
     def read_selected_frames(self, indices: List[int]) -> Iterator[np.ndarray]:
         """
@@ -375,11 +382,6 @@ def unpack_12bitL_batch_to_uint16(
 
     return out.reshape(nframes, height, width)
 
-import mmap
-import struct
-import numpy as np
-
-
 def unpack_12bitL_batch_to_float32(
     packed: np.ndarray,
     width: int,
@@ -460,148 +462,314 @@ def unpack_12bitL_batch_to_float32_fast(
 #     pixels[1::2] = pixel1
 #     return pixels.reshape(height, width)
 
-class CineFileReader:
-    """Reader for .cine files"""
+@dataclass
+class CineMetadata:
+    """Parsed .cine file metadata."""
+    biHeight: int
+    biWidth: int
+    biCompression: int
+    biSizeImage: int
+    TotalImageCount: int
+    OffImageOffsets: int
+    FirstImageNo: int
+    RealBPP: int = 12  # default for Phantom
+    
+    # Store any additional metadata from cinereader
+    extra: dict = None
+    
+    @classmethod
+    def from_cinereader_dict(cls, metadata_dict: dict) -> 'CineMetadata':
+        """Create CineMetadata from cinereader's metadata dict."""
+        # Extract known fields, store rest in extra
+        known_fields = {
+            'biHeight', 'biWidth', 'biCompression', 'biSizeImage',
+            'TotalImageCount', 'OffImageOffsets', 'FirstImageNo', 'RealBPP'
+        }
+        kwargs = {k: metadata_dict[k] for k in known_fields if k in metadata_dict}
+        extra = {k: v for k, v in metadata_dict.items() if k not in known_fields}
+        return cls(**kwargs, extra=extra if extra else None)
+    
+    @property
+    def frame_shape(self) -> tuple:
+        """Get frame shape (height, width)."""
+        return (self.biHeight, self.biWidth)
+    
+    @property
+    def num_frames(self) -> int:
+        """Total number of frames."""
+        return self.TotalImageCount
 
-    def __init__(self, file_path):
+
+class CineFileReader:
+    """Reader for .cine files - iterator-based, no persistent file handles."""
+
+    def __init__(self, file_path: str):
         self.file_path = file_path
-        self.fid = None
-        self.metadata = None
+        self.metadata: Optional[CineMetadata] = None
 
     def open(self):
-        if self.fid is not None:
-            self.close()
-        self.fid = open(self.file_path, "rb")
-        self.metadata = dict(cinereader.read_metadata(self.file_path).__dict__)
-        # print(self.metadata)
+        """Compatibility method - does nothing."""
+        pass
 
     def close(self):
-        if self.fid is not None:
-            self.fid.close()
-            self.file_path = None
-            self.metadata = None
-            self.fid = None
+        """Compatibility method - does nothing."""
+        pass
+
+    def _read_metadata(self) -> CineMetadata:
+        """Read metadata from .cine file using cinereader."""
+        raw_metadata = dict(cinereader.read_metadata(self.file_path).__dict__)
+        self.metadata = CineMetadata.from_cinereader_dict(raw_metadata)
+        return self.metadata
+
+    @property
+    def header(self) -> CineMetadata:
+        """Lazy-load and return the file metadata."""
+        if self.metadata is None:
+            self._read_metadata()
+        return self.metadata
+        
+    @property
+    def footer(self) -> dict:
+        return {}
+
+    def _read_offsets(self, f, first_frame: int, count: int) -> np.ndarray:
+        """Read frame offset table entries."""
+        md = self.header
+        first_frame_corrected = first_frame - md.num_frames + 1 - md.FirstImageNo
+        
+        f.seek(md.OffImageOffsets + first_frame_corrected * 8)
+        offsets_bytes = f.read(count * 8)
+        
+        if len(offsets_bytes) != count * 8:
+            raise EOFError(f"Could not read enough frame offsets: requested {count}")
+        
+        return np.frombuffer(offsets_bytes, dtype=np.int64)
+
+    def _read_single_frame_mmap(
+        self, mm: mmap.mmap, offset: int, compression: int, 
+        frame_image_size: int, w: int, h: int
+    ) -> np.ndarray:
+        """Read and unpack a single frame from memory-mapped file."""
+        if offset == 0:
+            raise ValueError(f"Invalid offset for frame")
+        
+        ann_size = struct.unpack_from("I", mm, offset)[0]
+        data_start = offset + ann_size
+        
+        if compression == 1024:  # 12-bit packed (Phantom P12L)
+            # Assuming unpack_12bitL_vectorized or similar function exists
+            img = unpack_12bitL_vectorized(mm[data_start:data_start + frame_image_size], w, h)
+        elif compression == 256:  # 10-bit packed
+            raise NotImplementedError("10-bit unpacking not implemented")
+        else:
+            raise NotImplementedError(f"Compression {compression} not supported")
+        
+        return img.astype(np.float32)
+
+    def iter_frames(
+        self,
+        batch_size: int = 1,
+        batch_stride: Optional[int] = None,
+        skip_every: Optional[int] = None,
+        end_frame: Optional[int] = None,
+        first_frame: int = 0,
+    ) -> Iterator[np.ndarray]:
+        """
+        Iterator over batches of frames from .cine file.
+        
+        Args:
+            batch_size: Number of frames per batch (default 1 for single frames)
+            batch_stride: Stride between batch starts (default: batch_size)
+            skip_every: Read only 1 out of N frames
+            end_frame: Index of last frame to take into account in the file
+            first_frame: Index of first frame to read (0-based)
+        
+        Yields:
+            numpy arrays of shape (batch_size, height, width) or (height, width) if batch_size=1
+        
+        Example:
+            reader = CineFileReader("video.cine")
+            for batch in reader.read_frames(batch_size=16, batch_stride=8):
+                gpu_process(batch)
+        """
+        if batch_stride is None:
+            batch_stride = batch_size
+        
+        md = self.header
+        h, w = md.biHeight, md.biWidth
+        compression = md.biCompression
+        frame_image_size = md.biSizeImage
+
+        if end_frame is None:
+            end_frame = md.num_frames
+        
+        total_available = end_frame - first_frame
+        
+        with open(self.file_path, "rb") as f:
+            with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+                buffer = []
+                frames_in_buffer = 0
+                frames_since_last_batch = 0
+                batches_yielded = 0
+                total_frames_encountered = 0
+                frames_read = 0
+                
+                for frame_idx in range(total_available):
+                    
+                    # Apply frame skipping
+                    total_frames_encountered += 1
+                    if skip_every is not None and skip_every > 1:
+                        if (total_frames_encountered - 1) % skip_every != 0:
+                            continue
+                    
+                    # Handle striding between batches
+                    if frames_in_buffer == 0:
+                        frames_since_last_batch += 1
+                        if frames_since_last_batch < batch_stride and len(buffer) > 0:
+                            frames_read += 1
+                            continue
+                    
+                    # Read frame offset and data
+                    current_frame = first_frame + frame_idx
+                    try:
+                        offsets = self._read_offsets(f, current_frame, 1)
+                        img = self._read_single_frame_mmap(
+                            mm, offsets[0], compression, frame_image_size, w, h
+                        )
+                    except (EOFError, ValueError) as e:
+                        break  # End of available frames
+                    
+                    frames_read += 1
+                    buffer.append(img)
+                    frames_in_buffer += 1
+                    
+                    if frames_in_buffer == batch_size:
+                        # Yield batch
+                        if batch_size == 1:
+                            yield buffer[0]
+                        else:
+                            yield np.stack(buffer, axis=0)
+                        
+                        batches_yielded += 1
+                        
+                        # Prepare for next batch
+                        if batch_stride < batch_size:
+                            overlap = batch_size - batch_stride
+                            buffer = buffer[-overlap:] if overlap > 0 else []
+                            frames_in_buffer = len(buffer)
+                        else:
+                            buffer = []
+                            frames_in_buffer = 0
+                        
+                        frames_since_last_batch = 0
+
+    def read_selected_frames(self, indices: List[int]) -> Iterator[np.ndarray]:
+        """
+        Read specific frame indices (random access).
+        
+        Args:
+            indices: List of 0-based frame indices to read
+        
+        Yields:
+            numpy arrays of shape (height, width)
+        """
+        md = self.header
+        h, w = md.biHeight, md.biWidth
+        compression = md.biCompression
+        frame_image_size = md.biSizeImage
+        
+        with open(self.file_path, "rb") as f:
+            with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+                for idx in sorted(indices):
+                    if idx >= md.num_frames:
+                        continue
+                    try:
+                        offsets = self._read_offsets(f, idx, 1)
+                        img = self._read_single_frame_mmap(
+                            mm, offsets[0], compression, frame_image_size, w, h
+                        )
+                        yield img
+                    except (EOFError, ValueError):
+                        continue
+
+    def read_frames(
+        self,
+        first_frame: int = 0,
+        batch_size: int = 1,
+        skip_every: Optional[int] = None
+    ) -> np.ndarray:
+        return next(self.iter_frames( batch_size= batch_size, skip_every = skip_every, first_frame = first_frame))
+
+    # ===== FAST BATCH READING (preserved from original for performance) =====
+    
+    def read_frames_batch(
+        self, first_frame: int, frame_batchsize: int
+    ) -> np.ndarray:
+        """
+        Fast batch read of consecutive frames (preserved from original API).
+        
+        Returns:
+            np.ndarray, shape (frame_batchsize, height, width), dtype=np.float32
+        """
+        md = self.header
+        h, w = md.biHeight, md.biWidth
+        compression = md.biCompression
+        frame_image_size = md.biSizeImage
+        
+        with open(self.file_path, "rb") as f:
+            offsets = self._read_offsets(f, first_frame, frame_batchsize)
             
-    def read_frames_fastest(self, first_frame, frame_batchsize):
-        """
-        Read a batch of consecutive uncompressed frames as fast as possible.
-
-        Returns
-        -------
-        np.ndarray, shape (frame_batchsize, height, width), dtype=np.float32
-        """
-        md = self.metadata
-
-        h = md["biHeight"]
-        w = md["biWidth"]
-        compression = md["biCompression"]
-        frame_image_size = md["biSizeImage"]
-        num_frames = md["TotalImageCount"]
-
-        offset_table_pos = md["OffImageOffsets"]
-        first_frame_corrected = first_frame - num_frames + 1 - md["FirstImageNo"]
-
-        self.fid.seek(offset_table_pos + first_frame_corrected * 8)
-        offsets_bytes = self.fid.read(frame_batchsize * 8)
-
-        if len(offsets_bytes) != frame_batchsize * 8:
-            raise EOFError("Could not read enough frame offsets")
-
-        offsets = np.frombuffer(offsets_bytes, dtype=np.int64)
-
-        if compression != 1024:
-            raise NotImplementedError(
-                f"Only Phantom P12L 12-bit packed compression=1024 is implemented, "
-                f"got {compression}"
-            )
-
-        packed = np.empty((frame_batchsize, frame_image_size), dtype=np.uint8)
-
-        with mmap.mmap(self.fid.fileno(), 0, access=mmap.ACCESS_READ) as mm:
-            for i, img_start in enumerate(offsets):
-                if img_start == 0:
-                    raise ValueError(f"Invalid offset for frame {first_frame + i}")
-
-                ann_size = struct.unpack_from("I", mm, img_start)[0]
-                data_start = img_start + ann_size
-
-                packed[i] = np.frombuffer(
-                    mm,
-                    dtype=np.uint8,
-                    count=frame_image_size,
-                    offset=data_start,
+            if compression != 1024:
+                raise NotImplementedError(
+                    f"Only Phantom P12L 12-bit packed compression=1024 supported"
                 )
-
-        frames = unpack_12bitL_batch_to_uint16(packed, w, h)
-
-        return frames
             
+            packed = np.empty((frame_batchsize, frame_image_size), dtype=np.uint8)
+            
+            with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+                for i, img_start in enumerate(offsets):
+                    ann_size = struct.unpack_from("I", mm, img_start)[0]
+                    data_start = img_start + ann_size
+                    
+                    packed[i] = np.frombuffer(
+                        mm, dtype=np.uint8, count=frame_image_size, offset=data_start
+                    )
+            
+            frames = unpack_12bitL_batch_to_uint16(packed, w, h)
+            return frames.astype(np.float32)
+
+    # ===== CONTEXT MANAGER SUPPORT =====
     
-
-    def read_frames_fast(self, first_frame, frame_batchsize):
-        """
-        Read a batch of consecutive uncompressed frames as fast as possible.
-        
-        Parameters
-        ----------
-        first_frame : int
-            Zero-based index of the first frame to read.
-        frame_batchsize : int
-            Number of frames to read.
-        
-        Returns
-        -------
-        np.ndarray, shape (frame_batchsize, height, width), dtype=np.float32
-            Batch of frames, scaled to float32 (0..max_value).
-        """
-        md = self.metadata
-        h, w = md['biHeight'], md['biWidth']
-        # bpp = md['RealBPP']          # 12 for this file
-        compression = md['biCompression']  # 1024 for 12-bit packed
-        frame_image_size = md['biSizeImage']  
-        
-        num_frames = md['TotalImageCount']
-        
-        offset_table_pos = md['OffImageOffsets']
-        first_frame_corrected = first_frame - num_frames + 1 - md['FirstImageNo']
-        
-        self.fid.seek(offset_table_pos + first_frame_corrected * 8)
-        offsets_bytes = self.fid.read(frame_batchsize * 8)
-        
-        if len(offsets_bytes) != frame_batchsize * 8:
-            raise EOFError("Could not read enough frame offsets")
-        offsets = struct.unpack(f'{frame_batchsize}q', offsets_bytes)
-        frames = np.empty((frame_batchsize, h, w), dtype=np.float32)
-        
-        with mmap.mmap(self.fid.fileno(), 0, access=mmap.ACCESS_READ) as mm:
-            for i, img_start in enumerate(offsets):
-                if img_start == 0:
-                    raise ValueError(f"Invalid offset for frame {first_frame + i}")
-                ann_size = struct.unpack('I', mm[img_start:img_start+4])[0]
-                data_start = img_start + ann_size
-                data_end = data_start + frame_image_size 
-
-                # raw = np.frombuffer(mm[data_start:data_end], dtype=np.uint16)
-
-                if compression == 256:          # 10-bit packed
-                    pass
-                    # img = _unpack_10bit(raw, w, h)
-                elif compression == 1024:       # 12-bit packed (Phantom P12L)
-                    img = unpack_12bitL_vectorized(mm[data_start:data_end], w, h)
-                else:
-                    pass
-
-                frames[i] = img.astype(np.float32)
-
-        return frames
+    def __enter__(self):
+        _ = self.header  # Ensure metadata is loaded
+        return self
     
-    def read_frames_cinereader(self, first_frame, frame_size):
-        _, images, _ = cinereader.read(
-            self.file_path, self.metadata['FirstImageNo'] + first_frame, frame_size
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+    
+    @property
+    def frame_shape(self) -> tuple:
+        """Get the shape of individual frames (height, width)."""
+        return self.header.frame_shape
+    
+    @property
+    def total_frames(self) -> int:
+        """Get total number of frames in the file."""
+        return self.header.num_frames
+    
+    def __repr__(self) -> str:
+        if self.metadata is None:
+            try:
+                _ = self.header
+            except Exception:
+                return f"CineFileReader('{self.file_path}') [unreadable]"
+        
+        return (
+            f"CineFileReader('{self.file_path}')\n"
+            f"  Resolution: {self.header.biWidth}x{self.header.biHeight}\n"
+            f"  Frames: {self.header.num_frames}\n"
+            f"  Compression: {self.header.biCompression}"
         )
-        return np.stack(images, axis=0).astype(np.float32)
-    
-    read_frames = read_frames_fastest
     
     
 class FileReaderFactory:

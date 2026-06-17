@@ -6,6 +6,7 @@ import imageio as iio
 import numpy as np
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import asdict
 
 from .utils import *
 from .get_version import get_version
@@ -327,7 +328,7 @@ def save_metadata(target_dir, file_reader, parameters):
         with open(target_dir / "json" / "holovibes_footer.json", "w") as f:
             json.dump(file_reader.file_footer, f, indent=4)
         with open(target_dir / "json" / "holovibes_header.json", "w") as f:
-            json.dump(file_reader.file_header, f, indent=4)
+            json.dump(asdict(file_reader.file_header), f, indent=4)
 
 
 def save_h5(target_dir, vid, parameters, reg_list, coefs_list):

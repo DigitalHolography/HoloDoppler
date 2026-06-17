@@ -571,10 +571,11 @@ class SubapertureMontagePlotter:
 class SVDeigenvectorimages_plotter:
     """Montage of SVD eigenvector images """
     
-    def __init__(self, normalize_per_frame=True, to_abs=True):
+    def __init__(self, normalize_per_frame=False, to_abs=True, n_subplots=64):
         self.normalize_per_frame = normalize_per_frame
         self.to_abs = to_abs
-        
+        self.n_subplots = n_subplots  # Fixed number of subplots
+    
     def plot(self, U):
         if cp is not None and isinstance(U, cp.ndarray):
             U = cp.asnumpy(U)
@@ -585,45 +586,62 @@ class SVDeigenvectorimages_plotter:
         N_imgs = U.shape[-1]
         if N_imgs == 0:
             return None
-        ny = int(np.sqrt(N_imgs))
-        nx = N_imgs // ny if ny > 0 else N_imgs
         
-        imgs = []
+        # Determine grid size for fixed number of subplots
+        ny = int(np.sqrt(self.n_subplots))
+        nx = self.n_subplots // ny if ny > 0 else self.n_subplots
+        # Adjust to ensure nx * ny >= n_subplots
+        while nx * ny < self.n_subplots:
+            nx += 1
         
-        for i in range(N_imgs):
-            img = U[:, :, i] 
+        # Only keep the first n_subplots images
+        n_imgs_to_use = min(N_imgs, self.n_subplots)
+        
+        # Get image dimensions
+        img_height = U.shape[0]
+        img_width = U.shape[1]
+        
+        # Create empty array for the full montage (filled with zeros)
+        if self.to_abs:
+            # For RGB images (3 channels)
+            montage = np.zeros((ny * img_height, nx * img_width, 3), dtype=np.float32)
+        else:
+            # For complex color images (3 channels)
+            montage = np.zeros((ny * img_height, nx * img_width, 3), dtype=np.float32)
+        
+        # Fill the montage with images in order
+        for i in range(n_imgs_to_use):
+            row = i // nx
+            col = i % nx
+            
+            img = U[:, :, i]
             
             if self.to_abs:
                 img = np.abs(img)
-                
                 if img.ndim == 2:
                     img = np.stack([img] * 3, axis=-1)
             else:
-                
                 img = complex_to_color(img)
             
             if self.normalize_per_frame:
-                
                 img = normalize_image(img)
             
-            imgs.append(img)
+            # Place image in the montage
+            montage[row * img_height:(row + 1) * img_height, 
+                   col * img_width:(col + 1) * img_width, :] = img
         
+        # Remaining positions stay as zeros (already initialized)
         
-        rows = []
-        for i in range(ny):
-            row_imgs = imgs[i*nx:(i+1)*nx]
-            rows.append(np.hstack(row_imgs))
-        
-        
-        montage = np.vstack(rows)
-        
-        
+        # Normalize the entire montage if not normalizing per frame
         if not self.normalize_per_frame:
             montage = normalize_image(montage)
         else:
-            
+            # Convert to uint8 if needed
             if montage.dtype != np.uint8:
-                montage = (montage * 255).astype(np.uint8) if montage.max() <= 1 else montage.astype(np.uint8)
+                if montage.max() <= 1:
+                    montage = (montage * 255).astype(np.uint8)
+                else:
+                    montage = montage.astype(np.uint8)
         
         return montage
     
@@ -679,7 +697,6 @@ class SVDeigenvalues_plotter:
         return img[..., :3]
 
     def close(self):
-        import matplotlib.pyplot as plt
         plt.close(self.fig)
 
 class DebugPlotterManager:
@@ -757,5 +774,7 @@ class DebugPlotterManager:
         return out
     
     def close_all(self):
-        for plotter in self.plotters.values():
-            plotter.close()
+        plt.close('all')
+        # for name,plotter in self.plotters.items():
+        #     # print("closing: ",name)
+        #     plotter.close()
