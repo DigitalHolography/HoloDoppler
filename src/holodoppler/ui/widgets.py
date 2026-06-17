@@ -10,51 +10,12 @@ from typing import Any, Callable
 from .theme import configure_plain_widget
 
 
-class ScrollableFrame(ttk.Frame):
-    def __init__(self, master: tk.Misc, *, theme: str) -> None:
-        super().__init__(master)
-        self.canvas = tk.Canvas(self, highlightthickness=0, borderwidth=0)
-        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.content = ttk.Frame(self.canvas)
-        self.window_id = self.canvas.create_window((0, 0), window=self.content, anchor="nw")
-
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
-        self.canvas.grid(row=0, column=0, sticky="nsew")
-        self.scrollbar.grid(row=0, column=1, sticky="ns")
-
-        self.canvas.configure(background="#f5f5f5" if theme == "light" else "#1f1f1f")
-        self.content.bind("<Configure>", self._on_content_configure)
-        self.canvas.bind("<Configure>", self._on_canvas_configure)
-        self.canvas.bind("<Enter>", self._bind_mousewheel)
-        self.canvas.bind("<Leave>", self._unbind_mousewheel)
-
-    def reset(self) -> None:
-        self.canvas.yview_moveto(0)
-
-    def _on_content_configure(self, _event: tk.Event) -> None:
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    def _on_canvas_configure(self, event: tk.Event) -> None:
-        self.canvas.itemconfigure(self.window_id, width=event.width)
-
-    def _bind_mousewheel(self, _event: tk.Event) -> None:
-        self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
-
-    def _unbind_mousewheel(self, _event: tk.Event) -> None:
-        self.canvas.unbind_all("<MouseWheel>")
-
-    def _on_mousewheel(self, event: tk.Event) -> None:
-        self.canvas.yview_scroll(int(-event.delta / 120), "units")
-
-
 @dataclass
 class ParameterField:
     key: str
     original: Any
-    variable: tk.Variable | None = None
-    text: tk.Text | None = None
+    value: Any
+    item_id: str
 
 
 class SettingsEditor(ttk.Frame):
@@ -78,70 +39,170 @@ class SettingsEditor(ttk.Frame):
         super().__init__(master)
         self.theme = theme
         self.fields: dict[str, ParameterField] = {}
-        self.scrollable = ScrollableFrame(self, theme=theme)
-        self.scrollable.pack(fill="both", expand=True)
+        self.selected_key: str | None = None
+        self.value_variable: tk.Variable | None = None
+        self.value_text: tk.Text | None = None
+        self._build()
 
     def load(self, parameters: dict[str, Any]) -> None:
-        for child in self.scrollable.content.winfo_children():
-            child.destroy()
+        self.tree.delete(*self.tree.get_children())
         self.fields.clear()
+        self.selected_key = None
 
         grouped = self._group_parameters(parameters)
-        for row, (group_name, items) in enumerate(grouped.items()):
-            frame = ttk.LabelFrame(self.scrollable.content, text=group_name, padding=10)
-            frame.grid(row=row, column=0, sticky="ew", padx=(0, 8), pady=(0, 10))
-            frame.columnconfigure(1, weight=1)
-            for field_row, (key, value) in enumerate(items):
-                ttk.Label(frame, text=key).grid(row=field_row, column=0, sticky="w", padx=(0, 12), pady=4)
-                self._build_field(frame, field_row, key, value)
-        self.scrollable.content.columnconfigure(0, weight=1)
-        self.scrollable.reset()
+        first_item: str | None = None
+        for group_name, items in grouped.items():
+            group_id = self.tree.insert("", "end", text=group_name, values=("",), open=True, tags=("group",))
+            for key, value in items:
+                item_id = self.tree.insert(
+                    group_id,
+                    "end",
+                    text=key,
+                    values=(self._display_value(value),),
+                    tags=("parameter",),
+                )
+                self.fields[key] = ParameterField(key=key, original=value, value=value, item_id=item_id)
+                first_item = first_item or item_id
+
+        self._clear_editor("Select a parameter to edit it.")
+        if first_item is not None:
+            self.tree.selection_set(first_item)
+            self.tree.focus(first_item)
+            self.tree.see(first_item)
+            self._show_selected_editor()
 
     def values(self) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for key, field in self.fields.items():
-            try:
-                result[key] = self._field_value(field)
-            except ValueError as exc:
-                raise ValueError(f"{key}: {exc}") from exc
-        return result
+        self._apply_current_editor(silent=True)
+        return {key: field.value for key, field in self.fields.items()}
 
-    def _build_field(self, parent: ttk.Frame, row: int, key: str, value: Any) -> None:
-        field = ParameterField(key=key, original=value)
-        if isinstance(value, bool):
-            variable = tk.BooleanVar(value=value)
-            control = ttk.Checkbutton(parent, variable=variable)
-            field.variable = variable
+    def _build(self) -> None:
+        self.columnconfigure(0, weight=1)
+        self.columnconfigure(1, weight=0, minsize=260)
+        self.rowconfigure(0, weight=1)
+
+        table_frame = ttk.Frame(self)
+        table_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        table_frame.columnconfigure(0, weight=1)
+        table_frame.rowconfigure(0, weight=1)
+
+        self.tree = ttk.Treeview(table_frame, columns=("value",), show=("tree", "headings"), selectmode="browse")
+        self.tree.heading("#0", text="Parameter")
+        self.tree.heading("value", text="Value")
+        self.tree.column("#0", minwidth=220, width=360, stretch=True)
+        self.tree.column("value", minwidth=220, width=420, stretch=True)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
+        self.tree.bind("<Double-1>", self._focus_editor)
+        self.tree.tag_configure("group", font=("Segoe UI", 10, "bold"))
+
+        y_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        y_scroll.grid(row=0, column=1, sticky="ns")
+        self.tree.configure(yscrollcommand=y_scroll.set)
+
+        x_scroll = ttk.Scrollbar(table_frame, orient="horizontal", command=self.tree.xview)
+        x_scroll.grid(row=1, column=0, sticky="ew")
+        self.tree.configure(xscrollcommand=x_scroll.set)
+
+        self.editor_frame = ttk.LabelFrame(self, text="Value", padding=8)
+        self.editor_frame.grid(row=0, column=1, sticky="nsew")
+        self.editor_frame.configure(width=260)
+        self.editor_frame.grid_propagate(False)
+        self.editor_frame.columnconfigure(0, weight=1)
+        self.editor_frame.rowconfigure(1, weight=1)
+
+        self.selected_label = ttk.Label(
+            self.editor_frame,
+            text="Select a parameter to edit it.",
+            style="Muted.TLabel",
+            wraplength=220,
+        )
+        self.selected_label.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+
+        self.editor_host = ttk.Frame(self.editor_frame)
+        self.editor_host.grid(row=1, column=0, sticky="nsew")
+        self.editor_host.columnconfigure(0, weight=1)
+        self.editor_host.rowconfigure(0, weight=1)
+
+        self.apply_button = ttk.Button(self.editor_frame, text="Apply", command=self._apply_current_editor)
+        self.apply_button.grid(row=2, column=0, sticky="e", pady=(10, 0))
+        self.apply_button.configure(state="disabled")
+
+    def _on_tree_select(self, _event: tk.Event) -> None:
+        try:
+            self._apply_current_editor(silent=True)
+        except ValueError:
+            pass
+        self._show_selected_editor()
+
+    def _show_selected_editor(self) -> None:
+        selection = self.tree.selection()
+        if not selection:
+            self._clear_editor("Select a parameter to edit it.")
+            return
+
+        item_id = selection[0]
+        key = self.tree.item(item_id, "text")
+        if key not in self.fields:
+            self._clear_editor("Select a parameter row to edit it.")
+            return
+
+        field = self.fields[key]
+        self.selected_key = key
+        self.selected_label.configure(text=key)
+        self.apply_button.configure(state="normal")
+        self._clear_editor_controls()
+
+        value = field.value
+        if isinstance(field.original, bool):
+            variable = tk.BooleanVar(value=bool(value))
+            control = ttk.Checkbutton(self.editor_host, text="Enabled", variable=variable)
+            self.value_variable = variable
         elif key in self.CHOICES:
             variable = tk.StringVar(value=str(value))
-            control = ttk.Combobox(parent, textvariable=variable, values=self.CHOICES[key], state="normal")
-            field.variable = variable
-        elif isinstance(value, (list, dict)):
-            control = ScrolledText(parent, height=3, wrap="word", font=("Consolas", 10))
+            control = ttk.Combobox(self.editor_host, textvariable=variable, values=self.CHOICES[key], state="normal")
+            self.value_variable = variable
+        elif isinstance(field.original, (list, dict)):
+            control = ScrolledText(self.editor_host, height=6, wrap="word", font=("Consolas", 10))
             configure_plain_widget(control, self.theme)
-            control.insert("1.0", json.dumps(value))
-            field.text = control
+            control.insert("1.0", json.dumps(value, indent=2))
+            self.value_text = control
         else:
-            variable = tk.StringVar(value=str(value))
-            control = ttk.Entry(parent, textvariable=variable)
-            field.variable = variable
+            variable = tk.StringVar(value="" if value is None else str(value))
+            control = ttk.Entry(self.editor_host, textvariable=variable)
+            control.bind("<Return>", lambda _event: self._apply_current_editor())
+            self.value_variable = variable
 
-        control.grid(row=row, column=1, sticky="ew", pady=4)
-        self.fields[key] = field
+        sticky = "nsew" if isinstance(field.original, (list, dict)) else "new"
+        control.grid(row=0, column=0, sticky=sticky)
+        control.focus_set()
 
-    def _field_value(self, field: ParameterField) -> Any:
+    def _apply_current_editor(self, silent: bool = False) -> None:
+        if self.selected_key is None or self.selected_key not in self.fields:
+            return
+
+        field = self.fields[self.selected_key]
+        try:
+            field.value = self._editor_value(field)
+        except ValueError as exc:
+            if silent:
+                raise ValueError(f"{field.key}: {exc}") from exc
+            messagebox.showerror("Invalid settings", f"{field.key}: {exc}", parent=self)
+            return
+        self.tree.set(field.item_id, "value", self._display_value(field.value))
+
+    def _editor_value(self, field: ParameterField) -> Any:
         original = field.original
-        if field.text is not None:
-            raw_text = field.text.get("1.0", "end").strip()
+        if self.value_text is not None:
+            raw_text = self.value_text.get("1.0", "end").strip()
             value = json.loads(raw_text or "null")
             if not isinstance(value, type(original)):
                 raise ValueError(f"expected {type(original).__name__}")
             return value
 
         if isinstance(original, bool):
-            return bool(field.variable.get()) if field.variable is not None else original
+            return bool(self.value_variable.get()) if self.value_variable is not None else original
 
-        raw_value = str(field.variable.get()).strip() if field.variable is not None else ""
+        raw_value = str(self.value_variable.get()).strip() if self.value_variable is not None else ""
         if isinstance(original, int):
             return int(float(raw_value))
         if isinstance(original, float):
@@ -149,6 +210,32 @@ class SettingsEditor(ttk.Frame):
         if original is None:
             return json.loads(raw_value)
         return raw_value
+
+    def _clear_editor(self, message: str) -> None:
+        self.selected_key = None
+        self.selected_label.configure(text=message)
+        self.apply_button.configure(state="disabled")
+        self._clear_editor_controls()
+
+    def _clear_editor_controls(self) -> None:
+        for child in self.editor_host.winfo_children():
+            child.destroy()
+        self.value_variable = None
+        self.value_text = None
+
+    def _focus_editor(self, _event: tk.Event) -> None:
+        for child in self.editor_host.winfo_children():
+            child.focus_set()
+            break
+
+    def _display_value(self, value: Any) -> str:
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if value is None:
+            return "null"
+        if isinstance(value, (list, dict)):
+            return json.dumps(value, separators=(",", ":"))
+        return str(value)
 
     def _group_parameters(self, parameters: dict[str, Any]) -> dict[str, list[tuple[str, Any]]]:
         grouped: dict[str, list[tuple[str, Any]]] = {name: [] for name, _patterns in self.GROUPS}
