@@ -223,6 +223,10 @@ def _run_pyinstaller(console: bool) -> None:
         "tkinterdnd2",
         "--collect-data",
         "tkinterdnd2",
+        "--collect-data",
+        "sv_ttk",
+        "--collect-data",
+        "holodoppler",
     ]
 
     if console:

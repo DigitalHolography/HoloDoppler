@@ -20,6 +20,8 @@ dependencies = [
   "lblprof>=0.1.8",
   "imageio>=2.37.3",
   "tkinterdnd2",
+  "sv-ttk>=2.6.1",
+  "pillow>=11.0",
 ]
 
 [project.optional-dependencies]
@@ -37,7 +39,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-holodoppler = ["py.typed"]
+holodoppler = ["py.typed", "ui/assets/*", "ui/defaults/*"]
 
 [tool.pyinstaller]
 name = "HoloDoppler"

@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 import numpy as np
 from holodoppler.Holodoppler import Holodoppler
 from matlab_imresize.imresize import imresize
@@ -11,7 +11,7 @@ import os
 from .plotting import DebugPlotterManager
 
 
-def preview(holo_path, parameters: dict, tictoc=False) -> None:
+def preview(holo_path, parameters: dict, tictoc=False, save_debug=True) -> None:
     HD = Holodoppler(backend = "cupyRAM", pipeline_version = "latest")
 
     HD.load_file(holo_path)
@@ -79,9 +79,9 @@ def preview(holo_path, parameters: dict, tictoc=False) -> None:
 
     print("DEBUG KEYS:", list(debug_imgs.keys()))
 
-    # --- Save ---
-    save_dir = "./debug_outputs"
-    save_debug_images(debug_imgs, save_dir)
+    if save_debug:
+        save_dir = "./debug_outputs"
+        save_debug_images(debug_imgs, save_dir)
     
     M0img = debug_imgs.get("M0")
     if M0img is not None:
@@ -94,7 +94,11 @@ def preview(holo_path, parameters: dict, tictoc=False) -> None:
         return M0img
 
 
-def process(holo_path, parameters: dict) -> None:
+def process(
+    holo_path,
+    parameters: dict,
+    progress_callback: Callable[[int, int, str], None] | None = None,
+) -> None:
     HD = Holodoppler(backend = "cupyRAM", pipeline_version = "latest")
 
     HD.load_file(holo_path)
@@ -104,7 +108,7 @@ def process(holo_path, parameters: dict) -> None:
         
     print("parameters : ", parameters)
 
-    HD.process_moments(parameters, holodoppler_path = True)
+    HD.process_moments(parameters, holodoppler_path=True, progress_callback=progress_callback)
 
 def _existing_file(value: str) -> Path:
     path = Path(value).expanduser().resolve()

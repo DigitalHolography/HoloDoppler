@@ -500,7 +500,8 @@ class Holodoppler:
     # ------------------------------------------------------------
     
     def process_moments(self, parameters, mp4_path = None, 
-                        return_numpy = False, holodoppler_path = True):
+                        return_numpy = False, holodoppler_path = True,
+                        progress_callback = None):
         """Process entire video"""
         
         batch_size = parameters["batch_size"]
@@ -520,7 +521,9 @@ class Holodoppler:
             num_batch = int((end_frame - first_frame) / batch_stride)
         
         if num_batch <= 0:
+            self._notify_progress(progress_callback, 0, 0, "No batches to process")
             return None
+        self._notify_progress(progress_callback, 0, num_batch, "Preparing")
         
         out_list = []
         
@@ -566,6 +569,7 @@ class Holodoppler:
             M0_reg = self.bm.to_backend(M0_reg)
         else:
             M0_reg = None
+        self._notify_progress(progress_callback, 0, num_batch, "Processing batches")
         
         coefs_list = [None] * num_batch if parameters.get("shack_hartmann") else None
         reg_list = [None] * num_batch if parameters.get("image_registration") else None
@@ -574,15 +578,18 @@ class Holodoppler:
         if self.backend_name =="cupy":
             self._process_gpu_streaming(parameters, num_batch, first_frame, batch_stride,
                                         batch_size, M0_reg, out_list, coefs_list, reg_list,
-                                        debug_manager, debug_queue, res_store, lock)
+                                        debug_manager, debug_queue, res_store, lock,
+                                        progress_callback)
         elif self.backend_name =="cupyRAM":
             self._process_gpu_streaming_onram(parameters, num_batch, first_frame, batch_stride,
                                     batch_size, M0_reg, out_list, coefs_list, reg_list,
-                                    debug_manager, debug_queue, res_store, lock )
+                                    debug_manager, debug_queue, res_store, lock,
+                                    progress_callback)
         else:
             self._process_cpu(parameters, num_batch, first_frame, batch_stride,
                              batch_size, M0_reg, out_list, coefs_list, reg_list,
-                             debug_manager, debug_queue, res_store, lock)
+                             debug_manager, debug_queue, res_store, lock,
+                             progress_callback)
             
         # 1. Stack and move to CPU immediately to free VRAM
         # stack(out_list, axis=0) creates (T, C, H, W) where C channel is moments 0, 1, 2 and frequency bands in order
@@ -653,9 +660,19 @@ class Holodoppler:
         
         return None
     
+    @staticmethod
+    def _notify_progress(progress_callback, completed, total, message):
+        if progress_callback is None:
+            return
+        try:
+            progress_callback(completed, total, message)
+        except Exception:
+            pass
+    
     def _process_cpu(self, parameters, num_batch, first_frame, batch_stride,
                      batch_size, M0_reg, out_list, coefs_list, reg_list,
-                     debug_manager, debug_queue, res_store, lock):
+                     debug_manager, debug_queue, res_store, lock,
+                     progress_callback=None):
         """CPU processing loop"""
         for i in tqdm(range(num_batch)):
             frames = self.read_frames(first_frame + i * batch_stride, batch_size)
@@ -678,10 +695,12 @@ class Holodoppler:
                 with lock:
                     res_store[i] = res
                 debug_queue.put(i)
+            self._notify_progress(progress_callback, i + 1, num_batch, f"Batch {i + 1}/{num_batch}")
     
     def _process_gpu_streaming(self, parameters, num_batch, first_frame, batch_stride,
                                batch_size, M0_reg, out_list, coefs_list, reg_list,
-                               debug_manager, debug_queue, res_store, lock):
+                               debug_manager, debug_queue, res_store, lock,
+                               progress_callback=None):
         """GPU streaming processing loop"""
         import cupy as cp
         
@@ -727,13 +746,15 @@ class Holodoppler:
                 debug_queue.put(i)
             
             stream_compute.synchronize()
+            self._notify_progress(progress_callback, i + 1, num_batch, f"Batch {i + 1}/{num_batch}")
         
         stream_h2d.synchronize()
         cp.cuda.Device().synchronize()
         
     def _process_gpu_streaming_onram(self, parameters, num_batch, first_frame, batch_stride,
                                     batch_size, M0_reg, out_list, coefs_list, reg_list,
-                                    debug_manager, debug_queue, res_store, lock):
+                                    debug_manager, debug_queue, res_store, lock,
+                                    progress_callback=None):
         """GPU streaming processing loop with CPU RAM prefetch queue."""
         import queue, threading
         import cupy as cp
@@ -801,6 +822,7 @@ class Holodoppler:
             if d_frames_next is not None:
                 stream_h2d.synchronize()
                 d_frames = d_frames_next
+            self._notify_progress(progress_callback, i + 1, num_batch, f"Batch {i + 1}/{num_batch}")
 
         stop_reader.set()
         reader_thread.join(timeout=5)
