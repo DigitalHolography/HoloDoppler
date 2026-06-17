@@ -137,17 +137,22 @@ class AdvancedView(ttk.Frame):
 
         notebook = ttk.Notebook(self)
         notebook.grid(row=1, column=0, sticky="nsew")
-        self._build_inputs_tab(notebook)
-        self._build_preview_tab(notebook)
+        self._build_inputs_preview_tab(notebook)
         self._build_settings_tab(notebook)
 
-    def _build_inputs_tab(self, notebook: ttk.Notebook) -> None:
+    def _build_inputs_preview_tab(self, notebook: ttk.Notebook) -> None:
         frame = ttk.Frame(notebook, padding=12)
         frame.columnconfigure(0, weight=1)
+        frame.columnconfigure(1, weight=2)
         frame.rowconfigure(0, weight=1)
-        notebook.add(frame, text="Inputs")
+        notebook.add(frame, text="Inputs & Preview")
 
-        list_frame = ttk.Frame(frame)
+        list_panel = ttk.LabelFrame(frame, text="Inputs", padding=8)
+        list_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        list_panel.columnconfigure(0, weight=1)
+        list_panel.rowconfigure(0, weight=1)
+
+        list_frame = ttk.Frame(list_panel)
         list_frame.grid(row=0, column=0, sticky="nsew")
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
@@ -160,13 +165,12 @@ class AdvancedView(ttk.Frame):
         self.input_list.configure(yscrollcommand=scrollbar.set)
         self.input_list.bind("<<ListboxSelect>>", self._sync_preview_selection_from_list)
 
-    def _build_preview_tab(self, notebook: ttk.Notebook) -> None:
-        frame = ttk.Frame(notebook, padding=12)
-        frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(1, weight=1)
-        notebook.add(frame, text="Preview")
+        preview_panel = ttk.LabelFrame(frame, text="Preview", padding=8)
+        preview_panel.grid(row=0, column=1, sticky="nsew")
+        preview_panel.columnconfigure(0, weight=1)
+        preview_panel.rowconfigure(1, weight=1)
 
-        controls = ttk.Frame(frame)
+        controls = ttk.Frame(preview_panel)
         controls.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         controls.columnconfigure(1, weight=1)
         ttk.Button(controls, text="Previous", command=self._select_previous_preview).grid(row=0, column=0, padx=(0, 6))
@@ -177,14 +181,14 @@ class AdvancedView(ttk.Frame):
         self.preview_button = ttk.Button(controls, text="Preview", command=self._preview_selected, style="Accent.TButton")
         self.preview_button.grid(row=0, column=3)
 
-        self.preview_frame = ttk.Frame(frame, style="Preview.TFrame", padding=12)
+        self.preview_frame = ttk.Frame(preview_panel, style="Preview.TFrame", padding=12)
         self.preview_frame.grid(row=1, column=0, sticky="nsew")
         self.preview_frame.columnconfigure(0, weight=1)
         self.preview_frame.rowconfigure(0, weight=1)
         self.preview_label = ttk.Label(self.preview_frame, text="Load inputs to preview files.", anchor="center")
         self.preview_label.grid(row=0, column=0, sticky="nsew")
 
-        progress = ttk.Frame(frame)
+        progress = ttk.Frame(preview_panel)
         progress.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         progress.columnconfigure(0, weight=1)
         self.file_progress = ttk.Progressbar(progress, maximum=100, mode="determinate")
