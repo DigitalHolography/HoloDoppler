@@ -24,15 +24,14 @@ class ScrollableFrame(ttk.Frame):
         self.canvas.grid(row=0, column=0, sticky="nsew")
         self.scrollbar.grid(row=0, column=1, sticky="ns")
 
-        if theme == "light":
-            self.canvas.configure(background="#f5f5f5")
-        else:
-            self.canvas.configure(background="#1f1f1f")
-
+        self.canvas.configure(background="#f5f5f5" if theme == "light" else "#1f1f1f")
         self.content.bind("<Configure>", self._on_content_configure)
         self.canvas.bind("<Configure>", self._on_canvas_configure)
         self.canvas.bind("<Enter>", self._bind_mousewheel)
         self.canvas.bind("<Leave>", self._unbind_mousewheel)
+
+    def reset(self) -> None:
+        self.canvas.yview_moveto(0)
 
     def _on_content_configure(self, _event: tk.Event) -> None:
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
@@ -95,8 +94,8 @@ class SettingsEditor(ttk.Frame):
             for field_row, (key, value) in enumerate(items):
                 ttk.Label(frame, text=key).grid(row=field_row, column=0, sticky="w", padx=(0, 12), pady=4)
                 self._build_field(frame, field_row, key, value)
-
         self.scrollable.content.columnconfigure(0, weight=1)
+        self.scrollable.reset()
 
     def values(self) -> dict[str, Any]:
         result: dict[str, Any] = {}

@@ -48,9 +48,10 @@ class AdvancedView(ttk.Frame):
 
     def set_busy(self, busy: bool, can_run: bool) -> None:
         state = "disabled" if busy else "normal"
-        self.load_button.configure(state=state)
+        self.load_input_button.configure(state=state)
         self.clear_button.configure(state=state)
         self.import_button.configure(state=state)
+        self.load_settings_button.configure(state=state)
         self.save_button.configure(state=state)
         self.save_as_button.configure(state=state)
         self.new_button.configure(state=state)
@@ -88,7 +89,7 @@ class AdvancedView(ttk.Frame):
         self.preview_label.configure(image=image, text="")
         self.status_var.set(f"Preview loaded: {path.name}")
 
-    def refresh_parameter_choices(self) -> None:
+    def refresh_parameter_choices(self, *, load_selected: bool = False) -> None:
         files = self.store.parameter_files()
         self.parameter_paths = {path.name: path for path in files}
         self.parameter_combo.configure(values=list(self.parameter_paths))
@@ -97,7 +98,8 @@ class AdvancedView(ttk.Frame):
         label = selected.name if selected.name in self.parameter_paths else self.store.current_parameters_label()
         self.parameter_var.set(label)
         try:
-            self.editor.load(self.store.load_current_parameters())
+            data = self.store.load_selected_parameters() if load_selected else self.store.load_current_parameters()
+            self.editor.load(data)
         except ValueError as exc:
             self.status_var.set(str(exc))
 
@@ -123,8 +125,8 @@ class AdvancedView(ttk.Frame):
         toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         toolbar.columnconfigure(6, weight=1)
 
-        self.load_button = ttk.Button(toolbar, text="Load input", command=self.controller.open_inputs_dialog)
-        self.load_button.grid(row=0, column=0, padx=(0, 6))
+        self.load_input_button = ttk.Button(toolbar, text="Load input", command=self.controller.open_inputs_dialog)
+        self.load_input_button.grid(row=0, column=0, padx=(0, 6))
         self.clear_button = ttk.Button(toolbar, text="Clear", command=self.controller.clear_inputs)
         self.clear_button.grid(row=0, column=1, padx=(0, 12))
         self.run_button = ttk.Button(toolbar, text="Run", command=self.controller.run_processing, style="Accent.TButton")
@@ -207,12 +209,14 @@ class AdvancedView(ttk.Frame):
         self.import_button.grid(row=0, column=2, padx=(0, 6))
         self.new_button = ttk.Button(controls, text="New custom", command=self._new_custom)
         self.new_button.grid(row=0, column=3, padx=(0, 6))
-        self.save_button = ttk.Button(controls, text="Save", command=self._save_current, style="Accent.TButton")
-        self.save_button.grid(row=0, column=4, padx=(0, 6))
+        self.load_settings_button = ttk.Button(controls, text="Load", command=self._load_current, style="Accent.TButton")
+        self.load_settings_button.grid(row=0, column=4, padx=(0, 6))
+        self.save_button = ttk.Button(controls, text="Save", command=self._save_current)
+        self.save_button.grid(row=0, column=5, padx=(0, 6))
         self.save_as_button = ttk.Button(controls, text="Save as", command=self._save_as)
-        self.save_as_button.grid(row=0, column=5, padx=(0, 6))
+        self.save_as_button.grid(row=0, column=6, padx=(0, 6))
         self.raw_button = ttk.Button(controls, text="Edit JSON", command=self._edit_raw_json)
-        self.raw_button.grid(row=0, column=6)
+        self.raw_button.grid(row=0, column=7)
 
         self.editor = SettingsEditor(frame, theme=self.theme)
         self.editor.grid(row=1, column=0, sticky="nsew")
@@ -276,6 +280,14 @@ class AdvancedView(ttk.Frame):
             messagebox.showerror("Invalid settings", str(exc), parent=self)
             return
         self.controller.save_parameters_as(name, data)
+
+    def _load_current(self) -> None:
+        try:
+            data = self.current_editor_values()
+        except ValueError as exc:
+            messagebox.showerror("Invalid settings", str(exc), parent=self)
+            return
+        self.controller.load_session_parameters(data)
 
     def _save_current(self) -> None:
         try:

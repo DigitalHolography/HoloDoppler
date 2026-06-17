@@ -41,6 +41,7 @@ class UI(BaseTk):
 
         self.store = SettingsStore()
         self.store.initialize()
+        self.session_parameters = self.store.load_current_parameters()
         self.active_tab_name = self.store.active_tab()
         self.theme_name = self.store.theme()
         self.sun_valley_enabled = apply_theme(self, self.theme_name)
@@ -109,8 +110,8 @@ class UI(BaseTk):
             return
 
         try:
-            parameters = self.store.load_current_parameters()
-        except ValueError as exc:
+            parameters = copy.deepcopy(self.session_parameters)
+        except Exception as exc:
             messagebox.showerror("Settings", str(exc), parent=self)
             return
 
@@ -118,7 +119,7 @@ class UI(BaseTk):
         self._start_worker(
             kind="process",
             target=self._process_worker,
-            args=(list(self.input_paths), copy.deepcopy(parameters)),
+            args=(list(self.input_paths), parameters),
         )
 
     def stop_processing(self) -> None:
@@ -130,14 +131,14 @@ class UI(BaseTk):
         if self._busy():
             return
         try:
-            parameters = self.store.load_current_parameters()
-        except ValueError as exc:
+            parameters = copy.deepcopy(self.session_parameters)
+        except Exception as exc:
             messagebox.showerror("Settings", str(exc), parent=self)
             return
         self._start_worker(
             kind="preview",
             target=self._preview_worker,
-            args=(path, copy.deepcopy(parameters)),
+            args=(path, parameters),
         )
 
     def select_parameter_file(self, path: Path) -> None:
@@ -146,9 +147,9 @@ class UI(BaseTk):
         except Exception as exc:
             messagebox.showerror("Settings", str(exc), parent=self)
             return
-        self.advanced.refresh_parameter_choices()
+        self.advanced.refresh_parameter_choices(load_selected=True)
         self.minimal.set_parameter_label(self.store.current_parameters_label())
-        self._set_status(f"Selected settings: {selected_path.name}")
+        self._set_status(f"Selected settings: {selected_path.name}. Press Load to use it.")
 
     def import_parameter_file(self, path: Path) -> None:
         try:
@@ -156,27 +157,40 @@ class UI(BaseTk):
         except Exception as exc:
             messagebox.showerror("Settings", str(exc), parent=self)
             return
-        self.advanced.refresh_parameter_choices()
+        self.advanced.refresh_parameter_choices(load_selected=True)
         self.minimal.set_parameter_label(self.store.current_parameters_label())
-        self._set_status(f"Imported settings: {imported_path.name}")
+        self._set_status(f"Imported settings: {imported_path.name}. Press Load to use it.")
+
+    def load_session_parameters(self, data: dict[str, Any]) -> None:
+        try:
+            loaded_path = self.store.save_loaded_parameters(data)
+        except Exception as exc:
+            messagebox.showerror("Settings", str(exc), parent=self)
+            return
+        self.session_parameters = copy.deepcopy(data)
+        self._set_status(f"Loaded settings: {loaded_path.name}")
 
     def save_current_parameters(self, data: dict[str, Any]) -> None:
         try:
             saved_path = self.store.save_current_parameters(data)
+            self.store.save_loaded_parameters(data)
         except Exception as exc:
             messagebox.showerror("Settings", str(exc), parent=self)
             return
-        self.advanced.refresh_parameter_choices()
+        self.session_parameters = copy.deepcopy(data)
+        self.advanced.refresh_parameter_choices(load_selected=True)
         self.minimal.set_parameter_label(self.store.current_parameters_label())
         self._set_status(f"Saved settings: {saved_path.name}")
 
     def save_parameters_as(self, name: str, data: dict[str, Any]) -> None:
         try:
             saved_path = self.store.save_parameters_as(name, data)
+            self.store.save_loaded_parameters(data)
         except Exception as exc:
             messagebox.showerror("Settings", str(exc), parent=self)
             return
-        self.advanced.refresh_parameter_choices()
+        self.session_parameters = copy.deepcopy(data)
+        self.advanced.refresh_parameter_choices(load_selected=True)
         self.minimal.set_parameter_label(self.store.current_parameters_label())
         self._set_status(f"Saved settings: {saved_path.name}")
 
