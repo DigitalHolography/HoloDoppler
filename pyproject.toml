@@ -16,7 +16,7 @@ dependencies = [
   "h5py",
   "opencv-python",
   "cinereader>=1.4.3",
-  "cupy-cuda13x>=14.0.1",
+  "cupy-cuda13x[ctk]>=14.0.1",
   "lblprof>=0.1.8",
   "imageio>=2.37.3",
   "tkinterdnd2",
