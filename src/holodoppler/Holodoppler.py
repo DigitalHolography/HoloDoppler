@@ -8,6 +8,7 @@ import time
 import threading
 import queue
 import traceback
+import sys
 from collections import defaultdict
 
 from pathlib import Path
@@ -668,13 +669,22 @@ class Holodoppler:
             progress_callback(completed, total, message)
         except Exception:
             pass
+
+    @staticmethod
+    def _batch_iterator(num_batch, progress_callback=None):
+        if progress_callback is not None:
+            return range(num_batch)
+        stream = getattr(sys, "stderr", None)
+        if stream is None or not hasattr(stream, "write"):
+            return range(num_batch)
+        return tqdm(range(num_batch))
     
     def _process_cpu(self, parameters, num_batch, first_frame, batch_stride,
                      batch_size, M0_reg, out_list, coefs_list, reg_list,
                      debug_manager, debug_queue, res_store, lock,
                      progress_callback=None):
         """CPU processing loop"""
-        for i in tqdm(range(num_batch)):
+        for i in self._batch_iterator(num_batch, progress_callback):
             frames = self.read_frames(first_frame + i * batch_stride, batch_size)
             res = self.render_moments(parameters, frames=frames, registration_ref=M0_reg)
             
@@ -712,7 +722,7 @@ class Holodoppler:
         with stream_h2d:
             d_frames_next = cp.asarray(frames_next)
         
-        for i in tqdm(range(num_batch)):
+        for i in self._batch_iterator(num_batch, progress_callback):
             d_frames = d_frames_next
             
             # Prefetch next batch
@@ -758,20 +768,32 @@ class Holodoppler:
         """GPU streaming processing loop with CPU RAM prefetch queue."""
         import queue, threading
         import cupy as cp
-        from tqdm import tqdm
 
         frame_queue = queue.Queue(maxsize=4)
         stop_reader = threading.Event()
+        reader_done = object()
 
         def reader():
-            frame_idx = first_frame
-            for i in range(num_batch):
-                if stop_reader.is_set():
-                    break
-                frames = self.read_frames(frame_idx, batch_size)
-                frame_queue.put((i, frames))
-                frame_idx += batch_stride
-            frame_queue.put(None)
+            try:
+                frame_idx = first_frame
+                for i in range(num_batch):
+                    if stop_reader.is_set():
+                        break
+                    frames = self.read_frames(frame_idx, batch_size)
+                    frame_queue.put((i, frames))
+                    frame_idx += batch_stride
+            except Exception as exc:
+                frame_queue.put(exc)
+            finally:
+                frame_queue.put(reader_done)
+
+        def next_frame_item():
+            item = frame_queue.get()
+            if isinstance(item, BaseException):
+                raise item
+            if item is reader_done:
+                return None
+            return item
 
         reader_thread = threading.Thread(target=reader, daemon=True)
         reader_thread.start()
@@ -779,57 +801,57 @@ class Holodoppler:
         stream_h2d = cp.cuda.Stream(non_blocking=True)
         stream_compute = cp.cuda.Stream(non_blocking=True)
 
-        item = frame_queue.get()
-        if item is None:
-            return
+        try:
+            item = next_frame_item()
+            if item is None:
+                return
 
-        _, frames = item
-        with stream_h2d:
-            d_frames = cp.asarray(frames)
-        stream_h2d.synchronize()
+            _, frames = item
+            with stream_h2d:
+                d_frames = cp.asarray(frames)
+            stream_h2d.synchronize()
 
-        for i in tqdm(range(num_batch)):
-            next_item = frame_queue.get() if i + 1 < num_batch else None
+            for i in self._batch_iterator(num_batch, progress_callback):
+                next_item = next_frame_item() if i + 1 < num_batch else None
 
-            d_frames_next = None
-            if next_item is not None:
-                _, frames_next = next_item
-                with stream_h2d:
-                    d_frames_next = cp.asarray(frames_next)
+                d_frames_next = None
+                if next_item is not None:
+                    _, frames_next = next_item
+                    with stream_h2d:
+                        d_frames_next = cp.asarray(frames_next)
 
-            with stream_compute:
-                res = self.render_moments(parameters, frames=d_frames, registration_ref=M0_reg)
+                with stream_compute:
+                    res = self.render_moments(parameters, frames=d_frames, registration_ref=M0_reg)
 
+                stream_compute.synchronize()
+
+                if res is None:
+                    break
+                l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
+                for k, v in enumerate(parameters.get("frequency_bands", [])):
+                    l.append(res[f"band_{k}_{v[0]}_{v[1]}"])
+                out_list.append(self.bm.xp.stack(l, axis=0))
+
+                if "coefs" in res and coefs_list is not None:
+                    coefs_list[i] = res["coefs"]
+                if "registration" in res and reg_list is not None:
+                    reg_list[i] = res["registration"]
+
+                if debug_manager is not None and debug_queue is not None and lock is not None:
+                    with lock:
+                        res_store[i] = res
+                    debug_queue.put(i)
+
+                if d_frames_next is not None:
+                    stream_h2d.synchronize()
+                    d_frames = d_frames_next
+                self._notify_progress(progress_callback, i + 1, num_batch, f"Batch {i + 1}/{num_batch}")
+        finally:
+            stop_reader.set()
+            reader_thread.join(timeout=5)
+            stream_h2d.synchronize()
             stream_compute.synchronize()
-
-            if res is None:
-                break
-            l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
-            for k, v in enumerate(parameters.get("frequency_bands", [])):
-                l.append(res[f"band_{k}_{v[0]}_{v[1]}"])
-            out_list.append(self.bm.xp.stack(l, axis=0))
-
-            if "coefs" in res and coefs_list is not None:
-                coefs_list[i] = res["coefs"]
-            if "registration" in res and reg_list is not None:
-                reg_list[i] = res["registration"]
-
-            if debug_manager is not None and debug_queue is not None and lock is not None:
-                with lock:
-                    res_store[i] = res
-                debug_queue.put(i)
-
-            if d_frames_next is not None:
-                stream_h2d.synchronize()
-                d_frames = d_frames_next
-            self._notify_progress(progress_callback, i + 1, num_batch, f"Batch {i + 1}/{num_batch}")
-
-        stop_reader.set()
-        reader_thread.join(timeout=5)
-
-        stream_h2d.synchronize()
-        stream_compute.synchronize()
-        cp.cuda.Device().synchronize()
+            cp.cuda.Device().synchronize()
         
     def _save_outputs(self, video_path=None, holodoppler_path=None, vid=None, 
                     vid_debug=None, parameters=None, reg_list=None, 

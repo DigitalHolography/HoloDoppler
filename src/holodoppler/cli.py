@@ -11,6 +11,9 @@ import os
 from .plotting import DebugPlotterManager
 
 
+DEFAULT_PARAMETERS_NAME = "default_parameters_debug.json"
+
+
 def preview(holo_path, parameters: dict, tictoc=False, save_debug=True) -> None:
     HD = Holodoppler(backend = "cupyRAM", pipeline_version = "latest")
 
@@ -132,10 +135,30 @@ def _load_json(path: Path) -> dict[str, Any]:
     return data
 
 
-def _load_json(path: Path) -> dict:
-    """Load and parse JSON file."""
-    with open(path, 'r') as f:
-        return json.load(f)
+def _default_config_path() -> Path | None:
+    candidates = (
+        Path("parameters") / DEFAULT_PARAMETERS_NAME,
+        Path(__file__).resolve().parent / "ui" / "defaults" / DEFAULT_PARAMETERS_NAME,
+    )
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
+
+
+def _resolve_config_path(explicit_path: Path | None) -> Path:
+    if explicit_path is not None:
+        return explicit_path
+
+    default_path = _default_config_path()
+    if default_path is not None:
+        return default_path
+
+    raise SystemExit(
+        "Error: No config file provided and default_parameters_debug.json "
+        "was not found in ./parameters or bundled defaults."
+    )
+
 
 def _get_debug_config() -> dict:
     """Load debug configuration if it exists."""
@@ -162,13 +185,7 @@ def _cmd_preview(args: argparse.Namespace) -> int:
         input_path = args.input
     
     # Determine config path
-    if args.config is None:
-        config_path = Path("parameters/default_parameters_debug.json")
-        if not config_path.exists():
-            print("Error: No config file provided and parameters/default_parameters_debug.json not found")
-            return 1
-    else:
-        config_path = args.config
+    config_path = _resolve_config_path(args.config)
     
     config = _load_json(config_path)
     preview(input_path, config)
@@ -191,13 +208,7 @@ def _cmd_process(args: argparse.Namespace) -> int:
         input_path = args.input
     
     # Determine config path
-    if args.config is None:
-        config_path = Path("parameters/default_parameters_debug.json")
-        if not config_path.exists():
-            print("Error: No config file provided and parameters/default_parameters_debug.json not found")
-            return 1
-    else:
-        config_path = args.config
+    config_path = _resolve_config_path(args.config)
     
     config = _load_json(config_path)
     process(input_path, config)

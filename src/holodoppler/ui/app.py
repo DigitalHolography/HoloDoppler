@@ -4,6 +4,7 @@ import copy
 import queue
 import threading
 import traceback
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -299,6 +300,9 @@ class UI(BaseTk):
             total = int(event["total"])
             self.minimal.set_file_progress(completed, total)
             self.advanced.set_file_progress(completed, total)
+            message = str(event.get("message") or "")
+            if message:
+                self._set_status(message)
         elif kind == "batch_progress":
             completed = int(event["completed"])
             total = int(event["total"])
@@ -312,13 +316,30 @@ class UI(BaseTk):
         elif kind == "status":
             self._set_status(str(event["message"]))
         elif kind == "error":
-            print(event.get("traceback", ""))
+            log_path = self._write_error_log(str(event.get("traceback", "")))
             self._set_status("Error")
-            messagebox.showerror("HoloDoppler", str(event.get("message", "Unknown error")), parent=self)
+            message = str(event.get("message", "Unknown error"))
+            if log_path is not None:
+                message = f"{message}\n\nLog: {log_path}"
+            messagebox.showerror("HoloDoppler", message, parent=self)
         elif kind == "worker_done":
             self.worker = None
             self.worker_kind = None
             self._sync_views()
+
+    def _write_error_log(self, details: str) -> Path | None:
+        if not details:
+            return None
+        try:
+            log_dir = self.store.base_dir / "logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_path = log_dir / "ui-errors.log"
+            timestamp = datetime.now().isoformat(timespec="seconds")
+            with log_path.open("a", encoding="utf-8") as file:
+                file.write(f"\n[{timestamp}]\n{details}\n")
+            return log_path
+        except OSError:
+            return None
 
     def _sync_views(self) -> None:
         busy = self._busy()
