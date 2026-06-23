@@ -3,19 +3,14 @@ Shack-Hartmann wavefront sensing
 """
 
 from .propagation import (
-    fresnel_transform_with_phase,
-    angular_spectrum_transform,
-    angular_spectrum_transform_with_phase,
     build_fresnel_kernel_in,
-    build_fresnel_kernel_out,
     build_angular_kernel,
 )
 from .filtering import (
     svd_filter_batched,
     frequency_symmetric_filtering,
-    fourier_time_transform,
 )
-from .utils import crop_array_centrally, elliptical_mask
+from .utils import elliptical_mask
 
 
 def construct_subapertures_fresnel(

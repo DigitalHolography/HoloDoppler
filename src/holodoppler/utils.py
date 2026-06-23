@@ -3,14 +3,12 @@ Utility functions for array operations
 """
 
 import numpy as np
-import scipy.fftpack as fft
 from matlab_imresize import imresize
 from scipy.ndimage import gaussian_filter as np_gaussian_filter
 from scipy.ndimage import gaussian_filter1d
 
 # in utils.py
 import cv2
-import numpy as np
 
 from pathlib import Path
 import yaml

@@ -6,11 +6,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg
-import numpy as np
 from scipy.signal import find_peaks
 from scipy import stats
 from .utils import normalize_image, complex_to_color
-from scipy import stats
 
 try:
     import cupy as cp

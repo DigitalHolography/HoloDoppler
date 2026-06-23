@@ -551,7 +551,7 @@ class CineFileReader:
     ) -> np.ndarray:
         """Read and unpack a single frame from memory-mapped file."""
         if offset == 0:
-            raise ValueError(f"Invalid offset for frame")
+            raise ValueError("Invalid offset for frame")
         
         ann_size = struct.unpack_from("I", mm, offset)[0]
         data_start = offset + ann_size
@@ -636,7 +636,7 @@ class CineFileReader:
                         img = self._read_single_frame_mmap(
                             mm, offsets[0], compression, frame_image_size, w, h
                         )
-                    except (EOFError, ValueError) as e:
+                    except (EOFError, ValueError):
                         break  # End of available frames
                     
                     frames_read += 1
@@ -721,7 +721,7 @@ class CineFileReader:
             
             if compression != 1024:
                 raise NotImplementedError(
-                    f"Only Phantom P12L 12-bit packed compression=1024 supported"
+                    "Only Phantom P12L 12-bit packed compression=1024 supported"
                 )
             
             packed = np.empty((frame_batchsize, frame_image_size), dtype=np.uint8)

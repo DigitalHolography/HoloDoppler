@@ -1,7 +1,7 @@
 import argparse
 import json
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 from .utils import load_config
 from .pipelines import pipelines
@@ -12,7 +12,7 @@ def preview(file_path, parameters: dict):
         parameters = load_config(parameters)
     
     if "pipeline_name" not in parameters:
-        raise ValueError(f"parameters should have a 'pipeline_name' field")
+        raise ValueError("parameters should have a 'pipeline_name' field")
 
     pipeline_name = "preview_" + parameters.get("pipeline_name")
 
@@ -28,7 +28,7 @@ def process(file_path, parameters: dict):
         parameters = load_config(parameters)
 
     if "pipeline_name" not in parameters:
-        raise ValueError(f"parameters should have a 'pipeline_name' field")
+        raise ValueError("parameters should have a 'pipeline_name' field")
 
     pipeline_name = parameters.get("pipeline_name", "moments_main_pipeline")
     
@@ -72,7 +72,7 @@ def _resolve_paths(args: argparse.Namespace, command: str) -> tuple[Path, Path]:
         holofilepath = debug_config.get("HOLOFILEPATH")
         if not holofilepath:
             raise SystemExit(
-                f"Error: No input file provided and HOLOFILEPATH not found in .debug_paths.json"
+                "Error: No input file provided and HOLOFILEPATH not found in .debug_paths.json"
             )
         input_path = Path(holofilepath)
         if not input_path.exists():
