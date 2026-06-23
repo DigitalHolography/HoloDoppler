@@ -551,6 +551,37 @@ def load_config(config_path):
 
 
 
+def _pad_to_even(frames):
+    """
+    Pads H/W to even size for libx264/yuv420p.
+    Supports:
+      (T, H, W)
+      (T, H, W, C)
+    """
+    h = frames.shape[1]
+    w = frames.shape[2]
+
+    pad_h = h % 2
+    pad_w = w % 2
+
+    if pad_h == 0 and pad_w == 0:
+        return frames
+
+    if frames.ndim == 3:
+        pad_width = (
+            (0, 0),      # T
+            (0, pad_h),  # H
+            (0, pad_w),  # W
+        )
+    else:
+        pad_width = (
+            (0, 0),      # T
+            (0, pad_h),  # H
+            (0, pad_w),  # W
+            (0, 0),      # C
+        )
+
+    return np.pad(frames, pad_width, mode="edge")
 
 def unsharp_projection(
     bm,

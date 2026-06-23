@@ -7,7 +7,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 
-from .utils import resize_slicewise, normalize_to_uint8, unsharp_projection
+from .utils import resize_slicewise, normalize_to_uint8, unsharp_projection, _pad_to_even
 from .get_version import get_version
 
 
@@ -23,6 +23,7 @@ def save_outputs(
     end_frame=None,
     first_frame=None,
     num_batch=None,
+    backend=None,
 ):
     """
     Main entry point for saving.
@@ -32,7 +33,7 @@ def save_outputs(
     # 1. Path and Mode Resolution
     # Default path generation
     print(file_reader.file_path)
-    default_path = _get_default_output_path(file_reader)
+    default_path = _get_default_output_path(file_reader.file_path)
 
     if holodoppler_path:
         if isinstance(holodoppler_path, bool):
@@ -61,13 +62,15 @@ def save_outputs(
         end_frame=end_frame,
         first_frame=first_frame,
         num_batch=num_batch,
+        backend=None,
     )
 
 
-def _get_default_output_path(file_reader):
+def _get_default_output_path(file_path):
     """Generates the standard Holodoppler directory structure"""
-    base_name = Path(file_reader.file_path).stem
-    return Path(file_reader.file_path).parent / base_name / f"{base_name}_HD"
+    path = Path(file_path)
+    base_name = path.stem
+    return path.parent / base_name / f"{base_name}_HD"
 
 
 def _save_bundle(
@@ -82,6 +85,7 @@ def _save_bundle(
     end_frame,
     first_frame,
     num_batch,
+    backend=None,
 ):
     """
     Unified saving engine.
@@ -139,9 +143,12 @@ def _save_bundle(
                 save_map[f"debug_{key}"] = data
             
     # Projection  and unsharp mask imaging :
-    from .backend import BackendManager
-    bm = BackendManager(backend=parameters["backend"])
-    # unsharped = {}
+    if backend is None:
+        from .backend import BackendManager
+        bm = BackendManager(backend=parameters["backend"])
+    else :
+        bm = backend
+
     for name, data in save_map.items():
         if name in ["moment_0", "moment_1", "moment_2", "moment_0_ff", "montage", "montagenormalized"] or "frequency_bands" in name:
             # print(data.shape)
@@ -188,15 +195,10 @@ def _save_bundle(
             png_path = target_dir / "png" / f"{name}.png"
             mean_frame = np.mean(uint8_data, axis=0).astype(np.uint8)
             
-            
-            
             tasks.append(executor.submit(iio.imwrite, png_path, mean_frame))
 
         for fut in tqdm(as_completed(tasks), total=len(tasks), desc="Saving PNGs"):
             fut.result()
-
-        # for fut in tqdm(as_completed(tasks), total=len(tasks), desc="Saving visuals"):
-        #     fut.result()
 
     # --- 3. Save metadata (fast text/json writes) ---
     save_metadata(target_dir, file_reader, parameters)
@@ -204,38 +206,6 @@ def _save_bundle(
     # --- 4. Save H5 only if FULL mode ---
     if mode == "FULL":
         save_h5(target_dir, vid, parameters, reg_list, coefs_list)
-
-def _pad_to_even(frames):
-    """
-    Pads H/W to even size for libx264/yuv420p.
-    Supports:
-      (T, H, W)
-      (T, H, W, C)
-    """
-    h = frames.shape[1]
-    w = frames.shape[2]
-
-    pad_h = h % 2
-    pad_w = w % 2
-
-    if pad_h == 0 and pad_w == 0:
-        return frames
-
-    if frames.ndim == 3:
-        pad_width = (
-            (0, 0),      # T
-            (0, pad_h),  # H
-            (0, pad_w),  # W
-        )
-    else:
-        pad_width = (
-            (0, 0),      # T
-            (0, pad_h),  # H
-            (0, pad_w),  # W
-            (0, 0),      # C
-        )
-
-    return np.pad(frames, pad_width, mode="edge")
 
 def write_video_fast(
     path,
