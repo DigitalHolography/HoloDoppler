@@ -24,7 +24,7 @@ class SettingsEditor(ttk.Frame):
         ("Optics", ("wavelength", "pixel_pitch", "spatial_propagation", "zero_padding", "z")),
         ("Registration", ("image_registration", "image_registration_type", "registration_", "apply_registration")),
         ("Shack-Hartmann", ("shack_hartmann",)),
-        ("Frequency", ("temporal_transformation", "sampling_freq", "low_freq", "high_freq", "frequency_bands", "svd_threshold")),
+        ("Frequency", ("temporal_transformation", "sampling_freq", "low_freq", "high_freq", "enable_lf_hf_m0", "m0_hf_lf_freqs", "frequency_bands", "svd_threshold")),
         ("Output", ("square", "transpose", "flip_x", "flip_y", "debug")),
     )
 

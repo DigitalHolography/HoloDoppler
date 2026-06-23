@@ -30,6 +30,8 @@
   "sampling_freq": 37037,
   "low_freq": 6000,
   "high_freq": 18300,
+  "enable_lf_hf_m0": false,
+  "m0_hf_lf_freqs": [3000,9000,18300],
   "svd_threshold": 0,
   "square": true,
   "transpose": false,

@@ -20,6 +20,9 @@ DEFAULT_WINDOW_MINSIZES = {
     "advanced": (980, 640),
 }
 
+OLD_MEDIUM_FREQ_DEFAULTS = {12150, 12300}
+LEGACY_M0_HF_LF_FREQ_KEYS = ("very_low_freq", "medium_freq")
+
 
 class SettingsStore:
     def __init__(self) -> None:
@@ -228,6 +231,8 @@ class SettingsStore:
             target_path = self.parameters_dir / source_path.name
             if not target_path.exists():
                 shutil.copy2(source_path, target_path)
+            else:
+                self._merge_missing_parameters(source_path, target_path)
 
     def _default_parameters_path(self) -> Path:
         preferred = self.parameters_dir / DEFAULT_PARAMETERS_NAME
@@ -242,6 +247,8 @@ class SettingsStore:
 
     def _ensure_loaded_parameters(self, source_path: Path) -> None:
         if self.loaded_parameters_path.is_file():
+            if source_path.is_file():
+                self._merge_missing_parameters(source_path, self.loaded_parameters_path)
             return
         if source_path.is_file():
             shutil.copy2(source_path, self.loaded_parameters_path)
@@ -316,6 +323,52 @@ class SettingsStore:
     def _write_parameters(path: Path, data: dict[str, Any]) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    @staticmethod
+    def _merge_missing_parameters(source_path: Path, target_path: Path) -> None:
+        try:
+            source = _read_json_object(source_path)
+            target = _read_json_object(target_path)
+        except (OSError, ValueError):
+            return
+
+        changed = False
+        if "m0_hf_lf_freqs" not in target and (
+            "m0_hf_lf_freqs" in source
+            or any(key in target for key in LEGACY_M0_HF_LF_FREQ_KEYS)
+            or any(key in source for key in LEGACY_M0_HF_LF_FREQ_KEYS)
+        ):
+            target["m0_hf_lf_freqs"] = SettingsStore._migrated_m0_hf_lf_freqs(source, target)
+            changed = True
+
+        for key, value in source.items():
+            if key not in target:
+                target[key] = value
+                changed = True
+
+        for key in LEGACY_M0_HF_LF_FREQ_KEYS:
+            if key in target:
+                del target[key]
+                changed = True
+
+        if changed:
+            SettingsStore._write_parameters(target_path, target)
+
+    @staticmethod
+    def _migrated_m0_hf_lf_freqs(source: dict[str, Any], target: dict[str, Any]) -> Any:
+        defaults = source.get("m0_hf_lf_freqs")
+        if not isinstance(defaults, list) or len(defaults) != 3:
+            defaults = [3000, 9000, source.get("high_freq", target.get("high_freq"))]
+
+        split_freq = target.get("medium_freq", source.get("medium_freq", defaults[1]))
+        if isinstance(split_freq, (int, float)) and split_freq in OLD_MEDIUM_FREQ_DEFAULTS:
+            split_freq = defaults[1]
+
+        return [
+            target.get("very_low_freq", source.get("very_low_freq", defaults[0])),
+            split_freq,
+            target.get("high_freq", source.get("high_freq", defaults[2])),
+        ]
 
 
 def _read_json_object(path: Path) -> dict[str, Any]:
