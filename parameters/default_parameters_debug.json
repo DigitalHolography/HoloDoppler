@@ -10,6 +10,7 @@
   "registration_flatfield_gw": 35,
   "registration_gaussian_sigma": null,
   "registration_integer_translation": false,
+  "registration_integer_translation": false,
   "batch_size_registration": 512,
   "apply_registration": true,
   "first_frame": 0,
@@ -41,6 +42,7 @@
   "corner_compensation": true,
   "svd_threshold": 40,
   "svd_filter_mode": "number_of_values",
+  "svd_remove_dc": false,
   "svd_remove_dc": false,
   "save_psd_avg": false,
   

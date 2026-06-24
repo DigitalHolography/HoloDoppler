@@ -716,9 +716,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     
     if parameters.get("square", False):
         m = max(vid_t.shape[-2], vid_t.shape[-1])
-        vid_t = bm.to_backend(vid_t)
-        vid_t = resize_slicewise(vid_t, m, m, xp=bm.xp, fft=bm.fft)
-        vid_t = bm.to_numpy(vid_t)
+        vid_t = zoom_slicewise_fast(vid_t, m, m, use_gpu=bm.is_gpu)
     if parameters.get("transpose", False):
         vid_t = np.transpose(vid_t, axes=(0, 1, 3, 2))
     if parameters.get("flip_x", False):
