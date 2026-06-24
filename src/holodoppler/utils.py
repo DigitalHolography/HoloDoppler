@@ -6,6 +6,10 @@ import numpy as np
 from matlab_imresize import imresize
 from scipy.ndimage import gaussian_filter as np_gaussian_filter
 from scipy.ndimage import gaussian_filter1d
+import numpy as np
+from scipy.ndimage import zoom as zoom_cpu
+import cupy as cp
+from cupyx.scipy.ndimage import zoom as zoom_gpu
 
 # in utils.py
 import cv2
@@ -175,47 +179,72 @@ def resize_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
 
 def zoom_slicewise_fast(arr, new_h, new_w, axes=(-2, -1), use_gpu=True):
     """
-    Fast version with automatic GPU/CPU selection and memory optimization.
-    
-    Special optimizations:
-    - forced to nearest neighbor for speed an no confusion with channels (input can be nt nchannels ny nx in shape)
+    Zoom each 2D slice independently to new height and width.
+    Vectorized for better performance.
     """
     
-    # Determine if we should use GPU
-    if use_gpu and hasattr(arr, '__cuda_array_interface__'):
-        # Already on GPU or CuPy array
-        from cupyx.scipy.ndimage import zoom
-        arr_gpu = arr
-        to_numpy = False
-    elif use_gpu and isinstance(arr, np.ndarray):
-        # CPU array but user wants GPU
-        import cupy as cp
-        from cupyx.scipy.ndimage import zoom
-        arr_gpu = cp.asarray(arr)
-        to_numpy = True
+    original_shape = arr.shape
+    ndim = len(original_shape)
+    
+    # Determine dimensions
+    if ndim == 3:  # (nt, ny, nx)
+        nt, ny, nx = original_shape
+        nchannel = 1
+        arr_reshaped = arr.reshape(nt, 1, ny, nx)
+    elif ndim == 4:  # (nt, nchannel, ny, nx)
+        nt, nchannel, ny, nx = original_shape
+        arr_reshaped = arr
     else:
-        # Use CPU
-        from scipy.ndimage import zoom
-        arr_gpu = arr
-        to_numpy = False
+        raise ValueError(f"Expected 3 or 4D array, got {ndim}D")
     
     # Calculate zoom factors
-    zoom_factors = [1.0] * arr_gpu.ndim
-    zoom_factors[axes[0]] = new_h / arr_gpu.shape[axes[0]]
-    zoom_factors[axes[1]] = new_w / arr_gpu.shape[axes[1]]
+    zoom_h = new_h / ny
+    zoom_w = new_w / nx
     
-    # Apply zoom 
-    # Never do prefilter=True because the channels are not contiguous frames or comparable
-    # print(arr_gpu.shape)
-    # print(zoom_factors)
-    result = zoom(arr_gpu, zoom_factors, order=0, prefilter=False)
-    # print(result.shape)
-    # Convert back to numpy if needed
-    if to_numpy:
-        import cupy as cp
-        result = cp.asnumpy(result)
+    # Reshape to combine all slices into a single batch dimension
+    # This way each slice is processed independently but in parallel
+    total_slices = nt * nchannel
+    arr_flat = arr_reshaped.reshape(total_slices, ny, nx)
     
-    return result
+    if use_gpu:
+        try:
+            
+            if not isinstance(arr, cp.ndarray):
+                arr_flat_gpu = cp.asarray(arr_flat)
+            else:
+                arr_flat_gpu = arr_flat
+            
+            # Create output array
+            result_flat_gpu = cp.zeros((total_slices, new_h, new_w), dtype=arr_flat_gpu.dtype)
+            
+            # Process each slice independently (still loop, but fewer iterations)
+            for i in range(total_slices):
+                result_flat_gpu[i, :, :] = zoom_gpu(arr_flat_gpu[i, :, :], (zoom_h, zoom_w), order=1)
+            
+            # Reshape back
+            result_gpu = result_flat_gpu.reshape(nt, nchannel, new_h, new_w)
+            
+            if ndim == 3:
+                return result_gpu.reshape(nt, new_h, new_w).get()
+            else:
+                return result_gpu.get()
+                
+        except (ImportError, Exception) as e:
+            print(f"GPU zoom failed or not available: {e}")
+            print("Falling back to CPU...")
+    
+    # CPU version
+    result_flat = np.zeros((total_slices, new_h, new_w), dtype=arr_flat.dtype)
+    
+    for i in range(total_slices):
+        result_flat[i, :, :] = zoom_cpu(arr_flat[i, :, :], (zoom_h, zoom_w), order=1)
+    
+    result = result_flat.reshape(nt, nchannel, new_h, new_w)
+    
+    if ndim == 3:
+        return result.reshape(nt, new_h, new_w)
+    else:
+        return result
 
 
 def resize_fft2_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
