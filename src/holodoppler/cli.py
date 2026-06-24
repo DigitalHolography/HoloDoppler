@@ -1,7 +1,9 @@
 import argparse
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, List
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import sys
 
 from .utils import load_config
 from .pipelines import pipelines
@@ -115,6 +117,62 @@ def _apply_cli_overrides(parameters: dict, args: argparse.Namespace) -> dict:
     
     return parameters
 
+def _read_batch_file(batch_file: Path) -> List[Path]:
+    """Read a text file containing file paths (one per line)."""
+    paths = []
+    try:
+        with batch_file.open("r", encoding="utf-8") as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                # Skip empty lines and comments
+                if not line or line.startswith('#'):
+                    continue
+                
+                path = Path(line).expanduser().resolve()
+                if not path.is_file():
+                    print(f"Warning: Line {line_num} in batch file '{batch_file}': "
+                          f"File does not exist: {path}. Skipping.", file=sys.stderr)
+                    continue
+                paths.append(path)
+    except Exception as e:
+        raise SystemExit(f"Error reading batch file '{batch_file}': {e}")
+    
+    if not paths:
+        raise SystemExit(f"No valid file paths found in batch file: {batch_file}")
+    
+    return paths
+
+def _batch_process(file_paths: List[Path], parameters: dict, command: str):
+    """Process multiple files in batch mode."""
+    results = []
+    errors = []
+    
+    # Sequential processing
+    total = len(file_paths)
+    for idx, file_path in enumerate(file_paths, 1):
+        print(f"Processing file {idx}/{total}: {file_path.name}")
+        try:
+            params_copy = parameters.copy()
+            result = (preview if command == "preview" else process)(file_path, params_copy)
+            results.append((file_path, result, None))
+            print(f"✓ Completed: {file_path.name}")
+        except Exception as e:
+            errors.append((file_path, str(e)))
+            print(f"✗ Failed: {file_path.name} - {e}", file=sys.stderr)
+
+    # Summary
+    print(f"\n{'='*50}")
+    print(f"Batch processing complete:")
+    print(f"  Total files: {len(file_paths)}")
+    print(f"  Successful:  {len(results)}")
+    print(f"  Failed:      {len(errors)}")
+    
+    if errors:
+        print(f"\nFailed files:")
+        for path, error in errors:
+            print(f"  - {path}: {error}")
+    
+    return results, errors
 
 def _build_preview_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -255,7 +313,8 @@ def main() -> int:
         type=_existing_file,
         nargs="?",
         default=None,
-        help="Input file path. Uses HOLOFILEPATH from .debug_paths.json if not provided.",
+        help="Input file path. Uses HOLOFILEPATH from .debug_paths.json if not provided. "
+             "Ignored if --batch is used."
     )
     preview_parser.add_argument(
         "config",
@@ -278,6 +337,12 @@ def main() -> int:
         "--backend",
         type=str,
         help="Force 'backend' to specified value in parameters.",
+    )
+    preview_parser.add_argument(
+        "--batch",
+        type=_existing_file,
+        metavar="BATCH_FILE",
+        help="Path to a text file containing .holo file paths (one per line) for batch processing."
     )
     
     # Process subcommand
@@ -287,7 +352,8 @@ def main() -> int:
         type=_existing_file,
         nargs="?",
         default=None,
-        help="Input file path. Uses HOLOFILEPATH from .debug_paths.json if not provided.",
+        help="Input file path. Uses HOLOFILEPATH from .debug_paths.json if not provided. "
+             "Ignored if --batch is used."
     )
     process_parser.add_argument(
         "config",
@@ -311,12 +377,18 @@ def main() -> int:
         type=str,
         help="Force 'backend' to specified value in parameters.",
     )
+    process_parser.add_argument(
+        "--batch",
+        type=_existing_file,
+        metavar="BATCH_FILE",
+        help="Path to a text file containing .holo file paths (one per line) for batch processing."
+    )
     
     # Parse known args first
     args, remaining_args = main_parser.parse_known_args()
     
     # Define known options for each command
-    known_options = {'tictoc', 'debug', 'backend', 'filepath', 'config'}
+    known_options = {'tictoc', 'debug', 'backend', 'filepath', 'config', 'batch'}
     
     # Parse dynamic options from remaining arguments
     dynamic_options, _ = _parse_dynamic_options(main_parser, remaining_args, known_options)
@@ -324,14 +396,49 @@ def main() -> int:
     # Store dynamic options in args
     args.dynamic_options = dynamic_options
     
-    # Resolve input and config paths
-    input_path, config_path = _resolve_paths(args, args.command)
-    
     # Load config parameters
+    if args.config is None:
+        config_path = Path("parameters/default_parameters_debug.json")
+        if not config_path.exists():
+            raise SystemExit(
+                "Error: No config file provided and parameters/default_parameters_debug.json not found"
+            )
+    else:
+        config_path = args.config
+    
     parameters = load_config(config_path)
     
     # Apply CLI overrides
     parameters = _apply_cli_overrides(parameters, args)
+    
+    # ===== BATCH PROCESSING CHECK - MUST BE FIRST =====
+    if args.batch:
+        print(f"Batch mode activated. Reading files from: {args.batch}")
+        # Read files from batch file
+        file_paths = _read_batch_file(args.batch)
+        
+        # Process in batch mode
+        _batch_process(
+            file_paths=file_paths,
+            parameters=parameters,
+            command=args.command
+        )
+        return 0  # Exit after batch processing
+    
+    # ===== SINGLE FILE PROCESSING (only if --batch NOT used) =====
+    # Resolve input path for single file mode
+    if args.filepath is None:
+        debug_config = _get_debug_config()
+        holofilepath = debug_config.get("HOLOFILEPATH")
+        if not holofilepath:
+            raise SystemExit(
+                "Error: No input file provided and HOLOFILEPATH not found in .debug_paths.json"
+            )
+        input_path = Path(holofilepath)
+        if not input_path.exists():
+            raise SystemExit(f"Error: HOLOFILEPATH '{input_path}' does not exist")
+    else:
+        input_path = args.filepath
     
     # Execute appropriate command
     if args.command == "preview":
@@ -340,7 +447,6 @@ def main() -> int:
         process(input_path, parameters)
     
     return 0
-
 
 # Alternative implementation using a simpler approach with flags that accept optional values
 class _StoreTrueOrValue(argparse.Action):
