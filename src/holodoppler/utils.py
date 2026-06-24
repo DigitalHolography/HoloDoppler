@@ -36,7 +36,6 @@ def normalize_to_uint8(data):
     normalized = 255 * (data - vmin) / (vmax - vmin + 1e-12)
     return np.clip(normalized, 0, 255).astype(np.uint8)
 
-
 def write_video_file(path, frames, fps, fourcc_code="mp4v"):
     """
     Writes a video file.
@@ -217,7 +216,6 @@ def zoom_slicewise_fast(arr, new_h, new_w, axes=(-2, -1), use_gpu=True):
     
     return result
 
-
 def resize_fft2_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
     """Spectral resize using FFT. Vectorized across all non-target axes."""
     # 1. Move target axes to front: (..., H, W, ...) -> (H, W, ...)
@@ -245,7 +243,6 @@ def resize_fft2_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
 
     # 6. Restore original axes positions
     return np.moveaxis(res_t, (0, 1), axes)
-
 
 def resize_matlab_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np):
     """Spatial resize. Loops over remaining dimensions since imresize is 2D."""

@@ -38,6 +38,7 @@
   "low_freq": 6000,
   "high_freq": 33500,
   "frequency_bands": [],
+  "corner_compensation": true,
   "svd_threshold": 12,
   "svd_filter_mode": "number_of_values",
   "svd_remove_dc": true,

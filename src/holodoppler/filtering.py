@@ -3,7 +3,7 @@ Filtering operations: SVD, frequency filtering
 """
 
 from functools import cache
-
+from .utils import elliptical_mask
 
 def svd_filter(xp, H, svd_threshold, filter_mode="number_of_values", remove_dc=False, debug=False):
     """SVD filtering to remove tissue signal"""
@@ -155,7 +155,23 @@ def frequency_symmetric_filtering(
 
     return idxs, freqs[idxs]
 
-
 def fourier_time_transform(xp, fft, H):
     """FFT along time axis"""
     return fft.fft(H, axis=0, norm="ortho")
+
+def corner_compensation(xp, psd):    
+    n_freqs, ny, nx = psd.shape
+    
+    # Create the mask
+    disk = elliptical_mask(ny, nx, 1.2, xp)
+    mask_3d = xp.tile(~disk, (n_freqs, 1, 1))
+    
+    # Create masked PSD for outside region
+    psd_outside = psd.copy()
+    psd_outside[mask_3d] = xp.nan
+    
+    mean_outside = xp.nanmean(psd_outside, axis=(-1, -2), keepdims=True)
+    
+    psd = psd / mean_outside
+    
+    return psd

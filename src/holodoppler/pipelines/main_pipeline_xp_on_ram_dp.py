@@ -3,7 +3,7 @@ from holodoppler.propagation import fresnel_transform, fresnel_transform_with_ph
 from holodoppler.shack_hartmann import construct_subapertures_fresnel, construct_subapertures_angular, calculate_displacements, calculate_displacements_graph_laplacian
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum, southwell_phase_integration
 from holodoppler.utils import resize_slicewise, zoom_slicewise_fast, resize_fft2_slicewise, resize_matlab_slicewise, pad_array_centrally, gaussian_flatfield, update_from_footer
-from holodoppler.filtering import svd_filter, svd_filter_stdmeanratio, frequency_symmetric_filtering, fourier_time_transform
+from holodoppler.filtering import svd_filter, svd_filter_stdmeanratio, frequency_symmetric_filtering, fourier_time_transform, corner_compensation
 from holodoppler.moments import moment
 from holodoppler.registration import register_trs, apply_registration, apply_registration3D
 from holodoppler.plotting import DebugPlotterManager
@@ -303,6 +303,9 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
     psd = xp.abs(spectrum_f) ** 2
     # if compute_debug:
     #     psd_angle = xp.abs(spectrum_f_angle) ** 2
+
+    if parameters.get("corner_compensation", False):
+        psd = corner_compensation(xp, psd)
 
     if compute_debug and parameters["save_psd_avg"]:
         batch["psd"] = psd
