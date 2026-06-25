@@ -165,11 +165,16 @@ def _build_save_map(vid, parameters, vid_debug, num_batch):
         "moment_2": vid[:, 2, :, :],
         "moment_0_ff": vid[:, 3, :, :],
     }
+    band_offset = 4
+    if parameters.get("enable_lf_hf_m0"):
+        save_map["m0_lf"] = vid[:, 4, :, :]
+        save_map["m0_hf"] = vid[:, 5, :, :]
+        band_offset = 6
     
     # Frequency bands
     for k, v in enumerate(parameters.get("frequency_bands", [])):
         band_name = f"band_avg_{v[0]}_{v[1]}"
-        save_map[band_name] = vid[:, 4 + k, :, :]
+        save_map[band_name] = vid[:, band_offset + k, :, :]
 
     # Debug videos
     if vid_debug:
@@ -355,12 +360,17 @@ def _save_h5(target_dir, vid, parameters, reg_list, coefs_list):
         f.create_dataset("moment1", data=vid[:, 1, :, :], compression=compression)
         f.create_dataset("moment2", data=vid[:, 2, :, :], compression=compression)
         f.create_dataset("moment0ff", data=vid[:, 3, :, :], compression=compression)
+        band_offset = 4
+        if parameters.get("enable_lf_hf_m0"):
+            f.create_dataset("m0_lf", data=vid[:, 4, :, :], compression=compression)
+            f.create_dataset("m0_hf", data=vid[:, 5, :, :], compression=compression)
+            band_offset = 6
         
         # Save frequency bands
         for k, v in enumerate(parameters.get("frequency_bands", [])):
             f.create_dataset(
                 f"band_{v[0]}_{v[1]}",
-                data=vid[:, 4 + k, :, :],
+                data=vid[:, band_offset + k, :, :],
                 compression=compression,
             )
         

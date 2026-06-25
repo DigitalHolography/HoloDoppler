@@ -144,6 +144,44 @@ class Accumulator:
         self.count = 0
         return batch
 
+
+def _m0_lf_hf_frequency_ranges(parameters):
+    freqs = parameters.get(
+        "m0_hf_lf_freqs",
+        [
+            parameters.get("very_low_freq", 3000),
+            parameters.get("medium_freq", 9000),
+            parameters.get("high_freq"),
+        ],
+    )
+    if not isinstance(freqs, (list, tuple)) or len(freqs) != 3:
+        raise ValueError("m0_hf_lf_freqs must contain exactly 3 frequencies")
+    return freqs[0], freqs[1], freqs[2]
+
+
+def _output_channels(res, parameters):
+    channels = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
+    if parameters.get("enable_lf_hf_m0"):
+        channels.extend([res["m0_lf"], res["m0_hf"]])
+    for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
+        channels.append(res[f"band_{k}_{f1}_{f2}"])
+    return channels
+
+
+def _notify_progress(progress_callback, completed, total, message):
+    if progress_callback is None:
+        return
+    try:
+        progress_callback(completed, total, message)
+    except Exception:
+        pass
+
+
+def _progress_iter(iterable, total, progress_callback):
+    if progress_callback is not None:
+        return iterable
+    return tqdm(iterable, total=total)
+
 # ------------------------------------------------------------------
 # Shack-Hartmann sub‑pipeline
 # ------------------------------------------------------------------
@@ -254,7 +292,7 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
         if prop_method == "Fresnel":
             holograms = fresnel_transform_with_phase(
                 xp, fft, frames_sub, parameters["z"], parameters["pixel_pitch"], parameters["wavelength"],
-                phase_term, zero_padding=zero_pad, use_output_kernel=parameters["Fresnel_use_ouput_kernel"]
+                phase_term, zero_padding=zero_pad, use_output_kernel=parameters.get("Fresnel_use_ouput_kernel", False)
             )
         elif prop_method == "AngularSpectrum":
             holograms = angular_spectrum_transform_with_phase(
@@ -265,7 +303,7 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
         if prop_method == "Fresnel":
             holograms = fresnel_transform(
                 xp, fft, frames_sub, parameters["z"], parameters["pixel_pitch"], parameters["wavelength"],
-                zero_padding=zero_pad, use_output_kernel=parameters["Fresnel_use_ouput_kernel"]
+                zero_padding=zero_pad, use_output_kernel=parameters.get("Fresnel_use_ouput_kernel", False)
             )
         elif prop_method == "AngularSpectrum":
             holograms = angular_spectrum_transform(
@@ -307,7 +345,7 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
     if parameters.get("corner_compensation", False):
         psd = corner_compensation(xp, psd)
 
-    if compute_debug and parameters["save_psd_avg"]:
+    if compute_debug and parameters.get("save_psd_avg", False):
         batch["psd"] = psd
 
     # Moments
@@ -315,6 +353,17 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
     batch["M1"] = moment(xp, psd[idxs], freqs, 1)
     batch["M2"] = moment(xp, psd[idxs], freqs, 2)
     batch["M0ff"] = gaussian_flatfield(batch["M0"], parameters.get("registration_flatfield_gw", 1.0), bm.gaussian_filter)
+
+    if parameters.get("enable_lf_hf_m0"):
+        lf_start_freq, split_freq, hf_end_freq = _m0_lf_hf_frequency_ranges(parameters)
+        idxs_lf, freqs_lf = frequency_symmetric_filtering(
+            xp, fft, nt_sub, parameters["sampling_freq"], lf_start_freq, split_freq
+        )
+        idxs_hf, freqs_hf = frequency_symmetric_filtering(
+            xp, fft, nt_sub, parameters["sampling_freq"], split_freq, hf_end_freq
+        )
+        batch["m0_lf"] = moment(xp, psd[idxs_lf], freqs_lf, 0)
+        batch["m0_hf"] = moment(xp, psd[idxs_hf], freqs_hf, 0)
 
     # Frequency bands
     for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
@@ -325,7 +374,7 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
     # Debug-only recomputation without phase fix
     if compute_debug and phase_term is not None:
         if prop_method == "Fresnel":
-            holo_nofix = fresnel_transform(xp, fft, frames_sub, parameters["z"], parameters["pixel_pitch"], parameters["wavelength"], zero_padding=zero_pad, use_output_kernel=parameters["Fresnel_use_ouput_kernel"])
+            holo_nofix = fresnel_transform(xp, fft, frames_sub, parameters["z"], parameters["pixel_pitch"], parameters["wavelength"], zero_padding=zero_pad, use_output_kernel=parameters.get("Fresnel_use_ouput_kernel", False))
         elif prop_method == "AngularSpectrum":
             holo_nofix = angular_spectrum_transform(xp, fft, frames_sub, parameters["z"], parameters["pixel_pitch"], parameters["wavelength"], zero_padding=zero_pad)
         holo_nofix_f = svd_filter(xp, holo_nofix, parameters["svd_threshold"], filter_mode=parameters["svd_filter_mode"], remove_dc=parameters["svd_remove_dc"])
@@ -405,6 +454,9 @@ def render_moments(bm, parameters, frames=None, registration_ref=None):
             res["M1"] = apply_registration(xp, bm.fft, bm.ndi, res["M1"], reg, integer_translation=parameters.get("registration_integer_translation", False))
             res["M2"] = apply_registration(xp, bm.fft, bm.ndi, res["M2"], reg, integer_translation=parameters.get("registration_integer_translation", False))
             res["M0ff"] = apply_registration(xp, bm.fft, bm.ndi, res["M0ff"], reg, integer_translation=parameters.get("registration_integer_translation", False))
+            if parameters.get("enable_lf_hf_m0"):
+                res["m0_lf"] = apply_registration(xp, bm.fft, bm.ndi, res["m0_lf"], reg, integer_translation=parameters.get("registration_integer_translation", False))
+                res["m0_hf"] = apply_registration(xp, bm.fft, bm.ndi, res["m0_hf"], reg, integer_translation=parameters.get("registration_integer_translation", False))
             for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
                 key = f"band_{k}_{f1}_{f2}"
                 res[key] = apply_registration(xp, bm.fft, bm.ndi, res[key], reg, integer_translation=parameters.get("registration_integer_translation", False))
@@ -421,13 +473,13 @@ def render_moments(bm, parameters, frames=None, registration_ref=None):
 # ------------------------------------------------------------------
 # Preview (single batch)
 # ------------------------------------------------------------------
-def preview_process_moments(file_path, parameters):
+def preview_process_moments(file_path, parameters, save_debug=True):
     total_time_start()
 
-    tictoc = parameters["tictoc"]
+    tictoc = parameters.get("tictoc", False)
 
 
-    bm = BackendManager(backend=parameters["backend"])
+    bm = BackendManager(backend=parameters.get("backend", "numpy"))
     file_reader = FileReaderFactory.create(file_path)
     file_reader.open()
     
@@ -487,7 +539,8 @@ def preview_process_moments(file_path, parameters):
         M0 = (M0 - np.min(M0)) / (np.max(M0) - np.min(M0) + 1e-12)
         debug_imgs["M0ff"] = (M0 * 255).astype(np.uint8)
 
-    save_debug_images(debug_imgs, "./debug_outputs")
+    if save_debug:
+        save_debug_images(debug_imgs, "./debug_outputs")
     plt.close("all")
 
     M0img = debug_imgs.get("M0")
@@ -573,11 +626,13 @@ def _debug_plotting_worker(input_q, output_q, stop_ev, params):
 # ------------------------------------------------------------------
 # Full video processing
 # ------------------------------------------------------------------
-def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, holodoppler_path=True):
-    tictoc = parameters["tictoc"]
+def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, holodoppler_path=True,
+                    progress_callback=None):
+    tictoc = parameters.get("tictoc", False)
 
     total_time_start()
-    bm = BackendManager(backend=parameters["backend"])
+    backend_name = parameters.get("backend", "numpy")
+    bm = BackendManager(backend=backend_name)
     file_reader = FileReaderFactory.create(file_path)
     file_reader.open()
     
@@ -598,6 +653,7 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     else:
         num_batch = int((end_frame - first_frame) / batch_stride)
     if num_batch <= 0:
+        file_reader.close()
         return None
 
     debug = parameters.get("debug")
@@ -669,18 +725,23 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     bm.clear_gpu_memory()
     # bm.print_gpu_used_memory()
 
+    _notify_progress(progress_callback, 0, num_batch, "Processing batches")
+
     # Dispatch to backend-specific loop
-    if parameters["backend"] == "cupyRAM":
+    if backend_name == "cupyRAM":
         _process_gpu_streaming_onram(bm, file_reader.file_path, parameters, num_batch, end_frame, first_frame, batch_stride, batch_size,
-                                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task)
-    elif parameters["backend"] == "numpy":
-        _process_cpu_streaming(bm, file_reader, parameters, num_batch, end_frame, first_frame, batch_stride, batch_size,
-                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task)
-    elif "cupy" in parameters["backend"]:
-        _process_cpu_streaming(bm, file_reader, parameters, num_batch, end_frame, first_frame, batch_stride, batch_size,
-                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task)
+                                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task,
+                                     progress_callback)
+    elif backend_name == "numpy":
+        _process_cpu_streaming(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
+                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task,
+                     progress_callback)
+    elif "cupy" in backend_name:
+        _process_cpu_streaming(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
+                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task,
+                     progress_callback)
     else : 
-        raise ValueError(f"backend requested not implemented :{parameters["backend"]}")
+        raise ValueError(f"backend requested not implemented: {backend_name}")
 
     if coefs_list is not None:
             coefs_list = [bm.to_numpy(c) for c in coefs_list]
@@ -744,8 +805,9 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
 # Specialised loops
 # ------------------------------------------------------------------
 def _process_cpu_streaming(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
-                 M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task):
-    for i in tqdm(range(num_batch)):
+                 M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task,
+                 progress_callback=None):
+    for i in _progress_iter(range(num_batch), num_batch, progress_callback):
 
         frames = file_reader.read_frames(first_frame=first_frame+i*batch_stride, batch_size=batch_size)
         frames = bm.to_backend(frames)
@@ -758,14 +820,13 @@ def _process_cpu_streaming(bm, file_reader, parameters, num_batch, first_frame, 
                 out_accumulation[key] += accu[key]
 
         if res is None: break
-        l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
-        for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-            l.append(res[f"band_{k}_{f1}_{f2}"])
+        l = _output_channels(res, parameters)
         out_list.append(bm.xp.stack(l, axis=0))
         if "coefs" in res and coefs_list is not None: coefs_list[i] = res["coefs"]
         if "registration" in res and reg_list is not None: reg_list[i] = res["registration"]
         if debug:
             submit_debug_task(i, res)
+        _notify_progress(progress_callback, i + 1, num_batch, f"Batch {i + 1}/{num_batch}")
 
 
 class PrefetchBuffer:
@@ -815,7 +876,7 @@ class PrefetchBuffer:
 @track_time("_process_gpu_streaming_onram")
 def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, end_frame, first_frame, batch_stride,
                                  batch_size, M0_reg, out_list, out_accumulation, coefs_list, reg_list,
-                                 debug, submit_debug_task):
+                                 debug, submit_debug_task, progress_callback=None):
     """
     GPU streaming pipeline using iterator-based frame reading with double-buffering.
     """
@@ -843,12 +904,13 @@ def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, end_frame
         h2d_event_next = None
         
         # Start reading frames
-        for i, frames in enumerate(tqdm(file_reader.iter_frames(
+        frame_iter = file_reader.iter_frames(
             first_frame=first_frame,
             end_frame = end_frame,
             batch_size=batch_size,
             batch_stride=batch_stride
-        ), total=num_batch)):
+        )
+        for i, frames in enumerate(_progress_iter(frame_iter, num_batch, progress_callback)):
             
             # Start async H2D transfer for this batch
             with h2d_stream:
@@ -884,9 +946,7 @@ def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, end_frame
                     else:
                         out_accumulation[key] += value
                 
-                l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
-                for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-                    l.append(res[f"band_{k}_{f1}_{f2}"])
+                l = _output_channels(res, parameters)
                 
                 out_list.append(bm.xp.stack(l, axis=0))
                 
@@ -899,6 +959,7 @@ def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, end_frame
                     submit_debug_task(processed_batches, res)
                 
                 processed_batches += 1
+                _notify_progress(progress_callback, processed_batches, num_batch, f"Batch {processed_batches}/{num_batch}")
             
             # Advance: next becomes current
             d_current = d_next
@@ -926,9 +987,7 @@ def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, end_frame
                     else:
                         out_accumulation[key] += value
                 
-                l = [res["M0"], res["M1"], res["M2"], res["M0ff"]]
-                for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-                    l.append(res[f"band_{k}_{f1}_{f2}"])
+                l = _output_channels(res, parameters)
                 
                 out_list.append(bm.xp.stack(l, axis=0))
                 
@@ -941,6 +1000,7 @@ def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, end_frame
                     submit_debug_task(processed_batches, res)
                 
                 processed_batches += 1
+                _notify_progress(progress_callback, processed_batches, num_batch, f"Batch {processed_batches}/{num_batch}")
         
     finally:
         # Finalize accumulations
@@ -959,4 +1019,3 @@ def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, end_frame
             file_reader.close()
         except Exception:
             pass
-        

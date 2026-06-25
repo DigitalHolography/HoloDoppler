@@ -12,12 +12,14 @@ try:
     import cupyx.scipy.ndimage as cp_ndi
 
     _cupy_available = True
-except ImportError:
+    _cupy_import_error = None
+except ImportError as exc:
     cp = None
     cp_fft = None
     cp_gaussian_filter = None
     cp_ndi = None
     _cupy_available = False
+    _cupy_import_error = exc
 
 import scipy.fft as np_fft
 from scipy.ndimage import gaussian_filter as np_gaussian_filter
@@ -46,7 +48,9 @@ class BackendManager:
     def _init_backend(self):
         if "cupy" in self.backend_name:
             if not _cupy_available:
-                raise RuntimeError("CuPy backend requested but CuPy is not available.")
+                raise RuntimeError(
+                    f"CuPy backend requested but CuPy is not available: {_cupy_import_error}"
+                ) from _cupy_import_error
             self.xp = cp
             self.fft = cp_fft
             self.gaussian_filter = cp_gaussian_filter
