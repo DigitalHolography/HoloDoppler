@@ -168,7 +168,7 @@ def _build_save_map(vid, parameters, vid_debug, num_batch):
     
     # Frequency bands
     for k, v in enumerate(parameters.get("frequency_bands", [])):
-        band_name = f"band_{v[0]}_{v[1]}"
+        band_name = f"band_avg_{v[0]}_{v[1]}"
         save_map[band_name] = vid[:, 4 + k, :, :]
 
     # Debug videos
