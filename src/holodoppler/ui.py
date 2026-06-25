@@ -16,6 +16,7 @@ except Exception:
     ImageTk = None
 
 from holodoppler.cli import preview, process
+from holodoppler.utils import load_config
 
 APP_NAME = "HoloDoppler"
 SUPPORTED = {".holo", ".cine", ".txt"}
@@ -260,6 +261,8 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
             img = preview(str(path), params)
             self.q.put(("img", img))
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             self.q.put(("err", str(e)))
         finally:
             self.q.put(("done", None))
@@ -342,7 +345,7 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
 
     def _load_params(self):
         return (
-            json.loads(self.config_path.read_text(encoding="utf-8"))
+            load_config(self.config_path)
             if self.config_path.exists()
             else {}
         )
@@ -383,6 +386,7 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
                 if k == "img":
                     self._show_preview(v)
                 elif k == "err":
+
                     self.status_var.set("Error")
                     self.preview_label.config(text=v, image="")
                 elif k == "status":
