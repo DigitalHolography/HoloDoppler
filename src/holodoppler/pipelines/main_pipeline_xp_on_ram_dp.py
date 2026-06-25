@@ -275,9 +275,9 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
 
     # SVD filtering
     if compute_debug:
-        holograms_f, removedU, holograms_fbar, eigenvalues, _, _, dc = svd_filter_stdmeanratio(xp, holograms, parameters["svd_threshold"], filter_mode = parameters["svd_filter_mode"], remove_dc = parameters["svd_remove_dc"], debug = compute_debug)
+        holograms_f, removedU, holograms_fbar, eigenvalues, _, _, dc = svd_filter(xp, holograms, parameters["svd_threshold"], filter_mode = parameters["svd_filter_mode"], remove_dc = parameters["svd_remove_dc"], debug = compute_debug)
     else :
-        holograms_f = svd_filter_stdmeanratio(xp, holograms, parameters["svd_threshold"], filter_mode = parameters["svd_filter_mode"], remove_dc = parameters["svd_remove_dc"])
+        holograms_f = svd_filter(xp, holograms, parameters["svd_threshold"], filter_mode = parameters["svd_filter_mode"], remove_dc = parameters["svd_remove_dc"])
 
     if not compute_debug:
         del holograms  # Free memory early in non-debug mode
