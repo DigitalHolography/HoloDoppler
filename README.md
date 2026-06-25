@@ -32,10 +32,10 @@ uv sync --extra build
 uv run --extra build python build_installer.py --iscc "C:\Users\Rakushka\AppData\Local\Programs\Inno Setup 6\ISCC.exe" --verify-installer
 ```
 
-The build creates `dist\HoloDoppler-setup-0.3.1.exe`. The installer defaults to
-`%LOCALAPPDATA%\Programs\HoloDoppler\0.3.1`, creates shortcuts named
-`HoloDoppler 0.3.1`, and seeds parameter presets in
-`%APPDATA%\holodopplerpython\0.3.1\parameters`.
+The build creates `dist\HoloDoppler-setup-0.4.0.exe`. The installer defaults to
+`%LOCALAPPDATA%\Programs\HoloDoppler\0.4.0`, creates shortcuts named
+`HoloDoppler 0.4.0`, and seeds parameter presets in
+`%APPDATA%\holodopplerpython\0.4.0\parameters`.
 
 To also test `preview` and `process` with a real acquisition during installer
 verification, provide both the `.holo` file and the parameter JSON:
