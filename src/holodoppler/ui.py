@@ -26,6 +26,7 @@ DEFAULT_CONFIG = Path("./parameters/default_parameters_debug.json")
 # ------------------------------------------------------------------
 try:
     from tkinterdnd2 import TkinterDnD
+
     DND_AVAILABLE = True
 except ImportError:
     DND_AVAILABLE = False
@@ -71,17 +72,21 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
             style.configure("TFrame", background=bg)
             style.configure("TLabelframe", background=bg, foreground=fg)
             style.configure("TLabelframe.Label", background=bg, foreground=fg)
-            style.configure("TButton", background="#2d2d2d", foreground=fg, borderwidth=1)
+            style.configure(
+                "TButton", background="#2d2d2d", foreground=fg, borderwidth=1
+            )
             style.map("TButton", background=[("active", "#3c3c3c")])
             style.configure("Accent.TButton", background="#0a5c8e", foreground="white")
             style.map("Accent.TButton", background=[("active", "#0f6ba3")])
 
             # Custom style for readonly Entry (gray background, white text)
-            style.configure("Readonly.TEntry",
-                            fieldbackground="#3c3c3c",   # gray background
-                            foreground="white",
-                            borderwidth=1,
-                            relief="solid")
+            style.configure(
+                "Readonly.TEntry",
+                fieldbackground="#3c3c3c",  # gray background
+                foreground="white",
+                borderwidth=1,
+                relief="solid",
+            )
 
         # Use a font that is guaranteed to exist, avoid tuple issues
         default_font = ("TkDefaultFont", 10)
@@ -94,8 +99,8 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
     def _build(self):
         main = ttk.Frame(self, padding="15 15 15 15")
         main.pack(fill="both", expand=True)
-        main.columnconfigure(1, weight=1)   # middle column expands
-        main.rowconfigure(2, weight=1)       # preview area expands
+        main.columnconfigure(1, weight=1)  # middle column expands
+        main.rowconfigure(2, weight=1)  # preview area expands
 
         # ----- ROW 0: Input files (label, scrollable list, button) -----
         ttk.Label(main, text="Input files", font="TkDefaultFont 10 bold").grid(
@@ -105,8 +110,13 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
         files_frame.grid(row=0, column=1, sticky="ew", pady=(5, 5))
         files_frame.columnconfigure(0, weight=1)
         self.filelist_text = ScrolledText(
-            files_frame, height=5, wrap="word", relief="flat", borderwidth=0,
-            bg="#252526", fg="#e0e0e0"
+            files_frame,
+            height=5,
+            wrap="word",
+            relief="flat",
+            borderwidth=0,
+            bg="#252526",
+            fg="#e0e0e0",
         )
         self.filelist_text.grid(row=0, column=0, sticky="ew")
         self.filelist_text.config(state="disabled")
@@ -124,8 +134,12 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
         config_frame.columnconfigure(0, weight=1)
 
         # Use a custom style to give the readonly entry a gray background
-        config_entry = ttk.Entry(config_frame, textvariable=self.config_var,
-                                 state="readonly", style="Readonly.TEntry")
+        config_entry = ttk.Entry(
+            config_frame,
+            textvariable=self.config_var,
+            state="readonly",
+            style="Readonly.TEntry",
+        )
         config_entry.grid(row=0, column=0, sticky="ew")
 
         ttk.Button(main, text="⚙️ Change", command=self.choose_config).grid(
@@ -137,15 +151,25 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
         preview_frame.grid(row=2, column=0, columnspan=3, sticky="nsew", pady=15)
         preview_frame.columnconfigure(0, weight=1)
         preview_frame.rowconfigure(0, weight=1)
-        self.preview_label = ttk.Label(preview_frame, text="Drop files or select input", anchor="center")
+        self.preview_label = ttk.Label(
+            preview_frame, text="Drop files or select input", anchor="center"
+        )
         self.preview_label.grid(row=0, column=0, sticky="nsew")
 
         # ----- ROW 3: Action buttons (centered) -----
         btn_frame = ttk.Frame(main)
         btn_frame.grid(row=3, column=0, columnspan=3, pady=10)
-        self.run_btn = ttk.Button(btn_frame, text="▶ RUN", command=self.run, state="disabled", style="Accent.TButton")
+        self.run_btn = ttk.Button(
+            btn_frame,
+            text="▶ RUN",
+            command=self.run,
+            state="disabled",
+            style="Accent.TButton",
+        )
         self.run_btn.pack(side="left", padx=8)
-        self.stop_btn = ttk.Button(btn_frame, text="⏹ STOP", command=self.stop_work, state="disabled")
+        self.stop_btn = ttk.Button(
+            btn_frame, text="⏹ STOP", command=self.stop_work, state="disabled"
+        )
         self.stop_btn.pack(side="left", padx=8)
 
         # ----- ROW 4: Progress & Status -----
@@ -154,7 +178,12 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
 
         status_frame = ttk.Frame(main)
         status_frame.grid(row=5, column=0, columnspan=3, sticky="ew")
-        self.status_label = ttk.Label(status_frame, textvariable=self.status_var, anchor="center", font="TkDefaultFont 9 italic")
+        self.status_label = ttk.Label(
+            status_frame,
+            textvariable=self.status_var,
+            anchor="center",
+            font="TkDefaultFont 9 italic",
+        )
         self.status_label.pack(fill="x")
 
     # ------------------------------------------------------------------
@@ -163,7 +192,10 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
 
     def open_files(self):
         paths = filedialog.askopenfilenames(
-            filetypes=[("HoloDoppler inputs", "*.holo *.cine *.txt"), ("All files", "*.*")]
+            filetypes=[
+                ("HoloDoppler inputs", "*.holo *.cine *.txt"),
+                ("All files", "*.*"),
+            ]
         )
         if paths:
             self._set_paths([Path(p) for p in paths])
@@ -217,7 +249,9 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
             return
         self.stop.clear()
         self._set_busy(True, "Loading preview...")
-        self.worker = threading.Thread(target=self._preview_worker, args=(path,), daemon=True)
+        self.worker = threading.Thread(
+            target=self._preview_worker, args=(path,), daemon=True
+        )
         self.worker.start()
 
     def _preview_worker(self, path):
@@ -244,7 +278,11 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
         else:
             arr = arr.astype("float32")
             mn, mx = float(np.nanmin(arr)), float(np.nanmax(arr))
-            img_arr = ((arr - mn) * 255.0 / (mx - mn)).clip(0, 255).astype("uint8") if mx > mn else np.zeros_like(arr, dtype="uint8")
+            img_arr = (
+                ((arr - mn) * 255.0 / (mx - mn)).clip(0, 255).astype("uint8")
+                if mx > mn
+                else np.zeros_like(arr, dtype="uint8")
+            )
 
         img = Image.fromarray(img_arr).convert("RGB")
         max_w, max_h = 680, 320
@@ -279,6 +317,7 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
             self.q.put(("status", "Done ヽ(^o^)丿"))
         except Exception as e:
             import traceback
+
             print(traceback.format_exc())
             self.q.put(("err", str(e)))
         finally:
@@ -293,13 +332,20 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
     # ------------------------------------------------------------------
 
     def choose_config(self):
-        p = filedialog.askopenfilename(filetypes=[("JSON config", "*.json"), ("All files", "*.*")], initialdir=self.config_path.parent)
+        p = filedialog.askopenfilename(
+            filetypes=[("JSON config", "*.json"), ("All files", "*.*")],
+            initialdir=self.config_path.parent,
+        )
         if p:
             self.config_path = Path(p)
             self.config_var.set(str(self.config_path))
 
     def _load_params(self):
-        return json.loads(self.config_path.read_text(encoding="utf-8")) if self.config_path.exists() else {}
+        return (
+            json.loads(self.config_path.read_text(encoding="utf-8"))
+            if self.config_path.exists()
+            else {}
+        )
 
     # ------------------------------------------------------------------
     # DRAG & DROP (full window, no separate label)

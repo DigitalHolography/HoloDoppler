@@ -6,8 +6,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_agg import FigureCanvasAgg
-
-from .utils import normalize_image
+from scipy.signal import find_peaks
+from scipy import stats
+from .utils import normalize_image, complex_to_color
 
 try:
     import cupy as cp
@@ -23,13 +24,23 @@ def _make_agg_figure(figsize=(8, 6), dpi=100):
 class SignalPlotter:
     """Simple signal plotter"""
     
-    def __init__(self, figsize=(8, 6), dpi=100):
+    def __init__(self, figsize=(8, 6), dpi=100, ylim=None):
         self.fig, self.canvas, self.ax = _make_agg_figure(figsize, dpi)
+        self.ylim = ylim
+
     
     def plot(self, sig):
+        self.ax.clear()
         if cp is not None and isinstance(sig, cp.ndarray):
             sig = sig.get()
-        self.ax.plot(np.squeeze(sig))
+        sig = np.squeeze(sig)
+        if np.iscomplexobj(sig):
+            self.ax.plot(sig.real, 'b', label='real')
+            self.ax.plot(sig.imag, 'r', label='imag')
+        else:
+            self.ax.plot(sig)
+        if self.ylim is not None:
+            self.ax.set_ylim(self.ylim)
         self.canvas.draw()
         img = np.asarray(self.canvas.buffer_rgba()).copy()
         return img[..., :3]
@@ -40,14 +51,26 @@ class SignalPlotter:
 class ImagePlotter:
     """Simple image plotter"""
     
-    def __init__(self):
+    def __init__(self,to_abs=False):
+        self.to_abs = to_abs
         pass
     
     def plot(self, image):
+        if image is None:
+            return None
+
         if cp is not None and isinstance(image, cp.ndarray):
             image = image.get()
-        image = (image - np.min(image)) / (np.max(image) - np.min(image) + 1e-12) * 255
-        return image.astype(np.uint8)
+        
+        if self.to_abs:
+            image = np.abs(image)
+
+        if np.iscomplexobj(image):
+            img = complex_to_color(image, mode="amplitude_phase")
+            return img.astype(np.uint8)
+        else:
+            image = (image - np.min(image)) / (np.max(image) - np.min(image) + 1e-12) * 255
+            return image.astype(np.uint8)
     
     def close(self):
         pass
@@ -92,9 +115,12 @@ class ShiftsPlotter:
         shifts_x = np.asarray(shifts_x)
 
         if self.scale is None:
-            mag = np.sqrt(shifts_x**2 + shifts_y**2)
+            mag = np.hypot(shifts_x,shifts_y)
             med = np.median(mag[mag > 0]) if np.any(mag > 0) else 1.0
-            scale = 3.0 / (med + 1e-32) 
+            # print(med)
+            ref_arrow_length = 0.1
+            scale = med / ref_arrow_length
+            # print(scale)
         else:
             scale = self.scale
         
@@ -124,12 +150,13 @@ class SpectrumPlotter:
     
     def __init__(self, fs, f1, f2, title="Spectrum",
                  figsize=(8, 6), dpi=400, show_bands=True,
-                 ylim=None, use_stem=False):
+                 ylim=None, freqs_log=False, use_stem=False):
         self.fs = fs
         self.f1 = f1
         self.f2 = f2
         self.show_bands = show_bands
         self.ylim = ylim
+        self.freqs_log = freqs_log
         self.use_stem = use_stem
         self.title = title
 
@@ -140,13 +167,15 @@ class SpectrumPlotter:
             spectrum_line = cp.asnumpy(spectrum_line)
 
         spectrum_line = np.asarray(spectrum_line).copy()
+        
+        # print(spectrum_line[1])
 
         freqs_full = np.fft.fftfreq(len(spectrum_line), d=1 / self.fs)
         freqs_full = np.fft.fftshift(freqs_full)
         spectrum_line = np.fft.fftshift(spectrum_line)
 
-        spectrum_line[spectrum_line <= 0] = np.nan
-        signal_log = np.log10(spectrum_line)
+        spectrum_line[spectrum_line < 0] = np.nan
+        signal_log = np.log10(spectrum_line+1) # 1 is for 0db <=> inf
 
         self.ax.clear()
 
@@ -156,6 +185,7 @@ class SpectrumPlotter:
             stemlines.set_color("black")
             stemlines.set_linewidth(1)
         else:
+
             self.ax.plot(freqs_full, signal_log, color="black", linewidth=1)
 
         if self.show_bands:
@@ -184,7 +214,7 @@ class SpectrumPlotter:
 
         self.ax.set_title(self.title)
         self.ax.set_xlabel("frequency (Hz)")
-        self.ax.set_ylabel("log10 S")
+        self.ax.set_ylabel("log_{10}(S)")
         self.ax.grid(True, linestyle="--", alpha=0.5)
 
         self.canvas.draw()
@@ -193,10 +223,97 @@ class SpectrumPlotter:
     
     def close(self):
         self.fig.clear()
+
+
+class SpectrumPlotterLogLog:
+    """Simple spectrum plotter with log-log scale (positive frequencies only)"""
+    
+    def __init__(self, fs, title="Spectrum", dpi=100, figsize=(8, 6), is_magnitude_squared=True, fit_f1=None, fit_f2=None, ylim=None):
+        self.fs = fs
+        self.title = title
+        self.is_magnitude_squared = is_magnitude_squared
+        self.fig, self.canvas, self.ax = _make_agg_figure(figsize, dpi)
+        self.fit_f1 = fit_f1
+        self.fit_f2 = fit_f2
+        self.ylim = ylim
+    
+    def plot(self, spectrum_line):
+        if cp is not None and isinstance(spectrum_line, cp.ndarray):
+            spectrum_line = cp.asnumpy(spectrum_line)
+
+        fit_f1 = self.fit_f1
+        fit_f2 = self.fit_f2
+        spectrum_line = np.asarray(spectrum_line).copy()
         
-import numpy as np
-from scipy.signal import find_peaks
-from scipy import stats
+        # Positive frequencies only
+        freqs = np.fft.fftfreq(len(spectrum_line), d=1/self.fs)
+        pos_mask = freqs > 0
+        freqs_pos = freqs[pos_mask]
+        spectrum_pos = spectrum_line[pos_mask]
+        
+        # Log-log plot
+        self.ax.clear()
+        self.ax.loglog(freqs_pos, spectrum_pos, color="black", linewidth=1, label="Spectrum")
+
+        if self.ylim is not None:
+            self.ax.set_ylim(self.ylim)
+        
+        # Fit a line in log-log space if frequency range is specified
+        if fit_f1 is not None and fit_f2 is not None:
+            fit_mask = (freqs_pos >= fit_f1) & (freqs_pos <= fit_f2)
+            freqs_fit = freqs_pos[fit_mask]
+            spectrum_fit = spectrum_pos[fit_mask]
+            
+            if len(freqs_fit) > 1:
+                # Convert to log space
+                log_freqs = np.log10(freqs_fit)
+                log_spectrum = np.log10(spectrum_fit)
+                
+                # Linear regression
+                slope, intercept, r_value, p_value, std_err = stats.linregress(log_freqs, log_spectrum)
+                
+                # Plot fit line
+                log_freqs_line = np.array([np.log10(fit_f1), np.log10(fit_f2)])
+                log_fit_line = intercept + slope * log_freqs_line
+                self.ax.loglog(10**log_freqs_line, 10**log_fit_line, 
+                             color="red", linestyle="--", linewidth=1.5,
+                             label=f"Fit: slope={slope:.2f}, offset={intercept:.2f}")
+                
+                
+                # # Add text annotation with proper units
+                # if self.is_magnitude_squared:
+                #     units = "dB (mag²)/decade"
+                #     offset_units = "dB (mag²)"
+                # else:
+                #     units = "dB/decade"
+                #     offset_units = "dB"
+                
+                # text = f"slope: {slope:.2f} {units}\noffset: {intercept:.2f} {offset_units}"
+                # self.ax.text(0.05, 0.95, text, transform=self.ax.transAxes,
+                #            verticalalignment='top', bbox=dict(boxstyle='round', 
+                #            facecolor='white', alpha=0.8), fontsize=8)
+        
+        # Set ylabel based on is_magnitude_squared flag
+        if self.is_magnitude_squared:
+            ylabel = "Magnitude²"
+        else:
+            ylabel = "Magnitude"
+        
+        self.ax.set_title(self.title)
+        self.ax.set_xlabel("Frequency (Hz)")
+        self.ax.set_ylabel(ylabel)
+        self.ax.grid(True, linestyle="--", alpha=0.5)
+        self.ax.legend(loc='upper right', fontsize=8)
+        
+        self.fig.tight_layout()
+
+        self.canvas.draw()
+        img = np.asarray(self.canvas.buffer_rgba()).copy()
+        return img[..., :3]
+    
+    def close(self):
+        plt.close(self.fig)
+        
 
 class CalibrationSpectrumPlotter:
     """Spectrum plotter with frequency bands and peak analysis"""
@@ -448,27 +565,159 @@ class SubapertureMontagePlotter:
     
     def close(self):
         pass
+    
+class SVDeigenvectorimages_plotter:
+    """Montage of SVD eigenvector images """
+    
+    def __init__(self, normalize_per_frame=False, to_abs=True, n_subplots=64):
+        self.normalize_per_frame = normalize_per_frame
+        self.to_abs = to_abs
+        self.n_subplots = n_subplots  # Fixed number of subplots
+    
+    def plot(self, U):
+        if cp is not None and isinstance(U, cp.ndarray):
+            U = cp.asnumpy(U)
+        
+        if U.ndim == 2:
+            U = U.reshape(U.shape[0], U.shape[1], 1)
+        
+        N_imgs = U.shape[-1]
+        if N_imgs == 0:
+            return None
+        
+        # Determine grid size for fixed number of subplots
+        ny = int(np.sqrt(self.n_subplots))
+        nx = self.n_subplots // ny if ny > 0 else self.n_subplots
+        # Adjust to ensure nx * ny >= n_subplots
+        while nx * ny < self.n_subplots:
+            nx += 1
+        
+        # Only keep the first n_subplots images
+        n_imgs_to_use = min(N_imgs, self.n_subplots)
+        
+        # Get image dimensions
+        img_height = U.shape[0]
+        img_width = U.shape[1]
+        
+        # Create empty array for the full montage (filled with zeros)
+        if self.to_abs:
+            # For RGB images (3 channels)
+            montage = np.zeros((ny * img_height, nx * img_width, 3), dtype=np.float32)
+        else:
+            # For complex color images (3 channels)
+            montage = np.zeros((ny * img_height, nx * img_width, 3), dtype=np.float32)
+        
+        # Fill the montage with images in order
+        for i in range(n_imgs_to_use):
+            row = i // nx
+            col = i % nx
+            
+            img = U[:, :, i]
+            
+            if self.to_abs:
+                img = np.abs(img)
+                if img.ndim == 2:
+                    img = np.stack([img] * 3, axis=-1)
+            else:
+                img = complex_to_color(img)
+            
+            if self.normalize_per_frame:
+                img = normalize_image(img)
+            
+            # Place image in the montage
+            montage[row * img_height:(row + 1) * img_height, 
+                   col * img_width:(col + 1) * img_width, :] = img
+        
+        # Remaining positions stay as zeros (already initialized)
+        
+        # Normalize the entire montage if not normalizing per frame
+        if not self.normalize_per_frame:
+            montage = normalize_image(montage)
+        else:
+            # Convert to uint8 if needed
+            if montage.dtype != np.uint8:
+                if montage.max() <= 1:
+                    montage = (montage * 255).astype(np.uint8)
+                else:
+                    montage = montage.astype(np.uint8)
+        
+        return montage
+    
+    def close(self):
+        pass
 
+
+class SVDeigenvalues_plotter:
+    """Simple SVD eigenvalue/singular-value plotter"""
+
+    def __init__(self, figsize=(8, 6), dpi=100, ylim=None, log_plot=True):
+        self.fig, self.canvas, self.ax = _make_agg_figure(figsize, dpi)
+        self.ylim = ylim
+        self.log_plot = log_plot
+
+    def plot(self, eigen_values_list):
+        self.ax.clear()
+
+        if cp is not None and isinstance(eigen_values_list, cp.ndarray):
+            eigen_values_list = eigen_values_list.get()
+
+        vals = np.asarray(eigen_values_list)
+        vals = np.squeeze(vals)
+
+        if vals.ndim != 1:
+            vals = vals.ravel()
+
+        vals = vals[np.isfinite(vals)]
+
+        if self.log_plot:
+            vals = vals[vals > 0]
+
+        x = np.arange(vals.size)
+
+        if self.log_plot:
+            self.ax.semilogy(x, vals, marker="o", linewidth=1.5, markersize=3)
+            self.ax.set_ylabel("SVD eigenvalue / singular value (log scale)")
+        else:
+            self.ax.plot(x, vals, marker="o", linewidth=1.5, markersize=3)
+            self.ax.set_ylabel("SVD eigenvalue / singular value")
+
+        self.ax.set_title("SVD spectrum")
+        self.ax.set_xlabel("Index")
+        self.ax.grid(True, linestyle="--", alpha=0.7)
+
+        if self.ylim is not None:
+            self.ax.set_ylim(self.ylim)
+
+        self.fig.tight_layout()
+        self.canvas.draw()
+
+        img = np.asarray(self.canvas.buffer_rgba()).copy()
+        return img[..., :3]
+
+    def close(self):
+        plt.close(self.fig)
 
 class DebugPlotterManager:
     """Manages debug plotters"""
     
     def __init__(self, parameters):
+        plot_params = parameters["debug_plot_parameters"]
         plotters = {
             "montage": SubapertureMontagePlotter(),
             "montagenormalized": SubapertureMontagePlotter(normalize_per_frame = True),
-            "shifts": ShiftsPlotter(scale=30),
+            "shifts": ShiftsPlotter(scale=plot_params["shifts"]["scale"]),
             "shifts_rel": ShiftsPlotter(scale=None),
             "phase": PhasePlotter(),
             "phase_rel": PhasePlotter(relative=True),
             "M0notfixed": ImagePlotter(),
             "M0ffnoreg": ImagePlotter(),
+            "spectrumloglog": SpectrumPlotterLogLog(parameters["sampling_freq"], fit_f1=plot_params["spectrumloglog"]["fit_f1"],fit_f2=plot_params["spectrumloglog"]["fit_f2"], ylim=plot_params["spectrumloglog"]["ylim"],),
             "spectrum": SpectrumPlotter(
                 fs=parameters["sampling_freq"],
                 f1=parameters["low_freq"],
                 f2=parameters["high_freq"],
-                ylim=(-1, 20),
-                use_stem=False
+                ylim=plot_params["spectrum"]["ylim"],
+                use_stem=plot_params["spectrum"]["use_stem"]
             ),
             "calibration_spectrum": CalibrationSpectrumPlotter(
                 fs=parameters["sampling_freq"],
@@ -478,6 +727,10 @@ class DebugPlotterManager:
                 use_stem=False
             ),
             "average_signal" : SignalPlotter(),
+            "SVD_filtered_features" : SVDeigenvectorimages_plotter(),
+            "SVD_M0_inversed_svd_filter" : ImagePlotter(),
+            "SVD_eigenvalues" : SVDeigenvalues_plotter(ylim=plot_params["SVD_eigenvalues"]["ylim"], log_plot=plot_params["SVD_eigenvalues"]["log_plot"]),
+            "SVD_dc" : ImagePlotter(),
         }
         
         self.sources = {
@@ -490,8 +743,14 @@ class DebugPlotterManager:
             "M0notfixed": lambda res: (res["M0notfixed"],),
             "M0ffnoreg": lambda res: (res["M0_ff_noreg"],),
             "spectrum": lambda res: (res["spectrum_line"],),
+            "spectrumloglog": lambda res: (res["spectrum_line"],),
             "calibration_spectrum": lambda res: (res["calibration_spectrum_line"],),
             "average_signal" : lambda res: (res["average_signal"],),
+            "SVD_filtered_features": lambda res: (res["svd_U"],),
+            "SVD_M0_inversed_svd_filter": lambda res: (res["M0svdbar"],),
+            "SVD_eigenvalues": lambda res: (res["eigenvalues"],),
+            "SVD_dc": lambda res: (res["svd_dc"],),
+
         }
         
         self.plotters = plotters
@@ -513,5 +772,7 @@ class DebugPlotterManager:
         return out
     
     def close_all(self):
-        for plotter in self.plotters.values():
-            plotter.close()
+        plt.close('all')
+        # for name,plotter in self.plotters.items():
+        #     # print("closing: ",name)
+        #     plotter.close()

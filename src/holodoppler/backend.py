@@ -10,6 +10,7 @@ try:
     from cupyx.scipy.ndimage import gaussian_filter as cp_gaussian_filter
     from cupyx.scipy.ndimage import zoom as cupy_zoom
     import cupyx.scipy.ndimage as cp_ndi
+
     _cupy_available = True
 except ImportError:
     cp = None
@@ -24,18 +25,24 @@ import scipy.ndimage as np_ndi
 from scipy.ndimage import zoom as scipy_zoom
 
 
+def to_numpy(arr):
+    if isinstance(arr, cp.ndarray):
+        return arr.get()
+    return arr
+
+
 class BackendManager:
-    """Manages numpy/cupy backend switching"""
-    
+    """Manages numpy/cupy backend switching"""  # TODO add JAX
+
     def __init__(self, backend="numpy"):
         self.backend_name = backend
         self.xp = None
         self.fft = None
         self.gaussian_filter = None
         self.ndi = None
-        self.zoom = None 
+        self.zoom = None
         self._init_backend()
-    
+
     def _init_backend(self):
         if "cupy" in self.backend_name:
             if not _cupy_available:
@@ -44,25 +51,25 @@ class BackendManager:
             self.fft = cp_fft
             self.gaussian_filter = cp_gaussian_filter
             self.ndi = cp_ndi
-            self.zoom = cupy_zoom 
-            
+            self.zoom = cupy_zoom
+
         else:
             self.xp = np
             self.fft = np_fft
             self.gaussian_filter = np_gaussian_filter
             self.ndi = np_ndi
-            self.zoom = scipy_zoom 
-    
+            self.zoom = scipy_zoom
+
     def to_backend(self, arr):
         if "cupy" in self.backend_name and self.xp is cp:
             return cp.asarray(arr)
         return arr
-    
+
     def to_numpy(self, arr):
         if "cupy" in self.backend_name and isinstance(arr, cp.ndarray):
             return arr.get()
         return arr
-    
+
     def clear_gpu_memory(self, synchronize=True):
         """Clear GPU memory pools if using CuPy backend."""
 
@@ -74,7 +81,14 @@ class BackendManager:
 
         self.xp.get_default_memory_pool().free_all_blocks()
         self.xp.get_default_pinned_memory_pool().free_all_blocks()
-    
+
+    def print_gpu_used_memory(self):
+        if self.xp is not cp:
+            return
+        used_in_bytes = cp.cuda.runtime.memGetInfo()[1] - cp.cuda.runtime.memGetInfo()[0]
+
+        print(f"Used GPU memory : {used_in_bytes/1e6} MB ")
+
     @property
     def is_gpu(self):
         return "cupy" in self.backend_name and _cupy_available

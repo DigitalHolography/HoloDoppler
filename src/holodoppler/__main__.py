@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import sys
 
 from holodoppler.cli import main as cli_main
@@ -7,7 +5,7 @@ from holodoppler.ui import UI
 
 
 def main() -> int:
-    if len(sys.argv) == 1:
+    if len(sys.argv) > 1 and sys.argv[1] == "gui":
         UI().mainloop()
         return 0
 

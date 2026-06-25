@@ -7,7 +7,7 @@ name = "holodoppler"
 version = "0.2.0"
 description = "HoloDoppler processing and preview tools."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
   "numpy>=2.3.4",
   "tqdm>=4.67.1",
@@ -19,7 +19,10 @@ dependencies = [
   "cupy-cuda13x>=14.0.1",
   "lblprof>=0.1.8",
   "imageio>=2.37.3",
+  "imageio[ffmpeg]",
   "tkinterdnd2",
+  "pyyaml",
+  "dask",
 ]
 
 [project.optional-dependencies]
