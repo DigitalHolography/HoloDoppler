@@ -487,6 +487,10 @@ def preview_process_moments(file_path, parameters):
         M0 = (M0 - np.min(M0)) / (np.max(M0) - np.min(M0) + 1e-12)
         debug_imgs["M0ff"] = (M0 * 255).astype(np.uint8)
 
+    for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
+        key = f"band_{k}_{f1}_{f2}"
+        debug_imgs[key] = res[key]
+
     save_debug_images(debug_imgs, "./debug_outputs")
     plt.close("all")
 
