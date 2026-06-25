@@ -663,9 +663,11 @@ def update_from_footer(parameters, holofooter):
         if parameters.get("z") == "use_holovibes" and holofooter is not None:
             parameters["z"] = holofooter["compute_settings"]["image_rendering"]["propagation_distance"]
         if parameters.get("pixel_pitch") == "use_holovibes" and holofooter is not None:
-            parameters["pixel_pitch"] = (holofooter["info"]["pixel_pitch"]["y"], holofooter["info"]["pixel_pitch"]["x"])
+            parameters["pixel_pitch"] = (holofooter["info"]["pixel_pitch"]["y"] * 1e-6, holofooter["info"]["pixel_pitch"]["x"] * 1e-6)
         if parameters.get("sampling_freq") == "use_holovibes" and holofooter is not None:
             parameters["sampling_freq"] = holofooter["info"]["camera_fps"]
+        if parameters.get("high_freq") == "use_holovibes" and holofooter is not None:
+            parameters["high_freq"] = holofooter["info"]["camera_fps"]/2
     except Exception as e:
         print(f"Issue from holovibes footer: {e}")
     return parameters

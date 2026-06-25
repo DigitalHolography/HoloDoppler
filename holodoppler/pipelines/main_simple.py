@@ -5,7 +5,7 @@ from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectru
 from holodoppler.utils import resize_slicewise, zoom_slicewise_fast, pad_array_centrally, gaussian_flatfield, update_from_footer, normalize_to_uint8
 from holodoppler.filtering import svd_filter, frequency_symmetric_filtering, fourier_time_transform, corner_compensation
 from holodoppler.moments import moment
-from holodoppler.registration import register_trs, apply_registration, apply_registration3D
+from holodoppler.registration import register_images_shifts, apply_register_images_shifts, register_trs, apply_registration, apply_registration3D
 from holodoppler.plotting import DebugPlotterManager
 from holodoppler.backend import BackendManager
 from holodoppler.file_reader import FileReaderFactory, CineFileReader, HoloFileReader
@@ -56,7 +56,7 @@ def _process_batch(parameters, frames, phase_term = None):
     # Temporal transform
     if parameters.get("temporal_transformation") == "FourierTransform":
         spectrum_f = fourier_time_transform(xp, fft, holograms_f)
-
+        # spectrum_f_angle = fourier_time_transform(xp, fft, xp.angle(holograms_f))
     else:
         spectrum_f = holograms_f
 
@@ -85,6 +85,78 @@ def _process_batch(parameters, frames, phase_term = None):
 
     return d
 
+def _process_shack_hartmann(parameters, frames):
+    
+    fft = cp.fft
+    nt, ny, nx = frames.shape
+    debug = {}
+
+    prop_method = parameters["spatial_propagation"]
+    
+    
+    if prop_method == "Fresnel":
+        U = construct_subapertures_fresnel(
+            xp, fft, frames, parameters["wavelength"], parameters["z"], parameters["pixel_pitch"],
+            parameters["low_freq"], parameters.get("high_freq"), parameters["sampling_freq"],
+            frames_sub.shape[0], parameters["shack_hartmann_nx_subap"], parameters["shack_hartmann_ny_subap"],
+            parameters["shack_hartmann_svd_threshold"]
+        )
+    elif prop_method == "AngularSpectrum":
+        U = construct_subapertures_angular(
+            xp, fft, frames, parameters["wavelength"],
+            parameters["z"], parameters["pixel_pitch"], parameters["low_freq"], parameters.get("high_freq"),
+            parameters["sampling_freq"], frames_sub.shape[0], parameters["shack_hartmann_nx_subap"],
+            parameters["shack_hartmann_ny_subap"], parameters["shack_hartmann_svd_threshold"]
+        )
+        
+    del U, frames  # Memory footprint reduction
+
+    # Displacement estimation
+    if parameters.get("shack_hartmann_graph_laplacian", False): # Use all the sub aps
+        shifts_y, shifts_x = calculate_displacements_graph_laplacian(
+            xp, fft, U_subaps,
+            pupil_threshold=parameters.get("shack_hartmann_pupil_threshold", 1.0),
+            deviation_threshold=parameters.get("shack_hartmann_deviation_threshold", 3.0),
+            shifts_range=parameters.get("shack_hartmann_shifts_pixel_range_threshold", 20.0)
+        )
+    else: # Use only the shifts to the central sub ap
+        ny_s, nx_s, Ny, Nx = U_subaps.shape
+        shifts_y, shifts_x = calculate_displacements(
+            xp, fft, U_subaps,
+            pupil_threshold=parameters.get("shack_hartmann_pupil_threshold", 1.0),
+            deviation_threshold=parameters.get("shack_hartmann_deviation_threshold", 3.0),
+            shifts_range=parameters.get("shack_hartmann_shifts_pixel_range_threshold", 20.0)
+        )
+
+    # Phase reconstruction
+    phase = None
+    if parameters.get("shack_hartmann_zernike_fit", True):
+        if prop_method == "Fresnel":
+            coefs, phase = fit_zernike_fresnel(
+                xp, ny, nx, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
+                parameters["wavelength"], shifts_y, shifts_x, parameters.get("shack_hartmann_zernike_fit_modes")
+            )
+        elif prop_method == "AngularSpectrum":
+            coefs, phase = fit_zernike_angular_spectrum(
+                xp, ny, nx, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
+                parameters["wavelength"], parameters["z"], shifts_y, shifts_x, parameters.get("shack_hartmann_zernike_fit_modes")
+            )
+    # elif parameters.get("shack_hartmann_southwell_phase_integration", False):
+    #     phase = southwell_phase_integration(
+    #         bm, ny, nx, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
+    #         parameters["wavelength"], shifts_y, shifts_x
+    #     )
+    else:
+        phase = None
+
+    # Phase correction term
+    phase_term = None
+    if phase is not None:
+        phase_term = xp.exp(-1j * phase)
+        phase_term = xp.nan_to_num(phase_term, nan=0.0)
+
+    return phase_term
+
 def preview_simple(file_path, parameters):
     file_reader = FileReaderFactory.create(file_path)
     
@@ -103,8 +175,12 @@ def preview_simple(file_path, parameters):
     # transfer to gpu
     frames = cp.array(frames)
 
+    phase_term = None
+    if parameters.get("shack_hartmann", False):
+        phase_term = _process_shack_hartmann(parameters, frames)
+
     # calc on gpu
-    res = _process_batch(parameters, frames=frames)
+    res = _process_batch(parameters, frames=frames, phase_term=phase_term)
 
     # transfer to cpu
     res_np = {k: cp.asnumpy(v) for k, v in res.items()}
@@ -145,6 +221,8 @@ def process_simple(file_path, parameters):
 
     output = defaultdict(list)
 
+    M0_reg = None
+
     # Create CUDA streams
     h2d_stream = cp.cuda.Stream(non_blocking=True)
     d2h_stream = cp.cuda.Stream(non_blocking=True)
@@ -159,15 +237,14 @@ def process_simple(file_path, parameters):
     h2d_event_next = None
     
     # Start reading frames
-    for i, frames in enumerate(tqdm(file_reader.iter_frames(
-        first_frame=first_frame,
-        end_frame = end_frame,
-        batch_size=batch_size,
-        batch_stride=batch_stride
-    ), total=num_batch)):
+    for i in tqdm(range(num_batch)):
+
+
         
         # Start async H2D transfer for this batch
         with h2d_stream:
+
+            frames = file_reader.read_frames(first_frame = first_frame + i * batch_stride, batch_size = batch_size)
             d_next = cp.asarray(frames)
             h2d_event_next = cp.cuda.Event()
             h2d_event_next.record(h2d_stream)
@@ -179,7 +256,21 @@ def process_simple(file_path, parameters):
             
             # Compute current batch on compute stream
             with compute_stream:
-                res = _process_batch(parameters, d_current)
+                phase_term = None
+                if parameters.get("shack_hartmann", False):
+                    phase_term = _process_shack_hartmann(parameters, d_current)
+
+                res = _process_batch(parameters, d_current, phase_term=phase_term)
+
+                if M0_reg is None and parameters["image_registration"]: #first batch is used for fixed batch
+                    M0_reg = res["M0ff"]
+                
+                if M0_reg is not None:
+                    shift_y, shift_x = register_images_shifts(cp, cp.fft, M0_reg, res["M0ff"], radius=0.7, gaussian_sigma=0, gaussian_filter=gaussian_filter)
+                    
+                for k, v in res.items():
+                    res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
+
                 compute_event = cp.cuda.Event()
                 compute_event.record(compute_stream)
             
@@ -209,5 +300,7 @@ def process_simple(file_path, parameters):
     output_np = {k: normalize_to_uint8(v) for k, v in output_np.items()}
 
     _save_videos( _get_default_output_path(file_reader.file_path) / "process", output_np, 30)
+
+    
     
     

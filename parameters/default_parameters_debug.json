@@ -2,7 +2,7 @@
   "pipeline_name" : "simple",
   "backend": "cupyRAM",
   "batch_size": 256,
-  "batch_stride": 256,
+  "batch_stride": 2560,
   "accumulation": 1,
   "image_registration": true,
   "image_registration_type": "translation_rotation_scale",

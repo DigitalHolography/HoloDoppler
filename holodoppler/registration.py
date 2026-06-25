@@ -6,6 +6,61 @@ from .utils import elliptical_mask
 from .utils import signed_peak, subpixel_parabola
 
 
+
+
+
+
+def register_images_shifts(xp, fft, fixed, moving, radius=None, gaussian_sigma=None, gaussian_filter=None):
+    ny, nx = fixed.shape[-2:]
+
+    mask = elliptical_mask(ny, nx, radius, xp) if radius else None
+
+    fixed_f = fixed.astype(xp.float32, copy=False)
+    moving_f = moving.astype(xp.float32, copy=False)
+
+    fixed_e = _preprocess(xp, fixed_f, mask=mask, gaussian_sigma=gaussian_sigma, gaussian_filter=gaussian_filter)
+    moving_e = _preprocess(xp, moving_f, mask=mask, gaussian_sigma=gaussian_sigma, gaussian_filter=gaussian_filter)
+
+    shift_y, shift_x = phase_corr_integer(xp, fft, fixed_e, moving_e)
+
+    return shift_y, shift_x
+
+def apply_register_images_shifts(xp, image, shift_y, shift_x):
+
+    return xp.roll(xp.roll(image,shift_y, axis=-2),shift_x, axis=-1)
+
+    
+def _preprocess(xp, img, mask=None, gaussian_sigma=None, gaussian_filter=None):
+    """Convert to float32, optionally smooth, subtract masked mean, and apply mask."""
+    out = img.astype(xp.float32, copy=False)
+
+    if gaussian_sigma is not None and gaussian_sigma > 0:
+        out = gaussian_filter(out, sigma=gaussian_sigma)
+
+    if mask is None:
+        return out - xp.mean(out)
+
+    # Usually faster and cleaner than out[mask] on GPU because it avoids compaction.
+    mask_f = mask.astype(xp.float32, copy=False)
+    mean = xp.sum(out * mask_f) / xp.maximum(xp.sum(mask_f), 1.0)
+
+    return (out - mean) * mask_f
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 _EPS = 1e-12
 
 
