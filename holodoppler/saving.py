@@ -6,10 +6,24 @@ import json
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
+import os
 
 from .utils import resize_slicewise, normalize_to_uint8, unsharp_projection, _pad_to_even
 from .get_version import get_version
 
+def save_preview_images(save_dict, save_dir, prefix="debug"):
+    os.makedirs(save_dir, exist_ok=True)
+    for key, img in save_dict.items():
+        if img is None:
+            continue
+        if img.dtype != np.uint8:
+            img_min, img_max = np.min(img), np.max(img)
+            if img_max > img_min:
+                img_np = (img - img_min) / (img_max - img_min + 1e-12)
+            img_np = (img_np * 255).astype(np.uint8)
+        filename = os.path.join(save_dir, f"{prefix}_{key}.png")
+        print("Saving : ",filename)
+        iio.imwrite(filename, img_np)
 
 def save_outputs(
     file_reader,

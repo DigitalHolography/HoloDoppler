@@ -8,7 +8,7 @@ from holodoppler.moments import moment
 from holodoppler.registration import register_trs, apply_registration, apply_registration3D
 from holodoppler.plotting import DebugPlotterManager
 from holodoppler.backend import BackendManager
-from holodoppler.file_io import FileReaderFactory, CineFileReader, HoloFileReader
+from holodoppler.file_reader import FileReaderFactory, CineFileReader, HoloFileReader
 
 import os
 import time

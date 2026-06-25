@@ -5,7 +5,6 @@ File I/O for .holo and .cine files
 import os
 import cinereader
 from numba import njit, prange
-import matplotlib.pyplot as plt
 import json
 import traceback
 from typing import Optional, Iterator, Tuple, List

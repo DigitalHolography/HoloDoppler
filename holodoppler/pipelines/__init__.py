@@ -9,9 +9,13 @@ holodoppler.pipelines - Holographic Doppler processing library - pipelines lib
 
 from .main_pipeline_xp_on_ram_dp import process_moments, preview_process_moments
 
+from .main_simple import preview_simple, process_simple
+
 pipelines = {
     "main": process_moments,
     "preview_main": preview_process_moments,
+    "preview_simple" : preview_simple,
+    "simple" : process_simple
     # "dask_xp": process_moments_classical,
     # "template": process_template,
     # "daskxp2" : process_moments_daskxp2,
