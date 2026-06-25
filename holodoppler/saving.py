@@ -329,6 +329,36 @@ def _save_metadata(target_dir, file_reader, parameters):
     elapsed = time.time() - start_time
     print(f"Metadata saved in {elapsed:.2f} seconds")
 
+def _save_h5_2(target_dir, save_map, parameters):
+    """
+    Saves raw data to HDF5.
+    """
+    start_time = time.time()
+    
+    target_dir_name = target_dir.name if target_dir.name else "output"
+    h5_path = target_dir / "h5" / f"{target_dir_name}_output.h5"
+    
+    print(f"Saving H5 to: {h5_path}")
+    
+    # No compression for faster writing and lower memory usage
+    compression = None
+    
+    with h5py.File(h5_path, "w") as f:
+        
+        for k, v in save_map.items():
+            f.create_dataset(
+                k,
+                data=v,
+                compression=compression,
+            )
+        
+        # Save metadata
+        f.create_dataset("HD_parameters", data=json.dumps(parameters))
+        f.create_dataset("HD_version", data=f"py{get_version()}")
+    
+    elapsed = time.time() - start_time
+    file_size = h5_path.stat().st_size / (1024**3)
+    print(f"H5 saved in {elapsed:.1f} seconds (file size: {file_size:.2f} GB)")
 
 def _save_h5(target_dir, vid, parameters, reg_list, coefs_list):
     """

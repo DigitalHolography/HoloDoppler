@@ -1,4 +1,4 @@
-from holodoppler.saving import save_preview_images, _get_default_output_path, save_outputs, _save_videos
+from holodoppler.saving import save_preview_images, _get_default_output_path, save_outputs, _save_videos, _save_h5_2, _create_directories, _save_pngs, _save_pngs, _save_metadata
 from holodoppler.propagation import fresnel_transform, fresnel_transform_with_phase, angular_spectrum_transform, angular_spectrum_transform_with_phase
 from holodoppler.shack_hartmann import construct_subapertures_fresnel, construct_subapertures_angular, calculate_displacements, calculate_displacements_graph_laplacian
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum, southwell_phase_integration
@@ -297,10 +297,25 @@ def process_simple(file_path, parameters):
     del output
     cp.get_default_memory_pool().free_all_blocks()
 
+
+    target_dir = _get_default_output_path(file_reader.file_path)
+
+    _create_directories(target_dir, "FULL")
+
+    _save_h5_2(target_dir, output_np, parameters)
+
     output_np = {k: normalize_to_uint8(v) for k, v in output_np.items()}
 
-    _save_videos( _get_default_output_path(file_reader.file_path) / "process", output_np, 30)
-
     
+
+    # Save videos (sequential to avoid encoding conflicts)
+    _save_videos( target_dir, output_np, 30)
+    
+    # Save PNGs (parallel)
+    _save_pngs( target_dir, output_np)
+    
+    # Save metadata (fast)
+    _save_metadata(target_dir, file_reader, parameters)
+
     
     
