@@ -2,7 +2,7 @@ from holodoppler.saving import save_preview_images, _get_default_output_path, sa
 from holodoppler.propagation import fresnel_transform, fresnel_transform_with_phase, angular_spectrum_transform, angular_spectrum_transform_with_phase
 from holodoppler.shack_hartmann import construct_subapertures_fresnel, construct_subapertures_angular, calculate_displacements, calculate_displacements_graph_laplacian
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum, southwell_phase_integration
-from holodoppler.utils import resize_slicewise, zoom_slicewise_fast, pad_array_centrally, gaussian_flatfield, update_from_footer, normalize_to_uint8
+from holodoppler.utils import resize_slicewise, zoom_slicewise_fast, pad_array_centrally, gaussian_flatfield, update_from_footer, normalize_to_uint8, square_cupy
 from holodoppler.filtering import svd_filter, frequency_symmetric_filtering, fourier_time_transform, corner_compensation
 from holodoppler.moments import moment
 from holodoppler.registration import register_images_shifts, apply_register_images_shifts, register_trs, apply_registration, apply_registration3D
@@ -13,6 +13,7 @@ from holodoppler.file_reader import FileReaderFactory, CineFileReader, HoloFileR
 
 import cupy as cp
 from cupyx.scipy.ndimage import gaussian_filter
+from cupyx.scipy.ndimage import zoom
 from tqdm import tqdm
 
 from collections import defaultdict
@@ -192,7 +193,6 @@ def preview_simple(file_path, parameters):
     save_preview_images(res_np, _get_default_output_path(file_reader.file_path) / "preview")
 
 
-
 def process_simple(file_path, parameters):
     file_reader = FileReaderFactory.create(file_path)
     
@@ -291,12 +291,14 @@ def process_simple(file_path, parameters):
 
     output = {k: cp.stack(v, axis=0) for k, v in output.items()}
 
+    if parameters.get("square", False):
+        output = {k: square_cupy(v) for k, v in output.items()}
+
     # transfer to cpu
     output_np = {k: cp.asnumpy(v) for k, v in output.items()}
 
     del output
     cp.get_default_memory_pool().free_all_blocks()
-
 
     target_dir = _get_default_output_path(file_reader.file_path)
 
@@ -305,8 +307,6 @@ def process_simple(file_path, parameters):
     _save_h5_2(target_dir, output_np, parameters)
 
     output_np = {k: normalize_to_uint8(v) for k, v in output_np.items()}
-
-    
 
     # Save videos (sequential to avoid encoding conflicts)
     _save_videos( target_dir, output_np, 30)

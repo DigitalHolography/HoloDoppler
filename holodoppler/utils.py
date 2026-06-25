@@ -20,6 +20,18 @@ import json
 
 from functools import cache
 
+# Assuming video_frames is a GPU array of shape (n_frames, height, width, channels)
+def resize_cupy(video_frames, scale_factor):
+    # zoom works on spatial dimensions only
+    return zoom(video_frames, (1, scale_factor, scale_factor, 1), order=1)
+
+# For exact dimensions instead of scale
+def square_cupy(video_frames):
+    h, w = video_frames.shape[1], video_frames.shape[2]
+    m = max(h,w)
+    scale_h = m / h
+    scale_w = m / w
+    return zoom_gpu(video_frames, (1, scale_h, scale_w), order=1)
 
 def normalize_to_uint8(data):
     """
