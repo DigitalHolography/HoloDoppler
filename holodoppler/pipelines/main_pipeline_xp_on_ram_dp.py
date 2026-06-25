@@ -2,8 +2,8 @@ from holodoppler.saving import save_outputs
 from holodoppler.propagation import fresnel_transform, fresnel_transform_with_phase, angular_spectrum_transform, angular_spectrum_transform_with_phase
 from holodoppler.shack_hartmann import construct_subapertures_fresnel, construct_subapertures_angular, calculate_displacements, calculate_displacements_graph_laplacian
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum, southwell_phase_integration
-from holodoppler.utils import resize_slicewise, zoom_slicewise_fast, resize_fft2_slicewise, resize_matlab_slicewise, pad_array_centrally, gaussian_flatfield, update_from_footer
-from holodoppler.filtering import svd_filter, svd_filter_stdmeanratio, frequency_symmetric_filtering, fourier_time_transform, corner_compensation
+from holodoppler.utils import resize_slicewise, zoom_slicewise_fast, pad_array_centrally, gaussian_flatfield, update_from_footer
+from holodoppler.filtering import svd_filter, frequency_symmetric_filtering, fourier_time_transform, corner_compensation
 from holodoppler.moments import moment
 from holodoppler.registration import register_trs, apply_registration, apply_registration3D
 from holodoppler.plotting import DebugPlotterManager

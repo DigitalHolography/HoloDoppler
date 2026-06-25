@@ -3,7 +3,7 @@ Utility functions for array operations
 """
 
 import numpy as np
-from matlab_imresize import imresize
+
 from scipy.ndimage import gaussian_filter as np_gaussian_filter
 from scipy.ndimage import gaussian_filter1d
 import numpy as np
@@ -273,22 +273,22 @@ def resize_fft2_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
     # 6. Restore original axes positions
     return np.moveaxis(res_t, (0, 1), axes)
 
-def resize_matlab_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np):
-    """Spatial resize. Loops over remaining dimensions since imresize is 2D."""
-    img_t = np.moveaxis(img, axes, (0, 1))
-    h, w = img_t.shape[:2]
+# def resize_matlab_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np):
+#     """Spatial resize. Loops over remaining dimensions since imresize is 2D."""
+#     img_t = np.moveaxis(img, axes, (0, 1))
+#     h, w = img_t.shape[:2]
 
-    # Reshape to (H, W, -1) to loop through all other dimensions as one slice
-    flat_img = img_t.reshape(h, w, -1)
-    out = xp.empty((new_h, new_w, flat_img.shape[-1]), dtype=img.dtype)
+#     # Reshape to (H, W, -1) to loop through all other dimensions as one slice
+#     flat_img = img_t.reshape(h, w, -1)
+#     out = xp.empty((new_h, new_w, flat_img.shape[-1]), dtype=img.dtype)
 
-    for i in range(flat_img.shape[-1]):
-        # Assuming imresize is a provided utility function
-        out[:, :, i] = imresize(flat_img[:, :, i], output_shape=(new_h, new_w))
+#     for i in range(flat_img.shape[-1]):
+#         # Assuming imresize is a provided utility function
+#         out[:, :, i] = imresize(flat_img[:, :, i], output_shape=(new_h, new_w))
 
-    # Reshape back to target axes and move axes back
-    res_t = out.reshape(new_h, new_w, *img_t.shape[2:])
-    return np.moveaxis(res_t, (0, 1), axes)
+#     # Reshape back to target axes and move axes back
+#     res_t = out.reshape(new_h, new_w, *img_t.shape[2:])
+#     return np.moveaxis(res_t, (0, 1), axes)
 
 
 def pad_array_centrally(arr, new_shape, xp):
