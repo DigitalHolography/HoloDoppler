@@ -6,7 +6,6 @@ import numpy as np
 from matlab_imresize import imresize
 from scipy.ndimage import gaussian_filter as np_gaussian_filter
 from scipy.ndimage import gaussian_filter1d
-import numpy as np
 from scipy.ndimage import zoom as zoom_cpu
 import cupy as cp
 from cupyx.scipy.ndimage import zoom as zoom_gpu
@@ -533,7 +532,7 @@ def complex_to_color_simple(complex_img):
     hue = (phase + np.pi) / (2 * np.pi)
     
     # Create HSV image
-    hsv = np.stack([hue, np.ones_like(hue), amplitude], axis=-1)
+    # hsv = np.stack([hue, np.ones_like(hue), amplitude], axis=-1)
     
     # Convert to RGB manually (simpler HSV to RGB)
     rgb = np.zeros((*complex_img.shape, 3))
@@ -652,6 +651,64 @@ def unsharp_projection(
 
     projection = acc / nt
     return xp.asnumpy(projection)
+
+def stretchlim(data, low_percent=1, high_percent=99):
+    """
+    Compute lower and upper intensity limits for contrast stretching.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Input array. Can be 2D (H,W), 3D (T,H,W) or 4D (T,H,W,C).
+        For 4D the limits are computed per channel (last axis).
+    low_percent, high_percent : float
+        Percentiles to use as limits (default: 1% and 99%).
+
+    Returns
+    -------
+    low, high : float or ndarray
+        If data is 4D, returns arrays of shape (C,), else scalars.
+    """
+    # If 4D, compute percentiles per channel
+    if data.ndim == 4:
+        # Shape (T, H, W, C) – collapse all but channel
+        flat = data.reshape(-1, data.shape[-1])
+        low = np.nanpercentile(flat, low_percent, axis=0)
+        high = np.nanpercentile(flat, high_percent, axis=0)
+    else:
+        flat = data.ravel()
+        low = np.nanpercentile(flat, low_percent)
+        high = np.nanpercentile(flat, high_percent)
+    return low, high
+
+
+def imadjust(data, low, high, gamma=1.0):
+    """
+    Adjust image contrast via linear stretch and gamma correction.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        Input array (any shape).
+    low, high : float or array-like
+        Lower and upper limits. If data is 4D and low/high are arrays,
+        they must match the channel dimension.
+    gamma : float
+        Gamma correction factor (1.0 = linear).
+
+    Returns
+    -------
+    adjusted : np.ndarray
+        Array with values in [0, 1] (or [0,1] per channel).
+    """
+    # Clip to limits
+    data_clipped = np.clip(data, low, high)
+    # Scale to [0, 1]
+    data_scaled = (data_clipped - low) / (high - low + 1e-12)
+    # Gamma correction
+    if gamma != 1.0:
+        data_scaled = np.power(data_scaled, gamma)
+    return data_scaled
     
 # ------------------------------------------------------------------
 # Footer parameter update
