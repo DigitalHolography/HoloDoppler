@@ -185,7 +185,7 @@ def _process_shack_hartmann_phase(parameters, U, ny, nx, output_dict = None):
 
     return phase_term
 
-def preview_sliding(file_path, parameters):
+def preview(file_path, parameters):
     file_reader = FileReaderFactory.create(file_path)
     
     if file_reader.ext == ".holo":
@@ -221,9 +221,10 @@ def preview_sliding(file_path, parameters):
                 U_tot += U
     del U
 
+    ny, nx = frames.shape[-2:]
     phase_term = None
     if parameters.get("shack_hartmann", False):
-        phase_term = _process_shack_hartmann_phase(parameters, U_tot, output_dict=res_tot)
+        phase_term = _process_shack_hartmann_phase(parameters, U_tot, ny, nx, output_dict=res_tot)
 
     for n in range(time_slide_repetition): 
 
@@ -259,7 +260,7 @@ def preview_sliding(file_path, parameters):
     save_preview_images(res_np, _get_default_output_path(file_reader.file_path) / "preview")
 
 
-def process_sliding(file_path, parameters):
+def process(file_path, parameters):
     file_reader = FileReaderFactory.create(file_path)
     
     if file_reader.ext == ".holo":
@@ -318,7 +319,6 @@ def process_sliding(file_path, parameters):
         res_tot = {}
         U_tot = None
 
-
         for n in range(time_slide_repetition):
             
             # Start async H2D transfer for this batch
@@ -326,6 +326,7 @@ def process_sliding(file_path, parameters):
 
                 frames = file_reader.read_frames(first_frame = first_frame + i * time_stride + n * time_slide_delay, batch_size = time_window)
                 d_next = cp.asarray(frames)
+                del frames
                 h2d_event_next = cp.cuda.Event()
                 h2d_event_next.record(h2d_stream)
         
@@ -337,7 +338,7 @@ def process_sliding(file_path, parameters):
                 # Compute current batch on compute stream
                 with compute_stream:
                     if parameters.get("shack_hartmann", False):
-                        U = _process_shack_hartmann_U(parameters, frames)
+                        U = _process_shack_hartmann_U(parameters, d_current)
                         if U_tot is None:
                             U_tot = U
                         else:
@@ -347,10 +348,11 @@ def process_sliding(file_path, parameters):
             h2d_event_current = h2d_event_next
 
         del U
+        ny, nx = d_current.shape[-2:]
 
         phase_term = None
         if parameters.get("shack_hartmann", False):
-            phase_term = _process_shack_hartmann_phase(parameters, U_tot)
+            phase_term = _process_shack_hartmann_phase(parameters, U_tot, ny, nx)
 
         for n in range(time_slide_repetition):
 

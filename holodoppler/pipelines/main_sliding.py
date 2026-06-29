@@ -179,7 +179,7 @@ def _process_shack_hartmann(parameters, frames, output_dict = None):
 
     return phase_term
 
-def preview_sliding(file_path, parameters):
+def preview(file_path, parameters):
     file_reader = FileReaderFactory.create(file_path)
     
     if file_reader.ext == ".holo":
@@ -235,7 +235,7 @@ def preview_sliding(file_path, parameters):
     save_preview_images(res_np, _get_default_output_path(file_reader.file_path) / "preview")
 
 
-def process_sliding(file_path, parameters):
+def process(file_path, parameters):
     file_reader = FileReaderFactory.create(file_path)
     
     if file_reader.ext == ".holo":

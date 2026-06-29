@@ -9,16 +9,19 @@ holodoppler.pipelines - Holographic Doppler processing library - pipelines lib
 
 from .main_pipeline_xp_on_ram_dp import process_moments, preview_process_moments
 
-from .main_simple import preview_simple, process_simple
-from .main_sliding import preview_sliding, process_sliding
+from . import main_simple
+from . import main_sliding
+from . import main_sliding_shack_hart
 
 pipelines = {
     "main": process_moments,
     "preview_main": preview_process_moments,
-    "simple" : process_simple,
-    "preview_simple" : preview_simple,
-    "sliding" : process_sliding,
-    "preview_sliding" : preview_sliding
+    "simple" : main_simple.process,
+    "preview_simple" : main_simple.preview,
+    "sliding" : main_sliding.process,
+    "preview_sliding" : main_sliding.preview,
+    "sliding_shack_hartmann" : main_sliding_shack_hart.process,
+    "preview_sliding_shack_hartmann" : main_sliding_shack_hart.preview
     # "dask_xp": process_moments_classical,
     # "template": process_template,
     # "daskxp2" : process_moments_daskxp2,

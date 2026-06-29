@@ -1,4 +1,4 @@
-pipeline_name: "sliding"
+pipeline_name: "sliding_shack_hartmann"
 # Core parameters
 time_window: 256
 time_stride: 256
