@@ -1,5 +1,7 @@
 pipeline_name: "simple"
 
+
+
 # Core parameters
 batch_size: 256
 first_frame: 0
@@ -42,7 +44,7 @@ corner_compensation: false
 square: false
 
 # Shack-Hartmann wavefront sensing
-shack_hartmann: false  # Enable Shack-Hartmann processing
+shack_hartmann: true  # Enable Shack-Hartmann processing
 shack_hartmann_nx_subap: 5  # Number of subapertures in X
 shack_hartmann_ny_subap: 5  # Number of subapertures in Y
 shack_hartmann_svd_threshold: 10

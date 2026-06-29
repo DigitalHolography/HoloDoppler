@@ -244,8 +244,11 @@ def _save_projections(target_dir, save_map, parameters, backend):
 def _save_videos(target_dir, uint8_map, fps):
     """Save all videos as MP4 and AVI"""
     start_time = time.time()
-    
+    completed = 0
     for name, uint8_data in uint8_map.items():
+
+        if uint8_data.ndim !=3 and uint8_data.ndim !=4 : #check to avoid failure for outputs that are not videos exemple : list of coefficients
+            continue
         # MP4
         mp4_path = target_dir / "mp4" / f"{name}.mp4"
         _write_video_fast(
@@ -266,9 +269,11 @@ def _save_videos(target_dir, uint8_map, fps):
             codec="mjpeg",
             quality=8,
         )
+
+        completed += 1
     
     elapsed = time.time() - start_time
-    print(f"Videos saved in {elapsed:.1f} seconds ({len(uint8_map)} videos)")
+    print(f"Videos saved in {elapsed:.1f} seconds ({completed} videos)")
 
 
 def _save_pngs(target_dir, uint8_map):
@@ -278,6 +283,8 @@ def _save_pngs(target_dir, uint8_map):
     with ThreadPoolExecutor(max_workers=8) as executor:
         tasks = []
         for name, uint8_data in uint8_map.items():
+            if uint8_data.ndim !=3 and uint8_data.ndim !=4 : #check to avoid failure for outputs that are not videos exemple : list of coefficients
+                continue
             png_path = target_dir / "png" / f"{name}.png"
             mean_frame = np.mean(uint8_data, axis=0).astype(np.uint8)
             tasks.append(executor.submit(iio.imwrite, png_path, mean_frame))

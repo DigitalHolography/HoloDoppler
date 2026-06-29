@@ -12,13 +12,14 @@ from holodoppler.file_reader import FileReaderFactory, CineFileReader, HoloFileR
 
 
 import cupy as cp
+import numpy as np
 from cupyx.scipy.ndimage import gaussian_filter
 from cupyx.scipy.ndimage import zoom
 from tqdm import tqdm
 
 from collections import defaultdict
 
-def _process_batch(parameters, frames, phase_term = None):
+def _process_batch(parameters, frames, phase_term = None, output_dict = None):
     xp = cp
     fft = cp.fft
     nt_sub = frames.shape[0]
@@ -52,7 +53,8 @@ def _process_batch(parameters, frames, phase_term = None):
 
     del holograms  # Free memory early 
 
-    d = {}
+    if output_dict is None:
+        output_dict = {}
 
     # Temporal transform
     if parameters.get("temporal_transformation") == "FourierTransform":
@@ -73,73 +75,90 @@ def _process_batch(parameters, frames, phase_term = None):
         psd = corner_compensation(xp, psd)
 
     # Moments
-    d["M0"] = moment(xp, psd[idxs], freqs, 0)
-    d["M1"] = moment(xp, psd[idxs], freqs, 1)
-    d["M2"] = moment(xp, psd[idxs], freqs, 2)
-    d["M0ff"] = gaussian_flatfield(d["M0"], parameters.get("registration_flatfield_gw", 1.0), gaussian_filter)
+    output_dict["M0"] = moment(xp, psd[idxs], freqs, 0)
+    output_dict["M1"] = moment(xp, psd[idxs], freqs, 1)
+    output_dict["M2"] = moment(xp, psd[idxs], freqs, 2)
+    output_dict["M0ff"] = gaussian_flatfield(output_dict["M0"], parameters.get("registration_flatfield_gw", 1.0), gaussian_filter)
 
     # Frequency bands
     for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
         idxs_band, _ = frequency_symmetric_filtering(xp, fft, nt_sub, parameters["sampling_freq"], f1, f2)
         band = xp.mean(psd[idxs_band], axis=0)
-        d[f"band_{k}_{f1}_{f2}"] = band
+        output_dict[f"band_{k}_{f1}_{f2}"] = band
 
-    return d
-
-def _process_shack_hartmann(parameters, frames):
+def _process_shack_hartmann(parameters, frames, output_dict = None):
     
     fft = cp.fft
     nt, ny, nx = frames.shape
-    debug = {}
 
     prop_method = parameters["spatial_propagation"]
     
     
     if prop_method == "Fresnel":
         U = construct_subapertures_fresnel(
-            xp, fft, frames, parameters["wavelength"], parameters["z"], parameters["pixel_pitch"],
+            cp, fft, frames, parameters["wavelength"], parameters["z"], parameters["pixel_pitch"],
             parameters["low_freq"], parameters.get("high_freq"), parameters["sampling_freq"],
-            frames_sub.shape[0], parameters["shack_hartmann_nx_subap"], parameters["shack_hartmann_ny_subap"],
+            frames.shape[0], parameters["shack_hartmann_nx_subap"], parameters["shack_hartmann_ny_subap"],
             parameters["shack_hartmann_svd_threshold"]
         )
     elif prop_method == "AngularSpectrum":
         U = construct_subapertures_angular(
-            xp, fft, frames, parameters["wavelength"],
+            cp, fft, frames, parameters["wavelength"],
             parameters["z"], parameters["pixel_pitch"], parameters["low_freq"], parameters.get("high_freq"),
-            parameters["sampling_freq"], frames_sub.shape[0], parameters["shack_hartmann_nx_subap"],
+            parameters["sampling_freq"], frames.shape[0], parameters["shack_hartmann_nx_subap"],
             parameters["shack_hartmann_ny_subap"], parameters["shack_hartmann_svd_threshold"]
         )
-        
-    del U, frames  # Memory footprint reduction
 
     # Displacement estimation
     if parameters.get("shack_hartmann_graph_laplacian", False): # Use all the sub aps
         shifts_y, shifts_x = calculate_displacements_graph_laplacian(
-            xp, fft, U_subaps,
+            cp, fft, U,
             pupil_threshold=parameters.get("shack_hartmann_pupil_threshold", 1.0),
             deviation_threshold=parameters.get("shack_hartmann_deviation_threshold", 3.0),
             shifts_range=parameters.get("shack_hartmann_shifts_pixel_range_threshold", 20.0)
         )
     else: # Use only the shifts to the central sub ap
-        ny_s, nx_s, Ny, Nx = U_subaps.shape
+        ny_s, nx_s, Ny, Nx = U.shape
         shifts_y, shifts_x = calculate_displacements(
-            xp, fft, U_subaps,
+            cp, fft, U,
             pupil_threshold=parameters.get("shack_hartmann_pupil_threshold", 1.0),
             deviation_threshold=parameters.get("shack_hartmann_deviation_threshold", 3.0),
             shifts_range=parameters.get("shack_hartmann_shifts_pixel_range_threshold", 20.0)
         )
+
+    if output_dict is not None:
+
+        sy, sx, numy, numx = U.shape
+        U = cp.transpose(U, axes=(0,2,1,3))
+        output_dict["shack_hartmann_sub_images"] = cp.reshape(U,(numy*sy,numx*sx))
+
+    del U, frames  # Memory footprint reduction
 
     # Phase reconstruction
     phase = None
     if parameters.get("shack_hartmann_zernike_fit", True):
         if prop_method == "Fresnel":
             coefs, phase = fit_zernike_fresnel(
-                xp, ny, nx, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
+                cp, ny, nx, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
                 parameters["wavelength"], shifts_y, shifts_x, parameters.get("shack_hartmann_zernike_fit_modes")
             )
         elif prop_method == "AngularSpectrum":
             coefs, phase = fit_zernike_angular_spectrum(
-                xp, ny, nx, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
+                cp, ny, nx, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
+                parameters["wavelength"], parameters["z"], shifts_y, shifts_x, parameters.get("shack_hartmann_zernike_fit_modes")
+            )
+
+    # Phase reconstruction
+    phase = None
+    if parameters.get("shack_hartmann_zernike_fit", True):
+        if prop_method == "Fresnel":
+            coefs, phase = fit_zernike_fresnel(
+                cp, ny, nx, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
+                parameters["wavelength"], shifts_y, shifts_x, parameters.get("shack_hartmann_zernike_fit_modes")
+            )
+        elif prop_method == "AngularSpectrum":
+            coefs, phase = fit_zernike_angular_spectrum(
+                cp, ny, nx, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
                 parameters["wavelength"], parameters["z"], shifts_y, shifts_x, parameters.get("shack_hartmann_zernike_fit_modes")
             )
     # elif parameters.get("shack_hartmann_southwell_phase_integration", False):
@@ -147,14 +166,18 @@ def _process_shack_hartmann(parameters, frames):
     #         bm, ny, nx, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
     #         parameters["wavelength"], shifts_y, shifts_x
     #     )
+        if output_dict is not None:
+            output_dict["shack_hartmann_zernike_coefs"] = coefs
+            output_dict["shack_hartmann_wavefront_phase"] = phase
     else:
         phase = None
+
 
     # Phase correction term
     phase_term = None
     if phase is not None:
-        phase_term = xp.exp(-1j * phase)
-        phase_term = xp.nan_to_num(phase_term, nan=0.0)
+        phase_term = cp.exp(-1j * phase)
+        phase_term = cp.nan_to_num(phase_term, nan=0.0)
 
     return phase_term
 
@@ -176,12 +199,14 @@ def preview_simple(file_path, parameters):
     # transfer to gpu
     frames = cp.array(frames)
 
+    res = {}
+
     phase_term = None
     if parameters.get("shack_hartmann", False):
-        phase_term = _process_shack_hartmann(parameters, frames)
+        phase_term = _process_shack_hartmann(parameters, frames, output_dict=res)
 
     # calc on gpu
-    res = _process_batch(parameters, frames=frames, phase_term=phase_term)
+    _process_batch(parameters, frames=frames, phase_term=phase_term, output_dict=res)
 
     # transfer to cpu
     res_np = {k: cp.asnumpy(v) for k, v in res.items()}
@@ -256,11 +281,14 @@ def process_simple(file_path, parameters):
             
             # Compute current batch on compute stream
             with compute_stream:
+
+                res = {}
+
                 phase_term = None
                 if parameters.get("shack_hartmann", False):
-                    phase_term = _process_shack_hartmann(parameters, d_current)
+                    phase_term = _process_shack_hartmann(parameters, d_current, output_dict=res)
 
-                res = _process_batch(parameters, d_current, phase_term=phase_term)
+                _process_batch(parameters, d_current, phase_term=phase_term, output_dict=res)
 
                 if M0_reg is None and parameters["image_registration"]: #first batch is used for fixed batch
                     M0_reg = res["M0ff"]
@@ -269,7 +297,10 @@ def process_simple(file_path, parameters):
                     shift_y, shift_x = register_images_shifts(cp, cp.fft, M0_reg, res["M0ff"], radius=0.7, gaussian_sigma=0, gaussian_filter=gaussian_filter)
                     
                 for k, v in res.items():
-                    res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
+                    if k in ["M0ff","M0","M1","M2"] or "band_" in k : #select the outputs that need the registration from M0ff applied
+                        res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
+
+                res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
 
                 compute_event = cp.cuda.Event()
                 compute_event.record(compute_stream)
@@ -304,15 +335,17 @@ def process_simple(file_path, parameters):
 
     _create_directories(target_dir, "FULL")
 
+    # save_to_h5_list = ["M0ff","M0","M1","M2","shack_hartmann_zernike_coefs", "shack_hartmann_sub_images"] 
+
     _save_h5_2(target_dir, output_np, parameters)
 
     output_np = {k: normalize_to_uint8(v) for k, v in output_np.items()}
 
     # Save videos (sequential to avoid encoding conflicts)
-    _save_videos( target_dir, output_np, 30)
+    _save_videos(target_dir, output_np, 30)
     
     # Save PNGs (parallel)
-    _save_pngs( target_dir, output_np)
+    _save_pngs(target_dir, output_np)
     
     # Save metadata (fast)
     _save_metadata(target_dir, file_reader, parameters)
