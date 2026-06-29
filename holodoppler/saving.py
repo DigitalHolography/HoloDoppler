@@ -16,6 +16,8 @@ def save_preview_images(save_dict, save_dir, prefix="debug"):
     for key, img in save_dict.items():
         if img is None:
             continue
+        if img.ndim not in [2,3]:
+            continue
         if img.dtype != np.uint8:
             img_min, img_max = np.min(img), np.max(img)
             if img_max > img_min:
