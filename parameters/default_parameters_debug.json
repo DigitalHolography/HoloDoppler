@@ -41,7 +41,7 @@
   ],
   "shack_hartmann_southwell_phase_integration": false,
   "temporal_transformation": "FourierTransform",
-  "sampling_freq": 37000,
+  "sampling_freq": 37037,
   "low_freq": 6000,
   "high_freq": 18300,
   "frequency_bands": [
@@ -65,6 +65,12 @@
   "flip_y": false,
   "debug": false,
   "tictoc": false,
+  "contrast_adjustment": {
+    "enabled": true,
+    "low_percent": 1,
+    "high_percent": 99,
+    "gamma": 1.0
+  },
   "debug_plot_parameters": {
     "spectrumloglog": {
       "ylim": [
@@ -90,12 +96,6 @@
     },
     "shifts": {
       "scale": 30
-    },
-    "contrast_adjustment": {
-      "enabled": true,
-      "low_percent": 1,
-      "high_percent": 99,
-      "gamma": 1.0
     }
   }
 }
