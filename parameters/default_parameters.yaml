@@ -28,7 +28,7 @@ sampling_freq: "use_holovibes"  # Sampling frequency in Hz
 low_freq: 6000  # Low frequency cutoff in Hz
 high_freq: "use_holovibes"  # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
 
-# Frequency bands for analysis
+# Frequency bands for different cutoffs of the psd in Hz. It will give the average of the psd in the symmetric frequency range
 frequency_bands:
   - [3000, 9000]
   - [9000, 18000]
@@ -48,9 +48,9 @@ shack_hartmann: true  # Enable Shack-Hartmann processing
 shack_hartmann_nx_subap: 5  # Number of subapertures in X
 shack_hartmann_ny_subap: 5  # Number of subapertures in Y
 shack_hartmann_svd_threshold: 10
-shack_hartmann_pupil_threshold: 1.5
-shack_hartmann_deviation_threshold: 10.0
-shack_hartmann_shifts_pixel_range_threshold: 1000.0
+shack_hartmann_pupil_threshold: 1.5 # Rejection of the side sub images if they are too
+shack_hartmann_deviation_threshold: 10.0 # Max displacement accepted in number of the std
+shack_hartmann_shifts_pixel_range_threshold: 1000.0 # Max displacement accepted in pixels
 shack_hartmann_graph_laplacian: true  # Use graph Laplacian method
-shack_hartmann_zernike_fit: true
-shack_hartmann_zernike_fit_modes: [4,5,6]  # Number of Zernike modes to fit
+shack_hartmann_zernike_fit: true # Other option is shack_hartmann_southwell_integration but not really implemented yet because it is not stable
+shack_hartmann_zernike_fit_modes: [4,5,6]  # Number of the Zernike modes to use in the fit in Null ordering

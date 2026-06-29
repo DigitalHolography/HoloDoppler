@@ -1,20 +1,18 @@
-from holodoppler.saving import save_preview_images, _get_default_output_path, save_outputs, _save_videos, _save_h5_2, _create_directories, _save_pngs, _save_pngs, _save_metadata
+from holodoppler.saving import save_preview_images, _get_default_output_path, _save_videos, _save_h5_2, _create_directories, _save_pngs, _save_metadata
 from holodoppler.propagation import fresnel_transform, fresnel_transform_with_phase, angular_spectrum_transform, angular_spectrum_transform_with_phase
 from holodoppler.shack_hartmann import construct_subapertures_fresnel, construct_subapertures_angular, calculate_displacements, calculate_displacements_graph_laplacian
-from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum, southwell_phase_integration
-from holodoppler.utils import resize_slicewise, zoom_slicewise_fast, pad_array_centrally, gaussian_flatfield, update_from_footer, normalize_to_uint8, square_cupy
+from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum
+from holodoppler.utils import gaussian_flatfield, update_from_footer, normalize_to_uint8, square_cupy
 from holodoppler.filtering import svd_filter, frequency_symmetric_filtering, fourier_time_transform, corner_compensation
 from holodoppler.moments import moment
-from holodoppler.registration import register_images_shifts, apply_register_images_shifts, register_trs, apply_registration, apply_registration3D
-from holodoppler.plotting import DebugPlotterManager
-from holodoppler.backend import BackendManager
-from holodoppler.file_reader import FileReaderFactory, CineFileReader, HoloFileReader
+from holodoppler.registration import register_images_shifts, apply_register_images_shifts
+from holodoppler.file_reader import FileReaderFactory
 
 
 import cupy as cp
-import numpy as np
+# import numpy as np
 from cupyx.scipy.ndimage import gaussian_filter
-from cupyx.scipy.ndimage import zoom
+# from cupyx.scipy.ndimage import zoom
 from tqdm import tqdm
 
 from collections import defaultdict
@@ -263,8 +261,6 @@ def process_simple(file_path, parameters):
     
     # Start reading frames
     for i in tqdm(range(num_batch)):
-
-
         
         # Start async H2D transfer for this batch
         with h2d_stream:
@@ -335,7 +331,7 @@ def process_simple(file_path, parameters):
 
     _create_directories(target_dir, "FULL")
 
-    # save_to_h5_list = ["M0ff","M0","M1","M2","shack_hartmann_zernike_coefs", "shack_hartmann_sub_images"] 
+    # save_to_h5_list = ["M0ff","M0","M1","M2","shack_hartmann_zernike_coefs", "shack_hartmann_sub_images"] "_bands"
 
     _save_h5_2(target_dir, output_np, parameters)
 
