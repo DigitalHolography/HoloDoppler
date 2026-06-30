@@ -15,6 +15,9 @@ from cupyx.scipy.ndimage import gaussian_filter
 # from cupyx.scipy.ndimage import zoom
 from tqdm import tqdm
 
+from pathlib import Path
+
+
 from collections import defaultdict
 
 def _process_batch(parameters, frames, phase_term = None, output_dict = None):
@@ -328,6 +331,9 @@ def process(file_path, parameters):
     cp.get_default_memory_pool().free_all_blocks()
 
     target_dir = _get_default_output_path(file_reader.file_path)
+
+    if "saving_to_folder" in parameters:
+        target_dir = Path(parameters["saving_to_folder"])
 
     _create_directories(target_dir, "FULL")
 
