@@ -145,31 +145,37 @@ class UI(BaseTk):
     def select_parameter_file(self, path: Path) -> None:
         try:
             selected_path = self.store.select_parameters(path)
-        except Exception as exc:
-            messagebox.showerror("Settings", str(exc), parent=self)
-            return
-        self.advanced.refresh_parameter_choices(load_selected=True)
-        self.minimal.set_parameter_label(self.store.current_parameters_label())
-        self._set_status(f"Selected settings: {selected_path.name}. Press Load to use it.")
-
-    def import_parameter_file(self, path: Path) -> None:
-        try:
-            imported_path = self.store.import_parameters(path)
-        except Exception as exc:
-            messagebox.showerror("Settings", str(exc), parent=self)
-            return
-        self.advanced.refresh_parameter_choices(load_selected=True)
-        self.minimal.set_parameter_label(self.store.current_parameters_label())
-        self._set_status(f"Imported settings: {imported_path.name}. Press Load to use it.")
-
-    def load_session_parameters(self, data: dict[str, Any]) -> None:
-        try:
-            loaded_path = self.store.save_loaded_parameters(data)
+            data = self.store.load_parameters(selected_path)
+            self.store.save_loaded_parameters(data)
         except Exception as exc:
             messagebox.showerror("Settings", str(exc), parent=self)
             return
         self.session_parameters = copy.deepcopy(data)
-        self._set_status(f"Loaded settings: {loaded_path.name}")
+        self.advanced.refresh_parameter_choices(load_selected=True)
+        self.minimal.set_parameter_label(self.store.current_parameters_label())
+        self._set_status(f"Loaded settings: {selected_path.name}")
+
+    def import_parameter_file(self, path: Path) -> None:
+        try:
+            imported_path = self.store.import_parameters(path)
+            data = self.store.load_parameters(imported_path)
+            self.store.save_loaded_parameters(data)
+        except Exception as exc:
+            messagebox.showerror("Settings", str(exc), parent=self)
+            return
+        self.session_parameters = copy.deepcopy(data)
+        self.advanced.refresh_parameter_choices(load_selected=True)
+        self.minimal.set_parameter_label(self.store.current_parameters_label())
+        self._set_status(f"Imported and loaded settings: {imported_path.name}")
+
+    def load_session_parameters(self, data: dict[str, Any], status_message: str | None = None) -> None:
+        try:
+            self.store.save_loaded_parameters(data)
+        except Exception as exc:
+            messagebox.showerror("Settings", str(exc), parent=self)
+            return
+        self.session_parameters = copy.deepcopy(data)
+        self._set_status(status_message or f"Loaded settings: {self.store.current_parameters_label()}")
 
     def save_current_parameters(self, data: dict[str, Any]) -> None:
         try:

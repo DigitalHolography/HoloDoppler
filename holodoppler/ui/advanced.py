@@ -222,7 +222,7 @@ class AdvancedView(ttk.Frame):
         self.raw_button = ttk.Button(controls, text="Edit JSON", command=self._edit_raw_json)
         self.raw_button.grid(row=0, column=7)
 
-        self.editor = SettingsEditor(frame, theme=self.theme)
+        self.editor = SettingsEditor(frame, theme=self.theme, on_apply=self._load_editor_values)
         self.editor.grid(row=1, column=0, sticky="nsew")
 
     def _sync_preview_selection_from_list(self, _event: tk.Event) -> None:
@@ -298,6 +298,9 @@ class AdvancedView(ttk.Frame):
             return
         self.controller.load_session_parameters(data)
 
+    def _load_editor_values(self, data: dict) -> None:
+        self.controller.load_session_parameters(data, status_message="Applied and loaded settings")
+
     def _save_current(self) -> None:
         try:
             data = self.current_editor_values()
@@ -328,5 +331,9 @@ class AdvancedView(ttk.Frame):
             title="Edit settings JSON",
             data=data,
             theme=self.theme,
-            on_apply=self.editor.load,
+            on_apply=self._apply_raw_json,
         )
+
+    def _apply_raw_json(self, data: dict[str, object]) -> None:
+        self.editor.load(data)
+        self.controller.load_session_parameters(data)

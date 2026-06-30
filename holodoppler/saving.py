@@ -11,6 +11,15 @@ import os
 from .utils import resize_slicewise, normalize_to_uint8, unsharp_projection, _pad_to_even
 from .get_version import get_version
 
+H5_FLOAT32_DATASETS = {"M0", "M0ff", "M1", "M2", "moment_0", "moment_0_ff", "moment_1", "moment_2"}
+
+
+def _h5_data(name, data):
+    if name in H5_FLOAT32_DATASETS:
+        return np.asarray(data, dtype=np.float32)
+    return data
+
+
 def save_preview_images(save_dict, save_dir, prefix="debug"):
     os.makedirs(save_dir, exist_ok=True)
     for key, img in save_dict.items():
@@ -357,7 +366,7 @@ def _save_h5_2(target_dir, save_map, parameters):
         for k, v in save_map.items():
             f.create_dataset(
                 k,
-                data=v,
+                data=_h5_data(k, v),
                 compression=compression,
             )
 
@@ -404,10 +413,10 @@ def _save_h5(target_dir, vid, parameters, reg_list, coefs_list):
 
     with h5py.File(h5_path, "w") as f:
         # Save moments
-        f.create_dataset("moment0", data=vid[:, 0, :, :], compression=compression)
-        f.create_dataset("moment1", data=vid[:, 1, :, :], compression=compression)
-        f.create_dataset("moment2", data=vid[:, 2, :, :], compression=compression)
-        f.create_dataset("moment0ff", data=vid[:, 3, :, :], compression=compression)
+        f.create_dataset("moment0", data=np.asarray(vid[:, 0, :, :], dtype=np.float32), compression=compression)
+        f.create_dataset("moment1", data=np.asarray(vid[:, 1, :, :], dtype=np.float32), compression=compression)
+        f.create_dataset("moment2", data=np.asarray(vid[:, 2, :, :], dtype=np.float32), compression=compression)
+        f.create_dataset("moment0ff", data=np.asarray(vid[:, 3, :, :], dtype=np.float32), compression=compression)
 
         # Save frequency bands
         for k, v in enumerate(parameters.get("frequency_bands", [])):

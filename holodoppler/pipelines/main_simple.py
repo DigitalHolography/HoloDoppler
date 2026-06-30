@@ -4,7 +4,7 @@ from holodoppler.shack_hartmann import construct_subapertures_fresnel, construct
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum
 from holodoppler.utils import gaussian_flatfield, update_from_footer, normalize_to_uint8, square_cupy
 from holodoppler.filtering import svd_filter, frequency_symmetric_filtering, fourier_time_transform, corner_compensation
-from holodoppler.moments import moment
+from holodoppler.moments import cast_moment_outputs_float32, moment
 from holodoppler.registration import register_images_shifts, apply_register_images_shifts
 from holodoppler.file_reader import FileReaderFactory
 
@@ -77,6 +77,7 @@ def _process_batch(parameters, frames, phase_term = None, output_dict = None):
     output_dict["M1"] = moment(xp, psd[idxs], freqs, 1)
     output_dict["M2"] = moment(xp, psd[idxs], freqs, 2)
     output_dict["M0ff"] = gaussian_flatfield(output_dict["M0"], parameters.get("registration_flatfield_gw", 1.0), gaussian_filter)
+    cast_moment_outputs_float32(xp, output_dict)
 
     # Frequency bands
     for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
@@ -320,6 +321,8 @@ def process(file_path, parameters):
 
     if parameters.get("square", False):
         output = {k: square_cupy(v) if v.ndim >=3 else v for k, v in output.items()}
+
+    cast_moment_outputs_float32(cp, output)
 
     # transfer to cpu
     output_np = {k: cp.asnumpy(v) for k, v in output.items()}

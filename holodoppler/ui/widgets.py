@@ -38,9 +38,10 @@ class SettingsEditor(ttk.Frame):
         "shack_hartmann_graph_ref": ("central_sub_ap", "ref_from_registration", "none"),
     }
 
-    def __init__(self, master: tk.Misc, *, theme: str) -> None:
+    def __init__(self, master: tk.Misc, *, theme: str, on_apply: Callable[[dict[str, Any]], None] | None = None) -> None:
         super().__init__(master)
         self.theme = theme
+        self.on_apply = on_apply
         self.fields: dict[str, ParameterField] = {}
         self.selected_key: str | None = None
         self.value_variable: tk.Variable | None = None
@@ -202,6 +203,8 @@ class SettingsEditor(ttk.Frame):
             messagebox.showerror("Invalid settings", f"{field.key}: {exc}", parent=self)
             return
         self.tree.set(field.item_id, "value", self._display_field_value(field.key, field.value))
+        if not silent and self.on_apply is not None:
+            self.on_apply({key: item.value for key, item in self.fields.items()})
 
     def _editor_value(self, field: ParameterField) -> Any:
         original = field.original

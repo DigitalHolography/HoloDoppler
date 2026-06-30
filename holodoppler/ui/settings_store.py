@@ -14,6 +14,7 @@ from .paths import app_settings_dir, bundled_defaults_dir, get_package_version, 
 
 PARAMETER_SUFFIXES = (".json", ".yaml", ".yml")
 EXCLUDED_PARAMETER_NAMES = {"current_parameters.json", LOADED_PARAMETERS_NAME}
+LEGACY_DEFAULT_PARAMETERS_NAME = "default_parameters_sliding_shack_hart.yaml"
 
 
 DEFAULT_WINDOW_GEOMETRIES = {
@@ -46,6 +47,7 @@ class SettingsStore:
         state["selected_parameters_path"] = str(selected_path)
         state["loaded_parameters_path"] = str(self.loaded_parameters_path)
         state["current_parameters_path"] = str(self.loaded_parameters_path)
+        state["default_parameters_name"] = DEFAULT_PARAMETERS_NAME
         state.setdefault("active_tab", "minimal")
         state["active_tab"] = _normalized_tab_name(state["active_tab"])
         state["window_geometries"] = self._normalized_window_geometries(state)
@@ -196,6 +198,7 @@ class SettingsStore:
             "selected_parameters_path": str(self._default_parameters_path()),
             "loaded_parameters_path": str(self.loaded_parameters_path),
             "current_parameters_path": str(self.loaded_parameters_path),
+            "default_parameters_name": DEFAULT_PARAMETERS_NAME,
             "active_tab": "minimal",
             "window_geometries": DEFAULT_WINDOW_GEOMETRIES.copy(),
             "last_input_dir": str(Path.home()),
@@ -210,13 +213,21 @@ class SettingsStore:
         shutil.copytree(legacy_dir, self.base_dir)
 
     def _normalized_selected_parameters_path(self, state: dict[str, Any]) -> Path:
+        previous_default = state.get("default_parameters_name")
+        previous_default_name = previous_default if isinstance(previous_default, str) else LEGACY_DEFAULT_PARAMETERS_NAME
+        should_migrate_default = previous_default_name != DEFAULT_PARAMETERS_NAME
+
         raw_path = state.get("selected_parameters_path")
         if isinstance(raw_path, str):
             selected_path = Path(raw_path)
+            if should_migrate_default and selected_path.name == previous_default_name:
+                return self._default_parameters_path()
             if self._is_preset_parameters_path(selected_path):
                 return selected_path
 
             candidate = self.parameters_dir / selected_path.name
+            if should_migrate_default and candidate.name == previous_default_name:
+                return self._default_parameters_path()
             if self._is_preset_parameters_path(candidate):
                 return candidate
 
@@ -224,6 +235,8 @@ class SettingsStore:
         if isinstance(raw_current_path, str):
             current_path = Path(raw_current_path)
             current_candidate = self.parameters_dir / current_path.name
+            if should_migrate_default and current_candidate.name == previous_default_name:
+                return self._default_parameters_path()
             if self._is_preset_parameters_path(current_candidate):
                 return current_candidate
 
@@ -248,9 +261,13 @@ class SettingsStore:
 
     def _ensure_loaded_parameters(self, source_path: Path) -> None:
         if self.loaded_parameters_path.is_file():
-            return
+            try:
+                _read_parameter_object(self.loaded_parameters_path)
+                return
+            except ValueError:
+                pass
         if source_path.is_file():
-            shutil.copy2(source_path, self.loaded_parameters_path)
+            self._write_parameters(self.loaded_parameters_path, _read_parameter_object(source_path))
         else:
             self._write_parameters(self.loaded_parameters_path, {})
 

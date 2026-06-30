@@ -4,7 +4,7 @@ from holodoppler.shack_hartmann import construct_subapertures_fresnel, construct
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum, southwell_phase_integration
 from holodoppler.utils import resize_slicewise, zoom_slicewise_fast, pad_array_centrally, gaussian_flatfield, update_from_footer
 from holodoppler.filtering import svd_filter, frequency_symmetric_filtering, fourier_time_transform, corner_compensation
-from holodoppler.moments import moment
+from holodoppler.moments import cast_moment_outputs_float32, moment
 from holodoppler.registration import register_trs, apply_registration, apply_registration3D
 from holodoppler.plotting import DebugPlotterManager
 from holodoppler.backend import BackendManager
@@ -315,6 +315,7 @@ def _process_sub_batch(bm, parameters, frames_sub, phase_term, compute_debug):
     batch["M1"] = moment(xp, psd[idxs], freqs, 1)
     batch["M2"] = moment(xp, psd[idxs], freqs, 2)
     batch["M0ff"] = gaussian_flatfield(batch["M0"], parameters.get("registration_flatfield_gw", 1.0), bm.gaussian_filter)
+    cast_moment_outputs_float32(xp, batch)
 
     # Frequency bands
     for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
@@ -405,6 +406,7 @@ def render_moments(bm, parameters, frames=None, registration_ref=None):
             res["M1"] = apply_registration(xp, bm.fft, bm.ndi, res["M1"], reg, integer_translation=parameters.get("registration_integer_translation", False))
             res["M2"] = apply_registration(xp, bm.fft, bm.ndi, res["M2"], reg, integer_translation=parameters.get("registration_integer_translation", False))
             res["M0ff"] = apply_registration(xp, bm.fft, bm.ndi, res["M0ff"], reg, integer_translation=parameters.get("registration_integer_translation", False))
+            cast_moment_outputs_float32(xp, res)
             for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
                 key = f"band_{k}_{f1}_{f2}"
                 res[key] = apply_registration(xp, bm.fft, bm.ndi, res[key], reg, integer_translation=parameters.get("registration_integer_translation", False))
@@ -743,6 +745,7 @@ def process_moments(
         vid_t = np.flip(vid_t, axis=-1)
     if parameters.get("flip_y", False):
         vid_t = np.flip(vid_t, axis=-2)
+    vid_t = vid_t.astype(np.float32, copy=False)
 
     save_outputs(
         file_reader, video_path=mp4_path, holodoppler_path=holodoppler_path,
