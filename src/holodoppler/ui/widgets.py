@@ -10,6 +10,9 @@ from typing import Any, Callable
 from .theme import configure_plain_widget
 
 
+PIPELINE_PARAMETER_KEY = "pipeline_name"
+
+
 @dataclass
 class ParameterField:
     key: str
@@ -20,7 +23,7 @@ class ParameterField:
 
 class SettingsEditor(ttk.Frame):
     GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-        ("Processing", ("batch_size", "batch_stride", "accumulation", "first_frame", "end_frame")),
+        ("Processing", ("pipeline_name", "batch_size", "batch_stride", "accumulation", "first_frame", "end_frame")),
         ("Optics", ("wavelength", "pixel_pitch", "spatial_propagation", "zero_padding", "z")),
         ("Registration", ("image_registration", "image_registration_type", "registration_", "apply_registration")),
         ("Shack-Hartmann", ("shack_hartmann",)),
@@ -58,7 +61,7 @@ class SettingsEditor(ttk.Frame):
                     group_id,
                     "end",
                     text=key,
-                    values=(self._display_value(value),),
+                    values=(self._display_field_value(key, value),),
                     tags=("parameter",),
                 )
                 self.fields[key] = ParameterField(key=key, original=value, value=value, item_id=item_id)
@@ -157,9 +160,19 @@ class SettingsEditor(ttk.Frame):
             variable = tk.BooleanVar(value=bool(value))
             control = ttk.Checkbutton(self.editor_host, text="Enabled", variable=variable)
             self.value_variable = variable
-        elif key in self.CHOICES:
-            variable = tk.StringVar(value=str(value))
-            control = ttk.Combobox(self.editor_host, textvariable=variable, values=self.CHOICES[key], state="normal")
+        elif self._has_choices(key):
+            pairs = list(self._choice_pairs(key))
+            raw_value = str(value)
+            if raw_value not in {choice_value for choice_value, _label in pairs}:
+                pairs.append((raw_value, raw_value))
+            variable = tk.StringVar(value=self._choice_label_for_value(key, raw_value, pairs=pairs))
+            state = "readonly" if key == PIPELINE_PARAMETER_KEY else "normal"
+            control = ttk.Combobox(
+                self.editor_host,
+                textvariable=variable,
+                values=tuple(label for _choice_value, label in pairs),
+                state=state,
+            )
             self.value_variable = variable
         elif isinstance(field.original, (list, dict)):
             control = ScrolledText(self.editor_host, height=6, wrap="word", font=("Consolas", 10))
@@ -188,7 +201,7 @@ class SettingsEditor(ttk.Frame):
                 raise ValueError(f"{field.key}: {exc}") from exc
             messagebox.showerror("Invalid settings", f"{field.key}: {exc}", parent=self)
             return
-        self.tree.set(field.item_id, "value", self._display_value(field.value))
+        self.tree.set(field.item_id, "value", self._display_field_value(field.key, field.value))
 
     def _editor_value(self, field: ParameterField) -> Any:
         original = field.original
@@ -203,6 +216,9 @@ class SettingsEditor(ttk.Frame):
             return bool(self.value_variable.get()) if self.value_variable is not None else original
 
         raw_value = str(self.value_variable.get()).strip() if self.value_variable is not None else ""
+        if self._has_choices(field.key):
+            raw_value = self._choice_value_for_label(field.key, raw_value)
+
         if isinstance(original, int):
             return int(float(raw_value))
         if isinstance(original, float):
@@ -237,6 +253,36 @@ class SettingsEditor(ttk.Frame):
             return json.dumps(value, separators=(",", ":"))
         return str(value)
 
+    def _display_field_value(self, key: str, value: Any) -> str:
+        if key == PIPELINE_PARAMETER_KEY:
+            return self._choice_label_for_value(key, str(value))
+        return self._display_value(value)
+
+    def _has_choices(self, key: str) -> bool:
+        return key == PIPELINE_PARAMETER_KEY or key in self.CHOICES
+
+    def _choice_pairs(self, key: str) -> tuple[tuple[str, str], ...]:
+        if key == PIPELINE_PARAMETER_KEY:
+            return _pipeline_choice_pairs()
+        return tuple((value, value) for value in self.CHOICES[key])
+
+    def _choice_label_for_value(
+        self,
+        key: str,
+        value: str,
+        pairs: list[tuple[str, str]] | tuple[tuple[str, str], ...] | None = None,
+    ) -> str:
+        for choice_value, label in pairs or self._choice_pairs(key):
+            if choice_value == value:
+                return label
+        return value
+
+    def _choice_value_for_label(self, key: str, label: str) -> str:
+        for choice_value, choice_label in self._choice_pairs(key):
+            if choice_label == label or choice_value == label:
+                return choice_value
+        return label
+
     def _group_parameters(self, parameters: dict[str, Any]) -> dict[str, list[tuple[str, Any]]]:
         grouped: dict[str, list[tuple[str, Any]]] = {name: [] for name, _patterns in self.GROUPS}
         grouped["Other"] = []
@@ -253,6 +299,45 @@ class SettingsEditor(ttk.Frame):
                 if key == pattern or key.startswith(pattern):
                     return group_name
         return "Other"
+
+
+def _pipeline_choice_pairs() -> tuple[tuple[str, str], ...]:
+    try:
+        from holodoppler.pipelines import pipelines
+    except Exception:
+        return (("moments_main_pipeline", "Moments main pipeline"),)
+
+    preview_targets = {
+        name.removeprefix("preview_")
+        for name in pipelines
+        if name.startswith("preview_")
+    }
+    process_names = sorted(name for name in pipelines if not name.startswith("preview_"))
+    preferred_order = ["moments_main_pipeline", "daskxp2"]
+    ordered_names = [
+        name for name in preferred_order if name in process_names
+    ] + [
+        name for name in process_names if name not in preferred_order
+    ]
+
+    return tuple(
+        (
+            name,
+            _pipeline_label(name, supports_preview=name in preview_targets),
+        )
+        for name in ordered_names
+    )
+
+
+def _pipeline_label(name: str, *, supports_preview: bool) -> str:
+    labels = {
+        "moments_main_pipeline": "Moments main pipeline",
+        "daskxp2": "Dask XP 2",
+    }
+    label = labels.get(name, name.replace("_", " ").strip().title())
+    if not supports_preview:
+        label = f"{label} (process only)"
+    return label
 
 
 class RawJsonDialog(tk.Toplevel):

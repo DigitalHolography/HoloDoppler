@@ -147,6 +147,7 @@ def fit_zernike_fresnel(
 ):
     """Fit Zernike polynomials to displacement data"""
 
+    zernike_modes = tuple(zernike_modes)
     nysubabs, nxsubabs = shifts_y.shape
 
     slopes_y = (shifts_y) * wavelength / (pixel_pitch_y * (ny // nysubabs))  # z / z
@@ -197,6 +198,7 @@ def fit_zernike_angular_spectrum(
 ):
     """Fit Zernike polynomials to displacement data"""
 
+    zernike_modes = tuple(zernike_modes)
     nysubabs, nxsubabs = shifts_y.shape
 
     slopes_y = (shifts_y) * pixel_pitch_y * nysubabs / z_prop # much simpler in angularsp
