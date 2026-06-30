@@ -7,7 +7,7 @@ import sys
 from .utils import load_config
 from .pipelines import pipelines
 
-DEFAULT_PARAMETERS_PATH = "parameters/default_parameters_simple.yaml"
+DEFAULT_PARAMETERS_PATH = "parameters/default_parameters_sliding_shack_hart.yaml"
 
 def preview(file_path, parameters: dict):
     if not isinstance(parameters, dict):
@@ -401,7 +401,7 @@ def main() -> int:
         config_path = Path(DEFAULT_PARAMETERS_PATH)
         if not config_path.exists():
             raise SystemExit(
-                "Error: No config file provided and {DEFAULT_PARAMETERS_PATH} not found"
+                f"Error: No config file provided and {DEFAULT_PARAMETERS_PATH} not found"
             )
     else:
         config_path = args.config
@@ -486,7 +486,7 @@ def main_simple() -> int:
         type=_existing_file,
         nargs="?",
         default=None,
-        help="Config file path. Uses {DEFAULT_PARAMETERS_PATH} if not provided.",
+        help=f"Config file path. Uses {DEFAULT_PARAMETERS_PATH} if not provided.",
     )
     parser.add_argument(
         "--tictoc",
@@ -539,7 +539,7 @@ def main_simple() -> int:
     if args.config is None:
         config_path = Path(DEFAULT_PARAMETERS_PATH)
         if not config_path.exists():
-            raise SystemExit("Error: No config file provided and {DEFAULT_PARAMETERS_PATH} not found")
+            raise SystemExit(f"Error: No config file provided and {DEFAULT_PARAMETERS_PATH} not found")
     else:
         config_path = args.config
     

@@ -171,6 +171,7 @@ def _process_shack_hartmann_phase(parameters, U, ny, nx, output_dict = None):
     #         parameters["wavelength"], shifts_y, shifts_x
     #     )
         if output_dict is not None:
+            print(coefs)
             output_dict["shack_hartmann_zernike_coefs"] = coefs
             output_dict["shack_hartmann_wavefront_phase"] = phase
     else:
@@ -413,6 +414,7 @@ def process(file_path, parameters):
             sy, sx, numy, numx = U_tot.shape
             U_tot = cp.transpose(U_tot, axes=(0,2,1,3))
             res_tot["shack_hartmann_sub_images"] = cp.reshape(U_tot,(numy*sy,numx*sx))
+            output["shack_hartmann_sub_images"].append(res_tot["shack_hartmann_sub_images"])
         
         processed_batches += 1
 
