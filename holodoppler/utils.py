@@ -20,10 +20,10 @@ import json
 
 from functools import cache
 
-# Assuming video_frames is a GPU array of shape (n_frames, height, width, channels)
-def resize_cupy(video_frames, scale_factor):
-    # zoom works on spatial dimensions only
-    return zoom(video_frames, (1, scale_factor, scale_factor, 1), order=1)
+# # Assuming video_frames is a GPU array of shape (n_frames, height, width, channels)
+# def resize_cupy(video_frames, scale_factor):
+#     # zoom works on spatial dimensions only
+#     return zoom(video_frames, (1, scale_factor, scale_factor, 1), order=1)
 
 # For exact dimensions instead of scale
 def square_cupy(video_frames):

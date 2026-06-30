@@ -319,7 +319,7 @@ def process(file_path, parameters):
     output = {k: cp.stack(v, axis=0) for k, v in output.items()}
 
     if parameters.get("square", False):
-        output = {k: square_cupy(v) for k, v in output.items()}
+        output = {k: square_cupy(v) if v.ndim >=3 else v for k, v in output.items()}
 
     # transfer to cpu
     output_np = {k: cp.asnumpy(v) for k, v in output.items()}

@@ -2,12 +2,12 @@ import argparse
 import json
 from pathlib import Path
 from typing import Any, List
-from concurrent.futures import ProcessPoolExecutor, as_completed
 import sys
 
 from .utils import load_config
 from .pipelines import pipelines
 
+DEFAULT_PARAMETERS_PATH = "parameters/default_parameters_simple.yaml"
 
 def preview(file_path, parameters: dict):
     if not isinstance(parameters, dict):
@@ -83,10 +83,10 @@ def _resolve_paths(args: argparse.Namespace, command: str) -> tuple[Path, Path]:
         input_path = args.filepath
 
     if args.config is None:
-        config_path = Path("parameters/default_parameters_debug.json")
+        config_path = Path(DEFAULT_PARAMETERS_PATH)
         if not config_path.exists():
             raise SystemExit(
-                "Error: No config file provided and parameters/default_parameters_debug.json not found"
+                f"Error: No config file provided and {DEFAULT_PARAMETERS_PATH} not found"
             )
     else:
         config_path = args.config
@@ -162,13 +162,13 @@ def _batch_process(file_paths: List[Path], parameters: dict, command: str):
 
     # Summary
     print(f"\n{'='*50}")
-    print(f"Batch processing complete:")
+    print("Batch processing complete:")
     print(f"  Total files: {len(file_paths)}")
     print(f"  Successful:  {len(results)}")
     print(f"  Failed:      {len(errors)}")
     
     if errors:
-        print(f"\nFailed files:")
+        print("\nFailed files:")
         for path, error in errors:
             print(f"  - {path}: {error}")
     
@@ -398,10 +398,10 @@ def main() -> int:
     
     # Load config parameters
     if args.config is None:
-        config_path = Path("parameters/default_parameters_debug.json")
+        config_path = Path(DEFAULT_PARAMETERS_PATH)
         if not config_path.exists():
             raise SystemExit(
-                "Error: No config file provided and parameters/default_parameters_debug.json not found"
+                "Error: No config file provided and {DEFAULT_PARAMETERS_PATH} not found"
             )
     else:
         config_path = args.config
@@ -486,7 +486,7 @@ def main_simple() -> int:
         type=_existing_file,
         nargs="?",
         default=None,
-        help="Config file path. Uses parameters/default_parameters_debug.json if not provided.",
+        help="Config file path. Uses {DEFAULT_PARAMETERS_PATH} if not provided.",
     )
     parser.add_argument(
         "--tictoc",
@@ -537,9 +537,9 @@ def main_simple() -> int:
         input_path = args.filepath
     
     if args.config is None:
-        config_path = Path("parameters/default_parameters_debug.json")
+        config_path = Path(DEFAULT_PARAMETERS_PATH)
         if not config_path.exists():
-            raise SystemExit("Error: No config file provided and parameters/default_parameters_debug.json not found")
+            raise SystemExit("Error: No config file provided and {DEFAULT_PARAMETERS_PATH} not found")
     else:
         config_path = args.config
     
