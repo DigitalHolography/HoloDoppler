@@ -16,13 +16,15 @@ dependencies = [
   "h5py",
   "opencv-python",
   "cinereader>=1.4.3",
-  "cupy-cuda13x>=14.0.1",
+  "cupy-cuda13x[ctk]>=14.0.1",
   "lblprof>=0.1.8",
   "imageio>=2.37.3",
   "imageio[ffmpeg]",
   "tkinterdnd2",
   "pyyaml",
   "dask",
+  "sv-ttk>=2.6.1",
+  "pillow>=11.0",
 ]
 
 [project.optional-dependencies]
@@ -40,7 +42,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-holodoppler = ["py.typed"]
+holodoppler = ["py.typed", "ui/assets/*", "ui/defaults/*"]
 
 [tool.pyinstaller]
 name = "HoloDoppler"

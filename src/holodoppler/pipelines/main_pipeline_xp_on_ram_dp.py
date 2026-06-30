@@ -421,7 +421,7 @@ def render_moments(bm, parameters, frames=None, registration_ref=None):
 # ------------------------------------------------------------------
 # Preview (single batch)
 # ------------------------------------------------------------------
-def preview_process_moments(file_path, parameters):
+def preview_process_moments(file_path, parameters, save_debug=True):
     total_time_start()
 
     tictoc = parameters["tictoc"]
@@ -487,7 +487,8 @@ def preview_process_moments(file_path, parameters):
         M0 = (M0 - np.min(M0)) / (np.max(M0) - np.min(M0) + 1e-12)
         debug_imgs["M0ff"] = (M0 * 255).astype(np.uint8)
 
-    save_debug_images(debug_imgs, "./debug_outputs")
+    if save_debug:
+        save_debug_images(debug_imgs, "./debug_outputs")
     plt.close("all")
 
     M0img = debug_imgs.get("M0")
@@ -573,7 +574,19 @@ def _debug_plotting_worker(input_q, output_q, stop_ev, params):
 # ------------------------------------------------------------------
 # Full video processing
 # ------------------------------------------------------------------
-def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, holodoppler_path=True):
+def _notify_progress(progress_callback, completed, total, message):
+    if progress_callback is not None:
+        progress_callback(completed, total, message)
+
+
+def process_moments(
+    file_path,
+    parameters,
+    mp4_path=None,
+    return_numpy=False,
+    holodoppler_path=True,
+    progress_callback=None,
+):
     tictoc = parameters["tictoc"]
 
     total_time_start()
@@ -672,15 +685,18 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
     # Dispatch to backend-specific loop
     if parameters["backend"] == "cupyRAM":
         _process_gpu_streaming_onram(bm, file_reader.file_path, parameters, num_batch, end_frame, first_frame, batch_stride, batch_size,
-                                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task)
+                                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task,
+                                     progress_callback=progress_callback)
     elif parameters["backend"] == "numpy":
         _process_cpu_streaming(bm, file_reader, parameters, num_batch, end_frame, first_frame, batch_stride, batch_size,
-                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task)
+                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task,
+                     progress_callback=progress_callback)
     elif "cupy" in parameters["backend"]:
         _process_cpu_streaming(bm, file_reader, parameters, num_batch, end_frame, first_frame, batch_stride, batch_size,
-                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task)
+                     M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task,
+                     progress_callback=progress_callback)
     else : 
-        raise ValueError(f"backend requested not implemented :{parameters["backend"]}")
+        raise ValueError(f"backend requested not implemented :{parameters['backend']}")
 
     if coefs_list is not None:
             coefs_list = [bm.to_numpy(c) for c in coefs_list]
@@ -743,8 +759,9 @@ def process_moments(file_path, parameters, mp4_path=None, return_numpy=False, ho
 # ------------------------------------------------------------------
 # Specialised loops
 # ------------------------------------------------------------------
-def _process_cpu_streaming(bm, file_reader, parameters, num_batch, first_frame, batch_stride, batch_size,
-                 M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task):
+def _process_cpu_streaming(bm, file_reader, parameters, num_batch, end_frame, first_frame, batch_stride, batch_size,
+                 M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task,
+                 progress_callback=None):
     for i in tqdm(range(num_batch)):
 
         frames = file_reader.read_frames(first_frame=first_frame+i*batch_stride, batch_size=batch_size)
@@ -766,6 +783,7 @@ def _process_cpu_streaming(bm, file_reader, parameters, num_batch, first_frame, 
         if "registration" in res and reg_list is not None: reg_list[i] = res["registration"]
         if debug:
             submit_debug_task(i, res)
+        _notify_progress(progress_callback, i + 1, num_batch, f"Batch {i + 1}/{num_batch}")
 
 
 class PrefetchBuffer:
@@ -815,7 +833,7 @@ class PrefetchBuffer:
 @track_time("_process_gpu_streaming_onram")
 def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, end_frame, first_frame, batch_stride,
                                  batch_size, M0_reg, out_list, out_accumulation, coefs_list, reg_list,
-                                 debug, submit_debug_task):
+                                 debug, submit_debug_task, progress_callback=None):
     """
     GPU streaming pipeline using iterator-based frame reading with double-buffering.
     """
@@ -899,6 +917,7 @@ def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, end_frame
                     submit_debug_task(processed_batches, res)
                 
                 processed_batches += 1
+                _notify_progress(progress_callback, processed_batches, num_batch, f"Batch {processed_batches}/{num_batch}")
             
             # Advance: next becomes current
             d_current = d_next
@@ -941,6 +960,7 @@ def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, end_frame
                     submit_debug_task(processed_batches, res)
                 
                 processed_batches += 1
+                _notify_progress(progress_callback, processed_batches, num_batch, f"Batch {processed_batches}/{num_batch}")
         
     finally:
         # Finalize accumulations
@@ -959,4 +979,3 @@ def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, end_frame
             file_reader.close()
         except Exception:
             pass
-        

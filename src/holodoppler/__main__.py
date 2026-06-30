@@ -5,7 +5,7 @@ from holodoppler.ui import UI
 
 
 def main() -> int:
-    if len(sys.argv) > 1 and sys.argv[1] == "gui":
+    if len(sys.argv) == 1 or (len(sys.argv) > 1 and sys.argv[1] == "gui"):
         UI().mainloop()
         return 0
 

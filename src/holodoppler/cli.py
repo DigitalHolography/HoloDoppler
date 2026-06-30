@@ -1,7 +1,8 @@
 import argparse
+import inspect
 import json
 from pathlib import Path
-from typing import Any, List
+from typing import Any, Callable, List
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import sys
 
@@ -9,7 +10,7 @@ from .utils import load_config
 from .pipelines import pipelines
 
 
-def preview(file_path, parameters: dict):
+def preview(file_path, parameters: dict, save_debug: bool = True):
     if not isinstance(parameters, dict):
         parameters = load_config(parameters)
     
@@ -22,10 +23,42 @@ def preview(file_path, parameters: dict):
     if pipeline_func is None:
         raise ValueError(f"Unknown pipeline preview, looking for: {pipeline_name}")
     
-    return pipeline_func(file_path, parameters)
+    return _call_pipeline(
+        pipeline_func,
+        file_path,
+        parameters,
+        save_debug=save_debug,
+    )
 
 
-def process(file_path, parameters: dict):
+def _call_pipeline(
+    pipeline_func: Callable[..., Any],
+    file_path: str | Path,
+    parameters: dict,
+    progress_callback: Callable[[int, int, str], None] | None = None,
+    save_debug: bool | None = None,
+):
+    signature = inspect.signature(pipeline_func)
+    accepts_kwargs = any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    )
+    kwargs = {}
+    optional_kwargs = {
+        "progress_callback": progress_callback,
+        "save_debug": save_debug,
+    }
+    for name, value in optional_kwargs.items():
+        if value is not None and (name in signature.parameters or accepts_kwargs):
+            kwargs[name] = value
+    return pipeline_func(file_path, parameters, **kwargs)
+
+
+def process(
+    file_path,
+    parameters: dict,
+    progress_callback: Callable[[int, int, str], None] | None = None,
+):
     if not isinstance(parameters, dict):
         parameters = load_config(parameters)
 
@@ -38,7 +71,12 @@ def process(file_path, parameters: dict):
     if pipeline_func is None:
         raise ValueError(f"Unknown pipeline: {pipeline_name}")
 
-    return pipeline_func(file_path, parameters)
+    return _call_pipeline(
+        pipeline_func,
+        file_path,
+        parameters,
+        progress_callback=progress_callback,
+    )
 
 
 def _existing_file(value: str) -> Path:
