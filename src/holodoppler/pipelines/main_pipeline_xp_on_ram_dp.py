@@ -106,41 +106,34 @@ class Accumulator:
     def __init__(self, batch_size, xp):
         self.xp = xp
         self.batch_size = batch_size
-        self.accumulators = {}
+        self.buffers = {}
         self.count = 0
 
     def add(self, data_dict):
-        if not self.accumulators:
-            # Initialize buffers on first call to avoid reallocation
+        if not self.buffers:
             for k, v in data_dict.items():
-                if v is None:
-                    self.accumulators[k] = None
-                    continue
-                self.accumulators[k] = self.xp.zeros_like(v)
-        # In-place addition
+                self.buffers[k] = []
         for k, v in data_dict.items():
-            if k in self.accumulators:
-                if v is None:
-                    # self.accumulators[k] = None
-                    continue
-                self.xp.add(self.accumulators[k], v, out=self.accumulators[k])
-            else:
-                self.accumulators[k] = v.copy()
+            if v is not None:
+                self.buffers[k].append(v.copy())
         self.count += 1
         if self.count >= self.batch_size:
             return self.flush()
         return None
 
     def flush(self):
-        if not self.accumulators:
+        if not self.buffers:
             return None
         batch = {}
-        for k, buf in self.accumulators.items():
-            if buf is None:
+        for k, buf_list in self.buffers.items():
+            if not buf_list:
                 batch[k] = None
-                continue
-            batch[k] = buf / self.count
-            buf.fill(0)  # Reuse memory for next cycle
+            else:
+                # Stack and compute median along axis=0
+                stacked = self.xp.stack(buf_list, axis=0)
+                batch[k] = self.xp.median(stacked, axis=0)
+                # Clear list to free memory
+                buf_list.clear()
         self.count = 0
         return batch
 
