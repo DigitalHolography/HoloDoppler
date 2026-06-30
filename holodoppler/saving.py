@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 import os
 
-from .utils import resize_slicewise, normalize_to_uint8, unsharp_projection, _pad_to_even
+from .utils import resize_slicewise, normalize_to_uint8, unsharp_projection, _pad_to_even, imadjust, stretchlim
 from .get_version import get_version
 
 def save_preview_images(save_dict, save_dir, prefix="debug"):
@@ -128,7 +128,15 @@ def _save_bundle(
     _save_projections(target_dir, save_map, parameters, backend)
     
     # Convert all data to uint8 once (memory efficient)
-    uint8_map = {name: normalize_to_uint8(data) for name, data in save_map.items()}
+    # uint8_map = {name: normalize_to_uint8(data) for name, data in save_map.items()}
+    contrast_cfg = parameters.get("contrast_adjustment", {})
+    uint8_map = {}
+    for name, data in save_map.items():
+        if contrast_cfg.get("enabled", False):
+            # Data already in [0,1] thanks to imadjust
+            uint8_map[name] = (np.clip(data, 0, 1) * 255).astype(np.uint8)
+        else:
+            uint8_map[name] = normalize_to_uint8(data)
     
     # Save videos (sequential to avoid encoding conflicts)
     _save_videos(target_dir, uint8_map, fps)
@@ -172,7 +180,6 @@ def _calculate_fps(num_batch, end_frame, first_frame, parameters):
     
     return fps
 
-
 def _build_save_map(vid, parameters, vid_debug, num_batch):
     """Build dictionary of all data to save"""
     save_map = {
@@ -181,7 +188,7 @@ def _build_save_map(vid, parameters, vid_debug, num_batch):
         "moment_2": vid[:, 2, :, :],
         "moment_0_ff": vid[:, 3, :, :],
     }
-    
+
     # Frequency bands
     for k, v in enumerate(parameters.get("frequency_bands", [])):
         band_name = f"band_avg_{v[0]}_{v[1]}"
@@ -207,6 +214,17 @@ def _build_save_map(vid, parameters, vid_debug, num_batch):
 
             if data.ndim == 3 or data.ndim == 4:
                 save_map[f"debug_{key}"] = data
+
+    contrast_cfg = parameters.get("contrast_adjustment", {})
+    if contrast_cfg.get("enabled", False):
+        low_pct = contrast_cfg.get("low_percent", 1)
+        high_pct = contrast_cfg.get("high_percent", 99)
+        gamma = contrast_cfg.get("gamma", 1.0)
+        for name, data in save_map.items():
+            # For 4D debug data we might need per-channel – but we'll keep it simple:
+            # compute limits globally across all dimensions.
+            low, high = stretchlim(data, low_pct, high_pct)
+            save_map[name] = imadjust(data, low, high, gamma)
             
     return save_map
 
