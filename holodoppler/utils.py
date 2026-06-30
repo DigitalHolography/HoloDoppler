@@ -382,16 +382,6 @@ def signed_peak(ky, kx, ny, nx):
         kx -= nx
     return float(ky), float(kx)
 
-
-def temporal_gaussian_filter(arr, sigma):
-    """Apply 1D Gaussian filter along time axis"""
-    if sigma == 0:
-        return arr
-    from scipy.ndimage import gaussian_filter1d
-
-    return gaussian_filter1d(arr.astype(np.float32), sigma=sigma, axis=2)
-
-
 def normalize_image(arr):
     """Normalize image to 0-255 range"""
     arr = arr.astype(np.float32)
@@ -404,7 +394,7 @@ def normalize_image(arr):
 def temporal_gaussian(arr, sigma):
     if sigma == 0:
         return arr
-    return gaussian_filter1d(arr.astype(np.float32), sigma=sigma, axis=2)
+    return gaussian_filter1d(arr.astype(np.float32), sigma=sigma, axis=0)
 
 
 def flatfield3D(arr, gw):

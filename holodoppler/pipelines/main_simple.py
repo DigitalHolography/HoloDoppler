@@ -2,7 +2,7 @@ from holodoppler.saving import save_preview_images, _get_default_output_path, _s
 from holodoppler.propagation import fresnel_transform, fresnel_transform_with_phase, angular_spectrum_transform, angular_spectrum_transform_with_phase
 from holodoppler.shack_hartmann import construct_subapertures_fresnel, construct_subapertures_angular, calculate_displacements, calculate_displacements_graph_laplacian
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum
-from holodoppler.utils import gaussian_flatfield, update_from_footer, normalize_to_uint8, square_cupy
+from holodoppler.utils import gaussian_flatfield, update_from_footer, normalize_to_uint8, square_cupy, stretchlim, imadjust, temporal_gaussian
 from holodoppler.filtering import svd_filter, frequency_symmetric_filtering, fourier_time_transform, corner_compensation
 from holodoppler.moments import moment
 from holodoppler.registration import register_images_shifts, apply_register_images_shifts
@@ -341,8 +341,33 @@ def process(file_path, parameters):
 
     _save_h5_2(target_dir, output_np, parameters)
 
-    output_np = {k: normalize_to_uint8(v) for k, v in output_np.items()}
+    import time
 
+    start_time = time.time()
+
+    if parameters.get("smoothing_gaussian", False):
+        smoothing_gaussian_size =  parameters.get("smoothing_gaussian_size", 2)
+        for k in output_np.keys():
+            output_np[k] = temporal_gaussian(output_np[k], sigma=smoothing_gaussian_size)
+
+    elapsed = time.time() - start_time
+    print(f"smoothing_gaussian in {elapsed:.1f} seconds")
+
+    start_time = time.time()
+    
+    if parameters.get("contrast", False):
+        low_pct, high_pct = parameters.get("contrast_low_max_percent", (1.0,99.0))
+        gamma = parameters.get("contrast_gamma", 1.0)
+        for k in output_np.keys():
+            low, high = stretchlim(output_np[k], low_pct, high_pct)
+            output_np[k] = imadjust(output_np[k], low, high, gamma)
+            output_np[k] = normalize_to_uint8(output_np[k])
+    else:
+        output_np = {k: normalize_to_uint8(v) for k, v in output_np.items()}
+    
+    elapsed = time.time() - start_time
+    print(f"contrast in {elapsed:.1f} seconds")
+    
     # Save videos (sequential to avoid encoding conflicts)
     _save_videos(target_dir, output_np, 30)
     
