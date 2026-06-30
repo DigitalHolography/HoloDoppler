@@ -21,7 +21,7 @@ def register_images_shifts(xp, fft, fixed, moving, radius=None, gaussian_sigma=N
     fixed_e = _preprocess(xp, fixed_f, mask=mask, gaussian_sigma=gaussian_sigma, gaussian_filter=gaussian_filter)
     moving_e = _preprocess(xp, moving_f, mask=mask, gaussian_sigma=gaussian_sigma, gaussian_filter=gaussian_filter)
 
-    shift_y, shift_x = phase_corr_integer(xp, fft, fixed_e, moving_e)
+    shift_y, shift_x = intensity_corr_integer(xp, fft, fixed_e, moving_e)
 
     return shift_y, shift_x
 
@@ -176,7 +176,27 @@ def phase_corr_integer(xp, fft, fixed, moving):
     fb = fft.fft2(moving, axes=(-2, -1))
 
     cps = fb * fa.conj()
-    cps *= 1.0 / (xp.abs(cps) + _EPS)
+    cps *= 1.0 / (xp.abs(cps))
+
+    corr = fft.ifft2(cps, axes=(-2, -1))
+    mag = xp.abs(corr)
+
+    idx = xp.argmax(mag)
+    ky, kx = xp.unravel_index(idx, mag.shape)
+    ky, kx = int(ky), int(kx)
+
+    peak_y, peak_x = signed_peak(ky, kx, ny, nx)
+
+    return -int(peak_y), -int(peak_x)
+
+def intensity_corr_integer(xp, fft, fixed, moving):
+    """Integer-pixel intensity-correlation shift estimate."""
+    ny, nx = fixed.shape[-2:]
+
+    fa = fft.fft2(fixed, axes=(-2, -1))
+    fb = fft.fft2(moving, axes=(-2, -1))
+
+    cps = fb * fa.conj()
 
     corr = fft.ifft2(cps, axes=(-2, -1))
     mag = xp.abs(corr)

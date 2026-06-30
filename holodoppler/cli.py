@@ -7,7 +7,7 @@ import sys
 from .utils import load_config
 from .pipelines import pipelines
 
-DEFAULT_PARAMETERS_PATH = "parameters/default_parameters_sliding_shack_hart.yaml"
+DEFAULT_PARAMETERS_PATH = "parameters/default_parameters_simple.yaml"
 
 def preview(file_path, parameters: dict):
     if not isinstance(parameters, dict):

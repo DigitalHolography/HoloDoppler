@@ -357,7 +357,7 @@ def _save_h5_2(target_dir, save_map, parameters):
         for k, v in save_map.items():
             f.create_dataset(
                 k,
-                data=v,
+                data=v.astype(np.float32),
                 compression=compression,
             )
         

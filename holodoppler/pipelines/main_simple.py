@@ -195,7 +195,7 @@ def preview(file_path, parameters):
     frames = file_reader.read_frames(first_frame=first_frame, batch_size=batch_size)
     
     # transfer to gpu
-    frames = cp.array(frames)
+    frames = cp.array(frames, dtype=cp.float32)
 
     res = {}
 
@@ -204,7 +204,7 @@ def preview(file_path, parameters):
         phase_term = _process_shack_hartmann(parameters, frames, output_dict=res)
 
     # calc on gpu
-    _process_batch(parameters, frames=frames, phase_term=phase_term, output_dict=res)
+    _process_batch(parameters, frames = frames, phase_term = phase_term, output_dict=res)
 
     # transfer to cpu
     res_np = {k: cp.asnumpy(v) for k, v in res.items()}
@@ -290,7 +290,7 @@ def process(file_path, parameters):
                     M0_reg = res["M0ff"]
                 
                 if M0_reg is not None:
-                    shift_y, shift_x = register_images_shifts(cp, cp.fft, M0_reg, res["M0ff"], radius=0.7, gaussian_sigma=0, gaussian_filter=gaussian_filter)
+                    shift_y, shift_x = register_images_shifts(cp, cp.fft, M0_reg, res["M0ff"], radius=0.8, gaussian_sigma=3, gaussian_filter=gaussian_filter)
                     
                 for k, v in res.items():
                     if k in ["M0ff","M0","M1","M2"] or "band_" in k : #select the outputs that need the registration from M0ff applied

@@ -26,7 +26,7 @@ def build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding
     if zero_padding:
         kernel = pad_array_centrally(kernel, zero_padding, xp)
 
-    return kernel[xp.newaxis, :, :]
+    return kernel[xp.newaxis, :, :].astype(xp.complex64)
 
 @cache
 def build_fresnel_kernel_out(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None):
