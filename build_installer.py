@@ -19,10 +19,10 @@ APP_PUBLISHER = "HoloDoppler"
 APPDATA_SLUG = "holodopplerpython"
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-SRC_DIR = PROJECT_ROOT / "src"
+PACKAGE_DIR = PROJECT_ROOT / "holodoppler"
 PARAMETERS_DIR = PROJECT_ROOT / "parameters"
-DEFAULTS_DIR = SRC_DIR / "holodoppler" / "ui" / "defaults"
-APP_ICON_SOURCE = SRC_DIR / "holodoppler" / "ui" / "assets" / "logo.png"
+DEFAULTS_DIR = PACKAGE_DIR / "ui" / "defaults"
+APP_ICON_SOURCE = PACKAGE_DIR / "ui" / "assets" / "logo.png"
 PYPROJECT_FILE = PROJECT_ROOT / "pyproject.toml"
 VERSION_FILE = PROJECT_ROOT / "version_holodoppler.txt"
 
@@ -67,9 +67,7 @@ FROZEN_METADATA_DISTRIBUTIONS = (
     "tkinterdnd2",
     "sv-ttk",
     "cinereader",
-    "lblprof",
     "tqdm",
-    "dask",
     "PyYAML",
     "cupy-cuda13x",
     "cuda-pathfinder",
@@ -91,7 +89,6 @@ FROZEN_HIDDEN_IMPORTS = (
 
 FROZEN_SUBMODULE_COLLECTIONS = (
     "holodoppler",
-    "matlab_imresize",
     "cupy",
     "cupyx",
     "cupy_backends",
@@ -104,8 +101,6 @@ FROZEN_SUBMODULE_COLLECTIONS = (
     "sv_ttk",
     "PIL",
     "matplotlib",
-    "lblprof",
-    "dask",
     "yaml",
 )
 
@@ -117,7 +112,6 @@ FROZEN_DATA_COLLECTIONS = (
     "sv_ttk",
     "PIL",
     "imageio",
-    "dask",
 )
 
 FROZEN_BINARY_COLLECTIONS = (
@@ -281,9 +275,9 @@ def _parameter_preset_files() -> list[Path]:
     if not DEFAULTS_DIR.is_dir():
         raise FileNotFoundError(f"Bundled defaults directory not found: {DEFAULTS_DIR}")
 
-    files = sorted(DEFAULTS_DIR.glob("*.json"), key=lambda item: item.name.lower())
+    files = _parameter_files_in(DEFAULTS_DIR)
     if not files:
-        raise FileNotFoundError(f"No bundled parameter JSON files found in {DEFAULTS_DIR}")
+        raise FileNotFoundError(f"No bundled parameter files found in {DEFAULTS_DIR}")
     return files
 
 
@@ -292,17 +286,17 @@ def _validate_parameter_presets() -> None:
         return
 
     bundled_by_name = {path.name: path for path in _parameter_preset_files()}
-    repository_files = sorted(PARAMETERS_DIR.glob("*.json"), key=lambda item: item.name.lower())
+    repository_files = _parameter_files_in(PARAMETERS_DIR)
     missing = [path.name for path in repository_files if path.name not in bundled_by_name]
     mismatched = [
         path.name
         for path in repository_files
-        if path.name in bundled_by_name and _read_json_file(path) != _read_json_file(bundled_by_name[path.name])
+        if path.name in bundled_by_name and _read_parameter_file(path) != _read_parameter_file(bundled_by_name[path.name])
     ]
     if missing or mismatched:
         details = []
         if missing:
-            details.append("missing from src/holodoppler/ui/defaults: " + ", ".join(missing))
+            details.append("missing from holodoppler/ui/defaults: " + ", ".join(missing))
         if mismatched:
             details.append("different from parameters/: " + ", ".join(mismatched))
         raise RuntimeError("Bundled parameter presets are not in sync: " + "; ".join(details))
@@ -324,8 +318,20 @@ def _copy_installer_parameters(target_dir: Path) -> None:
     _copy_parameter_presets(target_dir)
 
 
-def _read_json_file(path: Path) -> object:
-    return json.loads(path.read_text(encoding="utf-8-sig"))
+def _parameter_files_in(directory: Path) -> list[Path]:
+    files: list[Path] = []
+    for pattern in ("*.json", "*.yaml", "*.yml"):
+        files.extend(directory.glob(pattern))
+    return sorted(files, key=lambda item: item.name.lower())
+
+
+def _read_parameter_file(path: Path) -> object:
+    text = path.read_text(encoding="utf-8-sig")
+    if path.suffix.lower() in {".yaml", ".yml"}:
+        import yaml
+
+        return yaml.safe_load(text)
+    return json.loads(text)
 
 
 def _run_command(command: list[str | Path]) -> None:
@@ -441,8 +447,8 @@ def _write_pyinstaller_entrypoint() -> Path:
 
 
 def _run_pyinstaller(console: bool) -> None:
-    if not SRC_DIR.exists():
-        raise SystemExit(f"Package source directory not found: {SRC_DIR}")
+    if not PACKAGE_DIR.exists():
+        raise SystemExit(f"Package source directory not found: {PACKAGE_DIR}")
 
     _validate_parameter_presets()
     icon_file = _ensure_icon()
@@ -463,7 +469,7 @@ def _run_pyinstaller(console: bool) -> None:
         "--distpath",
         DIST_DIR,
         "--paths",
-        SRC_DIR,
+        PROJECT_ROOT,
         "--icon",
         icon_file,
         "--runtime-hook",

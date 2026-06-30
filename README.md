@@ -65,6 +65,7 @@ python build_installer.py
 
 The installer build script must run under Python 3.13 or newer.
 The installer build uses the bundled UI defaults from
-`src/holodoppler/ui/defaults/` and verifies they match `parameters/*.json`.
+`holodoppler/ui/defaults/` and verifies they match `parameters/*.json`,
+`parameters/*.yaml`, and `parameters/*.yml`.
 Use `python build_installer.py --verify-installer` to run the installer smoke
 verification when Inno Setup is available.
