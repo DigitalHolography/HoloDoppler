@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -10,19 +10,17 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
   "numpy>=2.3.4",
-  "tqdm>=4.67.1",
-  "matplotlib>=3.10.7",
   "scipy>=1.17.0",
+  "matplotlib>=3.10.7",
+  "tqdm>=4.67.1",
   "h5py",
   "opencv-python",
-  "cinereader>=1.4.3",
   "cupy-cuda13x>=14.0.1",
-  "lblprof>=0.1.8",
   "imageio>=2.37.3",
   "imageio[ffmpeg]",
   "tkinterdnd2",
   "pyyaml",
-  "dask",
+  "cinereader",
 ]
 
 [project.optional-dependencies]
@@ -30,17 +28,8 @@ build = [
   "pyinstaller>=6.0",
 ]
 
+[tool.setuptools]
+packages = ["holodoppler"]
+
 [project.scripts]
 holodoppler = "holodoppler.__main__:main"
-
-[tool.setuptools]
-package-dir = {"" = "src"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-holodoppler = ["py.typed"]
-
-[tool.pyinstaller]
-name = "HoloDoppler"

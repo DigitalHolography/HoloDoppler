@@ -6,10 +6,26 @@ import json
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
+import os
 
 from .utils import resize_slicewise, normalize_to_uint8, unsharp_projection, _pad_to_even
 from .get_version import get_version
 
+def save_preview_images(save_dict, save_dir, prefix="debug"):
+    os.makedirs(save_dir, exist_ok=True)
+    for key, img in save_dict.items():
+        if img is None:
+            continue
+        if img.ndim not in [2,3]:
+            continue
+        if img.dtype != np.uint8:
+            img_min, img_max = np.min(img), np.max(img)
+            if img_max > img_min:
+                img_np = (img - img_min) / (img_max - img_min + 1e-12)
+            img_np = (img_np * 255).astype(np.uint8)
+        filename = os.path.join(save_dir, f"{prefix}_{key}.png")
+        print("Saving : ",filename)
+        iio.imwrite(filename, img_np)
 
 def save_outputs(
     file_reader,
@@ -230,8 +246,11 @@ def _save_projections(target_dir, save_map, parameters, backend):
 def _save_videos(target_dir, uint8_map, fps):
     """Save all videos as MP4 and AVI"""
     start_time = time.time()
-    
+    completed = 0
     for name, uint8_data in uint8_map.items():
+
+        if uint8_data.ndim !=3 and uint8_data.ndim !=4 : #check to avoid failure for outputs that are not videos exemple : list of coefficients
+            continue
         # MP4
         mp4_path = target_dir / "mp4" / f"{name}.mp4"
         _write_video_fast(
@@ -252,9 +271,11 @@ def _save_videos(target_dir, uint8_map, fps):
             codec="mjpeg",
             quality=8,
         )
+
+        completed += 1
     
     elapsed = time.time() - start_time
-    print(f"Videos saved in {elapsed:.1f} seconds ({len(uint8_map)} videos)")
+    print(f"Videos saved in {elapsed:.1f} seconds ({completed} videos)")
 
 
 def _save_pngs(target_dir, uint8_map):
@@ -264,6 +285,8 @@ def _save_pngs(target_dir, uint8_map):
     with ThreadPoolExecutor(max_workers=8) as executor:
         tasks = []
         for name, uint8_data in uint8_map.items():
+            if uint8_data.ndim !=3 and uint8_data.ndim !=4 : #check to avoid failure for outputs that are not videos exemple : list of coefficients
+                continue
             png_path = target_dir / "png" / f"{name}.png"
             mean_frame = np.mean(uint8_data, axis=0).astype(np.uint8)
             tasks.append(executor.submit(iio.imwrite, png_path, mean_frame))
@@ -315,6 +338,36 @@ def _save_metadata(target_dir, file_reader, parameters):
     elapsed = time.time() - start_time
     print(f"Metadata saved in {elapsed:.2f} seconds")
 
+def _save_h5_2(target_dir, save_map, parameters):
+    """
+    Saves raw data to HDF5.
+    """
+    start_time = time.time()
+    
+    target_dir_name = target_dir.name if target_dir.name else "output"
+    h5_path = target_dir / "h5" / f"{target_dir_name}_output.h5"
+    
+    print(f"Saving H5 to: {h5_path}")
+    
+    # No compression for faster writing and lower memory usage
+    compression = None
+    
+    with h5py.File(h5_path, "w") as f:
+        
+        for k, v in save_map.items():
+            f.create_dataset(
+                k,
+                data=v,
+                compression=compression,
+            )
+        
+        # Save metadata
+        f.create_dataset("HD_parameters", data=json.dumps(parameters))
+        f.create_dataset("HD_version", data=f"py{get_version()}")
+    
+    elapsed = time.time() - start_time
+    file_size = h5_path.stat().st_size / (1024**3)
+    print(f"H5 saved in {elapsed:.1f} seconds (file size: {file_size:.2f} GB)")
 
 def _save_h5(target_dir, vid, parameters, reg_list, coefs_list):
     """

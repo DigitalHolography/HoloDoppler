@@ -3,7 +3,7 @@ Utility functions for array operations
 """
 
 import numpy as np
-from matlab_imresize import imresize
+
 from scipy.ndimage import gaussian_filter as np_gaussian_filter
 from scipy.ndimage import gaussian_filter1d
 import numpy as np
@@ -20,6 +20,18 @@ import json
 
 from functools import cache
 
+# Assuming video_frames is a GPU array of shape (n_frames, height, width, channels)
+def resize_cupy(video_frames, scale_factor):
+    # zoom works on spatial dimensions only
+    return zoom(video_frames, (1, scale_factor, scale_factor, 1), order=1)
+
+# For exact dimensions instead of scale
+def square_cupy(video_frames):
+    h, w = video_frames.shape[1], video_frames.shape[2]
+    m = max(h,w)
+    scale_h = m / h
+    scale_w = m / w
+    return zoom_gpu(video_frames, (1, scale_h, scale_w), order=1)
 
 def normalize_to_uint8(data):
     """
@@ -273,22 +285,22 @@ def resize_fft2_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
     # 6. Restore original axes positions
     return np.moveaxis(res_t, (0, 1), axes)
 
-def resize_matlab_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np):
-    """Spatial resize. Loops over remaining dimensions since imresize is 2D."""
-    img_t = np.moveaxis(img, axes, (0, 1))
-    h, w = img_t.shape[:2]
+# def resize_matlab_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np):
+#     """Spatial resize. Loops over remaining dimensions since imresize is 2D."""
+#     img_t = np.moveaxis(img, axes, (0, 1))
+#     h, w = img_t.shape[:2]
 
-    # Reshape to (H, W, -1) to loop through all other dimensions as one slice
-    flat_img = img_t.reshape(h, w, -1)
-    out = xp.empty((new_h, new_w, flat_img.shape[-1]), dtype=img.dtype)
+#     # Reshape to (H, W, -1) to loop through all other dimensions as one slice
+#     flat_img = img_t.reshape(h, w, -1)
+#     out = xp.empty((new_h, new_w, flat_img.shape[-1]), dtype=img.dtype)
 
-    for i in range(flat_img.shape[-1]):
-        # Assuming imresize is a provided utility function
-        out[:, :, i] = imresize(flat_img[:, :, i], output_shape=(new_h, new_w))
+#     for i in range(flat_img.shape[-1]):
+#         # Assuming imresize is a provided utility function
+#         out[:, :, i] = imresize(flat_img[:, :, i], output_shape=(new_h, new_w))
 
-    # Reshape back to target axes and move axes back
-    res_t = out.reshape(new_h, new_w, *img_t.shape[2:])
-    return np.moveaxis(res_t, (0, 1), axes)
+#     # Reshape back to target axes and move axes back
+#     res_t = out.reshape(new_h, new_w, *img_t.shape[2:])
+#     return np.moveaxis(res_t, (0, 1), axes)
 
 
 def pad_array_centrally(arr, new_shape, xp):
@@ -663,9 +675,11 @@ def update_from_footer(parameters, holofooter):
         if parameters.get("z") == "use_holovibes" and holofooter is not None:
             parameters["z"] = holofooter["compute_settings"]["image_rendering"]["propagation_distance"]
         if parameters.get("pixel_pitch") == "use_holovibes" and holofooter is not None:
-            parameters["pixel_pitch"] = (holofooter["info"]["pixel_pitch"]["y"], holofooter["info"]["pixel_pitch"]["x"])
+            parameters["pixel_pitch"] = (holofooter["info"]["pixel_pitch"]["y"] * 1e-6, holofooter["info"]["pixel_pitch"]["x"] * 1e-6)
         if parameters.get("sampling_freq") == "use_holovibes" and holofooter is not None:
             parameters["sampling_freq"] = holofooter["info"]["camera_fps"]
+        if parameters.get("high_freq") == "use_holovibes" and holofooter is not None:
+            parameters["high_freq"] = holofooter["info"]["camera_fps"]/2
     except Exception as e:
         print(f"Issue from holovibes footer: {e}")
     return parameters
