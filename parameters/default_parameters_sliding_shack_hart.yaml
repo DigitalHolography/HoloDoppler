@@ -5,7 +5,7 @@ time_stride: 256
 sh_time_window: 256
 sh_time_slide_range: [256,4] # (delay between windows from the first one, number of repetition of this delay zero is same as one which is no sliding average) 
 first_frame: 0
-end_frame: 4500  # -1 means process all frames
+end_frame: -1  # -1 means process all frames
 
 # Propagation parameters
 spatial_propagation: "Fresnel"  # Options: "Fresnel" or "AngularSpectrum"
