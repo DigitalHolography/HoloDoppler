@@ -13,6 +13,7 @@ from . import main_simple
 from . import main_sh_avg
 from . import main_sliding
 from . import main_sliding_shack_hart
+from . import main_pca_accumulation
 
 pipelines = {
     "main": process_moments,
@@ -28,5 +29,8 @@ pipelines = {
     "preview_sliding" : main_sliding.preview,
     
     "sliding_shack_hartmann" : main_sliding_shack_hart.process,
-    "preview_sliding_shack_hartmann" : main_sliding_shack_hart.preview
+    "preview_sliding_shack_hartmann" : main_sliding_shack_hart.preview,
+
+    "pca_accumulation" : main_pca_accumulation.process,
+    "preview_pca_accumulation" : main_pca_accumulation.preview
 }

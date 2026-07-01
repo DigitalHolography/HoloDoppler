@@ -159,6 +159,19 @@ def fourier_time_transform(xp, fft, H):
     """FFT along time axis"""
     return fft.fft(H, axis=0, norm="ortho")
 
+def pca_time_transform(xp, H, remove_dc=False):
+    if remove_dc:
+        dc = xp.mean(H,axis=0)
+        H = H - dc
+    sz = H.shape
+    H2 = H.reshape((sz[0], sz[-1] * sz[-2])).T
+
+    cov = H2.conj().T @ H2
+
+    S, V = xp.linalg.eigh(cov)
+
+    return (H2 @ V).T.reshape(sz)
+
 def corner_compensation(xp, psd):    
     n_freqs, ny, nx = psd.shape
     
