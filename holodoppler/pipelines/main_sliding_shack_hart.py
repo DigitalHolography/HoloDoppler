@@ -171,7 +171,6 @@ def _process_shack_hartmann_phase(parameters, U, ny, nx, output_dict = None):
     #         parameters["wavelength"], shifts_y, shifts_x
     #     )
         if output_dict is not None:
-            print(coefs)
             output_dict["shack_hartmann_zernike_coefs"] = coefs
             output_dict["shack_hartmann_wavefront_phase"] = phase
     else:
@@ -200,17 +199,17 @@ def preview(file_path, parameters):
     time_window = parameters["time_window"]
     first_frame = parameters["first_frame"]
 
-    time_slide_delay = parameters["time_slide_range"][0]
-    time_slide_repetition = parameters["time_slide_range"][1]
+    time_slide_delay = parameters["sh_time_slide_range"][0]
+    time_slide_repetition = parameters["sh_time_slide_range"][1]
 
     if time_slide_repetition<= 0:
         time_slide_repetition = 1
 
-    res_tot = {}
     U_tot = None
+    res = {}
 
     for n in range(time_slide_repetition): 
-        frames = file_reader.read_frames(first_frame=first_frame + n*time_slide_delay, batch_size=time_window)
+        frames = file_reader.read_frames(first_frame=first_frame + n*time_slide_delay, batch_size=parameters["sh_time_window"])
         # transfer to gpu
         frames = cp.array(frames)
         if parameters.get("shack_hartmann", False):
@@ -225,40 +224,27 @@ def preview(file_path, parameters):
     ny, nx = frames.shape[-2:]
     phase_term = None
     if parameters.get("shack_hartmann", False):
-        phase_term = _process_shack_hartmann_phase(parameters, U_tot, ny, nx, output_dict=res_tot)
+        phase_term = _process_shack_hartmann_phase(parameters, U_tot, ny, nx, output_dict=res)
 
-    for n in range(time_slide_repetition): 
-
-        res = {}
-
-        frames = file_reader.read_frames(first_frame=first_frame + n*time_slide_delay, batch_size=time_window)
-        # transfer to gpu
-        frames = cp.array(frames)
-        # calc on gpu
-        _process_batch(parameters, frames=frames, phase_term=phase_term, output_dict=res)
-
-        for k, v in res.items():
-            if k in res_tot:
-                res_tot[k] += res[k]
-            else: 
-                res_tot[k] = res[k]
-
-    for k, v in res_tot.items():
-        res_tot[k] /= time_slide_repetition
+    frames = file_reader.read_frames(first_frame=first_frame, batch_size=time_window)
+    # transfer to gpu
+    frames = cp.array(frames)
+    # calc on gpu
+    _process_batch(parameters, frames=frames, phase_term=phase_term, output_dict=res)
 
     if U_tot is not None:
         sy, sx, numy, numx = U_tot.shape
         U_tot = cp.transpose(U_tot, axes=(0,2,1,3))
-        res_tot["shack_hartmann_sub_images"] = cp.reshape(U_tot,(numy*sy,numx*sx))
+        res["shack_hartmann_sub_images"] = cp.reshape(U_tot,(numy*sy,numx*sx))
 
     # transfer to cpu
-    res_np = {k: cp.asnumpy(v) for k, v in res_tot.items()}
+    res_np = {k: cp.asnumpy(v) for k, v in res.items()}
 
     # free gpu ram
-    del res_tot, res
+    del res
     cp.get_default_memory_pool().free_all_blocks()
 
-    save_preview_images(res_np, _get_default_output_path(file_reader.file_path) / "preview")
+    save_preview_images(res_np, _get_default_output_path(file_reader.file_path) / "preview" / "SLIDING_SHACK_HARTMANN", square=parameters["square"])
 
 
 def process(file_path, parameters):
@@ -279,8 +265,8 @@ def process(file_path, parameters):
     first_frame = parameters["first_frame"]
     end_frame = parameters.get("end_frame", 0)
 
-    time_slide_delay = parameters["time_slide_range"][0]
-    time_slide_repetition = parameters["time_slide_range"][1]
+    time_slide_delay = parameters["sh_time_slide_range"][0]
+    time_slide_repetition = parameters["sh_time_slide_range"][1]
 
     if time_slide_repetition<= 0:
         time_slide_repetition = 1
@@ -303,7 +289,7 @@ def process(file_path, parameters):
 
     # Create CUDA streams
     h2d_stream = cp.cuda.Stream(non_blocking=True)
-    d2h_stream = cp.cuda.Stream(non_blocking=True)
+    # d2h_stream = cp.cuda.Stream(non_blocking=True)
     compute_stream = cp.cuda.Stream(non_blocking=True)
     
     processed_batches = 0
@@ -317,7 +303,7 @@ def process(file_path, parameters):
     # Start reading frames
     for i in tqdm(range(num_batch)):
 
-        res_tot = {}
+        res = {}
         U_tot = None
 
         for n in range(time_slide_repetition):
@@ -325,7 +311,7 @@ def process(file_path, parameters):
             # Start async H2D transfer for this batch
             with h2d_stream:
 
-                frames = file_reader.read_frames(first_frame = first_frame + i * time_stride + n * time_slide_delay, batch_size = time_window)
+                frames = file_reader.read_frames(first_frame = first_frame + i * time_stride + n * time_slide_delay, batch_size = parameters["sh_time_window"])
                 d_next = cp.asarray(frames)
                 del frames
                 h2d_event_next = cp.cuda.Event()
@@ -353,68 +339,58 @@ def process(file_path, parameters):
 
         phase_term = None
         if parameters.get("shack_hartmann", False):
-            phase_term = _process_shack_hartmann_phase(parameters, U_tot, ny, nx)
+            phase_term = _process_shack_hartmann_phase(parameters, U_tot, ny, nx, output_dict=res)
 
-        for n in range(time_slide_repetition):
+        # Start async H2D transfer for this batch
+        with h2d_stream:
 
-            res = {}
+            frames = file_reader.read_frames(first_frame = first_frame + i * time_stride + n * time_slide_delay, batch_size = time_window)
+            d_next = cp.asarray(frames)
+            h2d_event_next = cp.cuda.Event()
+            h2d_event_next.record(h2d_stream)
+    
+        # If we have a previous batch, wait for its H2D and compute it
+        if d_current is not None:
+            # Wait for H2D of current batch to complete
+            h2d_event_current.synchronize()
             
-            # Start async H2D transfer for this batch
-            with h2d_stream:
+            # Compute current batch on compute stream
+            with compute_stream:
+                _process_batch(parameters, d_current, phase_term=phase_term, output_dict=res)
 
-                frames = file_reader.read_frames(first_frame = first_frame + i * time_stride + n * time_slide_delay, batch_size = time_window)
-                d_next = cp.asarray(frames)
-                h2d_event_next = cp.cuda.Event()
-                h2d_event_next.record(h2d_stream)
-        
-            # If we have a previous batch, wait for its H2D and compute it
-            if d_current is not None:
-                # Wait for H2D of current batch to complete
-                h2d_event_current.synchronize()
+                if M0_reg is None and parameters["image_registration"]: #first batch is used for fixed batch
+                    M0_reg = res["M0ff"]
                 
-                # Compute current batch on compute stream
-                with compute_stream:
-                    _process_batch(parameters, d_current, phase_term=phase_term, output_dict=res)
-
-                    if M0_reg is None and parameters["image_registration"]: #first batch is used for fixed batch
-                        M0_reg = res["M0ff"]
+                if M0_reg is not None:
+                    shift_y, shift_x = register_images_shifts(cp, cp.fft, M0_reg, res["M0ff"], radius=0.7, gaussian_sigma=0, gaussian_filter=gaussian_filter)
                     
-                    if M0_reg is not None:
-                        shift_y, shift_x = register_images_shifts(cp, cp.fft, M0_reg, res["M0ff"], radius=0.7, gaussian_sigma=0, gaussian_filter=gaussian_filter)
-                        
-                    for k, v in res.items():
-                        if k in ["M0ff","M0","M1","M2"] or "band_" in k : #select the outputs that need the registration from M0ff applied
-                            res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
-
-                    res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
-
-                    compute_event = cp.cuda.Event()
-                    compute_event.record(compute_stream)
-                
-                # Wait for compute to finish
-                compute_event.synchronize()
-                
-                if res is None:
-                    break
-                
                 for k, v in res.items():
-                    if k in res_tot:
-                        res_tot[k] += res[k]
-                    else: 
-                        res_tot[k] = res[k]
+                    if k in ["M0ff","M0","M1","M2"] or "band_" in k : #select the outputs that need the registration from M0ff applied
+                        res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
 
-            # Advance: next becomes current
-            d_current = d_next
-            h2d_event_current = h2d_event_next
+                res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
 
-        for k, v in res_tot.items():
-            output[k].append(res_tot[k] / time_slide_repetition)
+                compute_event = cp.cuda.Event()
+                compute_event.record(compute_stream)
             
+            # Wait for compute to finish
+            compute_event.synchronize()
+            
+            if res is None:
+                break
+
+        # Advance: next becomes current
+        d_current = d_next
+        h2d_event_current = h2d_event_next
+
+
         if U_tot is not None:
             sy, sx, numy, numx = U_tot.shape
             U_tot = cp.transpose(U_tot, axes=(0,2,1,3))
-            res_tot["shack_hartmann_sub_images"] = cp.reshape(U_tot,(numy*sy,numx*sx))
-            output["shack_hartmann_sub_images"].append(res_tot["shack_hartmann_sub_images"])
+            res["shack_hartmann_sub_images"] = cp.reshape(U_tot,(numy*sy,numx*sx))
+
+        for k, v in res.items():
+            output[k].append(res[k])
         
         processed_batches += 1
 
@@ -429,7 +405,7 @@ def process(file_path, parameters):
     del output
     cp.get_default_memory_pool().free_all_blocks()
 
-    target_dir = _get_default_output_path(file_reader.file_path)
+    target_dir = _get_default_output_path(file_reader.file_path) / "SLIDING_SHACK_HARTMANN"
 
     _create_directories(target_dir, "FULL")
 
