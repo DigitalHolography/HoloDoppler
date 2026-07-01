@@ -16,8 +16,8 @@ class MinimalView(ttk.Frame):
         self.file_detail_var = tk.StringVar(value="Drop a .holo, .cine, or .txt list here.")
         self.status_var = tk.StringVar(value="Ready")
         self.current_file_var = tk.StringVar(value="")
-        self.file_progress_var = tk.StringVar(value="File progress")
-        self.batch_progress_var = tk.StringVar(value="Batch progress")
+        self.file_progress_var = tk.StringVar(value="Batch progress")
+        self.batch_progress_var = tk.StringVar(value="Input progress")
         self._build()
 
     @property
@@ -65,23 +65,23 @@ class MinimalView(ttk.Frame):
     def reset_progress(self) -> None:
         self.file_progress.configure(value=0)
         self.batch_progress.configure(value=0)
-        self.file_progress_var.set("File progress")
-        self.batch_progress_var.set("Batch progress")
+        self.file_progress_var.set("Batch progress")
+        self.batch_progress_var.set("Input progress")
 
     def set_current_file(self, index: int, total: int, path: Path) -> None:
         self.current_file_var.set(f"{index}/{total}: {path.name}")
-        self.file_progress_var.set("File progress")
+        self.file_progress_var.set("Batch progress")
         self.file_progress.configure(value=0)
 
     def set_file_progress(self, completed: int, total: int) -> None:
         percent = 0 if total <= 0 else max(0, min(100, completed / total * 100))
         self.file_progress.configure(value=percent)
-        self.file_progress_var.set(f"File progress: {completed}/{total}" if total > 0 else "File progress")
+        self.file_progress_var.set(f"Batch progress: {completed}/{total}" if total > 0 else "Batch progress")
 
     def set_batch_progress(self, completed: int, total: int) -> None:
         percent = 0 if total <= 0 else max(0, min(100, completed / total * 100))
         self.batch_progress.configure(value=percent)
-        self.batch_progress_var.set(f"Batch progress: {completed}/{total}" if total > 1 else "Batch progress")
+        self.batch_progress_var.set(f"Input progress: {completed}/{total}" if total > 1 else "Input progress")
 
     def _build(self) -> None:
         self.columnconfigure(0, weight=1)

@@ -58,6 +58,7 @@ PAYLOAD_EXTRA_FILES = (
 FROZEN_METADATA_DISTRIBUTIONS = (
     "holodoppler",
     "imageio",
+    "imageio-ffmpeg",
     "numpy",
     "scipy",
     "matplotlib",
@@ -84,6 +85,7 @@ FROZEN_METADATA_DISTRIBUTIONS = (
 FROZEN_HIDDEN_IMPORTS = (
     "graphlib",
     "matplotlib.backends.backend_agg",
+    "matplotlib.backends.backend_pdf",
     "matplotlib.backends.backend_tkagg",
 )
 
@@ -95,6 +97,7 @@ FROZEN_SUBMODULE_COLLECTIONS = (
     "scipy",
     "h5py",
     "imageio",
+    "imageio_ffmpeg",
     "cv2",
     "cinereader",
     "tkinterdnd2",
@@ -112,12 +115,14 @@ FROZEN_DATA_COLLECTIONS = (
     "sv_ttk",
     "PIL",
     "imageio",
+    "imageio_ffmpeg",
 )
 
 FROZEN_BINARY_COLLECTIONS = (
     "cupy",
     "cv2",
     "h5py",
+    "imageio_ffmpeg",
     "scipy",
 )
 

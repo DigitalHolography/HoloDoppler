@@ -1,4 +1,4 @@
-from holodoppler.saving import save_preview_images, _get_default_output_path, _save_videos, _save_h5_2, _create_directories, _save_pngs, _save_metadata
+from holodoppler.saving import save_preview_images, _get_default_output_path, _save_videos, _save_h5_2, _create_directories, _save_pngs, _save_metadata, _save_reports
 from holodoppler.propagation import fresnel_transform, fresnel_transform_with_phase, angular_spectrum_transform, angular_spectrum_transform_with_phase
 from holodoppler.shack_hartmann import construct_subapertures_fresnel, construct_subapertures_angular, calculate_displacements, calculate_displacements_graph_laplacian
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum
@@ -16,6 +16,14 @@ from cupyx.scipy.ndimage import gaussian_filter
 from tqdm import tqdm
 
 from collections import defaultdict
+
+def _batch_iterator(num_batch, progress_callback):
+    batches = range(num_batch)
+    return batches if progress_callback is not None else tqdm(batches)
+
+def _notify_progress(progress_callback, completed, total):
+    if progress_callback is not None:
+        progress_callback(completed, total, f"Batch {completed}/{total}")
 
 def _process_batch(parameters, frames, phase_term = None, output_dict = None):
     xp = cp
@@ -217,7 +225,7 @@ def preview(file_path, parameters):
     save_preview_images(res_np, _get_default_output_path(file_reader.file_path) / "preview")
 
 
-def process(file_path, parameters):
+def process(file_path, parameters, progress_callback=None):
     file_reader = FileReaderFactory.create(file_path)
 
     if file_reader.ext == ".holo":
@@ -249,73 +257,61 @@ def process(file_path, parameters):
 
     # Create CUDA streams
     h2d_stream = cp.cuda.Stream(non_blocking=True)
-    d2h_stream = cp.cuda.Stream(non_blocking=True)
     compute_stream = cp.cuda.Stream(non_blocking=True)
 
     processed_batches = 0
 
-    # Use simple double-buffering with explicit state
-    d_current = None
-    d_next = None
-    h2d_event_current = None
-    h2d_event_next = None
-
     # Start reading frames
-    for i in tqdm(range(num_batch)):
+    for i in _batch_iterator(num_batch, progress_callback):
 
         # Start async H2D transfer for this batch
         with h2d_stream:
 
             frames = file_reader.read_frames(first_frame = first_frame + i * batch_stride, batch_size = batch_size)
-            d_next = cp.asarray(frames)
-            h2d_event_next = cp.cuda.Event()
-            h2d_event_next.record(h2d_stream)
+            d_current = cp.asarray(frames)
+            h2d_event = cp.cuda.Event()
+            h2d_event.record(h2d_stream)
 
-        # If we have a previous batch, wait for its H2D and compute it
-        if d_current is not None:
-            # Wait for H2D of current batch to complete
-            h2d_event_current.synchronize()
+        h2d_event.synchronize()
 
-            # Compute current batch on compute stream
-            with compute_stream:
+        # Compute current batch on compute stream
+        with compute_stream:
 
-                res = {}
+            res = {}
 
-                phase_term = None
-                if parameters.get("shack_hartmann", False):
-                    phase_term = _process_shack_hartmann(parameters, d_current, output_dict=res)
+            phase_term = None
+            if parameters.get("shack_hartmann", False):
+                phase_term = _process_shack_hartmann(parameters, d_current, output_dict=res)
 
-                _process_batch(parameters, d_current, phase_term=phase_term, output_dict=res)
+            _process_batch(parameters, d_current, phase_term=phase_term, output_dict=res)
 
-                if M0_reg is None and parameters["image_registration"]: #first batch is used for fixed batch
-                    M0_reg = res["M0ff"]
+            shift_y, shift_x = 0, 0
+            if M0_reg is None and parameters["image_registration"]: #first batch is used for fixed batch
+                M0_reg = res["M0ff"]
 
-                if M0_reg is not None:
-                    shift_y, shift_x = register_images_shifts(cp, cp.fft, M0_reg, res["M0ff"], radius=0.7, gaussian_sigma=0, gaussian_filter=gaussian_filter)
-
-                for k, v in res.items():
-                    if k in ["M0ff","M0","M1","M2"] or "band_" in k : #select the outputs that need the registration from M0ff applied
-                        res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
-
-                res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
-
-                compute_event = cp.cuda.Event()
-                compute_event.record(compute_stream)
-
-            # Wait for compute to finish
-            compute_event.synchronize()
-
-            if res is None:
-                break
+            if M0_reg is not None:
+                shift_y, shift_x = register_images_shifts(cp, cp.fft, M0_reg, res["M0ff"], radius=0.8, gaussian_sigma=3, gaussian_filter=gaussian_filter)
 
             for k, v in res.items():
-                output[k].append(v)
+                if k in ["M0ff","M0","M1","M2"] or "band_" in k : #select the outputs that need the registration from M0ff applied
+                    res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
 
-            processed_batches += 1
+            res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
 
-        # Advance: next becomes current
-        d_current = d_next
-        h2d_event_current = h2d_event_next
+            compute_event = cp.cuda.Event()
+            compute_event.record(compute_stream)
+
+        # Wait for compute to finish
+        compute_event.synchronize()
+
+        if res is None:
+            break
+
+        for k, v in res.items():
+            output[k].append(v)
+
+        processed_batches += 1
+        _notify_progress(progress_callback, processed_batches, num_batch)
 
     output = {k: cp.stack(v, axis=0) for k, v in output.items()}
 
@@ -336,9 +332,10 @@ def process(file_path, parameters):
 
     # save_to_h5_list = ["M0ff","M0","M1","M2","shack_hartmann_zernike_coefs", "shack_hartmann_sub_images"] "_bands"
 
-    _save_h5_2(target_dir, output_np, parameters)
+    raw_output_np = output_np
+    _save_h5_2(target_dir, raw_output_np, parameters)
 
-    output_np = {k: normalize_to_uint8(v) for k, v in output_np.items()}
+    output_np = {k: normalize_to_uint8(v) for k, v in raw_output_np.items()}
 
     # Save videos (sequential to avoid encoding conflicts)
     _save_videos(target_dir, output_np, 30)
@@ -348,3 +345,6 @@ def process(file_path, parameters):
 
     # Save metadata (fast)
     _save_metadata(target_dir, file_reader, parameters)
+
+    # Save visual result reports
+    _save_reports(target_dir, raw_output_np, output_np, parameters, file_reader)

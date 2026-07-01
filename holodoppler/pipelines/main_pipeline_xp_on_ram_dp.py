@@ -769,7 +769,10 @@ def process_moments(
 def _process_cpu_streaming(bm, file_reader, parameters, num_batch, end_frame, first_frame, batch_stride, batch_size,
                  M0_reg, out_list, out_accumulation, coefs_list, reg_list, debug, submit_debug_task,
                  progress_callback=None):
-    for i in tqdm(range(num_batch)):
+    batches = range(num_batch)
+    if progress_callback is None:
+        batches = tqdm(batches)
+    for i in batches:
 
         frames = file_reader.read_frames(first_frame=first_frame+i*batch_stride, batch_size=batch_size)
         frames = bm.to_backend(frames)
@@ -868,12 +871,15 @@ def _process_gpu_streaming_onram(bm, file_path, parameters, num_batch, end_frame
         h2d_event_next = None
 
         # Start reading frames
-        for i, frames in enumerate(tqdm(file_reader.iter_frames(
+        frames_iter = file_reader.iter_frames(
             first_frame=first_frame,
             end_frame = end_frame,
             batch_size=batch_size,
             batch_stride=batch_stride
-        ), total=num_batch)):
+        )
+        if progress_callback is None:
+            frames_iter = tqdm(frames_iter, total=num_batch)
+        for i, frames in enumerate(frames_iter):
 
             # Start async H2D transfer for this batch
             with h2d_stream:

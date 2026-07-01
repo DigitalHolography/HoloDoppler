@@ -1,17 +1,23 @@
 from pathlib import Path
+import base64
 import h5py
+import html
 import imageio as iio
 import numpy as np
 import json
 import time
+from datetime import datetime
+from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 import os
+from urllib.parse import quote
 
 from .utils import resize_slicewise, normalize_to_uint8, unsharp_projection, _pad_to_even
 from .get_version import get_version
 
 H5_FLOAT32_DATASETS = {"M0", "M0ff", "M1", "M2", "moment_0", "moment_0_ff", "moment_1", "moment_2"}
+AVI_FPS = 60.0
 
 
 def _h5_data(name, data):
@@ -127,8 +133,8 @@ def _save_bundle(
     # Create subdirectories
     _create_directories(target_dir, mode)
 
-    # Calculate FPS with safety check
-    fps = _calculate_fps(num_batch, end_frame, first_frame, parameters)
+    # MP4 keeps the original pipeline FPS behavior; AVI is fixed at 60 FPS.
+    mp4_fps = _calculate_fps(num_batch, end_frame, first_frame, parameters)
 
     # Prepare data for saving
     save_map = _build_save_map(vid, parameters, vid_debug, num_batch)
@@ -140,7 +146,7 @@ def _save_bundle(
     uint8_map = {name: normalize_to_uint8(data) for name, data in save_map.items()}
 
     # Save videos (sequential to avoid encoding conflicts)
-    _save_videos(target_dir, uint8_map, fps)
+    _save_videos(target_dir, uint8_map, mp4_fps)
 
     # Save PNGs (parallel)
     _save_pngs(target_dir, uint8_map)
@@ -152,13 +158,18 @@ def _save_bundle(
     if mode == "FULL":
         _save_h5(target_dir, vid, parameters, reg_list, coefs_list)
 
+    report_raw_map = dict(save_map)
+    if reg_list:
+        report_raw_map["registration"] = np.asarray(reg_list, dtype=np.float32)
+    _save_reports(target_dir, report_raw_map, uint8_map, parameters, file_reader)
+
     elapsed = time.time() - start_time
     print(f"_save_bundle completed in {elapsed:.1f} seconds")
 
 
 def _create_directories(target_dir, mode):
     """Create required subdirectories"""
-    subdirs = ["png", "mp4", "avi", "json"]
+    subdirs = ["png", "mp4", "avi", "json", "reports"]
     if mode == "FULL":
         subdirs.append("h5")
     for sub in subdirs:
@@ -166,7 +177,7 @@ def _create_directories(target_dir, mode):
 
 
 def _calculate_fps(num_batch, end_frame, first_frame, parameters):
-    """Calculate FPS with bounds checking"""
+    """Calculate MP4 FPS with the original bounds checking behavior."""
     if end_frame is None or first_frame is None:
         fps = 30  # Default fallback
         print(f"Using default FPS: {fps}")
@@ -252,8 +263,8 @@ def _save_projections(target_dir, save_map, parameters, backend):
                 print(f"Failed to save projection for {name}: {e}")
 
 
-def _save_videos(target_dir, uint8_map, fps):
-    """Save all videos as MP4 and AVI"""
+def _save_videos(target_dir, uint8_map, mp4_fps):
+    """Save all videos as MP4 and AVI."""
     start_time = time.time()
     completed = 0
     for name, uint8_data in uint8_map.items():
@@ -265,7 +276,7 @@ def _save_videos(target_dir, uint8_map, fps):
         _write_video_fast(
             mp4_path,
             uint8_data,
-            fps,
+            mp4_fps,
             codec="libx264",
             preset="ultrafast",
             crf=28,
@@ -276,7 +287,7 @@ def _save_videos(target_dir, uint8_map, fps):
         _write_video_fast(
             avi_path,
             uint8_data,
-            fps,
+            AVI_FPS,
             codec="mjpeg",
             quality=8,
         )
@@ -311,6 +322,453 @@ def _save_pngs(target_dir, uint8_map):
 
     elapsed = time.time() - start_time
     print(f"PNGs saved in {elapsed:.1f} seconds ({completed} images)")
+
+
+def _save_reports(target_dir, raw_map, uint8_map, parameters, file_reader):
+    """Save visual result summaries in HTML and PDF formats."""
+    report_dir = target_dir / "reports"
+    report_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        start_time = time.time()
+        entries = _result_entries(raw_map, uint8_map)
+
+        # Remove old assessment report names from earlier builds.
+        for old_name in ("quality_report.html", "quality_report.pdf", "quality_report_error.txt"):
+            old_path = report_dir / old_name
+            if old_path.exists():
+                old_path.unlink()
+
+        html_path = report_dir / "results_report.html"
+        pdf_path = report_dir / "results_report.pdf"
+
+        html_path.write_text(
+            _render_results_report_html(entries, parameters, file_reader),
+            encoding="utf-8",
+        )
+        _write_results_report_pdf(pdf_path, entries, parameters, file_reader)
+
+        elapsed = time.time() - start_time
+        print(f"Reports saved in {elapsed:.1f} seconds: {html_path.name}, {pdf_path.name}")
+    except Exception as exc:
+        error_path = report_dir / "results_report_error.txt"
+        error_path.write_text(f"Report generation failed:\n{exc}\n", encoding="utf-8")
+        print(f"Report generation failed: {exc}")
+
+
+def _result_entries(raw_map, uint8_map):
+    names = list(dict.fromkeys([*raw_map.keys(), *uint8_map.keys()]))
+    return [
+        _result_entry(name, raw_map.get(name), uint8_map.get(name))
+        for name in names
+    ]
+
+
+def _result_entry(name, raw_data, uint8_data):
+    source = raw_data if raw_data is not None else uint8_data
+    arr = np.asarray(source)
+    previews = _result_previews(raw_data, uint8_data)
+    plot = None
+    if not previews and arr.ndim <= 2:
+        plot = _plot_array_preview(arr, name)
+
+    return {
+        "name": name,
+        "shape": tuple(int(v) for v in getattr(arr, "shape", ())),
+        "dtype": str(getattr(arr, "dtype", "")),
+        "kind": _result_kind(arr, uint8_data),
+        "previews": previews,
+        "plot": plot,
+        "links": _output_links(name, uint8_data),
+    }
+
+
+def _result_kind(arr, uint8_data):
+    if getattr(uint8_data, "ndim", 0) in (3, 4):
+        return "video-like output"
+    if arr.ndim == 2:
+        return "image or matrix"
+    if arr.ndim == 1:
+        return "vector"
+    if arr.ndim == 0:
+        return "scalar"
+    return f"{arr.ndim}D array"
+
+
+def _output_links(name, uint8_data):
+    if getattr(uint8_data, "ndim", 0) not in (3, 4):
+        return []
+    url_name = quote(name, safe="")
+    return [
+        ("PNG", f"../png/{url_name}.png"),
+        ("MP4", f"../mp4/{url_name}.mp4"),
+    ]
+
+
+def _result_previews(raw_data, uint8_data):
+    if getattr(uint8_data, "ndim", 0) in (3, 4):
+        return _video_preview_images(uint8_data)
+
+    if raw_data is None:
+        return []
+
+    arr = np.asarray(raw_data)
+    if arr.ndim == 2:
+        if min(arr.shape) <= 16:
+            return []
+        return [{"label": "image", "image": _normalize_image_for_report(arr)}]
+    if arr.ndim in (3, 4):
+        return _video_preview_images(_normalize_array_for_report(arr))
+    return []
+
+
+def _video_preview_images(data):
+    arr = np.asarray(data)
+    if arr.shape[0] == 0:
+        return []
+
+    previews = []
+    seen = set()
+    for label, index in (
+        ("first", 0),
+        ("middle", arr.shape[0] // 2),
+        ("last", arr.shape[0] - 1),
+    ):
+        if index in seen:
+            continue
+        seen.add(index)
+        previews.append({"label": label, "image": _image_from_array(arr[index])})
+
+    previews.append({"label": "mean", "image": _image_from_array(np.mean(arr.astype(np.float32, copy=False), axis=0))})
+    return previews
+
+
+def _normalize_array_for_report(data):
+    arr = np.asarray(data)
+    if arr.ndim == 2:
+        return _normalize_image_for_report(arr)
+    if arr.ndim == 3:
+        return np.stack([_normalize_image_for_report(frame) for frame in arr], axis=0)
+    if arr.ndim == 4:
+        return np.stack([_image_from_array(frame) for frame in arr], axis=0)
+    return arr
+
+
+def _normalize_image_for_report(data):
+    arr = np.asarray(data)
+    if np.iscomplexobj(arr):
+        arr = np.abs(arr)
+    arr = arr.astype(np.float32, copy=False)
+    finite = np.isfinite(arr)
+    if not np.any(finite):
+        return np.zeros(arr.shape, dtype=np.uint8)
+    finite_values = arr[finite]
+    low, high = np.percentile(finite_values, [1, 99])
+    if high <= low:
+        low = float(np.min(finite_values))
+        high = float(np.max(finite_values))
+    if high <= low:
+        return np.zeros(arr.shape, dtype=np.uint8)
+    arr = np.nan_to_num(arr, nan=low, posinf=high, neginf=low)
+    return np.clip((arr - low) / (high - low) * 255, 0, 255).astype(np.uint8)
+
+
+def _image_from_array(data):
+    arr = np.asarray(data)
+    if arr.ndim == 2:
+        return np.clip(arr, 0, 255).astype(np.uint8)
+    if arr.ndim == 3:
+        if arr.shape[-1] == 1:
+            return np.clip(arr[..., 0], 0, 255).astype(np.uint8)
+        if arr.shape[-1] == 2:
+            arr = np.concatenate([arr, arr[..., :1]], axis=-1)
+        if arr.shape[-1] >= 3:
+            return np.clip(arr[..., :3], 0, 255).astype(np.uint8)
+        return np.clip(np.mean(arr.astype(np.float32, copy=False), axis=0), 0, 255).astype(np.uint8)
+    while arr.ndim > 2:
+        arr = np.mean(arr.astype(np.float32, copy=False), axis=0)
+    return _normalize_image_for_report(arr)
+
+
+def _plot_array_preview(data, title):
+    arr = np.asarray(data)
+    if arr.size == 0:
+        return None
+    if np.iscomplexobj(arr):
+        arr = np.abs(arr)
+    arr = np.squeeze(arr)
+
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(6.4, 3.6), dpi=120)
+    if arr.ndim == 0:
+        ax.text(0.5, 0.5, f"{float(arr):.4g}", ha="center", va="center", fontsize=16)
+        ax.set_axis_off()
+    elif arr.ndim == 1:
+        ax.plot(arr)
+        ax.set_xlabel("Index")
+        ax.grid(True, alpha=0.3)
+    elif arr.ndim == 2 and arr.shape[1] <= 16 and arr.shape[0] > 1:
+        for col in range(arr.shape[1]):
+            ax.plot(arr[:, col], label=f"col {col}")
+        ax.set_xlabel("Index")
+        ax.grid(True, alpha=0.3)
+        if arr.shape[1] <= 6:
+            ax.legend(fontsize=7)
+    elif arr.ndim == 2:
+        im = ax.imshow(arr, aspect="auto", cmap="viridis")
+        fig.colorbar(im, ax=ax, shrink=0.8)
+    else:
+        ax.plot(arr.reshape(-1))
+        ax.set_xlabel("Flattened index")
+        ax.grid(True, alpha=0.3)
+    ax.set_title(title)
+    fig.tight_layout()
+    image = _fig_to_image(fig)
+    plt.close(fig)
+    return image
+
+
+def _fig_to_image(fig):
+    fig.canvas.draw()
+    rgba = np.asarray(fig.canvas.buffer_rgba())
+    return rgba[..., :3].copy()
+
+
+def _render_results_report_html(entries, parameters, file_reader):
+    cards = "\n".join(_render_result_card(entry) for entry in entries)
+    metadata_rows = _report_metadata_rows(parameters, file_reader)
+    generated = datetime.now().isoformat(timespec="seconds")
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HoloDoppler Results Report</title>
+<style>
+body {{ font-family: Segoe UI, Arial, sans-serif; margin: 28px; color: #17202a; background: #f6f8fb; }}
+h1, h2, h3 {{ margin: 0 0 10px; }}
+.summary, .card, .metadata {{ background: #ffffff; border: 1px solid #d9e0ea; border-radius: 6px; padding: 16px; margin-bottom: 16px; }}
+.grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }}
+.preview-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 10px 0; }}
+.preview img {{ width: 100%; max-height: 260px; object-fit: contain; background: #111; border-radius: 4px; }}
+.preview video {{ width: 100%; max-height: 320px; background: #111; border-radius: 4px; }}
+.preview-label {{ color: #536271; font-size: 0.9em; margin-top: 4px; }}
+table {{ border-collapse: collapse; width: 100%; }}
+td, th {{ text-align: left; padding: 6px 8px; border-bottom: 1px solid #e7ecf3; }}
+.note {{ color: #536271; font-size: 0.92em; }}
+a {{ color: #0b63ce; margin-right: 10px; }}
+</style>
+</head>
+<body>
+<h1>HoloDoppler Results Report</h1>
+<div class="summary">
+  <p class="note">Generated {html.escape(generated)}.</p>
+</div>
+<div class="metadata">
+  <h2>Processing Metadata</h2>
+  <table>{metadata_rows}</table>
+</div>
+<h2>Saved Outputs</h2>
+<div class="grid">
+{cards}
+</div>
+</body>
+</html>
+"""
+
+
+def _render_result_card(entry):
+    rows = [
+        ("Shape", str(entry["shape"])),
+        ("Dtype", entry["dtype"]),
+    ]
+    metrics = "".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(value))}</td></tr>"
+        for key, value in rows
+    )
+    if entry["links"]:
+        previews = _render_existing_output_preview(entry)
+    else:
+        previews = "".join(_render_preview(preview) for preview in entry["previews"])
+        if entry["plot"] is not None:
+            previews += _render_preview({"label": "plot", "image": entry["plot"]})
+    if not previews:
+        previews = '<p class="note">No visual preview available for this output shape.</p>'
+    links = "".join(
+        f'<a href="{html.escape(href)}" target="_blank" rel="noopener">{html.escape(label)}</a>'
+        for label, href in entry["links"]
+        if label == "PNG"
+    )
+    links_html = f"<p>{links}</p>" if links else ""
+    return f"""<div class="card">
+<h3>{html.escape(entry["name"])}</h3>
+{links_html}
+<div class="preview-grid">{previews}</div>
+<table>{metrics}</table>
+</div>"""
+
+
+def _render_existing_output_preview(entry):
+    png_href = _entry_link(entry, "PNG")
+    mp4_href = _entry_link(entry, "MP4")
+    if mp4_href is None:
+        return ""
+    poster = f' poster="{html.escape(png_href)}"' if png_href is not None else ""
+    return f"""<div class="preview">
+<video controls preload="metadata"{poster} src="{html.escape(mp4_href)}"></video>
+<div class="preview-label">MP4 preview</div>
+</div>"""
+
+
+def _entry_link(entry, label):
+    return next((href for link_label, href in entry["links"] if link_label == label), None)
+
+
+def _render_preview(preview):
+    return f"""<div class="preview">
+<img src="{_image_data_uri(preview["image"])}" alt="{html.escape(preview["label"])}">
+<div class="preview-label">{html.escape(preview["label"])}</div>
+</div>"""
+
+
+def _report_metadata_rows(parameters, file_reader):
+    file_path = str(getattr(file_reader, "file_path", ""))
+    selected = {
+        "Input": file_path,
+        "Pipeline": parameters.get("pipeline_name", ""),
+        "First frame": parameters.get("first_frame", ""),
+        "End frame": parameters.get("end_frame", ""),
+        "Batch size": parameters.get("batch_size", parameters.get("time_window", "")),
+        "Batch stride": parameters.get("batch_stride", parameters.get("time_stride", "")),
+        "Low frequency": parameters.get("low_freq", ""),
+        "High frequency": parameters.get("high_freq", ""),
+        "SVD threshold": parameters.get("svd_threshold", ""),
+        "Version": f"py{get_version()}",
+    }
+    return "".join(
+        f"<tr><th>{html.escape(str(key))}</th><td>{html.escape(str(value))}</td></tr>"
+        for key, value in selected.items()
+    )
+
+
+def _image_data_uri(image):
+    from PIL import Image
+
+    arr = np.asarray(image)
+    if arr.ndim == 2:
+        pil_image = Image.fromarray(arr, mode="L")
+    else:
+        if arr.shape[-1] == 1:
+            arr = np.repeat(arr, 3, axis=-1)
+        elif arr.shape[-1] == 2:
+            arr = np.concatenate([arr, arr[..., :1]], axis=-1)
+        pil_image = Image.fromarray(arr[..., :3], mode="RGB")
+    pil_image.thumbnail((640, 640))
+    buffer = BytesIO()
+    pil_image.save(buffer, format="PNG")
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def _write_results_report_pdf(pdf_path, entries, parameters, file_reader):
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_pdf import PdfPages
+
+    with PdfPages(pdf_path) as pdf:
+        fig = plt.figure(figsize=(8.27, 11.69))
+        fig.patch.set_facecolor("white")
+        ax = fig.add_subplot(111)
+        ax.axis("off")
+
+        lines = [
+            "HoloDoppler Results Report",
+            "",
+            f"Generated: {datetime.now().isoformat(timespec='seconds')}",
+            f"Output count: {len(entries)}",
+            "",
+            "Processing metadata",
+        ]
+        for key, value in _pdf_metadata_items(parameters, file_reader):
+            lines.append(f"{key}: {value}")
+
+        ax.text(0.05, 0.95, "\n".join(lines), va="top", ha="left", fontsize=11, wrap=True)
+        pdf.savefig(fig, bbox_inches="tight")
+        plt.close(fig)
+
+        for entry in entries:
+            images = [preview["image"] for preview in entry["previews"]]
+            labels = [preview["label"] for preview in entry["previews"]]
+            if entry["plot"] is not None:
+                images.append(entry["plot"])
+                labels.append("plot")
+
+            fig, axes = plt.subplots(2, 2, figsize=(8.27, 11.69))
+            axes = axes.reshape(-1)
+            fig.suptitle(entry["name"], fontsize=14)
+
+            metadata_axis = axes[0]
+            metadata_axis.axis("off")
+            metadata_lines = [
+                f"Shape: {entry['shape']}",
+                f"Dtype: {entry['dtype']}",
+            ]
+            metadata_axis.text(
+                0.0,
+                1.0,
+                "\n".join(metadata_lines),
+                va="top",
+                ha="left",
+                fontsize=9,
+                wrap=True,
+            )
+
+            for axis, image, label in zip(axes[1:], images[:3], labels[:3]):
+                if image.ndim == 2:
+                    axis.imshow(image, cmap="gray", vmin=0, vmax=255)
+                else:
+                    axis.imshow(image)
+                axis.set_title(label, fontsize=10)
+                axis.set_axis_off()
+
+            shown = min(3, len(images))
+            if shown == 0:
+                axes[1].axis("off")
+                axes[1].text(0.5, 0.5, "No visual preview", ha="center", va="center")
+                shown = 1
+
+            for axis in axes[1 + shown:]:
+                axis.axis("off")
+
+            fig.tight_layout()
+            pdf.savefig(fig)
+            plt.close(fig)
+
+
+def _pdf_metadata_items(parameters, file_reader):
+    return [
+        ("Input", getattr(file_reader, "file_path", "")),
+        ("Pipeline", parameters.get("pipeline_name", "")),
+        ("First frame", parameters.get("first_frame", "")),
+        ("End frame", parameters.get("end_frame", "")),
+        ("Batch size", parameters.get("batch_size", parameters.get("time_window", ""))),
+        ("Batch stride", parameters.get("batch_stride", parameters.get("time_stride", ""))),
+        ("Low frequency", parameters.get("low_freq", "")),
+        ("High frequency", parameters.get("high_freq", "")),
+        ("SVD threshold", parameters.get("svd_threshold", "")),
+        ("Version", f"py{get_version()}"),
+    ]
+
+
+def _chunks(items, size):
+    for index in range(0, len(items), size):
+        yield items[index:index + size]
 
 
 def _save_metadata(target_dir, file_reader, parameters):
