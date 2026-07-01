@@ -11,13 +11,16 @@ import os
 from .utils import resize_slicewise, normalize_to_uint8, unsharp_projection, _pad_to_even, imadjust, stretchlim
 from .get_version import get_version
 
-def save_preview_images(save_dict, save_dir, prefix="debug"):
+def save_preview_images(save_dict, save_dir, prefix="debug", square=False):
     os.makedirs(save_dir, exist_ok=True)
     for key, img in save_dict.items():
         if img is None:
             continue
-        if img.ndim not in [2,3]:
+        if (img.ndim not in [2,3]) or (img.ndim == 3 and img.shape[-1] > 3):
             continue
+        if square:
+            m = max(img.shape)
+            img = resize_slicewise(img, m, m, axes=(0,1))
         if img.dtype != np.uint8:
             img_min, img_max = np.min(img), np.max(img)
             if img_max > img_min:

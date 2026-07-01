@@ -70,6 +70,8 @@ def _process_batch(parameters, frames, phase_term = None, output_dict = None):
     )
     psd = xp.abs(spectrum_f) ** 2
 
+    output_dict["psd"] = psd
+
     # psd_angle = xp.abs(spectrum_f_angle) ** 2
 
     if parameters.get("corner_compensation", False):
@@ -77,15 +79,15 @@ def _process_batch(parameters, frames, phase_term = None, output_dict = None):
 
     # Moments
     output_dict["M0"] = moment(xp, psd[idxs], freqs, 0)
-    output_dict["M1"] = moment(xp, psd[idxs], freqs, 1)
-    output_dict["M2"] = moment(xp, psd[idxs], freqs, 2)
+    # output_dict["M1"] = moment(xp, psd[idxs], freqs, 1)
+    # output_dict["M2"] = moment(xp, psd[idxs], freqs, 2)
     output_dict["M0ff"] = gaussian_flatfield(output_dict["M0"], parameters.get("registration_flatfield_gw", 1.0), gaussian_filter)
 
     # Frequency bands
-    for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-        idxs_band, _ = frequency_symmetric_filtering(xp, fft, nt_sub, parameters["sampling_freq"], f1, f2)
-        band = xp.mean(psd[idxs_band], axis=0)
-        output_dict[f"band_{k}_{f1}_{f2}"] = band
+    # for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
+    #     idxs_band, _ = frequency_symmetric_filtering(xp, fft, nt_sub, parameters["sampling_freq"], f1, f2)
+    #     band = xp.mean(psd[idxs_band], axis=0)
+    #     output_dict[f"band_{k}_{f1}_{f2}"] = band
 
 def _process_shack_hartmann(parameters, frames, output_dict = None):
     
@@ -216,7 +218,13 @@ def preview(file_path, parameters):
     del res
     cp.get_default_memory_pool().free_all_blocks()
 
-    save_preview_images(res_np, _get_default_output_path(file_reader.file_path) / "preview")
+    target_dir = _get_default_output_path(file_reader.file_path) / "preview" / "SH_AVG"
+
+    (target_dir / "h5").mkdir(parents=True, exist_ok=True)
+
+    save_preview_images(res_np, target_dir, square=parameters["square"])
+
+    _save_h5_2(target_dir, res_np, parameters)
 
 
 def process(file_path, parameters):
@@ -261,6 +269,8 @@ def process(file_path, parameters):
     d_next = None
     h2d_event_current = None
     h2d_event_next = None
+
+    psd_tot = None
     
     # Start reading frames
     for i in tqdm(range(num_batch)):
@@ -296,10 +306,17 @@ def process(file_path, parameters):
                     shift_y, shift_x = register_images_shifts(cp, cp.fft, M0_reg, res["M0ff"], radius=0.8, gaussian_sigma=3, gaussian_filter=gaussian_filter)
                     
                 for k, v in res.items():
-                    if k in ["M0ff","M0","M1","M2"] or "band_" in k : #select the outputs that need the registration from M0ff applied
+                    if k in ["M0ff","M0","M1","M2", "psd"] or "band_" in k : #select the outputs that need the registration from M0ff applied
                         res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
 
                 res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
+
+                if psd_tot is None:
+                    psd_tot = res["psd"]
+                else: 
+                    psd_tot += res["psd"]
+
+                del res["psd"] # Needed for memory to not get out of control
 
                 compute_event = cp.cuda.Event()
                 compute_event.record(compute_stream)
@@ -313,6 +330,8 @@ def process(file_path, parameters):
             for k, v in res.items():
                 output[k].append(v)
             
+            del res
+            
             processed_batches += 1
         
         # Advance: next becomes current
@@ -320,6 +339,8 @@ def process(file_path, parameters):
         h2d_event_current = h2d_event_next
 
     output = {k: cp.stack(v, axis=0) for k, v in output.items()}
+
+    output["sh_avg"] = psd_tot
 
     if parameters.get("square", False):
         output = {k: square_cupy(v) if v.ndim >=3 else v for k, v in output.items()}
@@ -330,7 +351,7 @@ def process(file_path, parameters):
     del output
     cp.get_default_memory_pool().free_all_blocks()
 
-    target_dir = _get_default_output_path(file_reader.file_path)
+    target_dir = _get_default_output_path(file_reader.file_path) / "SH_AVG"
 
     if "saving_to_folder" in parameters:
         target_dir = Path(parameters["saving_to_folder"])
