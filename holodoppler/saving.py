@@ -23,7 +23,7 @@ def save_preview_images(save_dict, save_dir, prefix="debug", square=False):
             img = resize_slicewise(img, m, m, axes=(0,1))
         if img.dtype != np.uint8:
             img_min, img_max = np.min(img), np.max(img)
-            if img_max > img_min:
+            if img_max >= img_min:
                 img_np = (img - img_min) / (img_max - img_min + 1e-12)
             img_np = (img_np * 255).astype(np.uint8)
         filename = os.path.join(save_dir, f"{prefix}_{key}.png")
