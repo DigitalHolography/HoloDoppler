@@ -48,12 +48,30 @@ def _process_batch(parameters, frames, phase_term = None):
                 xp, fft, frames, parameters["z"], parameters["pixel_pitch"], parameters["wavelength"],
             )
 
-    # PCA projection
-    holograms = pca_time_transform(cp, holograms, remove_dc=False)
+    if parameters["time_transform"] == "PCA":
 
-    # Moments
-    start, end = parameters["pca_range"]
-    return cp.sum(cp.abs(holograms)[start:end], axis=0)
+        # PCA projection
+        holograms = pca_time_transform(cp, holograms, remove_dc=False)
+
+
+
+        # Moments
+        start, end = parameters["pca_range"]
+        return cp.sum(cp.abs(holograms)[start:end], axis=0)
+    elif  parameters["time_transform"] == "FFT":
+
+        spectrum_f = fourier_time_transform(xp, fft, holograms)
+
+        psd = xp.abs(spectrum_f) ** 2
+
+        idxs, freqs = frequency_symmetric_filtering(
+            xp, fft, psd.shape[0], 1.0, parameters["low_freq"], parameters.get("high_freq")
+        )
+
+        return moment(xp, psd[idxs], freqs, 0)
+
+
+        
 
 def _process_shack_hartmann_U(parameters, frames):
     
