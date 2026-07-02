@@ -135,7 +135,7 @@ def _save_bundle(
     contrast_cfg = parameters.get("contrast_adjustment", {})
     uint8_map = {}
     for name, data in save_map.items():
-        if contrast_cfg.get("enabled", False):
+        if contrast_cfg.get("enabled", False) and not name.startswith("debug_"):
             # Data already in [0,1] thanks to imadjust
             uint8_map[name] = (np.clip(data, 0, 1) * 255).astype(np.uint8)
         else:
@@ -226,6 +226,8 @@ def _build_save_map(vid, parameters, vid_debug, num_batch):
         for name, data in save_map.items():
             # For 4D debug data we might need per-channel – but we'll keep it simple:
             # compute limits globally across all dimensions.
+            if name.startswith("debug_"):
+                continue
             low, high = stretchlim(data, low_pct, high_pct)
             save_map[name] = imadjust(data, low, high, gamma)
             
