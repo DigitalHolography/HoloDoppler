@@ -63,7 +63,7 @@
   "transpose": false,
   "flip_x": false,
   "flip_y": false,
-  "debug": false,
+  "debug": true,
   "tictoc": false,
   "contrast_adjustment": {
     "enabled": true,
