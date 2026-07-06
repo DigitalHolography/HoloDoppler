@@ -6,8 +6,49 @@ from .utils import elliptical_mask
 from .utils import signed_peak, subpixel_parabola
 
 
-
-
+def register_laplacian(xp, fft, video, radius=None):
+    nt, ny, nx = video.shape
+    
+    # Precompute mask once
+    mask = elliptical_mask(ny, nx, radius, xp) if radius else None
+    
+    # Preprocess all frames once
+    preprocessed = xp.zeros((nt, ny, nx), dtype=xp.float32)
+    for k in range(nt):
+        frame = video[k].astype(xp.float32, copy=False)
+        preprocessed[k] = _preprocess(xp, frame, mask=mask)
+    
+    # Store shifts (only upper triangle to save memory)
+    shifts_y = xp.zeros((nt, nt), dtype=xp.float32)
+    shifts_x = xp.zeros((nt, nt), dtype=xp.float32)
+    
+    # Compute pairwise shifts more efficiently
+    for k in range(nt):
+        for m in range(k + 1, nt):
+            shift_y, shift_x = intensity_corr_integer(
+                xp, fft, preprocessed[k], preprocessed[m]
+            )
+            shifts_y[k, m] = shift_y
+            shifts_x[k, m] = shift_x
+    
+    # Create full symmetric matrix (optional)
+    shifts_y = shifts_y + shifts_y.T
+    shifts_x = shifts_x + shifts_x.T
+    
+    # Compute average shifts with safe division
+    # For each frame, average shifts to all other frames
+    # Exclude self (diagonal)
+    row_counts = xp.full(nt, nt - 1, dtype=xp.float32)  # nt-1 shifts per row
+    
+    # Sum each row
+    sum_y = xp.sum(shifts_y, axis=1)
+    sum_x = xp.sum(shifts_x, axis=1)
+    
+    # Safe division
+    res_y = sum_y / row_counts
+    res_x = sum_x / row_counts
+    
+    return res_y, res_x
 
 
 def register_images_shifts(xp, fft, fixed, moving, radius=None, gaussian_sigma=None, gaussian_filter=None):

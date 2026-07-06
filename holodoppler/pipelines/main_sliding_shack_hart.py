@@ -5,7 +5,7 @@ from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectru
 from holodoppler.utils import gaussian_flatfield, update_from_footer, normalize_to_uint8, square_cupy, stretchlimcp, scaling
 from holodoppler.filtering import svd_filter, frequency_symmetric_filtering, fourier_time_transform, corner_compensation, filter_2d
 from holodoppler.moments import moment
-from holodoppler.registration import register_images_shifts, apply_register_images_shifts
+from holodoppler.registration import register_images_shifts, apply_register_images_shifts, register_laplacian
 from holodoppler.file_reader import FileReaderFactory
 
 
@@ -356,10 +356,11 @@ def process(file_path, parameters):
                     shift_y, shift_x = register_images_shifts(cp, cp.fft, M0_reg, res["M0ff"], radius=0.8, gaussian_sigma=2, gaussian_filter=gaussian_filter)
                     
                 for k, v in res.items():
-                    if k in ["M0ff","M0","M1","M2"] or "band_" in k and M0_reg is not None: #select the outputs that need the registration from M0ff applied
-                        res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
+                    if parameters["image_registration"]:
+                        if k in ["M0ff","M0","M1","M2"] or "band_" in k: #select the outputs that need the registration from M0ff applied
+                            res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
 
-                res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
+                        res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
 
                 compute_event = cp.cuda.Event()
                 compute_event.record(compute_stream)
@@ -383,6 +384,17 @@ def process(file_path, parameters):
 
     output = {k: cp.stack(v, axis=0) for k, v in output.items()}
 
+    if parameters.get("registration_laplacian", False):
+        shifts_y, shifts_x = register_laplacian(cp, cp.fft, output["M0ff"])
+        output["register_laplacian"] = cp.stack([shifts_y, shifts_x])
+
+        for k, v in output.items():
+            if k in ["M0ff","M0","M1","M2"] or "band_" in k : #select the outputs that need the registration from M0ff applied
+                output[k] = apply_register_images_shifts(cp, v, cp.rint(shifts_y).astype(cp.int64), 
+                                          cp.rint(shifts_x).astype(cp.int64))
+
+
+
     if parameters.get("square", False):
         output = {k: square_cupy(v) if v.ndim >=3 else v for k, v in output.items()}
 
@@ -396,7 +408,7 @@ def process(file_path, parameters):
 
     _create_directories(target_dir, "FULL")
 
-    save_to_h5_list = ["M0ff","shack_hartmann_zernike_coefs"]
+    save_to_h5_list = ["M0ff","shack_hartmann_zernike_coefs", "register_laplacian", "registration"]
 
     _save_h5_2(target_dir, output_np, parameters, save_only_list=save_to_h5_list)
 

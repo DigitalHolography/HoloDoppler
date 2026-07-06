@@ -729,12 +729,13 @@ def update_from_footer(parameters, holofooter):
         if parameters.get("wavelength") == "use_holovibes" and holofooter is not None:
             parameters["wavelength"] = holofooter["compute_settings"]["image_rendering"]["lambda"]
         if parameters.get("spatial_propagation") == "use_holovibes":
-            if holofooter["compute_settings"]["image_rendering"]["propagation_distance"] == "FRESNELTR":
+            hv_tr = holofooter["compute_settings"]["image_rendering"]["space_transformation"]
+            if hv_tr == "FRESNELTR":
                 parameters["spatial_propagation"] = "Fresnel"
-            elif holofooter["compute_settings"]["image_rendering"]["propagation_distance"] == "ANGULARTR":
+            elif hv_tr == "ANGULARTR":
                 parameters["spatial_propagation"] = "AngularSpectrum"
             else:
-                print("Couldn't pars spatial transform name in holovibes footer, using Fresnel as default")
+                print(f"Couldn't parse spatial transform name in holovibes footer : {hv_tr}, using Fresnel as default")
                 parameters["spatial_propagation"] = "Fresnel"
         if parameters.get("z") == "use_holovibes" and holofooter is not None:
             parameters["z"] = holofooter["compute_settings"]["image_rendering"]["propagation_distance"]
