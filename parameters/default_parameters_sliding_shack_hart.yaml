@@ -38,9 +38,9 @@ frequency_bands:
   - [9000, 18000]
 
 # Image registration
-image_registration: false
+image_registration: true
 registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
-registration_laplacian: true
+registration_laplacian: false
 
 # Corner compensation
 corner_compensation: false

@@ -174,7 +174,7 @@ def _process_shack_hartmann_phase(parameters, U, ny, nx, output_dict = None):
     #     )
         if output_dict is not None:
             output_dict["shack_hartmann_zernike_coefs"] = coefs
-            output_dict["shack_hartmann_wavefront_phase"] = phase
+            output_dict["shack_hartmann_wavefront_phase"] = phase % (2*cp.pi)
     else:
         phase = None
 
@@ -355,12 +355,12 @@ def process(file_path, parameters):
                 if M0_reg is not None:
                     shift_y, shift_x = register_images_shifts(cp, cp.fft, M0_reg, res["M0ff"], radius=0.8, gaussian_sigma=2, gaussian_filter=gaussian_filter)
                     
-                for k, v in res.items():
-                    if parameters["image_registration"]:
+                if parameters["image_registration"]:
+                    for k, v in res.items():
                         if k in ["M0ff","M0","M1","M2"] or "band_" in k: #select the outputs that need the registration from M0ff applied
                             res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
 
-                        res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
+                    res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
 
                 compute_event = cp.cuda.Event()
                 compute_event.record(compute_stream)
@@ -385,15 +385,15 @@ def process(file_path, parameters):
     output = {k: cp.stack(v, axis=0) for k, v in output.items()}
 
     if parameters.get("registration_laplacian", False):
-        shifts_y, shifts_x = register_laplacian(cp, cp.fft, output["M0ff"])
+        shifts_y, shifts_x = register_laplacian(cp, cp.fft, output["M0ff"], radius=0.7)
+        shifts_y, shifts_x = shifts_y - shifts_y[0], shifts_x- shifts_x[0]
         output["register_laplacian"] = cp.stack([shifts_y, shifts_x])
-
+        shifts_y, shifts_x = cp.rint(shifts_y).astype(cp.int64), cp.rint(shifts_x).astype(cp.int64)
         for k, v in output.items():
             if k in ["M0ff","M0","M1","M2"] or "band_" in k : #select the outputs that need the registration from M0ff applied
-                output[k] = apply_register_images_shifts(cp, v, cp.rint(shifts_y).astype(cp.int64), 
-                                          cp.rint(shifts_x).astype(cp.int64))
-
-
+                for m in range(v.shape[0]):
+                    shift_y, shift_x = int(shifts_y[m]), int(shifts_x[m])
+                    output[k][m] = apply_register_images_shifts(cp, v[m], shift_y, shift_x)
 
     if parameters.get("square", False):
         output = {k: square_cupy(v) if v.ndim >=3 else v for k, v in output.items()}

@@ -6,23 +6,21 @@ from .utils import elliptical_mask
 from .utils import signed_peak, subpixel_parabola
 
 
-def register_laplacian(xp, fft, video, radius=None):
+def register_laplacian(xp, fft, video, radius=None, gauge='minimal', ref_frame=0):
     nt, ny, nx = video.shape
     
-    # Precompute mask once
+    # Precompute mask and preprocess all frames
     mask = elliptical_mask(ny, nx, radius, xp) if radius else None
-    
-    # Preprocess all frames once
     preprocessed = xp.zeros((nt, ny, nx), dtype=xp.float32)
     for k in range(nt):
         frame = video[k].astype(xp.float32, copy=False)
         preprocessed[k] = _preprocess(xp, frame, mask=mask)
     
-    # Store shifts (only upper triangle to save memory)
+    # Compute pairwise shifts (upper triangle only)
     shifts_y = xp.zeros((nt, nt), dtype=xp.float32)
     shifts_x = xp.zeros((nt, nt), dtype=xp.float32)
+    count = xp.zeros((nt, nt), dtype=xp.float32)
     
-    # Compute pairwise shifts more efficiently
     for k in range(nt):
         for m in range(k + 1, nt):
             shift_y, shift_x = intensity_corr_integer(
@@ -30,25 +28,43 @@ def register_laplacian(xp, fft, video, radius=None):
             )
             shifts_y[k, m] = shift_y
             shifts_x[k, m] = shift_x
+            shifts_y[m, k] = -shift_y  # Inverse relation
+            shifts_x[m, k] = -shift_x
+            count[k, m] = 1
+            count[m, k] = 1
     
-    # Create full symmetric matrix (optional)
-    shifts_y = shifts_y + shifts_y.T
-    shifts_x = shifts_x + shifts_x.T
+    # Solve for shifts using least squares
+    # We want to find s_i such that s_i - s_j = d_ij (where d_ij are pairwise shifts)
+    # This is a linear system that can be solved by averaging
     
-    # Compute average shifts with safe division
-    # For each frame, average shifts to all other frames
-    # Exclude self (diagonal)
-    row_counts = xp.full(nt, nt - 1, dtype=xp.float32)  # nt-1 shifts per row
-    
-    # Sum each row
+    # For each frame, compute average shift relative to all others
     sum_y = xp.sum(shifts_y, axis=1)
     sum_x = xp.sum(shifts_x, axis=1)
+    row_counts = xp.sum(count, axis=1)
     
-    # Safe division
-    res_y = sum_y / row_counts
-    res_x = sum_x / row_counts
+    # Avoid division by zero
+    row_counts = xp.maximum(row_counts, 1)
     
-    return res_y, res_x
+    raw_shifts_y = sum_y / row_counts
+    raw_shifts_x = sum_x / row_counts
+    
+    # Apply gauge choice
+    if gauge == 'minimal':
+        # Center shifts to minimize L2 norm (zero mean)
+        mean_y = xp.mean(raw_shifts_y)
+        mean_x = xp.mean(raw_shifts_x)
+        shifts_y_final = raw_shifts_y - mean_y
+        shifts_x_final = raw_shifts_x - mean_x
+        
+    elif gauge == 'reference':
+        # Relative to reference frame
+        shifts_y_final = raw_shifts_y - raw_shifts_y[ref_frame]
+        shifts_x_final = raw_shifts_x - raw_shifts_x[ref_frame]
+        
+    else:
+        raise ValueError(f"gauge must be 'minimal' or 'reference', got '{gauge}'")
+    
+    return shifts_y_final, shifts_x_final
 
 
 def register_images_shifts(xp, fft, fixed, moving, radius=None, gaussian_sigma=None, gaussian_filter=None):
