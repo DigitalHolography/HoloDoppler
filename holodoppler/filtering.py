@@ -5,6 +5,23 @@ Filtering operations: SVD, frequency filtering
 from functools import cache
 from .utils import elliptical_mask
 
+def filter_2d(xp, fft, frames, filter2d_low):
+    nt, ny, nx = frames.shape
+
+    F = fft.fft2(frames)
+
+    mask = elliptical_mask(ny, nx, filter2d_low, xp)
+
+    # import matplotlib.pyplot as plt
+    # plt.imshow(fft.fftshift(~mask).get())
+    # plt.show()
+
+    F = F * fft.fftshift(~mask)
+
+    F = fft.ifft2(F)
+
+    return F
+
 def svd_filter(xp, H, svd_threshold, filter_mode="number_of_values", remove_dc=False, debug=False):
     """SVD filtering to remove tissue signal"""
 

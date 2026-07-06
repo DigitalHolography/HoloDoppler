@@ -654,6 +654,15 @@ def unsharp_projection(
     projection = acc / nt
     return xp.asnumpy(projection)
 
+def stretchlimcp(data, low_percent=1, high_percent=99):
+    flat = data.ravel()
+    low = cp.percentile(flat, low_percent)
+    high = cp.percentile(flat, high_percent)
+    return low, high
+
+def scaling(data, low, high):
+    return (data - low) / (high - low + 1e-12)
+
 def stretchlim(data, low_percent=1, high_percent=99):
     """
     Compute lower and upper intensity limits for contrast stretching.
@@ -719,6 +728,14 @@ def update_from_footer(parameters, holofooter):
     try:
         if parameters.get("wavelength") == "use_holovibes" and holofooter is not None:
             parameters["wavelength"] = holofooter["compute_settings"]["image_rendering"]["lambda"]
+        if parameters.get("spatial_propagation") == "use_holovibes":
+            if holofooter["compute_settings"]["image_rendering"]["propagation_distance"] == "FRESNELTR":
+                parameters["spatial_propagation"] = "Fresnel"
+            elif holofooter["compute_settings"]["image_rendering"]["propagation_distance"] == "ANGULARTR":
+                parameters["spatial_propagation"] = "AngularSpectrum"
+            else:
+                print("Couldn't pars spatial transform name in holovibes footer, using Fresnel as default")
+                parameters["spatial_propagation"] = "Fresnel"
         if parameters.get("z") == "use_holovibes" and holofooter is not None:
             parameters["z"] = holofooter["compute_settings"]["image_rendering"]["propagation_distance"]
         if parameters.get("pixel_pitch") == "use_holovibes" and holofooter is not None:

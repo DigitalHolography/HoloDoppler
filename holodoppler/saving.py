@@ -361,7 +361,7 @@ def _save_metadata(target_dir, file_reader, parameters):
     elapsed = time.time() - start_time
     print(f"Metadata saved in {elapsed:.2f} seconds")
 
-def _save_h5_2(target_dir, save_map, parameters):
+def _save_h5_2(target_dir, save_map, parameters, save_only_list=None):
     """
     Saves raw data to HDF5.
     """
@@ -378,6 +378,10 @@ def _save_h5_2(target_dir, save_map, parameters):
     with h5py.File(h5_path, "w") as f:
         
         for k, v in save_map.items():
+
+            if save_only_list is not None and k not in save_only_list:
+                continue
+            
             f.create_dataset(
                 k,
                 data=v.astype(np.float32),
