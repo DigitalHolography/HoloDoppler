@@ -454,6 +454,12 @@ class DebugPlotterManager:
     """Manages debug plotters"""
     
     def __init__(self, parameters):
+        sampling_freq = parameters.get("sampling_freq", 1)
+        low_freq = parameters.get("low_freq", 0)
+        high_freq = parameters.get("high_freq")
+        if high_freq is None:
+            high_freq = sampling_freq / 2
+
         plotters = {
             "montage": SubapertureMontagePlotter(),
             "montagenormalized": SubapertureMontagePlotter(normalize_per_frame = True),
@@ -464,16 +470,16 @@ class DebugPlotterManager:
             "M0notfixed": ImagePlotter(),
             "M0ffnoreg": ImagePlotter(),
             "spectrum": SpectrumPlotter(
-                fs=parameters["sampling_freq"],
-                f1=parameters["low_freq"],
-                f2=parameters["high_freq"],
+                fs=sampling_freq,
+                f1=low_freq,
+                f2=high_freq,
                 ylim=(-1, 20),
                 use_stem=False
             ),
             "calibration_spectrum": CalibrationSpectrumPlotter(
-                fs=parameters["sampling_freq"],
-                f1=parameters["low_freq"],
-                f2=parameters["high_freq"],
+                fs=sampling_freq,
+                f1=low_freq,
+                f2=high_freq,
                 ylim=(-2.5, 12.5),
                 use_stem=False
             ),

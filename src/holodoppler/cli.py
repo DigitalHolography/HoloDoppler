@@ -25,9 +25,9 @@ def preview(holo_path, parameters: dict, tictoc=False) -> None:
     res = HD.render_moments(parameters, tictoc=tictoc)
 
     def plot_debug_safe(HD, res):
-        debug_manager = DebugPlotterManager(parameters) if parameters.get("debug") else None
+        debug_manager = DebugPlotterManager(parameters) if parameters.get("debug", False) else None
         
-        out = debug_manager.plot_all(res) if parameters.get("debug") else {}
+        out = debug_manager.plot_all(res) if parameters.get("debug", False) else {}
 
         return out
 
@@ -42,7 +42,7 @@ def preview(holo_path, parameters: dict, tictoc=False) -> None:
 
             img_np = HD.bm.to_numpy(img)
 
-            if img_np.ndim == 2 and parameters["square"]:
+            if img_np.ndim == 2 and parameters.get("square", False):
                 H, W = img_np.shape
                 L = max(H, W)
                 # --- Resize ---
@@ -67,7 +67,11 @@ def preview(holo_path, parameters: dict, tictoc=False) -> None:
     # --- Generate debug safely ---
     debug_imgs = plot_debug_safe(HD, res)
 
-    if parameters["debug"] and parameters["shack_hartmann"] and parameters["shack_hartmann_zernike_fit"]:
+    if (
+        parameters.get("debug", False)
+        and parameters.get("shack_hartmann", False)
+        and parameters.get("shack_hartmann_zernike_fit", False)
+    ):
         print("zernike_fit_coeffs (radians):", HD.bm.to_numpy(res["coefs"]) if "coefs" in res else "N/A")
         print("delta to true z in mm if coef[0] is defocus : ", 4* np.sqrt(3) * parameters["z"]**2 / ((min(frames.shape[1:])* parameters["pixel_pitch"])**2)  * parameters["wavelength"] / (2*np.pi) * (HD.bm.to_numpy(res["coefs"])[0] if "coefs" in res else 0) * 1e3)
 
@@ -85,7 +89,7 @@ def preview(holo_path, parameters: dict, tictoc=False) -> None:
     
     M0img = debug_imgs.get("M0")
     if M0img is not None:
-        if M0img.ndim == 2 and parameters["square"]:
+        if M0img.ndim == 2 and parameters.get("square", False):
             H, W = M0img.shape
             L = max(H, W)
             # --- Resize ---

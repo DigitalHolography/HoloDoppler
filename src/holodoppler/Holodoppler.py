@@ -292,13 +292,13 @@ class Holodoppler:
             if b is not None:
                 U_subaps = b["U_subaps"]
             
-            if parameters.get("debug"):
+            if parameters.get("debug", False):
                 res["U_subaps"] = U_subaps
                 
             prof.tick("saving U_subaps")
             
             # Calculate displacements
-            if parameters.get("shack_hartmann_graph_laplacian"):
+            if parameters.get("shack_hartmann_graph_laplacian", False):
                 shifts_y, shifts_x = self.shack_hartmann.calculate_displacements_graph_laplacian(
                     U_subaps,
                     pupil_threshold=parameters.get("shack_hartmann_pupil_threshold", 1.0),
@@ -324,12 +324,12 @@ class Holodoppler:
                     ref = imref
                 )
                 prof.tick("calculate_displacements")
-            if parameters.get("debug"):
+            if parameters.get("debug", False):
                 res["shifts_y"] = shifts_y
                 res["shifts_x"] = shifts_x
             
             # Phase reconstruction
-            if parameters.get("shack_hartmann_zernike_fit"):
+            if parameters.get("shack_hartmann_zernike_fit", False):
                 coefs, phase = self.zernike.fit_zernike(
                     ny, nx, parameters["pixel_pitch"], parameters["pixel_pitch"],
                     parameters["wavelength"], shifts_y, shifts_x,
@@ -337,16 +337,19 @@ class Holodoppler:
                 )
                 prof.tick("fit_zernike")
                 res["coefs"] = coefs
-                if parameters.get("debug"):
+                if parameters.get("debug", False):
                     res["phase"] = phase
-            elif parameters.get("shack_hartmann_southwell_phase_integration"):
+            elif parameters.get(
+                "shack_hartmann_southwell_phase_integration",
+                parameters.get("shack_hartmann_southwell_phase_integration ", False),
+            ):
                 print("shack_hartmann_southwell_phase_integration")
                 phase = self.zernike.southwell_phase_integration(
                     ny, nx, parameters["pixel_pitch"], parameters["pixel_pitch"],
                     parameters["wavelength"], shifts_y, shifts_x
                 )
                 prof.tick("southwell_phase_integration")
-                if parameters.get("debug"):
+                if parameters.get("debug", False):
                     res["phase"] = phase
             else:
                 phase = None
@@ -369,7 +372,7 @@ class Holodoppler:
             frames_sub = frames[sub_batch_stride*it:sub_batch_stride*it + sub_batch_size]
             
             # Propagate with or without phase correction
-            if parameters.get("shack_hartmann") and phase_term is not None:
+            if parameters.get("shack_hartmann", False) and phase_term is not None:
                 if parameters["spatial_propagation"] == "Fresnel":
                     holograms = self.propagation.fresnel_transform_with_phase(frames_sub, phase_term, 
                                                            zero_padding=parameters.get("zero_padding"))
@@ -378,7 +381,7 @@ class Holodoppler:
                         frames_sub, phase_term, zero_padding=parameters.get("zero_padding")
                     )
                 
-                if parameters.get("debug"):
+                if parameters.get("debug", False):
                     if parameters["spatial_propagation"] == "Fresnel":
                         holograms_not_fixed = self.propagation.fresnel_transform(frames_sub, 
                                                                zero_padding=parameters.get("zero_padding"))
@@ -414,7 +417,7 @@ class Holodoppler:
             
             
             
-            if parameters.get("debug"):
+            if parameters.get("debug", False):
                 sig = self.bm.xp.squeeze(self.bm.xp.mean(holograms_f, axis=(-1,-2)))
                 res_batch = {"average_signal" : sig}
             else :
@@ -424,7 +427,7 @@ class Holodoppler:
             
             
             # Temporal FFT
-            if parameters["temporal_transformation"] == "FourierTransform":
+            if parameters.get("temporal_transformation") == "FourierTransform":
                 spectrum_f = self.filtering.fourier_time_transform(holograms_f)
             
             else :
@@ -455,7 +458,7 @@ class Holodoppler:
                 band = self.bm.xp.mean(psd[idxs_band, :, :], axis=0)
                 res_batch[f"band_{k}_{range_band[0]}_{range_band[1]}"] = band
             
-            if parameters.get("debug"):
+            if parameters.get("debug", False):
                 res_batch["spectrum_line"] = self.bm.xp.mean(
                     psd , axis=(-1, -2)
                 )
@@ -475,13 +478,13 @@ class Holodoppler:
             res.update(b)
         
         # Registration
-        if parameters.get("image_registration") and registration_ref is not None:
+        if parameters.get("image_registration", False) and registration_ref is not None:
             M0_ff = gaussian_flatfield(res["M0"], parameters["registration_flatfield_gw"], 
                                         self.bm.gaussian_filter)
-            if parameters.get("debug"):
+            if parameters.get("debug", False):
                 res["M0_ff_noreg"] = M0_ff
             reg = self._register(registration_ref, M0_ff, parameters.get("registration_disc_ratio"), estimate_similarity = parameters.get("image_registration_type") == "translation_rotation_scale")
-            if parameters.get("apply_registration"):
+            if parameters.get("apply_registration", False):
                 res["M0"] = self._apply_registration(res["M0"], reg)
                 res["M1"] = self._apply_registration(res["M1"], reg)
                 res["M2"] = self._apply_registration(res["M2"], reg)
@@ -502,7 +505,6 @@ class Holodoppler:
     def process_moments(self, parameters, mp4_path = None, 
                         return_numpy = False, holodoppler_path = True):
         """Process entire video"""
-        
         batch_size = parameters["batch_size"]
         batch_stride = parameters["batch_stride"]
         first_frame = parameters["first_frame"]
@@ -525,9 +527,9 @@ class Holodoppler:
         out_list = []
         
         # Debug setup
-        debug_manager = DebugPlotterManager(parameters) if parameters.get("debug") else None
+        debug_manager = DebugPlotterManager(parameters) if parameters.get("debug", False) else None
         
-        if parameters.get("debug") and debug_manager is not None:
+        if parameters.get("debug", False) and debug_manager is not None:
             import threading
             import queue
             
@@ -558,7 +560,7 @@ class Holodoppler:
             lock = None  
         
         # Registration reference
-        if parameters.get("image_registration"):
+        if parameters.get("image_registration", False):
             frames_reg = self.read_frames(first_frame, parameters["batch_size_registration"])
             M0_reg = self.render_moments(parameters, frames=frames_reg)["M0"]
             M0_reg = gaussian_flatfield(M0_reg, parameters["registration_flatfield_gw"], 
@@ -567,8 +569,8 @@ class Holodoppler:
         else:
             M0_reg = None
         
-        coefs_list = [None] * num_batch if parameters.get("shack_hartmann") else None
-        reg_list = [None] * num_batch if parameters.get("image_registration") else None
+        coefs_list = [None] * num_batch if parameters.get("shack_hartmann", False) else None
+        reg_list = [None] * num_batch if parameters.get("image_registration", False) else None
         
         # Main processing loop with GPU streaming if enabled
         if self.backend_name =="cupy":
@@ -590,7 +592,7 @@ class Holodoppler:
         
         # 2. Cleanup GPU resources
         self.bm.clear_gpu_memory()
-        if parameters.get("debug") and debug_manager is not None:
+        if parameters.get("debug", False) and debug_manager is not None:
             debug_queue.join()
             stop_event.set()
             debug_thread.join()
@@ -605,7 +607,7 @@ class Holodoppler:
         # 4. Handle Debug data figures
         # Convert debug_results from list of dicts -> dict of (T, H, W, C) arrays where C really is color channel
         vid_debug = {}
-        if parameters.get("debug") and debug_results:
+        if parameters.get("debug", False) and debug_results:
             for key in debug_results[0].keys():
                 # print(key,debug_results[0][key])
                 # Stack into (T, H, W, C)
@@ -614,20 +616,20 @@ class Holodoppler:
         
         # 5. Post-processing: Spatial transforms
         # Since vid_t is (T, H, W, C), H=Axis 1 and W=Axis 2
-        if parameters.get("square"):
+        if parameters.get("square", False):
             # m is max of H or W
             m = max(vid_t.shape[-2], vid_t.shape[-1])
             vid_t = self._resize_to_square(vid_t, m, m)
             
-        if parameters.get("transpose"):
+        if parameters.get("transpose", False):
             # Swap Y and X
             vid_t = np.transpose(vid_t, axes=(0, 1, 3, 2))
             
-        if parameters.get("flip_x"):
+        if parameters.get("flip_x", False):
             # Flip W (axis 2)
             vid_t = np.flip(vid_t, axis=-1)
             
-        if parameters.get("flip_y"):
+        if parameters.get("flip_y", False):
             # Flip H (axis 1)
             vid_t = np.flip(vid_t, axis=-2)
         
@@ -893,7 +895,7 @@ class Holodoppler:
             if data.ndim == 3 and data.shape[-1] == num_batch:
                 data = np.moveaxis(data, -1, 0)
                 
-            if parameters["square"] and key in ["M0ffnoreg", "M0notfixed", "montage", "montagenormalized"]:
+            if parameters.get("square", False) and key in ["M0ffnoreg", "M0notfixed", "montage", "montagenormalized"]:
                 m = max(data.shape[-2], data.shape[-1])
                 data = self._resize_to_square(data, m, m)
             
@@ -956,8 +958,8 @@ class Holodoppler:
             info_text = f"py{self.__version__}  {self.backend_name}  {self.pipeline_version}"
             f.create_dataset("HD_info", data=info_text)
             
-            if parameters.get("image_registration") and reg_list:
+            if parameters.get("image_registration", False) and reg_list:
                 f.create_dataset("registration", data=np.array(reg_list, dtype=np.float32))
             
-            if parameters.get("shack_hartmann") and coefs_list:
+            if parameters.get("shack_hartmann", False) and coefs_list:
                 f.create_dataset("zernike_coefs_radians", data=np.stack(coefs_list).astype(np.float32))
