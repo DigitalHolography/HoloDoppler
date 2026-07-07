@@ -28,8 +28,8 @@ build = [
   "pyinstaller>=6.0",
 ]
 
-[tool.setuptools]
-packages = ["holodoppler"]
+[tool.setuptools.packages.find]
+include = ["holodoppler*"]
 
 [project.scripts]
 holodoppler = "holodoppler.__main__:main"
