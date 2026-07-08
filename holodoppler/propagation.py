@@ -108,6 +108,26 @@ def fresnel_transform(
 
     return result
 
+def fresnel_transform_noshift(
+    xp, fft, frames, z, pixel_pitch, wavelength, zero_padding=False, use_output_kernel=True
+):
+    """Apply Fresnel transform"""
+
+    ny, nx = frames.shape[-2:]
+    kernel_in = build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
+
+    if zero_padding:
+        frames = pad_array_centrally(frames, zero_padding, xp)
+
+    result = fft.fft2(frames * kernel_in, axes=(-1, -2), norm="ortho")
+
+    if use_output_kernel:
+        ny, nx = frames.shape[-2:]
+        kernel_out = build_fresnel_kernel_out(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
+        result = result * kernel_out
+
+    return result
+
 def inverse_fresnel_transform(
     xp, fft, result, z, pixel_pitch, wavelength, zero_padding=False, use_output_kernel=False
 ):
