@@ -256,70 +256,151 @@ def process(file_path, parameters):
     
     processed_batches = 0
     
-    # Use simple double-buffering with explicit state
-    d_current = None
-    d_next = None
-    h2d_event_current = None
-    h2d_event_next = None
-    
+    # Use double-buffering with explicit state and configurable prefetch depth
+    PREFETCH_DEPTH = 4  # Number of batches to prefetch ahead (set to 3 or 4)
+
+    # Initialize prefetch buffers
+    d_buffers = [None] * PREFETCH_DEPTH
+    h2d_events = [None] * PREFETCH_DEPTH
+    compute_events = [None] * PREFETCH_DEPTH
+    buffer_ready = [False] * PREFETCH_DEPTH
+
+    # Track which buffer index is being used for current and next operations
+    current_idx = 0
+    next_idx = 0
+    processed_batches = 0
+
     # Start reading frames
-    for i in tqdm(range(num_batch+1)):
+    for i in tqdm(range(num_batch + PREFETCH_DEPTH)):
         
-        # Start async H2D transfer for this batch
-        with h2d_stream:
-            
-            if i < num_batch:
-                frames = file_reader.read_frames(first_frame = first_frame + i * batch_stride, batch_size = batch_size)
-                d_next = cp.asarray(frames)
+        # Determine which buffer to use for prefetching
+        prefetch_idx = i % PREFETCH_DEPTH
+        
+        # Start async H2D transfer for this batch if frames remain
+        if i < num_batch:
+            with h2d_stream:
+                frames = file_reader.read_frames(
+                    first_frame=first_frame + i * batch_stride, 
+                    batch_size=batch_size
+                )
+                d_buffers[prefetch_idx] = cp.asarray(frames)
                 
-            h2d_event_next = cp.cuda.Event()
-            h2d_event_next.record(h2d_stream)
+                h2d_events[prefetch_idx] = cp.cuda.Event()
+                h2d_events[prefetch_idx].record(h2d_stream)
+                buffer_ready[prefetch_idx] = True
         
-        # If we have a previous batch, wait for its H2D and compute it
-        if d_current is not None:
+        # Process batches that are ready (up to PREFETCH_DEPTH behind current)
+        # This ensures we process in order while maintaining prefetch depth
+        while buffer_ready[current_idx] and current_idx != prefetch_idx:
+            
             # Wait for H2D of current batch to complete
-            h2d_event_current.synchronize()
+            h2d_events[current_idx].synchronize()
             
             # Compute current batch on compute stream
             with compute_stream:
-
+                d_current = d_buffers[current_idx]
+                
                 res = {}
-
+                
                 phase_term = None
                 if parameters.get("shack_hartmann", False):
                     phase_term = _process_shack_hartmann(parameters, d_current, output_dict=res)
-
+                
                 _process_batch(parameters, d_current, phase_term=phase_term, output_dict=res)
-
-                if M0_reg is None and parameters["image_registration"]: #first batch is used for fixed batch
+                
+                if M0_reg is None and parameters["image_registration"]:  # first batch is used for fixed batch
                     M0_reg = res["M0ff"]
                 
                 if M0_reg is not None:
-                    shift_y, shift_x = register_images_shifts(cp, cp.fft, M0_reg, res["M0ff"], radius=0.8, gaussian_sigma=3, gaussian_filter=gaussian_filter)
+                    shift_y, shift_x = register_images_shifts(
+                        cp, cp.fft, M0_reg, res["M0ff"], 
+                        radius=0.8, gaussian_sigma=3, 
+                        gaussian_filter=gaussian_filter
+                    )
                     
                 for k, v in res.items():
-                    if k in ["M0ff","M0","M1","M2"] or "band_" in k : #select the outputs that need the registration from M0ff applied
+                    if k in ["M0ff", "M0", "M1", "M2"] or "band_" in k:
                         res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
-
+                
                 res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
-
-                compute_event = cp.cuda.Event()
-                compute_event.record(compute_stream)
+                
+                compute_events[current_idx] = cp.cuda.Event()
+                compute_events[current_idx].record(compute_stream)
             
             # Wait for compute to finish
-            compute_event.synchronize()
+            compute_events[current_idx].synchronize()
             
-            if res is None:
-                break
-            
-            for k, v in res.items():
-                output[k].append(v)
+            # Store results
+            if res:
+                for k, v in res.items():
+                    output[k].append(v)
             
             processed_batches += 1
+            
+            # Mark buffer as processed and advance to next
+            buffer_ready[current_idx] = False
+            d_buffers[current_idx] = None  # Free memory
+            current_idx = (current_idx + 1) % PREFETCH_DEPTH
+            
+            # Break if we've processed all batches
+            if processed_batches >= num_batch:
+                break
+
+    # Process any remaining batches in the pipeline
+    # This handles the case where num_batch < PREFETCH_DEPTH
+    while buffer_ready[current_idx]:
         
-        # Advance: next becomes current
-        d_current = d_next
-        h2d_event_current = h2d_event_next
+        # Wait for H2D of current batch to complete
+        h2d_events[current_idx].synchronize()
+        
+        # Compute current batch on compute stream
+        with compute_stream:
+            d_current = d_buffers[current_idx]
+            
+            res = {}
+            
+            phase_term = None
+            if parameters.get("shack_hartmann", False):
+                phase_term = _process_shack_hartmann(parameters, d_current, output_dict=res)
+            
+            _process_batch(parameters, d_current, phase_term=phase_term, output_dict=res)
+            
+            if M0_reg is None and parameters["image_registration"]:
+                M0_reg = res["M0ff"]
+            
+            if M0_reg is not None:
+                shift_y, shift_x = register_images_shifts(
+                    cp, cp.fft, M0_reg, res["M0ff"],
+                    radius=0.8, gaussian_sigma=3,
+                    gaussian_filter=gaussian_filter
+                )
+                
+            for k, v in res.items():
+                if k in ["M0ff", "M0", "M1", "M2"] or "band_" in k:
+                    res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
+            
+            res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
+            
+            compute_events[current_idx] = cp.cuda.Event()
+            compute_events[current_idx].record(compute_stream)
+        
+        # Wait for compute to finish
+        compute_events[current_idx].synchronize()
+        
+        # Store results
+        if res:
+            for k, v in res.items():
+                output[k].append(v)
+        
+        processed_batches += 1
+        
+        # Mark buffer as processed and advance
+        buffer_ready[current_idx] = False
+        d_buffers[current_idx] = None
+        current_idx = (current_idx + 1) % PREFETCH_DEPTH
+        
+        if processed_batches >= num_batch:
+            break
 
     output = {k: cp.stack(v, axis=0) for k, v in output.items()}
 
