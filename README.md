@@ -12,29 +12,17 @@ python -m pip install -e .
 
 ## 2. Run the CLI Examples
 
-### Preview
+### Preview (first batch of frames output)
 
 ```bash
-holodoppler preview "D:\path\to\holo.holo" "./parameters/default_parameters_debug.json"
+holodoppler preview "D:\path\to\holo.holo" "./parameters/default_parameters_simple.yaml"
 ```
 
-### Process
+### Process (full processing)
 
 ```bash
-holodoppler process "D:\path\to\holo.holo" "./parameters/default_parameters_debug.json"
+holodoppler process "D:\path\to\holo.holo" "./parameters/default_parameters_simple.yaml"
 ```
-
-### Debug And Profile
-
-```bash
-holodoppler process "D:\path\to\holo.holo" "./parameters/default_parameters_debug.json" --debug --tictoc
-```
-
-```bash
-holodoppler preview "D:\path\to\holo.holo" "./parameters/default_parameters_debug.json" --debug --tictoc
-```
-
-The `--debug` provides more output visually and `--tictoc` provides information about processing time.
 
 ### 3. Run the GUI
 
@@ -42,13 +30,36 @@ The `--debug` provides more output visually and `--tictoc` provides information 
 holodoppler gui
 ```
 
-### 3. Run batch of files in CLI
+GUI handles batch processing of files with drag and drop of multiple files
+
+### 4. Run batch of files in CLI
 
 ```bash
-holodoppler process --batch "path/to/txt.txt "./parameters/default_parameters_debug.json"
+holodoppler process --batch "filepaths_list.txt" "./parameters/default_parameters_simple.yaml"
 ```
 
-Give a txt file with a 
+```bash
+holodoppler preview --batch "filepaths_list.txt" "./parameters/default_parameters_simple.yaml"
+```
+
+### 5. CLI Parameter overwrite
+
+```bash
+--<param>
+```
+
+Override any parameter "param" to true. Useful for --debug and --tictoc when available in pipeline.
+
+### 6. Help
+
+```bash
+holodoppler --help
+```
+
+```bash
+holodoppler preview  --help
+holodoppler process  --help
+```
 
 ### Building app
 

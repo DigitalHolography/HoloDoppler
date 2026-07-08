@@ -20,7 +20,7 @@ from holodoppler.utils import load_config
 
 APP_NAME = "HoloDoppler"
 SUPPORTED = {".holo", ".cine", ".txt"}
-DEFAULT_CONFIG = Path("./parameters/default_parameters_debug.json")
+DEFAULT_CONFIG = Path("./parameters/default_parameters_simple.yaml")
 
 # ------------------------------------------------------------------
 # DND availability check – root window will inherit from TkinterDnD.Tk if present
@@ -336,7 +336,7 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
 
     def choose_config(self):
         p = filedialog.askopenfilename(
-            filetypes=[("JSON config", "*.json"), ("All files", "*.*")],
+            filetypes=[("JSON config or YAML", "*.json *.yml *.yaml"), ("All files", "*.*")],
             initialdir=self.config_path.parent,
         )
         if p:
