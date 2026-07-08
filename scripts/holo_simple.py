@@ -1,8 +1,12 @@
 import numpy as np
 import json
 from imageio.v2 import imread
+
 import matplotlib.pyplot as plt
-from holodoppler.propagation import fresnel_transform_retro_propagation, fresnel_transform, inverse_fresnel_transform
+import matplotlib
+matplotlib.use('Qt5Agg')
+
+from holodoppler.propagation import fresnel_transform_retro_propagation, fresnel_transform, inverse_fresnel_transform, angular_spectrum_transform
 from holodoppler.moments import moment
 from holodoppler.filtering import frequency_symmetric_filtering
 
@@ -125,50 +129,127 @@ img = img.astype(np.uint8)
 
 img = np.pad(img, ((100,100),(100,100)))
 
+plt.imshow(img)
+plt.show()
+
 img = img[np.newaxis, ...]
-
-print(img.shape)
-
-# plt.imshow(img)
-# plt.show()
 
 z = 0.5
 wavelength = 852e-9
 pixel_pitch = (20e-6,20e-6)
 
-img_retro = inverse_fresnel_transform(np, np.fft, img, z, pixel_pitch, wavelength, use_output_kernel=True)[0]
+def retrieve_hologram(xp, objective_amplitude, num_iteration=25, z=0.5, 
+                      wavelength=852e-9, pixel_pitch=(20e-6, 20e-6),
+                      hologram_type='phase'):  # 'phase', 'amplitude', 'binary'
+    
+    _, ny, nx = objective_amplitude.shape
+    
+    # Initial guess
+    phase = 2 * xp.pi * xp.random.rand(ny, nx)
+    hologram_guess = xp.exp(1j * phase)
+    hologram_guess = hologram_guess[np.newaxis, ...]
+    
+    for k in range(num_iteration):
+        # Forward propagation
+        imgk = angular_spectrum_transform(xp, xp.fft, hologram_guess, z, pixel_pitch, wavelength)
+        
+        # Enforce image plane constraint
+        imgk = objective_amplitude * xp.exp(1j * xp.angle(imgk))
+        
+        # Backward propagation
+        hologram_guess = angular_spectrum_transform(xp, xp.fft, imgk, -z, pixel_pitch, wavelength)
+        
+        # Enforce hologram constraint
+        if hologram_type == 'phase':
+            hologram_guess = xp.exp(1j * xp.angle(hologram_guess))
+        elif hologram_type == 'amplitude':
+            hologram_guess = xp.abs(hologram_guess) * xp.exp(1j * 0)  # Set phase to 0
+        elif hologram_type == 'binary':
+            hologram_guess = xp.where(xp.abs(hologram_guess) > 0.5, 1.0, 0.0)
+    
+    return hologram_guess
 
-img_retro_abs = np.abs(img_retro)
+# Get phase-only hologram
+hologram_complex = retrieve_hologram(np, img, hologram_type='phase')
 
-plt.imshow(img_retro_abs)
+# hologram_amp = np.abs(hologram_complex)
+
+# plt.imshow(hologram_amp[0], cmap='gray')
+# plt.title('Hologram Amplitude')
+# plt.show()
+
+# reconstructed = angular_spectrum_transform(np, np.fft, hologram_amp, z, pixel_pitch, wavelength)
+# plt.imshow(np.abs(reconstructed[0]), cmap='gray')
+# plt.title('Reconstructed Image')
+# plt.show()
+
+# The "intensity" pattern you can display/print:
+hologram_angle = np.angle(hologram_complex[0])  # Phase values 0 to 2π
+
+intensity_display = ((hologram_angle + np.pi) / (2 * np.pi) * 255).astype(np.uint8)
+
+plt.imshow(intensity_display, cmap='gray')
+plt.title('Hologram Intensity Pattern (Encoded Phase)')
 plt.show()
 
-img_reconstruct = fresnel_transform(np, np.fft, img_retro_abs, z, pixel_pitch, wavelength, use_output_kernel=False)[0]
-img_reconstruct_abs = np.abs(img_reconstruct)
-
-plt.imshow(img_reconstruct_abs)
-plt.show()
-plt.imshow(np.angle(img_reconstruct))
+# Reconstruct to verify
+reconstructed = angular_spectrum_transform(np, np.fft, hologram_angle, z, pixel_pitch, wavelength)
+plt.imshow(np.abs(reconstructed[0]), cmap='gray')
+plt.title('Reconstructed Image')
 plt.show()
 
-pattern = [np.zeros_like(img_retro_abs), img_retro_abs]
-num_pattern=1
+# img_reconstruct = angular_spectrum_transform(np, np.fft, img_reconstruct, -z, pixel_pitch, wavelength)
 
-frames = np.stack(pattern*num_pattern)
-
-holograms = fresnel_transform(np, np.fft, frames, z, pixel_pitch, wavelength, use_output_kernel=False)
-
-spec = np.fft.fft(holograms, n=2, axis=0)
-
-psd = np.abs(spec) ** 2
-
-# idxs, freqs = frequency_symmetric_filtering(np, np.fft, 32, 1, 0.0, 0.5)
-# m0 = moment(np, psd[idxs], freqs, 0)
-
-m0 = np.sum(psd[1:],axis=0)
+# plt.imshow(np.abs(img_reconstruct[0]))
+# plt.show()
 
 
-plt.imshow(m0)
-plt.show()
 
-create_holo("debug_outputs/penguin.holo", frames, version=777, bit_depth=8, footer=None)
+
+
+
+
+
+
+
+# hologram = inverse_fresnel_transform(np, np.fft, img, z, pixel_pitch, wavelength, use_output_kernel=False)
+
+# plt.imshow(np.abs(hologram[0]))
+# plt.show()
+
+# plt.imshow(np.angle(hologram[0]))
+# plt.show()
+
+# img_rec = fresnel_transform(np, np.fft, hologram, z, pixel_pitch, wavelength, use_output_kernel=False)
+
+# plt.imshow(np.abs(img_rec[0]))
+# plt.show()
+
+# plt.imshow(np.angle(img_rec[0]))
+# plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+# spec = np.fft.fft(holograms, n=2, axis=0)
+
+# psd = np.abs(spec) ** 2
+
+# # idxs, freqs = frequency_symmetric_filtering(np, np.fft, 32, 1, 0.0, 0.5)
+# # m0 = moment(np, psd[idxs], freqs, 0)
+
+# m0 = np.sum(psd[1:],axis=0)
+
+
+# plt.imshow(m0)
+# plt.show()
+
+# create_holo("debug_outputs/penguin.holo", frames, version=777, bit_depth=8, footer=None)
