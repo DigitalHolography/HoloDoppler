@@ -263,13 +263,15 @@ def process(file_path, parameters):
     h2d_event_next = None
     
     # Start reading frames
-    for i in tqdm(range(num_batch)):
+    for i in tqdm(range(num_batch+1)):
         
         # Start async H2D transfer for this batch
         with h2d_stream:
-
-            frames = file_reader.read_frames(first_frame = first_frame + i * batch_stride, batch_size = batch_size)
-            d_next = cp.asarray(frames)
+            
+            if i < num_batch:
+                frames = file_reader.read_frames(first_frame = first_frame + i * batch_stride, batch_size = batch_size)
+                d_next = cp.asarray(frames)
+                
             h2d_event_next = cp.cuda.Event()
             h2d_event_next.record(h2d_stream)
         
