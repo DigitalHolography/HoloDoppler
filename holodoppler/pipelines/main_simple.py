@@ -267,7 +267,7 @@ def process(file_path, parameters):
 
     # Track which buffer index is being used for current and next operations
     current_idx = 0
-    next_idx = 0
+    # next_idx = 0
     processed_batches = 0
 
     # Start reading frames

@@ -660,8 +660,15 @@ def stretchlimcp(data, low_percent=1, high_percent=99):
     high = cp.percentile(flat, high_percent)
     return low, high
 
+def imadjustcp(data, low, high, gamma=1.0):
+    data_clipped = cp.clip(data, low, high)
+    data_scaled = (data_clipped - low) / (high - low)
+    if gamma != 1.0:
+        data_scaled = cp.power(data_scaled, gamma)
+    return data_scaled
+
 def scaling(data, low, high):
-    return (data - low) / (high - low + 1e-12)
+    return (data - low) / (high - low)
 
 def stretchlim(data, low_percent=1, high_percent=99):
     """
