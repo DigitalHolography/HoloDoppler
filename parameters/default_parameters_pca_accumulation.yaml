@@ -4,25 +4,30 @@ pipeline_name: "pca_accumulation"
 batch_size: 32
 first_frame: 0
 batch_stride: 32
-end_frame: -1  # -1 means process all frames
+end_frame: 4096  # -1 means process all frames
 accumulation: 32
 
 # Propagation parameters
 spatial_propagation: "Fresnel"  # Options: "Fresnel" or "AngularSpectrum"
 z: "use_holovibes"  # Propagation distance in meters
-wavelength: 852.0e-9  # Wavelength in meters
+wavelength: "use_holovibes"  # Wavelength in meters
 pixel_pitch: "use_holovibes"  # Pixel pitch in meters [y, x]
 
 # Fresnel specific
 Fresnel_use_ouput_kernel: false  # Use output kernel for Fresnel transform
 
+svd_threshold: 40
 
 # Time transform
 time_transform: "FFT" # "FFT"
 # PCA projection
 pca_range: [0, 16]
-low_freq: 0.2  # Low frequency cutoff in reduced frequency
-high_freq: 0.5  # High frequency cutoff in reduced frequency
+low_freq: 2000  # Low frequency cutoff in reduced frequency
+high_freq: 7142.5  # High frequency cutoff in reduced frequency
+
+frequency_bands:
+  - [200, 3000]
+  - [3000, 7142.5]
 
 # Image registration
 image_registration: true
@@ -43,3 +48,17 @@ shack_hartmann_shifts_pixel_range_threshold: 1000.0 # Max displacement accepted 
 shack_hartmann_graph_laplacian: true  # Use graph Laplacian method
 shack_hartmann_zernike_fit: true # Other option is shack_hartmann_southwell_integration but not really implemented yet because it is not stable
 shack_hartmann_zernike_fit_modes: [4,5,6]  # Number of the Zernike modes to use in the fit in Null ordering
+
+
+#test
+analyse_zone_points : [
+  [105,115], # Haut à gauche
+  [185,115], # Haut à droite
+  [185,106], # Bas à droite
+  [105,106] # Bas à gauche 
+]
+# Fréquence de décalage de l'oscillateur local (en Hz)
+delta_omega: 60.0
+
+# Fréquence de vibration que vous cherchez à isoler (en Hz)
+vibration_freq: 540.3
