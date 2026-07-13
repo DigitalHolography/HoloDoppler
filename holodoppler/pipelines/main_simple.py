@@ -3,7 +3,7 @@ from holodoppler.propagation import fresnel_transform, fresnel_transform_with_ph
 from holodoppler.shack_hartmann import construct_subapertures_fresnel, construct_subapertures_angular, calculate_displacements, calculate_displacements_graph_laplacian
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum
 from holodoppler.utils import gaussian_flatfield, update_from_footer, normalize_to_uint8, square_cupy, stretchlim, imadjust, temporal_gaussian
-from holodoppler.filtering import svd_filter, frequency_symmetric_filtering, fourier_time_transform, corner_compensation
+from holodoppler.filtering import filter_2d, svd_filter, frequency_symmetric_filtering, fourier_time_transform, corner_compensation
 from holodoppler.moments import moment
 from holodoppler.registration import register_images_shifts, apply_register_images_shifts
 from holodoppler.file_reader import FileReaderFactory
@@ -200,6 +200,10 @@ def preview(file_path, parameters):
     # transfer to gpu
     frames = cp.array(frames, dtype=cp.float32)
 
+    # 2D filtering
+    if parameters.get("filter2d", False):
+        frames = filter_2d(cp, cp.fft, frames, parameters["filter2d_low"])
+
     res = {}
 
     phase_term = None
@@ -254,6 +258,9 @@ def process(file_path, parameters):
     if parameters["image_registration"] and (parameters["registration_ref_first_frame"] != 0 or parameters["registration_ref_batch_size"] != parameters["batch_size"]):
         frames = file_reader.read_frames(first_frame=parameters["registration_ref_first_frame"], batch_size=parameters["registration_ref_batch_size"])
         frames = cp.array(frames)
+        # 2D filtering
+        if parameters.get("filter2d", False):
+            frames = filter_2d(cp, cp.fft, frames, parameters["filter2d_low"])
         phase_term = None
         if parameters.get("shack_hartmann", False):
             phase_term = _process_shack_hartmann(parameters, frames)
@@ -304,6 +311,10 @@ def process(file_path, parameters):
             
             with compute_stream:
                 d_current = d_buffers[current_idx]
+
+                # 2D filtering
+                if parameters.get("filter2d", False):
+                    d_current = filter_2d(cp, cp.fft, d_current, parameters["filter2d_low"])
                 
                 res = {}
                 
@@ -353,6 +364,10 @@ def process(file_path, parameters):
         
         with compute_stream:
             d_current = d_buffers[current_idx]
+
+            # 2D filtering
+            if parameters.get("filter2d", False):
+                d_current = filter_2d(cp, cp.fft, d_current, parameters["filter2d_low"])
             
             res = {}
             
