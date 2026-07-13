@@ -13,7 +13,14 @@ from dataclasses import asdict
 import os
 from urllib.parse import quote
 
-from .utils import resize_slicewise, normalize_to_uint8, unsharp_projection, _pad_to_even
+from .utils import (
+    resize_slicewise,
+    normalize_to_uint8,
+    unsharp_projection,
+    _pad_to_even,
+    stretchlim,
+    imadjust,
+)
 from .get_version import get_version
 
 H5_DATASET_RENAMES = {
@@ -41,6 +48,79 @@ H5_FLOAT32_DATASETS = {
     "moment_2",
 }
 AVI_FPS = 60.0
+NON_CONTRAST_OUTPUT_NAMES = {
+    "registration",
+    "register_laplacian",
+    "shack_hartmann_zernike_coefs",
+    "zernike_coefs_radians",
+}
+
+
+def apply_contrast_adjustment(data, parameters):
+    """Apply configured display contrast to one image/video array."""
+    settings = _contrast_settings(parameters)
+    if settings is None or not _is_contrast_candidate(data):
+        return data
+
+    arr = np.asarray(data)
+    if np.iscomplexobj(arr):
+        arr = np.abs(arr)
+    low, high = stretchlim(arr, settings["low_percent"], settings["high_percent"])
+    return imadjust(arr, low, high, settings["gamma"])
+
+
+def apply_contrast_adjustments(save_map, parameters, skip_debug=True):
+    """Apply configured display contrast to visual outputs in a save map."""
+    if _contrast_settings(parameters) is None:
+        return dict(save_map)
+
+    adjusted = {}
+    for name, data in save_map.items():
+        if _skip_contrast_for_name(name, skip_debug):
+            adjusted[name] = data
+        else:
+            adjusted[name] = apply_contrast_adjustment(data, parameters)
+    return adjusted
+
+
+def _contrast_settings(parameters):
+    parameters = parameters or {}
+    cfg = parameters.get("contrast_adjustment")
+    if isinstance(cfg, dict) and cfg.get("enabled", False):
+        return {
+            "low_percent": float(cfg.get("low_percent", 1.0)),
+            "high_percent": float(cfg.get("high_percent", 99.0)),
+            "gamma": float(cfg.get("gamma", 1.0)),
+        }
+
+    if not parameters.get("contrast", False):
+        return None
+
+    low_high = parameters.get("contrast_low_max_percent", (1.0, 99.0))
+    if isinstance(low_high, (int, float)):
+        low_percent, high_percent = float(low_high), 100.0 - float(low_high)
+    else:
+        low_percent, high_percent = low_high
+    return {
+        "low_percent": float(low_percent),
+        "high_percent": float(high_percent),
+        "gamma": float(parameters.get("contrast_gamma", 1.0)),
+    }
+
+
+def _is_contrast_candidate(data):
+    arr = np.asarray(data)
+    return arr.size > 0 and arr.ndim in (2, 3, 4) and np.issubdtype(arr.dtype, np.number)
+
+
+def _skip_contrast_for_name(name, skip_debug):
+    name = str(name)
+    return (
+        (skip_debug and name.startswith("debug_"))
+        or name in NON_CONTRAST_OUTPUT_NAMES
+        or name.endswith("_coefs")
+        or "zernike_coefs" in name
+    )
 
 
 def _h5_data(name, data):
@@ -296,7 +376,7 @@ def _build_save_map(vid, parameters, vid_debug, num_batch):
             if data.ndim == 3 or data.ndim == 4:
                 save_map[f"debug_{key}"] = data
 
-    return save_map
+    return apply_contrast_adjustments(save_map, parameters, skip_debug=True)
 
 
 def _save_projections(target_dir, save_map, parameters, backend):

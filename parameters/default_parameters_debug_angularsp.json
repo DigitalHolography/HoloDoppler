@@ -52,6 +52,13 @@
   "debug" : false,
   "tictoc" : false,
 
+  "contrast_adjustment": {
+    "enabled": false,
+    "low_percent": 0.5,
+    "high_percent": 99.5,
+    "gamma": 1.0
+  },
+
   "debug_plot_parameters": {
     "spectrumloglog": {
       "ylim": [1e2, 1e5],

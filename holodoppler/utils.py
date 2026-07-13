@@ -52,6 +52,49 @@ def normalize_to_uint8(data):
     normalized = 255 * (data - vmin) / (vmax - vmin + 1e-12)
     return np.clip(normalized, 0, 255).astype(np.uint8)
 
+
+def stretchlim(data, low_percent=1, high_percent=99):
+    """
+    Compute lower and upper intensity limits for contrast stretching.
+
+    For 4D arrays, limits are computed per channel on the last axis.
+    """
+    data = np.asarray(data)
+    if data.ndim == 4:
+        flat = data.reshape(-1, data.shape[-1])
+        low = np.nanpercentile(flat, low_percent, axis=0)
+        high = np.nanpercentile(flat, high_percent, axis=0)
+    else:
+        flat = data.ravel()
+        low = np.nanpercentile(flat, low_percent)
+        high = np.nanpercentile(flat, high_percent)
+    return low, high
+
+
+def imadjust(data, low, high, gamma=1.0):
+    """Apply linear percentile stretch and optional gamma correction."""
+    data = np.asarray(data)
+    adjusted = (np.clip(data, low, high) - low) / (high - low + 1e-12)
+    if gamma != 1.0:
+        adjusted = np.power(adjusted, gamma)
+    return adjusted
+
+
+def stretchlimcp(data, low_percent=1, high_percent=99):
+    flat = data.ravel()
+    return cp.percentile(flat, low_percent), cp.percentile(flat, high_percent)
+
+
+def imadjustcp(data, low, high, gamma=1.0):
+    adjusted = (cp.clip(data, low, high) - low) / (high - low + 1e-12)
+    if gamma != 1.0:
+        adjusted = cp.power(adjusted, gamma)
+    return adjusted
+
+
+def scaling(data, low, high):
+    return (data - low) / (high - low + 1e-12)
+
 def write_video_file(path, frames, fps, fourcc_code="mp4v"):
     """
     Writes a video file.

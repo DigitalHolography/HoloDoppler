@@ -1,4 +1,4 @@
-from holodoppler.saving import save_preview_images, preview_image_from_results, _get_default_output_path, _save_videos, _save_h5_2, _create_directories, _save_pngs, _save_metadata, _save_reports
+from holodoppler.saving import save_preview_images, preview_image_from_results, _get_default_output_path, _save_videos, _save_h5_2, _create_directories, _save_pngs, _save_metadata, _save_reports, apply_contrast_adjustments
 from holodoppler.propagation import fresnel_transform, fresnel_transform_with_phase, angular_spectrum_transform, angular_spectrum_transform_with_phase
 from holodoppler.shack_hartmann import construct_subapertures_fresnel, construct_subapertures_angular, calculate_displacements, calculate_displacements_graph_laplacian
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum
@@ -372,7 +372,8 @@ def process(file_path, parameters, progress_callback=None):
     raw_output_np = output_np
     _save_h5_2(target_dir, raw_output_np, parameters)
 
-    output_np = {k: normalize_to_uint8(v) for k, v in raw_output_np.items()}
+    display_output_np = apply_contrast_adjustments(raw_output_np, parameters, skip_debug=True)
+    output_np = {k: normalize_to_uint8(v) for k, v in display_output_np.items()}
 
     # Save videos (sequential to avoid encoding conflicts)
     _save_videos(target_dir, output_np, 30)
@@ -384,4 +385,4 @@ def process(file_path, parameters, progress_callback=None):
     _save_metadata(target_dir, file_reader, parameters)
 
     # Save visual result reports
-    _save_reports(target_dir, raw_output_np, output_np, parameters, file_reader)
+    _save_reports(target_dir, display_output_np, output_np, parameters, file_reader)

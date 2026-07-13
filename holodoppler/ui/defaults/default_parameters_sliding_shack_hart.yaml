@@ -41,6 +41,11 @@ corner_compensation: false
 # Image resizing
 square: false
 
+# Image contrast
+contrast: false
+contrast_low_max_percent: [0.5, 99.5] # Applied only to rendered avi/png/report outputs, not raw h5.
+contrast_gamma: 1.0
+
 # Shack-Hartmann wavefront sensing
 shack_hartmann: true  # Enable Shack-Hartmann processing
 shack_hartmann_nx_subap: 3  # Number of subapertures in X
