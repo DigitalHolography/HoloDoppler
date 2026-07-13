@@ -266,14 +266,17 @@ def _save_projections(target_dir, save_map, parameters, backend):
                 print(f"Failed to save projection for {name}: {e}")
 
 
-def _save_videos(target_dir, uint8_map, fps):
+def _save_videos(target_dir, np_map, fps):
     """Save all videos as MP4 and AVI"""
     start_time = time.time()
     completed = 0
-    for name, uint8_data in uint8_map.items():
-
-        if uint8_data.ndim !=3 and uint8_data.ndim !=4 : #check to avoid failure for outputs that are not videos exemple : list of coefficients
+    for name, np_data in np_map.items():
+        if np_data.ndim != 3 and np_data.ndim != 4:
             continue
+        
+        # Determine bit depth and convert appropriately
+        uint8_data = _normalize_to_uint8(np_data)
+        
         # MP4
         mp4_path = target_dir / "mp4" / f"{name}.mp4"
         _write_video_fast(
@@ -300,18 +303,34 @@ def _save_videos(target_dir, uint8_map, fps):
     elapsed = time.time() - start_time
     print(f"Videos saved in {elapsed:.1f} seconds ({completed} videos)")
 
+def normalize(data):
+    mi = data.min()
+    ma = data.max()
 
-def _save_pngs(target_dir, uint8_map):
+    return (data-mi)/(ma-mi + 1e-24)
+
+def _save_pngs(target_dir, np_map):
     """Save mean frames as PNGs in parallel"""
     start_time = time.time()
     
     with ThreadPoolExecutor(max_workers=8) as executor:
         tasks = []
-        for name, uint8_data in uint8_map.items():
-            if uint8_data.ndim !=3 and uint8_data.ndim !=4 : #check to avoid failure for outputs that are not videos exemple : list of coefficients
+        for name, data in np_map.items():
+            if data.ndim != 3 and data.ndim != 4:
                 continue
             png_path = target_dir / "png" / f"{name}.png"
-            mean_frame = np.mean(uint8_data, axis=0).astype(np.uint8)
+            mean_frame = np.mean(data, axis=0)
+            
+            # Preserve original dtype for PNG saving
+            if data.dtype == np.uint16:
+                mean_frame = mean_frame.astype(np.uint16)
+            elif data.dtype == np.float32 or data.dtype == np.float64:
+                # For float data, normalize to 16-bit to preserve precision
+                mean_frame = np.clip(normalize(mean_frame), 0, 1)
+                mean_frame = (mean_frame * 65535).astype(np.uint16)
+            else:
+                mean_frame = mean_frame.astype(np.uint8)
+                
             tasks.append(executor.submit(iio.imwrite, png_path, mean_frame))
 
         # Wait for all tasks to complete
@@ -479,9 +498,11 @@ def _write_video_fast(
     quality=None,
     overwrite=True,
     pad_even=True,
+    bit_depth=8,
 ):
     """
     Write video with ffmpeg backend.
+    Supports 8-bit, 10-bit, 12-bit, and 16-bit encoding.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -491,10 +512,46 @@ def _write_video_fast(
 
     frames = np.asarray(frames)
     
-    # Validate and normalize frames
-    if frames.dtype != np.uint8:
-        frames = np.nan_to_num(frames, nan=0, posinf=255, neginf=0)
-        frames = np.clip(frames, 0, 255).astype(np.uint8)
+    # Validate and normalize frames based on bit depth
+    if bit_depth == 8:
+        max_val = 255
+        target_dtype = np.uint8
+    elif bit_depth == 10:
+        max_val = 1023
+        target_dtype = np.uint16
+    elif bit_depth == 12:
+        max_val = 4095
+        target_dtype = np.uint16
+    elif bit_depth == 16:
+        max_val = 65535
+        target_dtype = np.uint16
+    elif bit_depth == 32:
+        max_val = 1.0
+        target_dtype = np.float32
+    else:
+        raise ValueError(f"Unsupported bit depth: {bit_depth}")
+    
+    # Normalize frames to target range
+    if frames.dtype != target_dtype or (bit_depth <= 16 and frames.max() > max_val):
+        if frames.dtype == np.float32 or frames.dtype == np.float64:
+            if frames.max() <= 1.0:
+                # Normalize from [0, 1] to [0, max_val]
+                frames = (frames * max_val).astype(target_dtype)
+            else:
+                # Already in range, just clip and convert
+                frames = np.clip(frames, 0, max_val).astype(target_dtype)
+        elif frames.dtype == np.uint8 and bit_depth > 8:
+            # Scale up
+            frames = frames.astype(np.float32) * (max_val / 255.0)
+            frames = frames.astype(target_dtype)
+        elif frames.dtype == np.uint16 and bit_depth == 8:
+            # Scale down
+            frames = (frames.astype(np.float32) * (255.0 / 65535.0)).astype(np.uint8)
+        else:
+            frames = np.clip(frames, 0, max_val).astype(target_dtype)
+    
+    # Handle NaN and Inf values
+    frames = np.nan_to_num(frames, nan=0, posinf=max_val, neginf=0)
 
     # Validate shape
     if frames.ndim == 3:
@@ -522,6 +579,17 @@ def _write_video_fast(
         output_params += ["-preset", str(preset)]
     if crf is not None:
         output_params += ["-crf", str(crf)]
+    
+    # Add pixel format for higher bit depths
+    if bit_depth > 8:
+        if bit_depth == 10:
+            output_params += ["-pix_fmt", "yuv420p10le"]
+        elif bit_depth == 12:
+            output_params += ["-pix_fmt", "yuv420p12le"]
+        elif bit_depth == 16:
+            output_params += ["-pix_fmt", "yuv420p16le"]
+        elif bit_depth == 32:
+            output_params += ["-pix_fmt", "gbrpf32le"]  # For float32
 
     kwargs = {
         "fps": float(fps),
@@ -537,3 +605,26 @@ def _write_video_fast(
     with iio.get_writer(str(path), **kwargs) as writer:
         for frame in frames:
             writer.append_data(frame)
+
+
+def _normalize_to_uint8(data):
+    """Helper function to normalize various data types to uint8"""
+    data = np.asarray(data)
+    
+    if data.dtype == np.uint8:
+        return data
+    elif data.dtype == np.uint16:
+        return (data.astype(np.float32) / 65535.0 * 255).astype(np.uint8)
+    elif data.dtype == np.float32 or data.dtype == np.float64:
+        if data.max() <= 1.0:
+            return (data * 255).astype(np.uint8)
+        else:
+            return np.clip(data, 0, 255).astype(np.uint8)
+    else:
+        # For any other type, try to normalize
+        data = np.nan_to_num(data, nan=0)
+        min_val, max_val = data.min(), data.max()
+        if max_val > min_val:
+            return ((data - min_val) / (max_val - min_val) * 255).astype(np.uint8)
+        else:
+            return np.zeros_like(data, dtype=np.uint8)

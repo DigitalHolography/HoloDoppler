@@ -218,6 +218,8 @@ def preview(file_path, parameters):
 
     save_preview_images(res_np, _get_default_output_path(file_reader.file_path) / "preview")
 
+    return res_np["M0ff"]
+
 
 def process(file_path, parameters):
     file_reader = FileReaderFactory.create(file_path)
@@ -397,11 +399,12 @@ def process(file_path, parameters):
     output = {k: cp.stack(v, axis=0) for k, v in output.items()}
 
     if parameters.get("square", False):
-        output = {k: square_cupy(v) if v.ndim >=3 else v for k, v in output.items()}
+        output = {k: square_cupy(v) if v.ndim ==3 else v for k, v in output.items()}
 
     # transfer to cpu
     output_np = {k: cp.asnumpy(v) for k, v in output.items()}
 
+    output.clear()
     del output
     cp.get_default_memory_pool().free_all_blocks()
 
@@ -412,9 +415,9 @@ def process(file_path, parameters):
 
     _create_directories(target_dir, "FULL")
 
-    # save_to_h5_list = ["M0ff","M0","M1","M2","shack_hartmann_zernike_coefs", "shack_hartmann_sub_images"] "_bands"
+    save_to_h5_list = ["M0ff","M0","M1","M2","shack_hartmann_zernike_coefs"] + [key for key in output_np.keys() if "bands_" in key]
 
-    _save_h5_2(target_dir, output_np, parameters)
+    _save_h5_2(target_dir, output_np, parameters, save_only_list=save_to_h5_list)
     
     # Save videos (sequential to avoid encoding conflicts)
     _save_videos(target_dir, output_np, 30)
