@@ -615,11 +615,6 @@ def _normalize_to_uint8(data):
         return data
     elif data.dtype == np.uint16:
         return (data.astype(np.float32) / 65535.0 * 255).astype(np.uint8)
-    elif data.dtype == np.float32 or data.dtype == np.float64:
-        if data.max() <= 1.0:
-            return (data * 255).astype(np.uint8)
-        else:
-            return np.clip(data, 0, 255).astype(np.uint8)
     else:
         # For any other type, try to normalize
         data = np.nan_to_num(data, nan=0)

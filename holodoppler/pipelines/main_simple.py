@@ -415,7 +415,7 @@ def process(file_path, parameters):
 
     _create_directories(target_dir, "FULL")
 
-    save_to_h5_list = ["M0ff","M0","M1","M2","shack_hartmann_zernike_coefs"] + [key for key in output_np.keys() if "bands_" in key]
+    save_to_h5_list = ["M0ff", "M0", "M1", "M2", "shack_hartmann_zernike_coefs", "registration"] + [key for key in output_np.keys() if "band_" in key]
 
     _save_h5_2(target_dir, output_np, parameters, save_only_list=save_to_h5_list)
     
