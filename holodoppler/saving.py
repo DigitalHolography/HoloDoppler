@@ -16,7 +16,30 @@ from urllib.parse import quote
 from .utils import resize_slicewise, normalize_to_uint8, unsharp_projection, _pad_to_even
 from .get_version import get_version
 
-H5_FLOAT32_DATASETS = {"M0", "M0ff", "M1", "M2", "moment_0", "moment_0_ff", "moment_1", "moment_2"}
+H5_DATASET_RENAMES = {
+    "M0": "moment0",
+    "M1": "moment1",
+    "M2": "moment2",
+    "M0ff": "moment0ff",
+    "moment_0": "moment0",
+    "moment_1": "moment1",
+    "moment_2": "moment2",
+    "moment_0_ff": "moment0ff",
+}
+H5_FLOAT32_DATASETS = {
+    "M0",
+    "M0ff",
+    "M1",
+    "M2",
+    "moment0",
+    "moment0ff",
+    "moment1",
+    "moment2",
+    "moment_0",
+    "moment_0_ff",
+    "moment_1",
+    "moment_2",
+}
 AVI_FPS = 60.0
 
 
@@ -26,21 +49,66 @@ def _h5_data(name, data):
     return data
 
 
+def _h5_dataset_name(name):
+    return H5_DATASET_RENAMES.get(name, name)
+
+
 def save_preview_images(save_dict, save_dir, prefix="debug"):
     os.makedirs(save_dir, exist_ok=True)
     for key, img in save_dict.items():
         if img is None:
             continue
-        if img.ndim not in [2,3]:
+        img_np = np.asarray(img)
+        if img_np.ndim not in [2, 3]:
             continue
-        if img.dtype != np.uint8:
-            img_min, img_max = np.min(img), np.max(img)
-            if img_max > img_min:
-                img_np = (img - img_min) / (img_max - img_min + 1e-12)
-            img_np = (img_np * 255).astype(np.uint8)
+        if img_np.dtype != np.uint8:
+            img_np = normalize_to_uint8(img_np)
         filename = os.path.join(save_dir, f"{prefix}_{key}.png")
         print("Saving : ",filename)
         iio.imwrite(filename, img_np)
+
+
+def preview_image_from_results(results):
+    """Return a displayable uint8 preview image from a pipeline result dict."""
+    if not results:
+        return None
+
+    preferred = ("M0ff", "M0", "moment_0_ff", "moment_0", "moment0ff", "moment0")
+    keys = [key for key in preferred if key in results]
+    keys.extend(key for key in results if key not in keys)
+
+    for key in keys:
+        image = _preview_image_candidate(results[key])
+        if image is not None:
+            return normalize_to_uint8(image)
+    return None
+
+
+def _preview_image_candidate(data):
+    arr = np.asarray(data)
+    if arr.size == 0:
+        return None
+    if np.iscomplexobj(arr):
+        arr = np.abs(arr)
+    arr = np.squeeze(arr)
+
+    if arr.ndim == 2:
+        return arr
+
+    if arr.ndim == 3:
+        if arr.shape[-1] in (3, 4):
+            return arr
+        if arr.shape[0] in (3, 4):
+            return np.moveaxis(arr, 0, -1)
+        return np.mean(arr.astype(np.float32, copy=False), axis=0)
+
+    if arr.ndim > 3:
+        while arr.ndim > 3:
+            arr = np.mean(arr.astype(np.float32, copy=False), axis=0)
+        return _preview_image_candidate(arr)
+
+    return None
+
 
 def save_outputs(
     file_reader,
@@ -822,9 +890,10 @@ def _save_h5_2(target_dir, save_map, parameters):
     with h5py.File(h5_path, "w") as f:
 
         for k, v in save_map.items():
+            dataset_name = _h5_dataset_name(k)
             f.create_dataset(
-                k,
-                data=_h5_data(k, v),
+                dataset_name,
+                data=_h5_data(dataset_name, v),
                 compression=compression,
             )
 

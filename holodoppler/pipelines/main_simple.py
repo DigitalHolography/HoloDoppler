@@ -1,4 +1,4 @@
-from holodoppler.saving import save_preview_images, _get_default_output_path, _save_videos, _save_h5_2, _create_directories, _save_pngs, _save_metadata, _save_reports
+from holodoppler.saving import save_preview_images, preview_image_from_results, _get_default_output_path, _save_videos, _save_h5_2, _create_directories, _save_pngs, _save_metadata, _save_reports
 from holodoppler.propagation import fresnel_transform, fresnel_transform_with_phase, angular_spectrum_transform, angular_spectrum_transform_with_phase
 from holodoppler.shack_hartmann import construct_subapertures_fresnel, construct_subapertures_angular, calculate_displacements, calculate_displacements_graph_laplacian
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum
@@ -223,6 +223,7 @@ def preview(file_path, parameters):
     cp.get_default_memory_pool().free_all_blocks()
 
     save_preview_images(res_np, _get_default_output_path(file_reader.file_path) / "preview")
+    return preview_image_from_results(res_np)
 
 
 def process(file_path, parameters, progress_callback=None):
@@ -286,15 +287,39 @@ def process(file_path, parameters, progress_callback=None):
             _process_batch(parameters, d_current, phase_term=phase_term, output_dict=res)
 
             shift_y, shift_x = 0, 0
-            if M0_reg is None and parameters["image_registration"]: #first batch is used for fixed batch
+            registration_enabled = parameters.get("image_registration", False)
+            integer_registration = parameters.get("registration_integer_translation", False)
+            reference_batch = False
+            if M0_reg is None and registration_enabled: #first batch is used for fixed batch
                 M0_reg = res["M0ff"]
+                reference_batch = True
 
-            if M0_reg is not None:
-                shift_y, shift_x = register_images_shifts(cp, cp.fft, M0_reg, res["M0ff"], radius=0.8, gaussian_sigma=3, gaussian_filter=gaussian_filter)
+            if M0_reg is not None and not reference_batch:
+                shift_y, shift_x = register_images_shifts(
+                    cp,
+                    cp.fft,
+                    M0_reg,
+                    res["M0ff"],
+                    radius=parameters.get("registration_disc_ratio", 0.8),
+                    gaussian_sigma=3,
+                    gaussian_filter=gaussian_filter,
+                    integer_translation=integer_registration,
+                )
 
             for k, v in res.items():
-                if k in ["M0ff","M0","M1","M2"] or "band_" in k : #select the outputs that need the registration from M0ff applied
-                    res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
+                if (
+                    registration_enabled
+                    and not reference_batch
+                    and (k in ["M0ff", "M0", "M1", "M2"] or "band_" in k)
+                ):
+                    res[k] = apply_register_images_shifts(
+                        cp,
+                        v,
+                        shift_y,
+                        shift_x,
+                        fft=cp.fft,
+                        integer_translation=integer_registration,
+                    )
 
             res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
 

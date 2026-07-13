@@ -1,4 +1,4 @@
-from holodoppler.saving import save_preview_images, _get_default_output_path, _save_videos, _save_h5_2, _create_directories, _save_pngs, _save_metadata, _save_reports
+from holodoppler.saving import save_preview_images, preview_image_from_results, _get_default_output_path, _save_videos, _save_h5_2, _create_directories, _save_pngs, _save_metadata, _save_reports
 from holodoppler.propagation import fresnel_transform, fresnel_transform_with_phase, angular_spectrum_transform, angular_spectrum_transform_with_phase
 from holodoppler.shack_hartmann import construct_subapertures_fresnel, construct_subapertures_angular, calculate_displacements, calculate_displacements_graph_laplacian
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum
@@ -242,6 +242,7 @@ def preview(file_path, parameters):
     cp.get_default_memory_pool().free_all_blocks()
 
     save_preview_images(res_np, _get_default_output_path(file_reader.file_path) / "preview")
+    return preview_image_from_results(res_np)
 
 
 def process(file_path, parameters, progress_callback=None):

@@ -588,7 +588,7 @@ def _write_inno_script(app_version: str) -> Path:
         VersionInfoVersion={{#VersionInfoVersion}}
 
         [Tasks]
-        Name: "desktopicon"; Description: "{{cm:CreateDesktopIcon}}"; GroupDescription: "{{cm:AdditionalIcons}}"; Flags: unchecked
+        Name: "desktopicon"; Description: "{{cm:CreateDesktopIcon}}"; GroupDescription: "{{cm:AdditionalIcons}}"
 
         [Dirs]
         Name: "{{userappdata}}\\{{#AppDataSlug}}\\{{#AppVersion}}"; Flags: uninsneveruninstall
