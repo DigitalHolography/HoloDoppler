@@ -296,9 +296,9 @@ def process(file_path, parameters):
             
             shift_y, shift_x = register_images_shifts(cp, cp.fft, reg_img, Projection_tot_ff, radius=0.8, gaussian_sigma=0, gaussian_filter=gaussian_filter)
 
-            Projection_tot = apply_register_images_shifts(cp, Projection_tot, shift_y, shift_x)
+            Projection_tot = apply_register_images_shifts(cp, cp.fft, Projection_tot, shift_y, shift_x)
 
-            Projection_tot_ff = apply_register_images_shifts(cp, Projection_tot_ff, shift_y, shift_x)
+            Projection_tot_ff = apply_register_images_shifts(cp, cp.fft, Projection_tot_ff, shift_y, shift_x)
 
             res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
         

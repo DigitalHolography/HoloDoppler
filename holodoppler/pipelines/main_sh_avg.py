@@ -307,7 +307,7 @@ def process(file_path, parameters):
                     
                 for k, v in res.items():
                     if k in ["M0ff","M0","M1","M2", "psd"] or "band_" in k : #select the outputs that need the registration from M0ff applied
-                        res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
+                        res[k] = apply_register_images_shifts(cp, cp.fft, v, shift_y, shift_x)
 
                 res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
 

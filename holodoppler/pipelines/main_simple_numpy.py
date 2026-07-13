@@ -164,7 +164,7 @@ def process(file_path, parameters):
             shifts_y.append(sy)
             shifts_x.append(sx)
             for k in reg_keys:
-                output[k][i] = apply_register_images_shifts(np, output[k][i], sy, sx)
+                output[k][i] = apply_register_images_shifts(np, np.fft, output[k][i], sy, sx)
 
         output["registration"] = np.stack([np.array(shifts_y), np.array(shifts_x)], axis=1)
 

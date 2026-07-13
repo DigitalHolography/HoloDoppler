@@ -358,7 +358,7 @@ def process(file_path, parameters):
                 if parameters["image_registration"]:
                     for k, v in res.items():
                         if k in ["M0ff","M0","M1","M2"] or "band_" in k: #select the outputs that need the registration from M0ff applied
-                            res[k] = apply_register_images_shifts(cp, v, shift_y, shift_x)
+                            res[k] = apply_register_images_shifts(cp, cp.fft, v, shift_y, shift_x)
 
                     res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
 
@@ -393,7 +393,7 @@ def process(file_path, parameters):
             if k in ["M0ff","M0","M1","M2"] or "band_" in k : #select the outputs that need the registration from M0ff applied
                 for m in range(v.shape[0]):
                     shift_y, shift_x = int(shifts_y[m]), int(shifts_x[m])
-                    output[k][m] = apply_register_images_shifts(cp, v[m], shift_y, shift_x)
+                    output[k][m] = apply_register_images_shifts(cp, cp.fft, v[m], shift_y, shift_x)
 
     if parameters.get("square", False):
         output = {k: square_cupy(v) if v.ndim >=3 else v for k, v in output.items()}
