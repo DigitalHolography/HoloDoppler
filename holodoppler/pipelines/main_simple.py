@@ -415,33 +415,6 @@ def process(file_path, parameters):
     # save_to_h5_list = ["M0ff","M0","M1","M2","shack_hartmann_zernike_coefs", "shack_hartmann_sub_images"] "_bands"
 
     _save_h5_2(target_dir, output_np, parameters)
-
-    import time
-
-    start_time = time.time()
-
-    if parameters.get("smoothing_gaussian", False):
-        smoothing_gaussian_size =  parameters.get("smoothing_gaussian_size", 2)
-        for k in output_np.keys():
-            output_np[k] = temporal_gaussian(output_np[k], sigma=smoothing_gaussian_size)
-
-    elapsed = time.time() - start_time
-    print(f"smoothing_gaussian in {elapsed:.1f} seconds")
-
-    start_time = time.time()
-    
-    if parameters.get("contrast", False):
-        low_pct, high_pct = parameters.get("contrast_low_max_percent", (1.0,99.0))
-        gamma = parameters.get("contrast_gamma", 1.0)
-        for k in output_np.keys():
-            low, high = stretchlim(output_np[k], low_pct, high_pct)
-            output_np[k] = imadjust(output_np[k], low, high, gamma)
-            output_np[k] = normalize_to_uint8(output_np[k])
-    else:
-        output_np = {k: normalize_to_uint8(v) for k, v in output_np.items()}
-    
-    elapsed = time.time() - start_time
-    print(f"contrast in {elapsed:.1f} seconds")
     
     # Save videos (sequential to avoid encoding conflicts)
     _save_videos(target_dir, output_np, 30)
