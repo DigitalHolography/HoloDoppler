@@ -330,7 +330,7 @@ def process(file_path, parameters):
                     shift_y, shift_x = register_images_shifts(
                         cp, cp.fft, M0_reg, res["M0ff"], 
                         radius=parameters["registration_radius"],
-                        sub_pixel=True
+                        sub_pixel=parameters["registration_sub_pixel"]
                     )
                     
                 for k, v in res.items():
@@ -385,10 +385,10 @@ def process(file_path, parameters):
             
             if M0_reg is not None:
                 shift_y, shift_x = register_images_shifts(
-                    cp, cp.fft, M0_reg, res["M0ff"],
-                    radius=0.8, gaussian_sigma=3,
-                    gaussian_filter=gaussian_filter
-                )
+                        cp, cp.fft, M0_reg, res["M0ff"], 
+                        radius=parameters["registration_radius"],
+                        sub_pixel=parameters["registration_sub_pixel"]
+                    )
                 
             for k, v in res.items():
                 if k in ["M0ff", "M0", "M1", "M2"] or "band_" in k:
