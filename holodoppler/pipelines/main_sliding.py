@@ -376,7 +376,7 @@ def process(file_path, parameters, progress_callback=None):
     output_np = {k: normalize_to_uint8(v) for k, v in display_output_np.items()}
 
     # Save videos (sequential to avoid encoding conflicts)
-    _save_videos(target_dir, output_np, 30)
+    _save_videos(target_dir, output_np, 60)
 
     # Save PNGs (parallel)
     _save_pngs(target_dir, output_np)

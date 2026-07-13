@@ -47,6 +47,7 @@ H5_FLOAT32_DATASETS = {
     "moment_1",
     "moment_2",
 }
+MP4_FPS = 60.0
 AVI_FPS = 60.0
 NON_CONTRAST_OUTPUT_NAMES = {
     "registration",
@@ -281,8 +282,8 @@ def _save_bundle(
     # Create subdirectories
     _create_directories(target_dir, mode)
 
-    # MP4 keeps the original pipeline FPS behavior; AVI is fixed at 60 FPS.
-    mp4_fps = _calculate_fps(num_batch, end_frame, first_frame, parameters)
+    # Keep encoding quality unchanged; only force exported MP4 playback to 60 FPS.
+    mp4_fps = MP4_FPS
 
     # Prepare data for saving
     save_map = _build_save_map(vid, parameters, vid_debug, num_batch)
@@ -317,7 +318,7 @@ def _save_bundle(
 
 def _create_directories(target_dir, mode):
     """Create required subdirectories"""
-    subdirs = ["png", "mp4", "avi", "json", "reports"]
+    subdirs = ["png", "mp4", "avi", "json", "html", "pdf"]
     if mode == "FULL":
         subdirs.append("h5")
     for sub in subdirs:
@@ -474,21 +475,36 @@ def _save_pngs(target_dir, uint8_map):
 
 def _save_reports(target_dir, raw_map, uint8_map, parameters, file_reader):
     """Save visual result summaries in HTML and PDF formats."""
-    report_dir = target_dir / "reports"
-    report_dir.mkdir(parents=True, exist_ok=True)
+    html_dir = target_dir / "html"
+    pdf_dir = target_dir / "pdf"
+    html_dir.mkdir(parents=True, exist_ok=True)
+    pdf_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         start_time = time.time()
         entries = _result_entries(raw_map, uint8_map)
 
         # Remove old assessment report names from earlier builds.
-        for old_name in ("quality_report.html", "quality_report.pdf", "quality_report_error.txt"):
-            old_path = report_dir / old_name
+        legacy_report_dir = target_dir / "reports"
+        for old_name in (
+            "quality_report.html",
+            "quality_report.pdf",
+            "quality_report_error.txt",
+            "results_report.html",
+            "results_report.pdf",
+            "results_report_error.txt",
+        ):
+            old_path = legacy_report_dir / old_name
             if old_path.exists():
                 old_path.unlink()
+        if legacy_report_dir.exists():
+            try:
+                legacy_report_dir.rmdir()
+            except OSError:
+                pass
 
-        html_path = report_dir / "results_report.html"
-        pdf_path = report_dir / "results_report.pdf"
+        html_path = html_dir / "results_report.html"
+        pdf_path = pdf_dir / "results_report.pdf"
 
         html_path.write_text(
             _render_results_report_html(entries, parameters, file_reader),
@@ -499,7 +515,7 @@ def _save_reports(target_dir, raw_map, uint8_map, parameters, file_reader):
         elapsed = time.time() - start_time
         print(f"Reports saved in {elapsed:.1f} seconds: {html_path.name}, {pdf_path.name}")
     except Exception as exc:
-        error_path = report_dir / "results_report_error.txt"
+        error_path = html_dir / "results_report_error.txt"
         error_path.write_text(f"Report generation failed:\n{exc}\n", encoding="utf-8")
         print(f"Report generation failed: {exc}")
 
