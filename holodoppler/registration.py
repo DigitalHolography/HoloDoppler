@@ -67,7 +67,7 @@ def register_laplacian(xp, fft, video, radius=None, gauge='minimal', ref_frame=0
     return shifts_y_final, shifts_x_final
 
 
-def register_images_shifts(xp, fft, fixed, moving, radius=None, gaussian_sigma=None, gaussian_filter=None):
+def register_images_shifts(xp, fft, fixed, moving, radius=None, gaussian_sigma=None, gaussian_filter=None, sub_pixel = False):
     ny, nx = fixed.shape[-2:]
 
     mask = elliptical_mask(ny, nx, radius, xp) if radius else None
@@ -78,13 +78,31 @@ def register_images_shifts(xp, fft, fixed, moving, radius=None, gaussian_sigma=N
     fixed_e = _preprocess(xp, fixed_f, mask=mask, gaussian_sigma=gaussian_sigma, gaussian_filter=gaussian_filter)
     moving_e = _preprocess(xp, moving_f, mask=mask, gaussian_sigma=gaussian_sigma, gaussian_filter=gaussian_filter)
 
-    shift_y, shift_x = intensity_corr_integer(xp, fft, fixed_e, moving_e)
+    if not sub_pixel:
+        shift_y, shift_x = intensity_corr_integer(xp, fft, fixed_e, moving_e)
+    else:
+        shift_y, shift_x = intensity_corr_sub_pixel(xp, fft, fixed_e, moving_e)
 
     return shift_y, shift_x
 
-def apply_register_images_shifts(xp, image, shift_y, shift_x):
+def apply_register_images_shifts(xp, fft, image, shift_y, shift_x):
+    if (isinstance(shift_y, int) and isinstance(shift_x, int)):
+        return xp.roll(xp.roll(image,shift_y, axis=-2),shift_x, axis=-1)
+    else:
+        ny, nx = image.shape[-2:]
 
-    return xp.roll(xp.roll(image,shift_y, axis=-2),shift_x, axis=-1)
+        fy = fft.fftfreq(ny).reshape(ny, 1)
+        fx = fft.fftfreq(nx).reshape(1, nx)
+
+        phase = xp.exp(-2j * xp.pi * (fy * shift_y + fx * shift_x))
+
+        out = fft.ifft2(
+            fft.fft2(image, axes=(-2, -1)) * phase,
+            axes=(-2, -1),
+        )
+
+        return xp.abs(out)
+
 
     
 def _preprocess(xp, img, mask=None, gaussian_sigma=None, gaussian_filter=None):
@@ -265,6 +283,37 @@ def intensity_corr_integer(xp, fft, fixed, moving):
     peak_y, peak_x = signed_peak(ky, kx, ny, nx)
 
     return -int(peak_y), -int(peak_x)
+
+def intensity_corr_sub_pixel(xp, fft, fixed, moving):
+    """Integer-pixel intensity-correlation shift estimate."""
+    ny, nx = fixed.shape[-2:]
+
+    fa = fft.fft2(fixed, axes=(-2, -1))
+    fb = fft.fft2(moving, axes=(-2, -1))
+
+    cps = fb * fa.conj()
+
+    corr = fft.ifft2(cps, axes=(-2, -1))
+    mag = xp.abs(corr)
+
+    idx = xp.argmax(mag)
+    ky, kx = xp.unravel_index(idx, mag.shape)
+    ky, kx = int(ky), int(kx)
+
+    peak_y, peak_x = signed_peak(ky, kx, ny, nx)
+
+    sub_y = subpixel_parabola(
+        mag[(ky - 1) % ny, kx],
+        mag[ky, kx],
+        mag[(ky + 1) % ny, kx],
+    )
+    sub_x = subpixel_parabola(
+        mag[ky, (kx - 1) % nx],
+        mag[ky, kx],
+        mag[ky, (kx + 1) % nx],
+    )
+
+    return -(peak_y + sub_y), -(peak_x + sub_x)
 
 
 def phase_corr_subpixel(xp, fft, fixed, moving):
