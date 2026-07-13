@@ -30,7 +30,7 @@ def square_cupy(video_frames):
     m = max(h,w)
     scale_h = m / h
     scale_w = m / w
-    return zoom_gpu(video_frames, (1, scale_h, scale_w), order=1)
+    return zoom_gpu(video_frames, (1, scale_h, scale_w), order=3)
 
 def normalize_to_uint8(data):
     """
