@@ -259,39 +259,31 @@ def process(file_path, parameters):
         _process_batch(parameters, frames, phase_term=phase_term, output_dict=res)
         M0_reg = res["M0ff"].copy()
         print(res.keys())
-        del frames, phase_term
-        res.clear()
+        del frames, phase_term # Memory footprint reduction
+        res.clear() 
         del res
 
-
-    # Create CUDA streams
     h2d_stream = cp.cuda.Stream(non_blocking=True)
     # d2h_stream = cp.cuda.Stream(non_blocking=True)
     compute_stream = cp.cuda.Stream(non_blocking=True)
     
     processed_batches = 0
     
-    # Use double-buffering with explicit state and configurable prefetch depth
     PREFETCH_DEPTH = 4  # Number of batches to prefetch ahead (set to 3 or 4)
 
-    # Initialize prefetch buffers
+    # prefetch buffers
     d_buffers = [None] * PREFETCH_DEPTH
     h2d_events = [None] * PREFETCH_DEPTH
     compute_events = [None] * PREFETCH_DEPTH
     buffer_ready = [False] * PREFETCH_DEPTH
 
-    # Track which buffer index is being used for current and next operations
     current_idx = 0
-    # next_idx = 0
     processed_batches = 0
 
-    # Start reading frames
     for i in tqdm(range(num_batch + PREFETCH_DEPTH)):
         
-        # Determine which buffer to use for prefetching
         prefetch_idx = i % PREFETCH_DEPTH
         
-        # Start async H2D transfer for this batch if frames remain
         if i < num_batch:
             with h2d_stream:
                 frames = file_reader.read_frames(
@@ -304,14 +296,10 @@ def process(file_path, parameters):
                 h2d_events[prefetch_idx].record(h2d_stream)
                 buffer_ready[prefetch_idx] = True
         
-        # Process batches that are ready (up to PREFETCH_DEPTH behind current)
-        # This ensures we process in order while maintaining prefetch depth
         while buffer_ready[current_idx] and current_idx != prefetch_idx:
             
-            # Wait for H2D of current batch to complete
             h2d_events[current_idx].synchronize()
             
-            # Compute current batch on compute stream
             with compute_stream:
                 d_current = d_buffers[current_idx]
                 
@@ -342,33 +330,25 @@ def process(file_path, parameters):
                 compute_events[current_idx] = cp.cuda.Event()
                 compute_events[current_idx].record(compute_stream)
             
-            # Wait for compute to finish
             compute_events[current_idx].synchronize()
             
-            # Store results
             if res:
                 for k, v in res.items():
                     output[k].append(v)
             
             processed_batches += 1
             
-            # Mark buffer as processed and advance to next
             buffer_ready[current_idx] = False
             d_buffers[current_idx] = None  # Free memory
             current_idx = (current_idx + 1) % PREFETCH_DEPTH
             
-            # Break if we've processed all batches
             if processed_batches >= num_batch:
                 break
 
-    # Process any remaining batches in the pipeline
-    # This handles the case where num_batch < PREFETCH_DEPTH
     while buffer_ready[current_idx]:
         
-        # Wait for H2D of current batch to complete
         h2d_events[current_idx].synchronize()
         
-        # Compute current batch on compute stream
         with compute_stream:
             d_current = d_buffers[current_idx]
             
@@ -399,17 +379,14 @@ def process(file_path, parameters):
             compute_events[current_idx] = cp.cuda.Event()
             compute_events[current_idx].record(compute_stream)
         
-        # Wait for compute to finish
         compute_events[current_idx].synchronize()
         
-        # Store results
         if res:
             for k, v in res.items():
                 output[k].append(v)
         
         processed_batches += 1
         
-        # Mark buffer as processed and advance
         buffer_ready[current_idx] = False
         d_buffers[current_idx] = None
         current_idx = (current_idx + 1) % PREFETCH_DEPTH
