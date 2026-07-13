@@ -35,6 +35,8 @@ frequency_bands:
 
 # Image registration
 image_registration: true
+registration_ref_first_frame: 0
+registration_ref_batch_size: 512
 registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
 
 # Corner compensation

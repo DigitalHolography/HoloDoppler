@@ -247,7 +247,22 @@ def process(file_path, parameters):
 
     output = defaultdict(list)
 
+    # creating the registration reference image
     M0_reg = None
+    if parameters["image_registration"] and (parameters["registration_ref_first_frame"] != 0 or parameters["registration_ref_batch_size"] != parameters["batch_size"]):
+        frames = file_reader.read_frames(first_frame=parameters["registration_ref_first_frame"], batch_size=parameters["registration_ref_batch_size"])
+        frames = cp.array(frames)
+        phase_term = None
+        if parameters.get("shack_hartmann", False):
+            phase_term = _process_shack_hartmann(parameters, frames)
+        res = {}
+        _process_batch(parameters, frames, phase_term=phase_term, output_dict=res)
+        M0_reg = res["M0ff"].copy()
+        print(res.keys())
+        del frames, phase_term
+        res.clear()
+        del res
+
 
     # Create CUDA streams
     h2d_stream = cp.cuda.Stream(non_blocking=True)
