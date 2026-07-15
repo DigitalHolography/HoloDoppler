@@ -10,6 +10,7 @@ holodoppler.pipelines - Holographic Doppler processing library - pipelines lib
 from .main_pipeline_xp_on_ram_dp import process_moments, preview_process_moments
 
 from . import main_simple
+from . import main_abs_angle
 from . import main_sh_avg
 from . import main_sliding
 from . import main_sliding_shack_hart
@@ -36,5 +37,8 @@ pipelines = {
     "preview_pca_accumulation" : main_pca_accumulation.preview,
 
     "simple_numpy" : main_simple_numpy.process,
-    "preview_simple_numpy" : main_simple_numpy.preview
+    "preview_simple_numpy" : main_simple_numpy.preview,
+
+    "main_abs_angle" : main_abs_angle.process,
+    "preview_main_abs_angle" : main_abs_angle.preview
 }
