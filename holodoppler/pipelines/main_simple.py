@@ -81,6 +81,8 @@ def _process_batch(parameters, frames, phase_term = None, output_dict = None):
     output_dict["M2"] = moment(xp, psd[idxs], freqs, 2)
     output_dict["M0ff"] = gaussian_flatfield(output_dict["M0"], parameters.get("registration_flatfield_gw", 1.0), gaussian_filter)
 
+    output_dict["spectrum_line"] = xp.mean(psd, axis=(-2,-1))
+
     # Frequency bands
     for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
         idxs_band, _ = frequency_symmetric_filtering(xp, fft, nt_sub, parameters["sampling_freq"], f1, f2)
