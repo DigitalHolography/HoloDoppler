@@ -79,6 +79,10 @@ def _process_batch(parameters, frames, phase_term = None, output_dict = None):
     output_dict["M0"] = moment(xp, psd[idxs], freqs, 0)
     output_dict["M1"] = moment(xp, psd[idxs], freqs, 1)
     output_dict["M2"] = moment(xp, psd[idxs], freqs, 2)
+    # output_dict["M3"] = moment(xp, psd[idxs], freqs, 3)
+    # output_dict["M4"] = moment(xp, psd[idxs], freqs, 4)
+    # output_dict["M5"] = moment(xp, psd[idxs], freqs, 5)
+    # output_dict["M6"] = moment(xp, psd[idxs], freqs, 6)
     output_dict["M0ff"] = gaussian_flatfield(output_dict["M0"], parameters.get("registration_flatfield_gw", 1.0), gaussian_filter)
 
     output_dict["spectrum_line"] = xp.mean(psd, axis=(-2,-1))
@@ -210,6 +214,9 @@ def preview(file_path, parameters):
 
     # calc on gpu
     _process_batch(parameters, frames = frames, phase_term = phase_term, output_dict=res)
+
+    if parameters.get("square", False):
+        res = {k: cp.squeeze(square_cupy(v[cp.newaxis, ...])) if v.ndim ==2 else v for k, v in res.items()}
 
     # transfer to cpu
     res_np = {k: cp.asnumpy(v) for k, v in res.items()}
