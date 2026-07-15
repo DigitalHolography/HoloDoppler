@@ -225,7 +225,11 @@ def preview(file_path, parameters):
     del res
     cp.get_default_memory_pool().free_all_blocks()
 
-    save_preview_images(res_np, _get_default_output_path(file_reader.file_path) / "preview")
+    preview_path = _get_default_output_path(file_reader.file_path) / "preview"
+
+    save_preview_images(res_np, preview_path)
+    (preview_path / "h5").mkdir(exist_ok=True)
+    _save_h5_2(preview_path, res_np, parameters)
 
     return res_np["M0ff"]
 
@@ -424,7 +428,7 @@ def process(file_path, parameters):
 
     _create_directories(target_dir, "FULL")
 
-    save_to_h5_list = ["M0ff", "M0", "M1", "M2", "shack_hartmann_zernike_coefs", "registration"] + [key for key in output_np.keys() if "band_" in key]
+    save_to_h5_list = ["M0ff", "M0", "M1", "M2", "shack_hartmann_zernike_coefs", "registration", "spectrum_line"] + [key for key in output_np.keys() if "band_" in key]
 
     _save_h5_2(target_dir, output_np, parameters, save_only_list=save_to_h5_list)
     
