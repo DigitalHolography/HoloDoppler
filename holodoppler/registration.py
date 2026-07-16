@@ -123,7 +123,7 @@ def apply_register_images_shifts(xp, fft, image, shift_y, shift_x):
             axes=(-2, -1),
         )
 
-        return xp.abs(out)
+        return (out)
 
 
 def _preprocess(xp, img, mask=None, gaussian_sigma=None, gaussian_filter=None):
