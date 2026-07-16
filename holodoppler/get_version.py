@@ -3,7 +3,7 @@ from pathlib import Path
 
 def get_version() -> str:
     # Check if in dev mode (pyproject.toml exists)
-    dev_toml = Path(__file__).parent.parent.parent / "pyproject.toml"
+    dev_toml = Path(__file__).resolve().parent.parent / "pyproject.toml"
 
     if dev_toml.exists():
         # Development mode - parse version from pyproject.toml as text
