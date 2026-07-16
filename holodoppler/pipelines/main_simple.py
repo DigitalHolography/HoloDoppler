@@ -492,13 +492,13 @@ def process(file_path, parameters):
                         sub_pixel=parameters["registration_sub_pixel"],
                     )
 
-                for k, v in res.items():
-                    if k in ["M0ff", "M0", "M1", "M2"] or "band_" in k:
-                        res[k] = apply_register_images_shifts(
-                            cp, cp.fft, v, shift_y, shift_x
-                        )
+                    for k, v in res.items():
+                        if k in ["M0ff", "M0", "M1", "M2"] or "band_" in k:
+                            res[k] = apply_register_images_shifts(
+                                cp, cp.fft, v, shift_y, shift_x
+                            )
 
-                res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
+                    res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
 
                 compute_events[current_idx] = cp.cuda.Event()
                 compute_events[current_idx].record(compute_stream)
