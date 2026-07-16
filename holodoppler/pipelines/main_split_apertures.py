@@ -184,6 +184,32 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
                     use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
                 )
         U_quadrants[qname] = U_q
+
+    if phase_term is not None:
+        if prop_method == "Fresnel":
+            U_main = fresnel_transform_with_phase(
+                xp,
+                fft,
+                frames,
+                parameters["z"],
+                parameters["pixel_pitch"],
+                parameters["wavelength"],
+                phase_term,
+                zero_padding=parameters.get("Fresnel_zero_padding", False),
+                use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
+            )
+    else:
+        if prop_method == "Fresnel":
+            U_main = fresnel_transform_with_phase(
+                xp,
+                fft,
+                frames,
+                parameters["z"],
+                parameters["pixel_pitch"],
+                parameters["wavelength"],
+                None,
+                use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
+            )
     del frames
 
     # SVD filtering per quadrant
@@ -199,6 +225,14 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     U_quadrants.clear()  # free memory
     del U_quadrants
 
+    U_main = svd_filter(
+        xp,
+        U_main,
+        parameters["svd_threshold"],
+        filter_mode=parameters["svd_filter_mode"],
+        remove_dc=parameters["svd_remove_dc"],
+    )
+
     if output_dict is None:
         output_dict = {}
 
@@ -210,7 +244,11 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         else:
             spectrum_f = U_q
         spectrum_f_q[qname] = spectrum_f
+
+    U_q_filt.clear()  # free memory
     del U_q_filt
+
+    U_main = fourier_time_transform(xp, fft, U_main)
 
     # Frequency selection
     idxs, freqs = frequency_symmetric_filtering(
@@ -226,7 +264,10 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     for qname, spectrum_f in spectrum_f_q.items():
         psd = xp.abs(spectrum_f) ** 2
         psd_q[qname] = psd
+    spectrum_f_q.clear()  # free memory
     del spectrum_f_q
+
+    U_main = xp.abs(U_main) ** 2
 
     if parameters.get("corner_compensation", False):
         for qname, psd in psd_q.items():
@@ -259,9 +300,9 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     del M0, total_energy
 
     # Full pupil image reconstruction
-    output_dict["M0"] = moment(xp, psd[idxs], freqs, 0)
-    output_dict["M1"] = moment(xp, psd[idxs], freqs, 1)
-    output_dict["M2"] = moment(xp, psd[idxs], freqs, 2)
+    output_dict["M0"] = moment(xp, U_main[idxs], freqs, 0)
+    output_dict["M1"] = moment(xp, U_main[idxs], freqs, 1)
+    output_dict["M2"] = moment(xp, U_main[idxs], freqs, 2)
     output_dict["M0ff"] = gaussian_flatfield(
         output_dict["M0"],
         parameters.get("registration_flatfield_gw", 1.0),
