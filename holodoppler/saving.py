@@ -47,8 +47,8 @@ H5_FLOAT32_DATASETS = {
     "moment_1",
     "moment_2",
 }
-MP4_FPS = 60.0
-AVI_FPS = 60.0
+DEFAULT_VIDEO_FPS = 30.0
+MP4_MAX_FPS = 60.0
 NON_CONTRAST_OUTPUT_NAMES = {
     "registration",
     "register_laplacian",
@@ -282,8 +282,7 @@ def _save_bundle(
     # Create subdirectories
     _create_directories(target_dir, mode)
 
-    # Keep encoding quality unchanged; only force exported MP4 playback to 60 FPS.
-    mp4_fps = MP4_FPS
+    video_fps = _calculate_fps(num_batch, end_frame, first_frame, parameters)
 
     # Prepare data for saving
     save_map = _build_save_map(vid, parameters, vid_debug, num_batch)
@@ -295,7 +294,7 @@ def _save_bundle(
     uint8_map = {name: normalize_to_uint8(data) for name, data in save_map.items()}
 
     # Save videos (sequential to avoid encoding conflicts)
-    _save_videos(target_dir, uint8_map, mp4_fps)
+    _save_videos(target_dir, uint8_map, video_fps)
 
     # Save PNGs (parallel)
     _save_pngs(target_dir, uint8_map)
@@ -326,20 +325,78 @@ def _create_directories(target_dir, mode):
 
 
 def _calculate_fps(num_batch, end_frame, first_frame, parameters):
-    """Calculate MP4 FPS with the original bounds checking behavior."""
-    if end_frame is None or first_frame is None:
-        fps = 30  # Default fallback
-        print(f"Using default FPS: {fps}")
-    else:
-        frame_range = end_frame - first_frame
-        if frame_range <= 0:
-            fps = 30
-            print(f"Invalid frame range, using default FPS: {fps}")
-        else:
-            sampling_freq = parameters.get("sampling_freq", 1000)  # Default 1kHz
-            fps = min((num_batch / frame_range * sampling_freq), 65)
+    """Return the real-time cadence of the processed output frames."""
+    parameters = parameters or {}
+    sampling_freq = _positive_float(parameters.get("sampling_freq"))
 
-    return fps
+    pipeline_name = str(parameters.get("pipeline_name", "")).lower()
+    if "sliding" in pipeline_name:
+        stride_keys = ("time_stride", "batch_stride")
+    else:
+        stride_keys = ("batch_stride", "time_stride")
+
+    stride = next(
+        (
+            value
+            for key in stride_keys
+            if (value := _positive_float(parameters.get(key))) is not None
+        ),
+        None,
+    )
+    if sampling_freq is not None and stride is not None:
+        fps = sampling_freq / stride
+        print(f"Real-time video FPS: {fps:.6g} ({sampling_freq:.6g} Hz / {stride:.6g} frames)")
+        return fps
+
+    # Compatibility fallback for callers that do not provide a processing stride.
+    frame_range = None
+    if end_frame is not None and first_frame is not None:
+        frame_range = _positive_float(end_frame - first_frame)
+    batch_count = _positive_float(num_batch)
+    if sampling_freq is not None and frame_range is not None and batch_count is not None:
+        fps = batch_count / frame_range * sampling_freq
+        print(f"Estimated real-time video FPS: {fps:.6g}")
+        return fps
+
+    print(f"Video timing unavailable, using default FPS: {DEFAULT_VIDEO_FPS:g}")
+    return DEFAULT_VIDEO_FPS
+
+
+def _positive_float(value):
+    """Convert a finite positive value to float, or return None."""
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(value) or value <= 0:
+        return None
+    return value
+
+
+def _prepare_mp4_frames(frames, source_fps, max_fps=MP4_MAX_FPS):
+    """Limit MP4 playback FPS by dropping frames without changing duration."""
+    frames = np.asarray(frames)
+    source_fps = _positive_float(source_fps)
+    max_fps = _positive_float(max_fps)
+    if source_fps is None:
+        source_fps = DEFAULT_VIDEO_FPS
+    if max_fps is None:
+        raise ValueError("max_fps must be a finite positive number")
+
+    frame_count = frames.shape[0]
+    if frame_count <= 1 or source_fps <= max_fps:
+        return frames, min(source_fps, max_fps)
+
+    # Use as many frames as the MP4 limit permits. Adjusting the encoded FPS to
+    # the retained count keeps retained_count / encoded_fps == count / source_fps.
+    retained_count = max(1, int(np.floor(frame_count * max_fps / source_fps)))
+    retained_count = min(retained_count, frame_count)
+    indices = np.floor(
+        np.arange(retained_count, dtype=np.float64) * frame_count / retained_count
+    ).astype(np.intp)
+    mp4_frames = frames[indices]
+    mp4_fps = source_fps * retained_count / frame_count
+    return mp4_frames, mp4_fps
 
 
 def _build_save_map(vid, parameters, vid_debug, num_batch):
@@ -412,19 +469,27 @@ def _save_projections(target_dir, save_map, parameters, backend):
                 print(f"Failed to save projection for {name}: {e}")
 
 
-def _save_videos(target_dir, uint8_map, mp4_fps):
-    """Save all videos as MP4 and AVI."""
+def _save_videos(target_dir, uint8_map, source_fps):
+    """Save real-time AVI files and compatibility MP4 previews."""
     start_time = time.time()
     completed = 0
     for name, uint8_data in uint8_map.items():
 
         if uint8_data.ndim !=3 and uint8_data.ndim !=4 : #check to avoid failure for outputs that are not videos exemple : list of coefficients
             continue
-        # MP4
+        # MP4 previews target broadly supported playback rates. Frames may be
+        # discarded here only; AVI and H5 outputs retain every processed frame.
+        mp4_data, mp4_fps = _prepare_mp4_frames(uint8_data, source_fps)
+        dropped_frames = uint8_data.shape[0] - mp4_data.shape[0]
+        if dropped_frames:
+            print(
+                f"MP4 {name}: {dropped_frames}/{uint8_data.shape[0]} frames dropped, "
+                f"encoded at {mp4_fps:.6g} FPS"
+            )
         mp4_path = target_dir / "mp4" / f"{name}.mp4"
         _write_video_fast(
             mp4_path,
-            uint8_data,
+            mp4_data,
             mp4_fps,
             codec="libx264",
             preset="ultrafast",
@@ -436,7 +501,7 @@ def _save_videos(target_dir, uint8_map, mp4_fps):
         _write_video_fast(
             avi_path,
             uint8_data,
-            AVI_FPS,
+            source_fps,
             codec="mjpeg",
             quality=8,
         )
