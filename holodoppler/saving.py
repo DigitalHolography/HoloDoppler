@@ -848,7 +848,7 @@ def _render_existing_output_preview(entry):
         return ""
     poster = f' poster="{html.escape(png_href)}"' if png_href is not None else ""
     return f"""<div class="preview">
-<video controls preload="metadata"{poster} src="{html.escape(mp4_href)}"></video>
+<video controls preload="auto" playsinline{poster} src="{html.escape(mp4_href)}"></video>
 <div class="preview-label">MP4 preview</div>
 </div>"""
 
@@ -1192,6 +1192,10 @@ def _write_video_fast(
         output_params += ["-preset", str(preset)]
     if crf is not None:
         output_params += ["-crf", str(crf)]
+    if path.suffix.lower() == ".mp4":
+        # Put the MP4 index before the media payload so browsers can start
+        # playback immediately without requiring an initial seek.
+        output_params += ["-movflags", "+faststart"]
 
     kwargs = {
         "fps": float(fps),
