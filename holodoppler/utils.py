@@ -24,13 +24,15 @@ from functools import cache
 #     # zoom works on spatial dimensions only
 #     return zoom(video_frames, (1, scale_factor, scale_factor, 1), order=1)
 
+
 # For exact dimensions instead of scale
 def square_cupy(video_frames):
     h, w = video_frames.shape[1], video_frames.shape[2]
-    m = max(h,w)
+    m = max(h, w)
     scale_h = m / h
     scale_w = m / w
     return zoom_gpu(video_frames, (1, scale_h, scale_w), order=3)
+
 
 def normalize_to_uint8(data):
     """
@@ -50,6 +52,7 @@ def normalize_to_uint8(data):
     # vectorized normalization
     normalized = 255 * (data - vmin) / (vmax - vmin + 1e-12)
     return np.clip(normalized, 0, 255).astype(np.uint8)
+
 
 def write_video_file(path, frames, fps, fourcc_code="mp4v"):
     """
@@ -74,6 +77,7 @@ def write_video_file(path, frames, fps, fourcc_code="mp4v"):
     for frame in frames:
         out.write(frame)
     out.release()
+
 
 def resize_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
     """
@@ -187,15 +191,16 @@ def resize_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
 
     return img_resized
 
+
 def zoom_slicewise_fast(arr, new_h, new_w, axes=(-2, -1), use_gpu=True):
     """
     Zoom each 2D slice independently to new height and width.
     Vectorized for better performance.
     """
-    
+
     original_shape = arr.shape
     ndim = len(original_shape)
-    
+
     # Determine dimensions
     if ndim == 3:  # (nt, ny, nx)
         nt, ny, nx = original_shape
@@ -206,55 +211,60 @@ def zoom_slicewise_fast(arr, new_h, new_w, axes=(-2, -1), use_gpu=True):
         arr_reshaped = arr
     else:
         raise ValueError(f"Expected 3 or 4D array, got {ndim}D")
-    
+
     # Calculate zoom factors
     zoom_h = new_h / ny
     zoom_w = new_w / nx
-    
+
     # Reshape to combine all slices into a single batch dimension
     # This way each slice is processed independently but in parallel
     total_slices = nt * nchannel
     arr_flat = arr_reshaped.reshape(total_slices, ny, nx)
-    
+
     if use_gpu:
         try:
-            
+
             if not isinstance(arr, cp.ndarray):
                 arr_flat_gpu = cp.asarray(arr_flat)
             else:
                 arr_flat_gpu = arr_flat
-            
+
             # Create output array
-            result_flat_gpu = cp.zeros((total_slices, new_h, new_w), dtype=arr_flat_gpu.dtype)
-            
+            result_flat_gpu = cp.zeros(
+                (total_slices, new_h, new_w), dtype=arr_flat_gpu.dtype
+            )
+
             # Process each slice independently (still loop, but fewer iterations)
             for i in range(total_slices):
-                result_flat_gpu[i, :, :] = zoom_gpu(arr_flat_gpu[i, :, :], (zoom_h, zoom_w), order=1)
-            
+                result_flat_gpu[i, :, :] = zoom_gpu(
+                    arr_flat_gpu[i, :, :], (zoom_h, zoom_w), order=1
+                )
+
             # Reshape back
             result_gpu = result_flat_gpu.reshape(nt, nchannel, new_h, new_w)
-            
+
             if ndim == 3:
                 return result_gpu.reshape(nt, new_h, new_w).get()
             else:
                 return result_gpu.get()
-                
+
         except (ImportError, Exception) as e:
             print(f"GPU zoom failed or not available: {e}")
             print("Falling back to CPU...")
-    
+
     # CPU version
     result_flat = np.zeros((total_slices, new_h, new_w), dtype=arr_flat.dtype)
-    
+
     for i in range(total_slices):
         result_flat[i, :, :] = zoom_cpu(arr_flat[i, :, :], (zoom_h, zoom_w), order=1)
-    
+
     result = result_flat.reshape(nt, nchannel, new_h, new_w)
-    
+
     if ndim == 3:
         return result.reshape(nt, new_h, new_w)
     else:
         return result
+
 
 def resize_fft2_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
     """Spectral resize using FFT. Vectorized across all non-target axes."""
@@ -283,6 +293,7 @@ def resize_fft2_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
 
     # 6. Restore original axes positions
     return np.moveaxis(res_t, (0, 1), axes)
+
 
 # def resize_matlab_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np):
 #     """Spatial resize. Loops over remaining dimensions since imresize is 2D."""
@@ -347,6 +358,7 @@ def crop_array_centrally(arr, target_shape, xp):
 
     return arr[tuple(slices)]
 
+
 @cache
 def elliptical_mask(ny, nx, radius_frac, xp):
     """Create elliptical boolean mask"""
@@ -382,6 +394,7 @@ def signed_peak(ky, kx, ny, nx):
         kx -= nx
     return float(ky), float(kx)
 
+
 def normalize_image(arr):
     """Normalize image to 0-255 range"""
     arr = arr.astype(np.float32)
@@ -406,10 +419,11 @@ def flatfield3D(arr, gw):
     blurred[blurred == 0] = 1
     return arr / blurred
 
-def complex_to_color(complex_img, mode='hsv', normalize=True):
+
+def complex_to_color(complex_img, mode="hsv", normalize=True):
     """
     Convert a complex 2D array to a color image.
-    
+
     Parameters:
     -----------
     complex_img : np.ndarray
@@ -418,7 +432,7 @@ def complex_to_color(complex_img, mode='hsv', normalize=True):
         Color mapping mode: 'hsv', 'phase_amplitude', 'log_amplitude', or 'amplitude_phase'
     normalize : bool
         Whether to normalize amplitude values to [0,1]
-    
+
     Returns:
     --------
     np.ndarray
@@ -426,98 +440,102 @@ def complex_to_color(complex_img, mode='hsv', normalize=True):
     """
     phase = np.angle(complex_img)  # Range: [-π, π]
     amplitude = np.abs(complex_img)
-    
-    if normalize and mode != 'log_amplitude':
+
+    if normalize and mode != "log_amplitude":
         amplitude = amplitude / (amplitude.max() + 1e-10)
-    elif mode == 'log_amplitude':
+    elif mode == "log_amplitude":
         amplitude = np.log1p(amplitude)
         amplitude = amplitude / (amplitude.max() + 1e-10)
-    
-    if mode == 'hsv':
+
+    if mode == "hsv":
         # HSV: Hue = phase, Saturation = 1, Value = amplitude
         hue = (phase + np.pi) / (2 * np.pi)  # Map to [0, 1]
         saturation = np.ones_like(phase)
         value = amplitude
-        
+
         # Convert HSV to RGB
         rgb = hsv_to_rgb(np.stack([hue, saturation, value], axis=-1))
-        
-    elif mode == 'phase_amplitude':
+
+    elif mode == "phase_amplitude":
         # RGB: Red = cos(phase), Green = sin(phase), Blue = amplitude
         r = (np.cos(phase) + 1) / 2
         g = (np.sin(phase) + 1) / 2
         b = amplitude
         rgb = np.stack([r, g, b], axis=-1)
-        
-    elif mode == 'amplitude_phase':
+
+    elif mode == "amplitude_phase":
         # Amplitude modulates intensity, phase modulates color
         hue = (phase + np.pi) / (2 * np.pi)
         # Use amplitude as both saturation and value for different effects
         saturation = np.clip(amplitude * 1.5, 0, 1)
         value = np.clip(amplitude * 1.2, 0, 1)
         rgb = hsv_to_rgb(np.stack([hue, saturation, value], axis=-1))
-        
-    elif mode == 'log_amplitude_phase':
+
+    elif mode == "log_amplitude_phase":
         # Log amplitude with phase coloring
         amplitude_log = np.log1p(np.abs(complex_img))
         amplitude_log = amplitude_log / (amplitude_log.max() + 1e-10)
         hue = (phase + np.pi) / (2 * np.pi)
         rgb = hsv_to_rgb(np.stack([hue, np.ones_like(phase), amplitude_log], axis=-1))
-        
+
     else:
-        raise ValueError(f"Unknown mode: {mode}. Use 'hsv', 'phase_amplitude', 'amplitude_phase', or 'log_amplitude_phase'")
-    
+        raise ValueError(
+            f"Unknown mode: {mode}. Use 'hsv', 'phase_amplitude', 'amplitude_phase', or 'log_amplitude_phase'"
+        )
+
     # Convert to uint8 in range [0, 255]
     rgb = (np.clip(rgb, 0, 1) * 255).astype(np.uint8)
-    
+
     return rgb
+
 
 def hsv_to_rgb(hsv):
     """
     Convert HSV to RGB.
-    
+
     Parameters:
     -----------
     hsv : np.ndarray
         HSV image (H, W, 3) with values in [0, 1]
-    
+
     Returns:
     --------
     np.ndarray
         RGB image (H, W, 3) with values in [0, 1]
     """
     h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
-    
+
     h = h * 6.0  # Scale hue to [0, 6)
     i = np.floor(h).astype(int)
     f = h - i
     p = v * (1 - s)
     q = v * (1 - s * f)
     t = v * (1 - s * (1 - f))
-    
+
     i = i % 6
     rgb = np.zeros_like(hsv)
-    
+
     # Vectorized assignment
     mask0 = i == 0
     rgb[mask0] = np.stack([v[mask0], t[mask0], p[mask0]], axis=-1)
-    
+
     mask1 = i == 1
     rgb[mask1] = np.stack([q[mask1], v[mask1], p[mask1]], axis=-1)
-    
+
     mask2 = i == 2
     rgb[mask2] = np.stack([p[mask2], v[mask2], t[mask2]], axis=-1)
-    
+
     mask3 = i == 3
     rgb[mask3] = np.stack([p[mask3], q[mask3], v[mask3]], axis=-1)
-    
+
     mask4 = i == 4
     rgb[mask4] = np.stack([t[mask4], p[mask4], v[mask4]], axis=-1)
-    
+
     mask5 = i == 5
     rgb[mask5] = np.stack([v[mask5], p[mask5], q[mask5]], axis=-1)
-    
+
     return rgb
+
 
 # Alternative simpler version using only numpy and standard functions
 def complex_to_color_simple(complex_img):
@@ -526,26 +544,26 @@ def complex_to_color_simple(complex_img):
     """
     phase = np.angle(complex_img)
     amplitude = np.abs(complex_img)
-    
+
     # Normalize amplitude
     amplitude = amplitude / (amplitude.max() + 1e-10)
-    
+
     # Map phase from [-π, π] to [0, 1] for hue
     hue = (phase + np.pi) / (2 * np.pi)
-    
+
     # Create HSV image
     # hsv = np.stack([hue, np.ones_like(hue), amplitude], axis=-1)
-    
+
     # Convert to RGB manually (simpler HSV to RGB)
     rgb = np.zeros((*complex_img.shape, 3))
-    
+
     h = hue * 6.0
     i = np.floor(h).astype(int)
     f = h - i
     p = amplitude * (1 - 1)  # saturation=1, so p=0
     q = amplitude * (1 - f)
     t = amplitude * f
-    
+
     i = i % 6
     # Apply for each hue sector
     rgb[i == 0] = np.stack([amplitude[i == 0], t[i == 0], p[i == 0]], axis=-1)
@@ -554,17 +572,19 @@ def complex_to_color_simple(complex_img):
     rgb[i == 3] = np.stack([p[i == 3], q[i == 3], amplitude[i == 3]], axis=-1)
     rgb[i == 4] = np.stack([t[i == 4], p[i == 4], amplitude[i == 4]], axis=-1)
     rgb[i == 5] = np.stack([amplitude[i == 5], p[i == 5], q[i == 5]], axis=-1)
-    
+
     return (rgb * 255).astype(np.uint8)
 
 
 def load_config(config_path):
-    if isinstance(config_path,dict):
+    if isinstance(config_path, dict):
         config = config_path
-    else :
+    else:
         config_path = Path(config_path)
         with open(config_path, "r") as f:
-            config = yaml.safe_load(f) if config_path.suffix == ".yaml" else json.load(f)
+            config = (
+                yaml.safe_load(f) if config_path.suffix == ".yaml" else json.load(f)
+            )
 
     def list_to_tuple(d):
         for k, v in d.items():
@@ -575,7 +595,6 @@ def load_config(config_path):
         return d
 
     return list_to_tuple(config)
-
 
 
 def _pad_to_even(frames):
@@ -596,19 +615,20 @@ def _pad_to_even(frames):
 
     if frames.ndim == 3:
         pad_width = (
-            (0, 0),      # T
+            (0, 0),  # T
             (0, pad_h),  # H
             (0, pad_w),  # W
         )
     else:
         pad_width = (
-            (0, 0),      # T
+            (0, 0),  # T
             (0, pad_h),  # H
             (0, pad_w),  # W
-            (0, 0),      # C
+            (0, 0),  # C
         )
 
     return np.pad(frames, pad_width, mode="edge")
+
 
 def unsharp_projection(
     bm,
@@ -628,9 +648,8 @@ def unsharp_projection(
     out_nx, out_ny = output_shape
 
     zoom_factors = (out_nx / nx, out_ny / ny)
-    
-    xp = bm.xp
 
+    xp = bm.xp
 
     imgs_gpu = xp.asarray(imgs_arr)
 
@@ -645,7 +664,7 @@ def unsharp_projection(
         sharp_resized = bm.zoom(
             sharp,
             zoom_factors,
-            order=3,          # bicubic interpolation, prettier / MATLAB like
+            order=3,  # bicubic interpolation, prettier / MATLAB like
             # mode="nearest",
         )
 
@@ -654,11 +673,13 @@ def unsharp_projection(
     projection = acc / nt
     return xp.asnumpy(projection)
 
+
 def stretchlimcp(data, low_percent=1, high_percent=99):
     flat = data.ravel()
     low = cp.percentile(flat, low_percent)
     high = cp.percentile(flat, high_percent)
     return low, high
+
 
 def imadjustcp(data, low, high, gamma=1.0):
     data_clipped = cp.clip(data, low, high)
@@ -667,8 +688,10 @@ def imadjustcp(data, low, high, gamma=1.0):
         data_scaled = cp.power(data_scaled, gamma)
     return data_scaled
 
+
 def scaling(data, low, high):
     return (data - low) / (high - low)
+
 
 def stretchlim(data, low_percent=1, high_percent=99):
     """
@@ -727,31 +750,46 @@ def imadjust(data, low, high, gamma=1.0):
     if gamma != 1.0:
         data_scaled = np.power(data_scaled, gamma)
     return data_scaled
-    
+
+
 # ------------------------------------------------------------------
 # Footer parameter update
 # ------------------------------------------------------------------
 def update_from_footer(parameters, holofooter):
     try:
         if parameters.get("wavelength") == "use_holovibes" and holofooter is not None:
-            parameters["wavelength"] = holofooter["compute_settings"]["image_rendering"]["lambda"]
+            parameters["wavelength"] = holofooter["compute_settings"][
+                "image_rendering"
+            ]["lambda"]
         if parameters.get("spatial_propagation") == "use_holovibes":
-            hv_tr = holofooter["compute_settings"]["image_rendering"]["space_transformation"]
+            hv_tr = holofooter["compute_settings"]["image_rendering"][
+                "space_transformation"
+            ]
             if hv_tr == "FRESNELTR":
                 parameters["spatial_propagation"] = "Fresnel"
             elif hv_tr == "ANGULARTR":
                 parameters["spatial_propagation"] = "AngularSpectrum"
             else:
-                print(f"Couldn't parse spatial transform name in holovibes footer : {hv_tr}, using Fresnel as default")
+                print(
+                    f"Couldn't parse spatial transform name in holovibes footer : {hv_tr}, using Fresnel as default"
+                )
                 parameters["spatial_propagation"] = "Fresnel"
         if parameters.get("z") == "use_holovibes" and holofooter is not None:
-            parameters["z"] = holofooter["compute_settings"]["image_rendering"]["propagation_distance"]
+            parameters["z"] = holofooter["compute_settings"]["image_rendering"][
+                "propagation_distance"
+            ]
         if parameters.get("pixel_pitch") == "use_holovibes" and holofooter is not None:
-            parameters["pixel_pitch"] = (holofooter["info"]["pixel_pitch"]["y"] * 1e-6, holofooter["info"]["pixel_pitch"]["x"] * 1e-6)
-        if parameters.get("sampling_freq") == "use_holovibes" and holofooter is not None:
+            parameters["pixel_pitch"] = (
+                holofooter["info"]["pixel_pitch"]["y"] * 1e-6,
+                holofooter["info"]["pixel_pitch"]["x"] * 1e-6,
+            )
+        if (
+            parameters.get("sampling_freq") == "use_holovibes"
+            and holofooter is not None
+        ):
             parameters["sampling_freq"] = holofooter["info"]["camera_fps"]
         if parameters.get("high_freq") == "use_holovibes" and holofooter is not None:
-            parameters["high_freq"] = holofooter["info"]["camera_fps"]/2
+            parameters["high_freq"] = holofooter["info"]["camera_fps"] / 2
     except Exception as e:
         print(f"Issue from holovibes footer: {e}")
     return parameters

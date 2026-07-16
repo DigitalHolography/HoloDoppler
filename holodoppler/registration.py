@@ -6,21 +6,21 @@ from .utils import elliptical_mask
 from .utils import signed_peak, subpixel_parabola
 
 
-def register_laplacian(xp, fft, video, radius=None, gauge='minimal', ref_frame=0):
+def register_laplacian(xp, fft, video, radius=None, gauge="minimal", ref_frame=0):
     nt, ny, nx = video.shape
-    
+
     # Precompute mask and preprocess all frames
     mask = elliptical_mask(ny, nx, radius, xp) if radius else None
     preprocessed = xp.zeros((nt, ny, nx), dtype=xp.float32)
     for k in range(nt):
         frame = video[k].astype(xp.float32, copy=False)
         preprocessed[k] = _preprocess(xp, frame, mask=mask)
-    
+
     # Compute pairwise shifts (upper triangle only)
     shifts_y = xp.zeros((nt, nt), dtype=xp.float32)
     shifts_x = xp.zeros((nt, nt), dtype=xp.float32)
     count = xp.zeros((nt, nt), dtype=xp.float32)
-    
+
     for k in range(nt):
         for m in range(k + 1, nt):
             shift_y, shift_x = intensity_corr_integer(
@@ -32,42 +32,51 @@ def register_laplacian(xp, fft, video, radius=None, gauge='minimal', ref_frame=0
             shifts_x[m, k] = -shift_x
             count[k, m] = 1
             count[m, k] = 1
-    
+
     # Solve for shifts using least squares
     # We want to find s_i such that s_i - s_j = d_ij (where d_ij are pairwise shifts)
     # This is a linear system that can be solved by averaging
-    
+
     # For each frame, compute average shift relative to all others
     sum_y = xp.sum(shifts_y, axis=1)
     sum_x = xp.sum(shifts_x, axis=1)
     row_counts = xp.sum(count, axis=1)
-    
+
     # Avoid division by zero
     row_counts = xp.maximum(row_counts, 1)
-    
+
     raw_shifts_y = sum_y / row_counts
     raw_shifts_x = sum_x / row_counts
-    
+
     # Apply gauge choice
-    if gauge == 'minimal':
+    if gauge == "minimal":
         # Center shifts to minimize L2 norm (zero mean)
         mean_y = xp.mean(raw_shifts_y)
         mean_x = xp.mean(raw_shifts_x)
         shifts_y_final = raw_shifts_y - mean_y
         shifts_x_final = raw_shifts_x - mean_x
-        
-    elif gauge == 'reference':
+
+    elif gauge == "reference":
         # Relative to reference frame
         shifts_y_final = raw_shifts_y - raw_shifts_y[ref_frame]
         shifts_x_final = raw_shifts_x - raw_shifts_x[ref_frame]
-        
+
     else:
         raise ValueError(f"gauge must be 'minimal' or 'reference', got '{gauge}'")
-    
+
     return shifts_y_final, shifts_x_final
 
 
-def register_images_shifts(xp, fft, fixed, moving, radius=None, gaussian_sigma=None, gaussian_filter=None, sub_pixel = False):
+def register_images_shifts(
+    xp,
+    fft,
+    fixed,
+    moving,
+    radius=None,
+    gaussian_sigma=None,
+    gaussian_filter=None,
+    sub_pixel=False,
+):
     ny, nx = fixed.shape[-2:]
 
     mask = elliptical_mask(ny, nx, radius, xp) if radius else None
@@ -75,8 +84,20 @@ def register_images_shifts(xp, fft, fixed, moving, radius=None, gaussian_sigma=N
     fixed_f = fixed.astype(xp.float32, copy=False)
     moving_f = moving.astype(xp.float32, copy=False)
 
-    fixed_e = _preprocess(xp, fixed_f, mask=mask, gaussian_sigma=gaussian_sigma, gaussian_filter=gaussian_filter)
-    moving_e = _preprocess(xp, moving_f, mask=mask, gaussian_sigma=gaussian_sigma, gaussian_filter=gaussian_filter)
+    fixed_e = _preprocess(
+        xp,
+        fixed_f,
+        mask=mask,
+        gaussian_sigma=gaussian_sigma,
+        gaussian_filter=gaussian_filter,
+    )
+    moving_e = _preprocess(
+        xp,
+        moving_f,
+        mask=mask,
+        gaussian_sigma=gaussian_sigma,
+        gaussian_filter=gaussian_filter,
+    )
 
     if not sub_pixel:
         shift_y, shift_x = intensity_corr_integer(xp, fft, fixed_e, moving_e)
@@ -85,9 +106,10 @@ def register_images_shifts(xp, fft, fixed, moving, radius=None, gaussian_sigma=N
 
     return shift_y, shift_x
 
+
 def apply_register_images_shifts(xp, fft, image, shift_y, shift_x):
-    if (isinstance(shift_y, int) and isinstance(shift_x, int)):
-        return xp.roll(xp.roll(image,shift_y, axis=-2),shift_x, axis=-1)
+    if isinstance(shift_y, int) and isinstance(shift_x, int):
+        return xp.roll(xp.roll(image, shift_y, axis=-2), shift_x, axis=-1)
     else:
         ny, nx = image.shape[-2:]
 
@@ -104,7 +126,6 @@ def apply_register_images_shifts(xp, fft, image, shift_y, shift_x):
         return xp.abs(out)
 
 
-    
 def _preprocess(xp, img, mask=None, gaussian_sigma=None, gaussian_filter=None):
     """Convert to float32, optionally smooth, subtract masked mean, and apply mask."""
     out = img.astype(xp.float32, copy=False)
@@ -120,20 +141,6 @@ def _preprocess(xp, img, mask=None, gaussian_sigma=None, gaussian_filter=None):
     mean = xp.sum(out * mask_f) / xp.maximum(xp.sum(mask_f), 1.0)
 
     return (out - mean) * mask_f
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 _EPS = 1e-12
@@ -264,6 +271,7 @@ def phase_corr_integer(xp, fft, fixed, moving):
 
     return -int(peak_y), -int(peak_x)
 
+
 def intensity_corr_integer(xp, fft, fixed, moving):
     """Integer-pixel intensity-correlation shift estimate."""
     ny, nx = fixed.shape[-2:]
@@ -283,6 +291,7 @@ def intensity_corr_integer(xp, fft, fixed, moving):
     peak_y, peak_x = signed_peak(ky, kx, ny, nx)
 
     return -int(peak_y), -int(peak_x)
+
 
 def intensity_corr_sub_pixel(xp, fft, fixed, moving):
     """Integer-pixel intensity-correlation shift estimate."""
@@ -359,7 +368,7 @@ def fourier_magnitude(xp, fft, img, dc_radius_factor=32):
     r = max(4, min(ny, nx) // dc_radius_factor)
 
     yy, xx = xp.ogrid[:ny, :nx]
-    dc_mask = (yy - cy) ** 2 + (xx - cx) ** 2 <= r ** 2
+    dc_mask = (yy - cy) ** 2 + (xx - cx) ** 2 <= r**2
 
     mag[dc_mask] = 0
     return mag
@@ -540,6 +549,7 @@ def apply_registration(
 
     return out
 
+
 def apply_registration3D(
     xp,
     fft,
@@ -566,6 +576,14 @@ def apply_registration3D(
         raise ValueError("reg must have 2 or 4 elements.")
 
     for i in range(img3D.shape[0]):
-        img3D[i] = apply_registration(xp,fft,ndi,img3D[i],reg,integer_translation=integer_translation,translation_method=translation_method)
+        img3D[i] = apply_registration(
+            xp,
+            fft,
+            ndi,
+            img3D[i],
+            reg,
+            integer_translation=integer_translation,
+            translation_method=translation_method,
+        )
 
     return img3D

@@ -7,6 +7,8 @@ holodoppler.pipelines - Holographic Doppler processing library - pipelines lib
 # from .dask_xp3 import process_moments_daskxp3
 # from .numba_np import process_moments_cpu
 
+from holodoppler.pipelines import main_split_apertures
+
 from .main_pipeline_xp_on_ram_dp import process_moments, preview_process_moments
 
 from . import main_simple
@@ -15,6 +17,8 @@ from . import main_sliding
 from . import main_sliding_shack_hart
 from . import main_pca_accumulation
 from . import main_simple_numpy
+from . import main_quad_pupils
+from . import main_split_apertures
 
 pipelines = {
     "main": process_moments,
@@ -36,5 +40,12 @@ pipelines = {
     "preview_pca_accumulation" : main_pca_accumulation.preview,
 
     "simple_numpy" : main_simple_numpy.process,
-    "preview_simple_numpy" : main_simple_numpy.preview
+    "preview_simple_numpy" : main_simple_numpy.preview,
+
+    "quad_pupils" : main_quad_pupils.process,
+    "preview_quad_pupils" : main_quad_pupils.preview,
+
+    "simple_split_apertures" : main_split_apertures.process,
+    "preview_simple_split_apertures" : main_split_apertures.preview,
+
 }

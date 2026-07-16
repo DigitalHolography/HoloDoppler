@@ -2,9 +2,9 @@
 Propagation kernels (Fresnel and Angular Spectrum)
 """
 
-
 from functools import cache
 from .utils import pad_array_centrally
+
 
 @cache
 def build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None):
@@ -27,6 +27,7 @@ def build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding
         kernel = pad_array_centrally(kernel, zero_padding, xp)
 
     return kernel[xp.newaxis, :, :].astype(xp.complex64)
+
 
 @cache
 def build_fresnel_kernel_out(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None):
@@ -54,6 +55,7 @@ def build_fresnel_kernel_out(xp, z, pixel_pitch, wavelength, ny, nx, zero_paddin
         kernel = pad_array_centrally(kernel, zero_padding, xp)
 
     return kernel[xp.newaxis, :, :].astype(xp.complex64)
+
 
 @cache
 def build_angular_kernel(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None):
@@ -85,15 +87,23 @@ def build_angular_kernel(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=No
 
 
 def fresnel_transform(
-    xp, fft, frames, z, pixel_pitch, wavelength, zero_padding=False, use_output_kernel=True
+    xp,
+    fft,
+    frames,
+    z,
+    pixel_pitch,
+    wavelength,
+    zero_padding=False,
+    use_output_kernel=True,
 ):
     """Apply Fresnel transform"""
 
     ny, nx = frames.shape[-2:]
-    kernel_in = build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
+    kernel_in = build_fresnel_kernel_in(
+        xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+    )
 
     if zero_padding:
-        
 
         frames = pad_array_centrally(frames, zero_padding, xp)
 
@@ -103,7 +113,9 @@ def fresnel_transform(
 
     if use_output_kernel:
         ny, nx = frames.shape[-2:]
-        kernel_out = build_fresnel_kernel_out(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
+        kernel_out = build_fresnel_kernel_out(
+            xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+        )
         result = result * kernel_out
 
     return result
@@ -113,9 +125,9 @@ def fresnel_transform_with_phase(
     xp,
     fft,
     frames,
-    z, 
-    pixel_pitch, 
-    wavelength, 
+    z,
+    pixel_pitch,
+    wavelength,
     phase_term,
     zero_padding=False,
     use_output_kernel=True,
@@ -123,7 +135,9 @@ def fresnel_transform_with_phase(
     """Apply Fresnel transform with phase correction"""
 
     ny, nx = frames.shape[-2:]
-    kernel_in = build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
+    kernel_in = build_fresnel_kernel_in(
+        xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+    )
 
     if zero_padding:
         ny, nx = frames.shape[-2:]
@@ -134,17 +148,23 @@ def fresnel_transform_with_phase(
     )
 
     if use_output_kernel:
-        kernel_out = build_fresnel_kernel_out(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
+        kernel_out = build_fresnel_kernel_out(
+            xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+        )
         result = result * kernel_out
 
     return result
 
 
-def angular_spectrum_transform(xp, fft, frames, z, pixel_pitch, wavelength,  zero_padding=False):
+def angular_spectrum_transform(
+    xp, fft, frames, z, pixel_pitch, wavelength, zero_padding=False
+):
     """Apply Angular Spectrum transform"""
 
     ny, nx = frames.shape[-2:]
-    kernel = build_angular_kernel(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
+    kernel = build_angular_kernel(
+        xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+    )
 
     if zero_padding:
 
@@ -162,7 +182,9 @@ def angular_spectrum_transform_with_phase(
     """Apply Angular Spectrum transform with phase correction"""
 
     ny, nx = frames.shape[-2:]
-    kernel = build_angular_kernel(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
+    kernel = build_angular_kernel(
+        xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+    )
 
     # print("multiplying frames")
 
@@ -180,5 +202,6 @@ def angular_spectrum_transform_with_phase(
 
     return fft.ifft2(
         fft.fft2(frames, axes=(-1, -2), norm="ortho")
-        * fft.fftshift(kernel, axes=(-1, -2)), norm="ortho"
+        * fft.fftshift(kernel, axes=(-1, -2)),
+        norm="ortho",
     )
