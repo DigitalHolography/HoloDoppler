@@ -47,14 +47,6 @@ H5_FLOAT32_DATASETS = {
     "moment_1",
     "moment_2",
 }
-H5_NON_IMAGE_DATASETS = {
-    "HD_parameters",
-    "HD_version",
-    "registration",
-    "register_laplacian",
-    "shack_hartmann_zernike_coefs",
-    "zernike_coefs_radians",
-}
 MP4_FPS = 60.0
 AVI_FPS = 60.0
 NON_CONTRAST_OUTPUT_NAMES = {
@@ -133,42 +125,9 @@ def _skip_contrast_for_name(name, skip_debug):
 
 
 def _h5_data(name, data):
-    data = _h5_match_display_orientation(name, data)
     if name in H5_FLOAT32_DATASETS:
         return np.asarray(data, dtype=np.float32)
     return data
-
-
-def _h5_match_display_orientation(name, data):
-    arr = np.asarray(data)
-    if not _h5_should_flip_y(name, arr):
-        return data
-    return np.flip(arr, axis=_h5_y_axis(arr))
-
-
-def _h5_should_flip_y(name, arr):
-    name = str(name)
-    if (
-        name in H5_NON_IMAGE_DATASETS
-        or name.endswith("_coefs")
-        or "zernike_coefs" in name
-        or arr.ndim < 2
-    ):
-        return False
-    height, width = _h5_image_shape(arr)
-    return height > 16 and width > 16
-
-
-def _h5_y_axis(arr):
-    if arr.ndim == 4 and arr.shape[-1] in (3, 4):
-        return -3
-    return -2
-
-
-def _h5_image_shape(arr):
-    if arr.ndim == 4 and arr.shape[-1] in (3, 4):
-        return arr.shape[-3], arr.shape[-2]
-    return arr.shape[-2], arr.shape[-1]
 
 
 def _h5_dataset_name(name):
@@ -1077,16 +1036,16 @@ def _save_h5(target_dir, vid, parameters, reg_list, coefs_list):
 
     with h5py.File(h5_path, "w") as f:
         # Save moments
-        f.create_dataset("moment0", data=_h5_data("moment0", vid[:, 0, :, :]), compression=compression)
-        f.create_dataset("moment1", data=_h5_data("moment1", vid[:, 1, :, :]), compression=compression)
-        f.create_dataset("moment2", data=_h5_data("moment2", vid[:, 2, :, :]), compression=compression)
-        f.create_dataset("moment0ff", data=_h5_data("moment0ff", vid[:, 3, :, :]), compression=compression)
+        f.create_dataset("moment0", data=np.asarray(vid[:, 0, :, :], dtype=np.float32), compression=compression)
+        f.create_dataset("moment1", data=np.asarray(vid[:, 1, :, :], dtype=np.float32), compression=compression)
+        f.create_dataset("moment2", data=np.asarray(vid[:, 2, :, :], dtype=np.float32), compression=compression)
+        f.create_dataset("moment0ff", data=np.asarray(vid[:, 3, :, :], dtype=np.float32), compression=compression)
 
         # Save frequency bands
         for k, v in enumerate(parameters.get("frequency_bands", [])):
             f.create_dataset(
                 f"band_{v[0]}_{v[1]}",
-                data=_h5_data(f"band_{v[0]}_{v[1]}", vid[:, 4 + k, :, :]),
+                data=vid[:, 4 + k, :, :],
                 compression=compression,
             )
 
