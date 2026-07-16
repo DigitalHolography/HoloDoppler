@@ -148,11 +148,17 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     output_dict["M0"] = moment(xp, psd[idxs], freqs, 0)
     output_dict["M1"] = moment(xp, psd[idxs], freqs, 1)
     output_dict["M2"] = moment(xp, psd[idxs], freqs, 2)
+    # output_dict["M3"] = moment(xp, psd[idxs], freqs, 3)
+    # output_dict["M4"] = moment(xp, psd[idxs], freqs, 4)
+    # output_dict["M5"] = moment(xp, psd[idxs], freqs, 5)
+    # output_dict["M6"] = moment(xp, psd[idxs], freqs, 6)
     output_dict["M0ff"] = gaussian_flatfield(
         output_dict["M0"],
         parameters.get("registration_flatfield_gw", 1.0),
         gaussian_filter,
     )
+
+    output_dict["spectrum_line"] = xp.mean(psd, axis=(-2, -1))
 
     # Frequency bands
     for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
@@ -344,6 +350,12 @@ def preview(file_path, parameters):
     # calc on gpu
     _process_batch(parameters, frames=frames, phase_term=phase_term, output_dict=res)
 
+    if parameters.get("square", False):
+        res = {
+            k: cp.squeeze(square_cupy(v[cp.newaxis, ...])) if v.ndim == 2 else v
+            for k, v in res.items()
+        }
+
     # transfer to cpu
     res_np = {k: cp.asnumpy(v) for k, v in res.items()}
 
@@ -351,9 +363,11 @@ def preview(file_path, parameters):
     del res
     cp.get_default_memory_pool().free_all_blocks()
 
-    save_preview_images(
-        res_np, _get_default_output_path(file_reader.file_path) / "preview"
-    )
+    preview_path = _get_default_output_path(file_reader.file_path) / "preview"
+
+    save_preview_images(res_np, preview_path)
+    (preview_path / "h5").mkdir(exist_ok=True)
+    _save_h5_2(preview_path, res_np, parameters)
 
     return res_np["M0ff"]
 
@@ -588,6 +602,7 @@ def process(file_path, parameters):
         "M2",
         "shack_hartmann_zernike_coefs",
         "registration",
+        "spectrum_line",
     ] + [key for key in output_np.keys() if "band_" in key]
 
     _save_h5_2(target_dir, output_np, parameters, save_only_list=save_to_h5_list)
