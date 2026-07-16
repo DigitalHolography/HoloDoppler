@@ -4,7 +4,7 @@ pipeline_name: "simple_split_apertures"
 batch_size: 256
 first_frame: 0
 batch_stride: 256
-end_frame: -1  # -1 means process all frames
+end_frame: -1 # -1 means process all frames
 
 # Propagation parameters
 spatial_propagation: "Fresnel"  # Options: "Fresnel" or "AngularSpectrum"
@@ -55,7 +55,7 @@ smoothing_gaussian: false # smoothing images with a gaussian kernel only applied
 smoothing_gaussian_size: 2
 
 # Shack-Hartmann wavefront sensing
-shack_hartmann: false  # Enable Shack-Hartmann processing
+shack_hartmann: true  # Enable Shack-Hartmann processing
 shack_hartmann_nx_subap: 5  # Number of subapertures in X
 shack_hartmann_ny_subap: 5  # Number of subapertures in Y
 shack_hartmann_svd_threshold: 10

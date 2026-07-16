@@ -12,6 +12,9 @@ from holodoppler.propagation import (
     fresnel_transform_with_phase,
     angular_spectrum_transform,
     angular_spectrum_transform_with_phase,
+    build_fresnel_kernel_in,
+    build_fresnel_kernel_out,
+    pad_array_centrally,
 )
 from holodoppler.shack_hartmann import (
     construct_subapertures_fresnel,
@@ -42,7 +45,6 @@ from holodoppler.registration import (
 )
 from holodoppler.file_reader import FileReaderFactory
 
-
 import cupy as cp
 
 # import numpy as np
@@ -64,7 +66,7 @@ def make_quadrant_masks(shape, center=None):
     """
     Create boolean masks for NW, NE, SW, SE quadrants.
     shape : (ny, nx) of the pupil plane.
-    center : (cy, cx) – if None, use geometric centre.
+    center : (cy, cx) - if None, use geometric centre.
     """
     ny, nx = shape
     if center is None:
@@ -81,6 +83,59 @@ def make_quadrant_masks(shape, center=None):
     return mask_NW, mask_NE, mask_SW, mask_SE
 
 
+def make_quadrant_indices(shape, center=None):
+    """
+    Create indices for NW, NE, SW, SE quadrants.
+    shape : (ny, nx) of the pupil plane.
+    center : (cy, cx) - if None, use geometric centre.
+    """
+    ny, nx = shape
+    if center is None:
+        cy, cx = ny // 2, nx // 2
+    else:
+        cy, cx = center
+
+    idx_NW = ((0, cy ), (0, cx ))
+    idx_NE = ((0, cy ), (cx , nx + 1))
+    idx_SW = ((cy , ny + 1), (0, cx ))
+    idx_SE = ((cy , ny + 1), (cx , nx + 1))
+    
+    return idx_NW, idx_NE, idx_SW, idx_SE
+
+
+def fresnel_transform_with_phase_2(
+    xp,
+    fft,
+    frames,
+    z,
+    pixel_pitch,
+    wavelength,
+    phase_term,
+    idx,
+    zero_padding=False,
+    use_output_kernel=True,
+):
+    """Apply Fresnel transform with phase correction"""
+
+    ny, nx = phase_term.shape[-2:]
+    kernel_in = build_fresnel_kernel_in(
+        xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+    )
+
+    result = fft.fftshift(
+        fft.fft2(
+            frames
+            * kernel_in[:, idx[0][0] : idx[0][1], idx[1][0] : idx[1][1]]
+            * phase_term[xp.newaxis, idx[0][0] : idx[0][1], idx[1][0] : idx[1][1]],
+            axes=(-1, -2),
+            norm="ortho",
+        ),
+        axes=(-1, -2),
+    )
+
+    return result
+
+
 def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     xp = cp
     fft = cp.fft
@@ -88,55 +143,45 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     prop_method = parameters["spatial_propagation"]
 
     # Split into four quadrants
-    masks = make_quadrant_masks(frames.shape[1:], center=parameters.get("pupil_center"))
+    # masks = make_quadrant_masks(frames.shape[1:], center=parameters.get("pupil_center"))
     mask_names = ["NW", "NE", "SW", "SE"]
-    quadrant_masks = dict(zip(mask_names, masks))
+    # quadrant_masks = dict(zip(mask_names, masks))
+
+    quadrant_indices = make_quadrant_indices(
+        frames.shape[1:], center=parameters.get("pupil_center")
+    )
+    quadrant_idxs = dict(zip(mask_names, quadrant_indices))
 
     # Propagation
     U_quadrants = {}
-    for qname, mask in quadrant_masks.items():
-        masked_frames = frames * mask  # Apply the current quadrant mask to the frames
+    for qname, idx in quadrant_idxs.items():
+        cropped_frames = frames[:, idx[0][0] : idx[0][1], idx[1][0] : idx[1][1]]
         if phase_term is not None:
             if prop_method == "Fresnel":
-                U_q = fresnel_transform_with_phase(
+                U_q = fresnel_transform_with_phase_2(
                     xp,
                     fft,
-                    masked_frames,
+                    cropped_frames,
                     parameters["z"],
                     parameters["pixel_pitch"],
                     parameters["wavelength"],
                     phase_term,
+                    idx=quadrant_idxs[qname],
+                    zero_padding=parameters.get("Fresnel_zero_padding", False),
                     use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
-                )
-            elif prop_method == "AngularSpectrum":
-                U_q = angular_spectrum_transform_with_phase(
-                    xp,
-                    fft,
-                    masked_frames,
-                    parameters["z"],
-                    parameters["pixel_pitch"],
-                    parameters["wavelength"],
-                    phase_term,
                 )
         else:
             if prop_method == "Fresnel":
-                U_q = fresnel_transform(
+                U_q = fresnel_transform_with_phase_2(
                     xp,
                     fft,
-                    masked_frames,
+                    cropped_frames,
                     parameters["z"],
                     parameters["pixel_pitch"],
                     parameters["wavelength"],
+                    None,
+                    idx=quadrant_idxs[qname],
                     use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
-                )
-            elif prop_method == "AngularSpectrum":
-                U_q = angular_spectrum_transform(
-                    xp,
-                    fft,
-                    masked_frames,
-                    parameters["z"],
-                    parameters["pixel_pitch"],
-                    parameters["wavelength"],
                 )
         U_quadrants[qname] = U_q
     del frames
@@ -151,6 +196,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             filter_mode=parameters["svd_filter_mode"],
             remove_dc=parameters["svd_remove_dc"],
         )
+    U_quadrants.clear()  # free memory
     del U_quadrants
 
     if output_dict is None:
@@ -243,7 +289,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
 
     I_full = xp.mean(psd_full, axis=0)
 
-    B_inc = sum(quadrant_moments[q][f"{q}_M0"] for q in quadrant_masks)
+    B_inc = sum(quadrant_moments[q][f"{q}_M0"] for q in quadrant_idxs.keys())
 
     B_R = quadrant_moments["NE"]["NE_M0"] + quadrant_moments["SE"]["SE_M0"]
     B_L = quadrant_moments["NW"]["NW_M0"] + quadrant_moments["SW"]["SW_M0"]
@@ -463,7 +509,7 @@ def preview(file_path, parameters):
     cp.get_default_memory_pool().free_all_blocks()
 
     save_preview_images(
-        res_np, _get_default_output_path(file_reader.file_path) / "preview"
+        res_np, _get_default_output_path(file_reader.file_path) / "preview"  / "SPLIT_APERTURES"
     )
 
     return res_np["M0ff"]
@@ -593,7 +639,9 @@ def process(file_path, parameters):
 
                 for k, v in res.items():
                     if isinstance(v, cp.ndarray) and v.ndim == 2:
-                        res[k] = apply_register_images_shifts(cp, cp.fft, v, shift_y, shift_x)
+                        res[k] = apply_register_images_shifts(
+                            cp, cp.fft, v, shift_y, shift_x
+                        )
 
                 res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
 
@@ -680,23 +728,19 @@ def process(file_path, parameters):
         compute_events[i] = None
     del d_buffers, h2d_events, compute_events, buffer_ready
 
-    final_output = {}
     for k, v in output_np.items():
-        final_output[k] = np.stack(v, axis=0)
-
-    del output_np
+        output_np[k] = np.stack(v, axis=0)
 
     if parameters.get("square", False):
-        final_output = {
-            k: np.square(v) if v.ndim == 3 else v for k, v in final_output.items()
+        output_np = {
+            k: cp.asnumpy(square_cupy(cp.array(v))) if v.ndim == 3 else v for k, v in output_np.items()
         }
 
-    # Use final_output as the main numpy result dict
-    output_np = final_output
+    # Use output_np as the main numpy result dict
 
     cp.get_default_memory_pool().free_all_blocks()
 
-    target_dir = _get_default_output_path(file_reader.file_path)
+    target_dir = _get_default_output_path(file_reader.file_path) / "SPLIT_APERTURES"
 
     if "saving_to_folder" in parameters:
         target_dir = Path(parameters["saving_to_folder"])
@@ -704,13 +748,13 @@ def process(file_path, parameters):
     _create_directories(target_dir, "FULL")
 
     save_to_h5_list = [
-        "M0ff",
-        "M0",
-        "M1",
-        "M2",
+        # "M0ff",
+        # "M0",
+        # "M1",
+        # "M2",
         "shack_hartmann_zernike_coefs",
         "registration",
-    ] + [key for key in output_np.keys() if "band_" in key]
+    ] #+ [key for key in output_np.keys() if "band_" in key]
 
     _save_h5_2(target_dir, output_np, parameters, save_only_list=save_to_h5_list)
 

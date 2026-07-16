@@ -17,7 +17,6 @@ from . import main_sliding
 from . import main_sliding_shack_hart
 from . import main_pca_accumulation
 from . import main_simple_numpy
-from . import main_quad_pupils
 from . import main_split_apertures
 
 pipelines = {
@@ -41,9 +40,6 @@ pipelines = {
 
     "simple_numpy" : main_simple_numpy.process,
     "preview_simple_numpy" : main_simple_numpy.preview,
-
-    "quad_pupils" : main_quad_pupils.process,
-    "preview_quad_pupils" : main_quad_pupils.preview,
 
     "simple_split_apertures" : main_split_apertures.process,
     "preview_simple_split_apertures" : main_split_apertures.preview,
