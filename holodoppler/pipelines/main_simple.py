@@ -597,11 +597,17 @@ def process(file_path, parameters):
 
     _create_directories(target_dir, "FULL")
 
+    # renaming for compatibility with Doppler View
+    output_np["moment0"] = output_np.pop("M0")
+    output_np["moment0ff"] = output_np.pop("M0ff")
+    output_np["moment1"] = output_np.pop("M1")
+    output_np["moment2"] = output_np.pop("M2")
+
     save_to_h5_list = [
-        "M0ff",
-        "M0",
-        "M1",
-        "M2",
+        "moment0ff",
+        "moment0",
+        "moment1",
+        "moment2",
         "shack_hartmann_zernike_coefs",
         "registration",
         "spectrum_line",
