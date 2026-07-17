@@ -295,7 +295,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         M0 = quadrant_moments[qname][qname + "_M0"]
         total_energy = xp.sum(M0)  # scalar
         if total_energy == 0:
-            total_energy = eps
+            total_energy = 1e-24
         psd_q_norm[qname] = psd / total_energy
     del M0, total_energy
 
@@ -680,8 +680,10 @@ def process(file_path, parameters):
 
                 for k, v in res.items():
                     if isinstance(v, cp.ndarray) and v.ndim == 2:
+                        ny, nx = v.shape[-2:]
+                        reg_ny, reg_nx = M0_reg.shape[-2:]
                         res[k] = apply_register_images_shifts(
-                            cp, cp.fft, v, shift_y, shift_x
+                            cp, cp.fft, v, shift_y*ny/reg_ny, shift_x*nx/reg_nx
                         )
 
                 res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
