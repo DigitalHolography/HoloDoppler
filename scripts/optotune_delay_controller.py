@@ -129,11 +129,11 @@ import signal
 # import sys
 from opto import Opto
 
-LOW_CURRENT_mA=90.18
-HIGH_CURRENT_mA=95.68
-TIME_DELAY_before_high = 1 #s
-TIME_DELAY_period_low = 2 #s
-TIME_DELAY_period_high = 2 #s
+A_CURRENT_mA=105
+B_CURRENT_mA=110
+TIME_DELAY_before_A = 1 #s
+TIME_DELAY_period_A = 1 #s
+TIME_DELAY_period_B = 1 #s
 TIME_DELAY_end = 10 #s
 
 
@@ -143,19 +143,19 @@ def set_lens_current_mA(value):
         lens.current(value)
         print(f"Lens current set to {value} mA.")
 
-set_lens_current_mA(HIGH_CURRENT_mA) #init
+set_lens_current_mA(B_CURRENT_mA) #init
 
 def trigger_function():
     t=0
-    set_lens_current_mA(HIGH_CURRENT_mA) #reset but should already be
-    time.sleep(TIME_DELAY_before_high)
+    set_lens_current_mA(B_CURRENT_mA) #reset but should already be
+    time.sleep(TIME_DELAY_before_A)
     while t <= TIME_DELAY_end:
-        set_lens_current_mA(LOW_CURRENT_mA)
-        time.sleep(TIME_DELAY_period_low)
-        set_lens_current_mA(HIGH_CURRENT_mA)
-        time.sleep(TIME_DELAY_period_high)
-        t+=(TIME_DELAY_period_low+TIME_DELAY_period_high)
-    set_lens_current_mA(HIGH_CURRENT_mA) #reset but should already be
+        set_lens_current_mA(B_CURRENT_mA)
+        time.sleep(TIME_DELAY_period_B)
+        set_lens_current_mA(A_CURRENT_mA)
+        time.sleep(TIME_DELAY_period_A)
+        t+=(TIME_DELAY_period_A+TIME_DELAY_period_B)
+    set_lens_current_mA(B_CURRENT_mA) #reset but should already be
 
 
 # --- Configuration ---
@@ -233,4 +233,5 @@ def main():
         print("✅ Client stopped.")
 
 if __name__ == "__main__":
+    trigger_function()
     main()
