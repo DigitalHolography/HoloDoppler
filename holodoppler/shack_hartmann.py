@@ -99,7 +99,9 @@ def construct_subapertures_angular(
         xp, z_prop, pixel_pitch, wavelength, Ny, Nx, zero_padding=None
     )  # TODO accept a shack hartman zero_padding option
 
-    U_fft = fft.fft2(U0.astype(xp.complex64), axes=(-2, -1)) * fft.fftshift(kernel, axes=(-2, -1))
+    U_fft = fft.fft2(U0.astype(xp.complex64), axes=(-2, -1)) * fft.fftshift(
+        kernel, axes=(-2, -1)
+    )
 
     crop_ny, crop_nx = sub_ny * ny_subabs, sub_nx * nx_subabs
     y0, x0 = (Ny - crop_ny) // 2, (Nx - crop_nx) // 2
@@ -152,17 +154,17 @@ def calculate_displacements(
 
     if mask_disk_ratio is not None:
         mask = elliptical_mask(Ny, Nx, mask_disk_ratio, xp)
-        
+
         ref_masked = ref * mask
         moving_masked = moving_stack * mask
-        
+
         masked_pixels_ref = ref_masked[mask]
         if len(masked_pixels_ref) > 0:
             ref_mean = xp.mean(masked_pixels_ref)
         else:
             ref_mean = 0.0
         ref_zm = ref_masked - ref_mean
-        
+
         moving_zm = xp.zeros_like(moving_masked)
         for i in range(moving_masked.shape[0]):
             masked_pixels_moving = moving_masked[i][mask]
@@ -201,7 +203,7 @@ def calculate_displacements(
 
     den_y = vm_y - 2 * v0 + vp_y + 1e-12
     den_x = vm_x - 2 * v0 + vp_x + 1e-12
-    
+
     cy = (Ny - 1) / 2 if Ny % 2 == 1 else Ny / 2
     cx = (Nx - 1) / 2 if Nx % 2 == 1 else Nx / 2
 
@@ -243,7 +245,13 @@ def calculate_displacements(
 
 
 def calculate_displacements_graph_laplacian(
-    xp, fft, U_subaps, pupil_threshold=1.0, deviation_threshold=3.0, shifts_range=20.0 , use_corr_weights=False
+    xp,
+    fft,
+    U_subaps,
+    pupil_threshold=1.0,
+    deviation_threshold=3.0,
+    shifts_range=20.0,
+    use_corr_weights=False,
 ):
     ny_s, nx_s, Ny, Nx = U_subaps.shape
     B = ny_s * nx_s

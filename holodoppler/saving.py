@@ -8,27 +8,36 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 import os
 
-from .utils import resize_slicewise, normalize_to_uint8, unsharp_projection, _pad_to_even, imadjust, stretchlim
+from .utils import (
+    resize_slicewise,
+    normalize_to_uint8,
+    unsharp_projection,
+    _pad_to_even,
+    imadjust,
+    stretchlim,
+)
 from .get_version import get_version
+
 
 def save_preview_images(save_dict, save_dir, prefix="debug", square=False):
     os.makedirs(save_dir, exist_ok=True)
     for key, img in save_dict.items():
         if img is None:
             continue
-        if (img.ndim not in [2,3]) or (img.ndim == 3 and img.shape[-1] > 3):
+        if (img.ndim not in [2, 3]) or (img.ndim == 3 and img.shape[-1] > 3):
             continue
         if square:
             m = max(img.shape)
-            img = resize_slicewise(img, m, m, axes=(0,1))
+            img = resize_slicewise(img, m, m, axes=(0, 1))
         if img.dtype != np.uint8:
             img_min, img_max = np.min(img), np.max(img)
             if img_max >= img_min:
                 img_np = (img - img_min) / (img_max - img_min + 1e-12)
             img_np = (img_np * 255).astype(np.uint8)
         filename = os.path.join(save_dir, f"{prefix}_{key}.png")
-        print("Saving : ",filename)
+        print("Saving : ", filename)
         iio.imwrite(filename, img_np)
+
 
 def save_outputs(
     file_reader,
@@ -49,10 +58,10 @@ def save_outputs(
     Priority: holodoppler_path > video_path > default
     """
     start_time = time.time()
-    
+
     # Path resolution
     default_path = _get_default_output_path(file_reader.file_path)
-    
+
     if holodoppler_path:
         if isinstance(holodoppler_path, bool):
             holodoppler_path = default_path
@@ -85,7 +94,7 @@ def save_outputs(
         num_batch=num_batch,
         backend=backend,
     )
-    
+
     elapsed = time.time() - start_time
     print(f"\nSaving completed in {elapsed:.1f} seconds")
 
@@ -117,19 +126,19 @@ def _save_bundle(
     mode="LITE" -> Saves videos, pngs, json, txt.
     """
     start_time = time.time()
-    
+
     # Create subdirectories
     _create_directories(target_dir, mode)
-    
+
     # Calculate FPS with safety check
     fps = _calculate_fps(num_batch, end_frame, first_frame, parameters)
 
     # Prepare data for saving
     save_map = _build_save_map(vid, parameters, vid_debug, num_batch)
-    
+
     # Process and save projections (unsharp masking)
     _save_projections(target_dir, save_map, parameters, backend)
-    
+
     # Convert all data to uint8 once (memory efficient)
     # uint8_map = {name: normalize_to_uint8(data) for name, data in save_map.items()}
     contrast_cfg = parameters.get("contrast_adjustment", {})
@@ -140,20 +149,20 @@ def _save_bundle(
             uint8_map[name] = (np.clip(data, 0, 1) * 255).astype(np.uint8)
         else:
             uint8_map[name] = normalize_to_uint8(data)
-    
+
     # Save videos (sequential to avoid encoding conflicts)
     _save_videos(target_dir, uint8_map, fps)
-    
+
     # Save PNGs (parallel)
     _save_pngs(target_dir, uint8_map)
-    
+
     # Save metadata (fast)
     _save_metadata(target_dir, file_reader, parameters)
-    
+
     # Save H5 if FULL mode
     if mode == "FULL":
         _save_h5(target_dir, vid, parameters, reg_list, coefs_list)
-    
+
     elapsed = time.time() - start_time
     print(f"_save_bundle completed in {elapsed:.1f} seconds")
 
@@ -180,8 +189,9 @@ def _calculate_fps(num_batch, end_frame, first_frame, parameters):
         else:
             sampling_freq = parameters.get("sampling_freq", 1000)  # Default 1kHz
             fps = min((num_batch / frame_range * sampling_freq), 65)
-    
+
     return fps
+
 
 def _build_save_map(vid, parameters, vid_debug, num_batch):
     """Build dictionary of all data to save"""
@@ -202,11 +212,15 @@ def _build_save_map(vid, parameters, vid_debug, num_batch):
         for key, data in vid_debug.items():
             if data.ndim == 3 and data.shape[-1] == num_batch:
                 data = np.moveaxis(data, -1, 0)  # ensure (T, H, W)
-            
+
             # Handle special cases
             if parameters.get("square") and key in [
-                "M0ffnoreg", "M0notfixed", "montage", 
-                "montagenormalized", "psd_map_avg", "SVD_M0_inversed_svd_filter"
+                "M0ffnoreg",
+                "M0notfixed",
+                "montage",
+                "montagenormalized",
+                "psd_map_avg",
+                "SVD_M0_inversed_svd_filter",
             ]:
                 m = max(data.shape[-2], data.shape[-1])
                 data = resize_slicewise(data, m, m)
@@ -230,7 +244,7 @@ def _build_save_map(vid, parameters, vid_debug, num_batch):
                 continue
             low, high = stretchlim(data, low_pct, high_pct)
             save_map[name] = imadjust(data, low, high, gamma)
-            
+
     return save_map
 
 
@@ -239,26 +253,31 @@ def _save_projections(target_dir, save_map, parameters, backend):
     # Initialize backend if needed
     if backend is None:
         from .backend import BackendManager
+
         bm = BackendManager(backend=parameters.get("backend", "cpu"))
     else:
         bm = backend
-    
+
     # Define which keys get projection
     projection_keys = {
-        "moment_0", "moment_1", "moment_2", "moment_0_ff", 
-        "montage", "montagenormalized"
+        "moment_0",
+        "moment_1",
+        "moment_2",
+        "moment_0_ff",
+        "montage",
+        "montagenormalized",
     }
-    
+
     # Also include frequency bands
     projection_keys.update([k for k in save_map.keys() if "frequency_bands" in k])
-    
+
     for name, data in save_map.items():
         if name in projection_keys:
             try:
                 # Create projection
                 im = unsharp_projection(bm, data, (1024, 1024), radius=2.0, amount=2.0)
                 im = normalize_to_uint8(im)
-                
+
                 # Save
                 png_path = target_dir / "png" / f"{name}_unsharped.png"
                 iio.imwrite(png_path, im)
@@ -273,10 +292,10 @@ def _save_videos(target_dir, np_map, fps):
     for name, np_data in np_map.items():
         if np_data.ndim != 3 and np_data.ndim != 4:
             continue
-        
+
         # Determine bit depth and convert appropriately
         uint8_data = _normalize_to_uint8(np_data)
-        
+
         # MP4
         mp4_path = target_dir / "mp4" / f"{name}.mp4"
         _write_video_fast(
@@ -287,7 +306,7 @@ def _save_videos(target_dir, np_map, fps):
             preset="ultrafast",
             crf=28,
         )
-        
+
         # AVI
         avi_path = target_dir / "avi" / f"{name}.avi"
         _write_video_fast(
@@ -299,20 +318,22 @@ def _save_videos(target_dir, np_map, fps):
         )
 
         completed += 1
-    
+
     elapsed = time.time() - start_time
     print(f"Videos saved in {elapsed:.1f} seconds ({completed} videos)")
+
 
 def normalize(data):
     mi = data.min()
     ma = data.max()
 
-    return (data-mi)/(ma-mi + 1e-24)
+    return (data - mi) / (ma - mi + 1e-24)
+
 
 def _save_pngs(target_dir, np_map):
     """Save mean frames as PNGs in parallel"""
     start_time = time.time()
-    
+
     with ThreadPoolExecutor(max_workers=8) as executor:
         tasks = []
         for name, data in np_map.items():
@@ -320,7 +341,7 @@ def _save_pngs(target_dir, np_map):
                 continue
             png_path = target_dir / "png" / f"{name}.png"
             mean_frame = np.mean(data, axis=0)
-            
+
             # Preserve original dtype for PNG saving
             if data.dtype == np.uint16:
                 mean_frame = mean_frame.astype(np.uint16)
@@ -330,7 +351,7 @@ def _save_pngs(target_dir, np_map):
                 mean_frame = (mean_frame * 65535).astype(np.uint16)
             else:
                 mean_frame = mean_frame.astype(np.uint8)
-                
+
             tasks.append(executor.submit(iio.imwrite, png_path, mean_frame))
 
         # Wait for all tasks to complete
@@ -341,7 +362,7 @@ def _save_pngs(target_dir, np_map):
                 completed += 1
             except Exception as e:
                 print(f"PNG save failed: {e}")
-    
+
     elapsed = time.time() - start_time
     print(f"PNGs saved in {elapsed:.1f} seconds ({completed} images)")
 
@@ -349,7 +370,7 @@ def _save_pngs(target_dir, np_map):
 def _save_metadata(target_dir, file_reader, parameters):
     """Saves all configuration and versioning files"""
     start_time = time.time()
-    
+
     # JSON params
     json_path = target_dir / "json" / "parameters_holodoppler.json"
     with open(json_path, "w") as f:
@@ -361,100 +382,109 @@ def _save_metadata(target_dir, file_reader, parameters):
     # Git commit (with error handling)
     try:
         import subprocess
-        commit = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], 
-            stderr=subprocess.DEVNULL
-        ).decode().strip()
+
+        commit = (
+            subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
+            )
+            .decode()
+            .strip()
+        )
         info_text = f"Git commit: {commit}\npy{get_version()}"
     except (subprocess.CalledProcessError, FileNotFoundError):
         info_text = "Git commit: Not Available (not a git repo)"
     (target_dir / "git_version.txt").write_text(info_text)
 
     # Holo-specific metadata
-    if hasattr(file_reader, 'ext') and file_reader.ext == ".holo":
+    if hasattr(file_reader, "ext") and file_reader.ext == ".holo":
         with open(target_dir / "json" / "holovibes_footer.json", "w") as f:
             json.dump(file_reader.file_footer, f, indent=4)
         with open(target_dir / "json" / "holovibes_header.json", "w") as f:
             json.dump(asdict(file_reader.file_header), f, indent=4)
-    
+
     elapsed = time.time() - start_time
     print(f"Metadata saved in {elapsed:.2f} seconds")
+
 
 def _save_h5_2(target_dir, save_map, parameters, save_only_list=None):
     """
     Saves raw data to HDF5.
     """
     start_time = time.time()
-    
+
     target_dir_name = target_dir.name if target_dir.name else "output"
     h5_path = target_dir / "h5" / f"{target_dir_name}_output.h5"
-    
+
     print(f"Saving H5 to: {h5_path}")
-    
+
     # No compression for faster writing and lower memory usage
     compression = None
-    
+
     with h5py.File(h5_path, "w") as f:
-        
+
         for k, v in save_map.items():
 
             if save_only_list is not None and k not in save_only_list:
                 continue
-            
+
+            v = np.clip(v, -3.4e38, 3.4e38)
+            data = v.astype(np.float32)
+
             f.create_dataset(
                 k,
-                data=v.astype(np.float32),
+                data=data,
                 compression=compression,
             )
-        
+
         # Save metadata
         f.create_dataset("HD_parameters", data=json.dumps(parameters))
         f.create_dataset("HD_version", data=f"py{get_version()}")
-    
+
     elapsed = time.time() - start_time
     file_size = h5_path.stat().st_size / (1024**3)
     print(f"H5 saved in {elapsed:.1f} seconds (file size: {file_size:.2f} GB)")
 
+
 def _save_h5(target_dir, vid, parameters, reg_list, coefs_list):
     """
     Saves raw data to HDF5.
-    
-    MEMORY WARNING: 
+
+    MEMORY WARNING:
     HDF5 writing can use large amounts of RAM because:
     1. The entire 'vid' array is kept in memory (size = nt * nchannels * h * w * dtype)
     2. HDF5 may buffer data during compression
     3. Each dataset copy uses additional memory
     4. If using compression, more memory is used for the compression buffer
-    
+
     For a 1000-frame, 4-channel, 512x512 video at float32:
     - vid memory: 1000 * 4 * 512 * 512 * 4 = ~4GB
     - Additional buffers: 500MB - 2GB
     - Total: ~5-6GB RAM required
-    
+
     To reduce memory:
     - Disable compression (set to None)
     - Use chunking
     - Process in batches
     """
     start_time = time.time()
-    
+
     target_dir_name = target_dir.name if target_dir.name else "output"
     h5_path = target_dir / "h5" / f"{target_dir_name}_output.h5"
-    
+
     print(f"Saving H5 to: {h5_path}")
     print(f"   Data shape: {vid.shape}")
     print(f"   Data size: {vid.nbytes / (1024**3):.2f} GB")
-    
+
     # No compression for faster writing and lower memory usage
     compression = None
-    
+
     with h5py.File(h5_path, "w") as f:
         # Save moments
         f.create_dataset("moment0", data=vid[:, 0, :, :], compression=compression)
         f.create_dataset("moment1", data=vid[:, 1, :, :], compression=compression)
         f.create_dataset("moment2", data=vid[:, 2, :, :], compression=compression)
         f.create_dataset("moment0ff", data=vid[:, 3, :, :], compression=compression)
-        
+
         # Save frequency bands
         for k, v in enumerate(parameters.get("frequency_bands", [])):
             f.create_dataset(
@@ -462,7 +492,7 @@ def _save_h5(target_dir, vid, parameters, reg_list, coefs_list):
                 data=vid[:, 4 + k, :, :],
                 compression=compression,
             )
-        
+
         # Save metadata
         f.create_dataset("HD_parameters", data=json.dumps(parameters))
         f.create_dataset("HD_version", data=f"py{get_version()}")
@@ -482,7 +512,7 @@ def _save_h5(target_dir, vid, parameters, reg_list, coefs_list):
                 compression=compression,
             )
             print(f"   Zernike coefficients: {coefs_data.shape}")
-    
+
     elapsed = time.time() - start_time
     file_size = h5_path.stat().st_size / (1024**3)
     print(f"H5 saved in {elapsed:.1f} seconds (file size: {file_size:.2f} GB)")
@@ -511,7 +541,7 @@ def _write_video_fast(
         path.unlink()
 
     frames = np.asarray(frames)
-    
+
     # Validate and normalize frames based on bit depth
     if bit_depth == 8:
         max_val = 255
@@ -530,7 +560,7 @@ def _write_video_fast(
         target_dtype = np.float32
     else:
         raise ValueError(f"Unsupported bit depth: {bit_depth}")
-    
+
     # Normalize frames to target range
     if frames.dtype != target_dtype or (bit_depth <= 16 and frames.max() > max_val):
         if frames.dtype == np.float32 or frames.dtype == np.float64:
@@ -549,7 +579,7 @@ def _write_video_fast(
             frames = (frames.astype(np.float32) * (255.0 / 65535.0)).astype(np.uint8)
         else:
             frames = np.clip(frames, 0, max_val).astype(target_dtype)
-    
+
     # Handle NaN and Inf values
     frames = np.nan_to_num(frames, nan=0, posinf=max_val, neginf=0)
 
@@ -579,7 +609,7 @@ def _write_video_fast(
         output_params += ["-preset", str(preset)]
     if crf is not None:
         output_params += ["-crf", str(crf)]
-    
+
     # Add pixel format for higher bit depths
     if bit_depth > 8:
         if bit_depth == 10:
@@ -610,7 +640,7 @@ def _write_video_fast(
 def _normalize_to_uint8(data):
     """Helper function to normalize various data types to uint8"""
     data = np.asarray(data)
-    
+
     if data.dtype == np.uint8:
         return data
     elif data.dtype == np.uint16:

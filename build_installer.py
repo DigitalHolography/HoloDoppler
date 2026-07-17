@@ -9,7 +9,6 @@ import textwrap
 import tomllib
 from pathlib import Path
 
-
 APP_NAME = "HoloDoppler"
 APP_EXE_NAME = f"{APP_NAME}.exe"
 APP_PUBLISHER = "HoloDoppler"
@@ -163,8 +162,7 @@ def _write_pyinstaller_entrypoint() -> Path:
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
 
     GENERATED_ENTRYPOINT.write_text(
-        textwrap.dedent(
-            """
+        textwrap.dedent("""
             from __future__ import annotations
 
             import sys
@@ -181,8 +179,7 @@ def _write_pyinstaller_entrypoint() -> Path:
 
             if __name__ == "__main__":
                 raise SystemExit(main())
-            """
-        ).lstrip(),
+            """).lstrip(),
         encoding="utf-8",
     )
 

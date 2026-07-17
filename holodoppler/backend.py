@@ -85,7 +85,9 @@ class BackendManager:
     def print_gpu_used_memory(self):
         if self.xp is not cp:
             return
-        used_in_bytes = cp.cuda.runtime.memGetInfo()[1] - cp.cuda.runtime.memGetInfo()[0]
+        used_in_bytes = (
+            cp.cuda.runtime.memGetInfo()[1] - cp.cuda.runtime.memGetInfo()[0]
+        )
 
         print(f"Used GPU memory : {used_in_bytes/1e6} MB ")
 

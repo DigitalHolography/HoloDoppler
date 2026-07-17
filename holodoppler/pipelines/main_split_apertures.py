@@ -12,6 +12,9 @@ from holodoppler.propagation import (
     fresnel_transform_with_phase,
     angular_spectrum_transform,
     angular_spectrum_transform_with_phase,
+    build_fresnel_kernel_in,
+    build_fresnel_kernel_out,
+    pad_array_centrally,
 )
 from holodoppler.shack_hartmann import (
     construct_subapertures_fresnel,
@@ -20,15 +23,27 @@ from holodoppler.shack_hartmann import (
     calculate_displacements_graph_laplacian,
 )
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum
-from holodoppler.utils import gaussian_flatfield, update_from_footer, normalize_to_uint8, square_cupy, stretchlim, imadjust, temporal_gaussian
-from holodoppler.filtering import filter_2d, svd_filter, frequency_symmetric_filtering, fourier_time_transform, corner_compensation
+from holodoppler.utils import (
+    gaussian_flatfield,
+    update_from_footer,
+    normalize_to_uint8,
+    square_cupy,
+    stretchlim,
+    imadjust,
+    temporal_gaussian,
+)
+from holodoppler.filtering import (
+    svd_filter,
+    frequency_symmetric_filtering,
+    fourier_time_transform,
+    corner_compensation,
+)
 from holodoppler.moments import moment
 from holodoppler.registration import (
     register_images_shifts,
     apply_register_images_shifts,
 )
 from holodoppler.file_reader import FileReaderFactory
-
 
 import cupy as cp
 
@@ -44,16 +59,135 @@ from pathlib import Path
 from collections import defaultdict
 
 
+# ----------------------------------------------------------------------
+#  Quadrant mask generation
+# ----------------------------------------------------------------------
+def make_quadrant_masks(shape, center=None):
+    """
+    Create boolean masks for NW, NE, SW, SE quadrants.
+    shape : (ny, nx) of the pupil plane.
+    center : (cy, cx) - if None, use geometric centre.
+    """
+    ny, nx = shape
+    if center is None:
+        cy, cx = ny // 2, nx // 2
+    else:
+        cy, cx = center
+
+    Y, X = cp.ogrid[:ny, :nx]
+    mask_NW = (Y <= cy) & (X <= cx)
+    mask_NE = (Y <= cy) & (X > cx)
+    mask_SW = (Y > cy) & (X <= cx)
+    mask_SE = (Y > cy) & (X > cx)
+
+    return mask_NW, mask_NE, mask_SW, mask_SE
+
+
+def make_quadrant_indices(shape, center=None):
+    """
+    Create indices for NW, NE, SW, SE quadrants.
+    shape : (ny, nx) of the pupil plane.
+    center : (cy, cx) - if None, use geometric centre.
+    """
+    ny, nx = shape
+    if center is None:
+        cy, cx = ny // 2, nx // 2
+    else:
+        cy, cx = center
+
+    idx_NW = ((0, cy ), (0, cx ))
+    idx_NE = ((0, cy ), (cx , nx + 1))
+    idx_SW = ((cy , ny + 1), (0, cx ))
+    idx_SE = ((cy , ny + 1), (cx , nx + 1))
+    
+    return idx_NW, idx_NE, idx_SW, idx_SE
+
+
+def fresnel_transform_with_phase_2(
+    xp,
+    fft,
+    frames,
+    z,
+    pixel_pitch,
+    wavelength,
+    phase_term,
+    idx,
+    zero_padding=False,
+    use_output_kernel=True,
+):
+    """Apply Fresnel transform with phase correction"""
+
+    ny, nx = phase_term.shape[-2:]
+    kernel_in = build_fresnel_kernel_in(
+        xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+    )
+
+    result = fft.fftshift(
+        fft.fft2(
+            frames
+            * kernel_in[:, idx[0][0] : idx[0][1], idx[1][0] : idx[1][1]]
+            * phase_term[xp.newaxis, idx[0][0] : idx[0][1], idx[1][0] : idx[1][1]],
+            axes=(-1, -2),
+            norm="ortho",
+        ),
+        axes=(-1, -2),
+    )
+
+    return result
+
+
 def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     xp = cp
     fft = cp.fft
     nt_sub = frames.shape[0]
     prop_method = parameters["spatial_propagation"]
 
+    # Split into four quadrants
+    # masks = make_quadrant_masks(frames.shape[1:], center=parameters.get("pupil_center"))
+    mask_names = ["NW", "NE", "SW", "SE"]
+    # quadrant_masks = dict(zip(mask_names, masks))
+
+    quadrant_indices = make_quadrant_indices(
+        frames.shape[1:], center=parameters.get("pupil_center")
+    )
+    quadrant_idxs = dict(zip(mask_names, quadrant_indices))
+
     # Propagation
+    U_quadrants = {}
+    for qname, idx in quadrant_idxs.items():
+        cropped_frames = frames[:, idx[0][0] : idx[0][1], idx[1][0] : idx[1][1]]
+        if phase_term is not None:
+            if prop_method == "Fresnel":
+                U_q = fresnel_transform_with_phase_2(
+                    xp,
+                    fft,
+                    cropped_frames,
+                    parameters["z"],
+                    parameters["pixel_pitch"],
+                    parameters["wavelength"],
+                    phase_term,
+                    idx=quadrant_idxs[qname],
+                    zero_padding=parameters.get("Fresnel_zero_padding", False),
+                    use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
+                )
+        else:
+            if prop_method == "Fresnel":
+                U_q = fresnel_transform_with_phase_2(
+                    xp,
+                    fft,
+                    cropped_frames,
+                    parameters["z"],
+                    parameters["pixel_pitch"],
+                    parameters["wavelength"],
+                    None,
+                    idx=quadrant_idxs[qname],
+                    use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
+                )
+        U_quadrants[qname] = U_q
+
     if phase_term is not None:
         if prop_method == "Fresnel":
-            holograms = fresnel_transform_with_phase(
+            U_main = fresnel_transform_with_phase(
                 xp,
                 fft,
                 frames,
@@ -61,59 +195,60 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
                 parameters["pixel_pitch"],
                 parameters["wavelength"],
                 phase_term,
+                zero_padding=parameters.get("Fresnel_zero_padding", False),
                 use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
-            )
-        elif prop_method == "AngularSpectrum":
-            holograms = angular_spectrum_transform_with_phase(
-                xp,
-                fft,
-                frames,
-                parameters["z"],
-                parameters["pixel_pitch"],
-                parameters["wavelength"],
-                phase_term,
             )
     else:
         if prop_method == "Fresnel":
-            holograms = fresnel_transform(
+            U_main = fresnel_transform_with_phase(
                 xp,
                 fft,
                 frames,
                 parameters["z"],
                 parameters["pixel_pitch"],
                 parameters["wavelength"],
+                None,
                 use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
             )
-        elif prop_method == "AngularSpectrum":
-            holograms = angular_spectrum_transform(
-                xp,
-                fft,
-                frames,
-                parameters["z"],
-                parameters["pixel_pitch"],
-                parameters["wavelength"],
-            )
+    del frames
 
-    # SVD filtering
-    holograms_f = svd_filter(
+    # SVD filtering per quadrant
+    U_q_filt = {}
+    for qname, U_q in U_quadrants.items():
+        U_q_filt[qname] = svd_filter(
+            xp,
+            U_q,
+            parameters["svd_threshold"],
+            filter_mode=parameters["svd_filter_mode"],
+            remove_dc=parameters["svd_remove_dc"],
+        )
+    U_quadrants.clear()  # free memory
+    del U_quadrants
+
+    U_main = svd_filter(
         xp,
-        holograms,
+        U_main,
         parameters["svd_threshold"],
         filter_mode=parameters["svd_filter_mode"],
         remove_dc=parameters["svd_remove_dc"],
     )
 
-    del holograms  # Free memory early
-
     if output_dict is None:
         output_dict = {}
 
     # Temporal transform
-    if parameters.get("temporal_transformation") == "FourierTransform":
-        spectrum_f = fourier_time_transform(xp, fft, holograms_f)
-        # spectrum_f_angle = fourier_time_transform(xp, fft, xp.angle(holograms_f))
-    else:
-        spectrum_f = holograms_f
+    spectrum_f_q = {}
+    for qname, U_q in U_q_filt.items():
+        if parameters.get("temporal_transformation") == "FourierTransform":
+            spectrum_f = fourier_time_transform(xp, fft, U_q)
+        else:
+            spectrum_f = U_q
+        spectrum_f_q[qname] = spectrum_f
+
+    U_q_filt.clear()  # free memory
+    del U_q_filt
+
+    U_main = fourier_time_transform(xp, fft, U_main)
 
     # Frequency selection
     idxs, freqs = frequency_symmetric_filtering(
@@ -124,36 +259,106 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         parameters["low_freq"],
         parameters.get("high_freq"),
     )
-    psd = xp.abs(spectrum_f) ** 2
 
-    # psd_angle = xp.abs(spectrum_f_angle) ** 2
+    psd_q = {}
+    for qname, spectrum_f in spectrum_f_q.items():
+        psd = xp.abs(spectrum_f) ** 2
+        psd_q[qname] = psd
+    spectrum_f_q.clear()  # free memory
+    del spectrum_f_q
+
+    U_main = xp.abs(U_main) ** 2
 
     if parameters.get("corner_compensation", False):
-        psd = corner_compensation(xp, psd)
+        for qname, psd in psd_q.items():
+            psd_q[qname] = corner_compensation(xp, psd)
 
     # Moments
-    output_dict["M0"] = moment(xp, psd[idxs], freqs, 0)
-    output_dict["M1"] = moment(xp, psd[idxs], freqs, 1)
-    output_dict["M2"] = moment(xp, psd[idxs], freqs, 2)
-    # output_dict["M3"] = moment(xp, psd[idxs], freqs, 3)
-    # output_dict["M4"] = moment(xp, psd[idxs], freqs, 4)
-    # output_dict["M5"] = moment(xp, psd[idxs], freqs, 5)
-    # output_dict["M6"] = moment(xp, psd[idxs], freqs, 6)
+    quadrant_moments = {}
+    for qname, psd in psd_q.items():
+        qres = {
+            qname + "_M0": moment(xp, psd[idxs], freqs, 0),
+            qname + "_M1": moment(xp, psd[idxs], freqs, 1),
+            qname + "_M2": moment(xp, psd[idxs], freqs, 2),
+        }
+        qres[qname + "_M0ff"] = gaussian_flatfield(
+            qres[qname + "_M0"],
+            parameters.get("registration_flatfield_gw", 1.0),
+            gaussian_filter,
+        )
+        quadrant_moments[qname] = qres
+        output_dict.update(qres)
+
+    # Normalization
+    psd_q_norm = {}
+    for qname, psd in psd_q.items():
+        M0 = quadrant_moments[qname][qname + "_M0"]
+        total_energy = xp.sum(M0)  # scalar
+        if total_energy == 0:
+            total_energy = eps
+        psd_q_norm[qname] = psd / total_energy
+    del M0, total_energy
+
+    # Full pupil image reconstruction
+    output_dict["M0"] = moment(xp, U_main[idxs], freqs, 0)
+    output_dict["M1"] = moment(xp, U_main[idxs], freqs, 1)
+    output_dict["M2"] = moment(xp, U_main[idxs], freqs, 2)
     output_dict["M0ff"] = gaussian_flatfield(
         output_dict["M0"],
         parameters.get("registration_flatfield_gw", 1.0),
         gaussian_filter,
     )
 
-    output_dict["spectrum_line"] = xp.mean(psd, axis=(-2, -1))
-
     # Frequency bands
-    for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-        idxs_band, _ = frequency_symmetric_filtering(
-            xp, fft, nt_sub, parameters["sampling_freq"], f1, f2
-        )
-        band = xp.mean(psd[idxs_band], axis=0)
-        output_dict[f"band_{k}_{f1}_{f2}"] = band
+    for qname, psd in psd_q.items():
+        bands = {}
+        for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
+            idxs_band, _ = frequency_symmetric_filtering(
+                xp, fft, nt_sub, parameters["sampling_freq"], f1, f2
+            )
+            band = xp.mean(psd[idxs_band], axis=0)
+            bands[f"{qname}_band_{k}_{f1}_{f2}"] = band
+            output_dict.update(bands)
+
+    # Full pupil image reconstruction
+    psd_full = psd_q["NW"].copy()
+    psd_full += psd_q["NE"]
+    psd_full += psd_q["SW"]
+    psd_full += psd_q["SE"]
+
+    del psd_q  # free memory
+
+    I_full = xp.mean(psd_full, axis=0)
+
+    B_inc = sum(quadrant_moments[q][f"{q}_M0"] for q in quadrant_idxs.keys())
+
+    B_R = quadrant_moments["NE"]["NE_M0"] + quadrant_moments["SE"]["SE_M0"]
+    B_L = quadrant_moments["NW"]["NW_M0"] + quadrant_moments["SW"]["SW_M0"]
+    B_S = quadrant_moments["NW"]["NW_M0"] + quadrant_moments["NE"]["NE_M0"]
+    B_I = quadrant_moments["SW"]["SW_M0"] + quadrant_moments["SE"]["SE_M0"]
+
+    del psd_full, quadrant_moments
+
+    eps = 1e-12
+    Ax = (B_R - B_L) / (B_R + B_L + eps)
+    Ay = (B_S - B_I) / (B_S + B_I + eps)
+    A_mag = xp.sqrt(Ax**2 + Ay**2)
+
+    output_dict.update(
+        {
+            "I_full": I_full,
+            "B_inc": B_inc,
+            "B_R": B_R,
+            "B_L": B_L,
+            "B_S": B_S,
+            "B_I": B_I,
+            "Ax": Ax,
+            "Ay": Ay,
+            "A_mag": A_mag,
+        }
+    )
+
+    del I_full, B_inc, B_R, B_L, B_S, B_I, Ax, Ay, A_mag
 
 
 def _process_shack_hartmann(parameters, frames, output_dict=None):
@@ -328,10 +533,6 @@ def preview(file_path, parameters):
     # transfer to gpu
     frames = cp.array(frames, dtype=cp.float32)
 
-    # 2D filtering
-    if parameters.get("filter2d", False):
-        frames = filter_2d(cp, cp.fft, frames, parameters["filter2d_low"])
-
     res = {}
 
     phase_term = None
@@ -341,12 +542,6 @@ def preview(file_path, parameters):
     # calc on gpu
     _process_batch(parameters, frames=frames, phase_term=phase_term, output_dict=res)
 
-    if parameters.get("square", False):
-        res = {
-            k: cp.squeeze(square_cupy(v[cp.newaxis, ...])) if v.ndim == 2 else v
-            for k, v in res.items()
-        }
-
     # transfer to cpu
     res_np = {k: cp.asnumpy(v) for k, v in res.items()}
 
@@ -354,16 +549,16 @@ def preview(file_path, parameters):
     del res
     cp.get_default_memory_pool().free_all_blocks()
 
-    preview_path = _get_default_output_path(file_reader.file_path) / "preview"
-
-    save_preview_images(res_np, preview_path)
-    (preview_path / "h5").mkdir(exist_ok=True)
-    _save_h5_2(preview_path, res_np, parameters)
+    save_preview_images(
+        res_np, _get_default_output_path(file_reader.file_path) / "preview"  / "SPLIT_APERTURES"
+    )
 
     return res_np["M0ff"]
 
 
 def process(file_path, parameters):
+    import numpy as np
+
     file_reader = FileReaderFactory.create(file_path)
 
     if file_reader.ext == ".holo":
@@ -373,7 +568,7 @@ def process(file_path, parameters):
     if file_reader.ext == ".cine":
         print("file header :", file_reader.metadata)
 
-    print("parameters : ", parameters)
+    # print("parameters : ", parameters)
 
     batch_size = parameters["batch_size"]
     batch_stride = parameters["batch_stride"]
@@ -393,7 +588,7 @@ def process(file_path, parameters):
     if num_batch <= 0:
         return None
 
-    output = defaultdict(list)
+    output_np = defaultdict(list)
 
     # creating the registration reference image
     M0_reg = None
@@ -406,9 +601,6 @@ def process(file_path, parameters):
             batch_size=parameters["registration_ref_batch_size"],
         )
         frames = cp.array(frames)
-        # 2D filtering
-        if parameters.get("filter2d", False):
-            frames = filter_2d(cp, cp.fft, frames, parameters["filter2d_low"])
         phase_term = None
         if parameters.get("shack_hartmann", False):
             phase_term = _process_shack_hartmann(parameters, frames)
@@ -459,10 +651,6 @@ def process(file_path, parameters):
             with compute_stream:
                 d_current = d_buffers[current_idx]
 
-                # 2D filtering
-                if parameters.get("filter2d", False):
-                    d_current = filter_2d(cp, cp.fft, d_current, parameters["filter2d_low"])
-                
                 res = {}
 
                 phase_term = None
@@ -490,13 +678,13 @@ def process(file_path, parameters):
                         sub_pixel=parameters["registration_sub_pixel"],
                     )
 
-                    for k, v in res.items():
-                        if k in ["M0ff", "M0", "M1", "M2"] or "band_" in k:
-                            res[k] = apply_register_images_shifts(
-                                cp, cp.fft, v, shift_y, shift_x
-                            )
+                for k, v in res.items():
+                    if isinstance(v, cp.ndarray) and v.ndim == 2:
+                        res[k] = apply_register_images_shifts(
+                            cp, cp.fft, v, shift_y, shift_x
+                        )
 
-                    res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
+                res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
 
                 compute_events[current_idx] = cp.cuda.Event()
                 compute_events[current_idx].record(compute_stream)
@@ -505,7 +693,7 @@ def process(file_path, parameters):
 
             if res:
                 for k, v in res.items():
-                    output[k].append(v)
+                    output_np[k].append(cp.asnumpy(v))
 
             processed_batches += 1
 
@@ -523,10 +711,6 @@ def process(file_path, parameters):
         with compute_stream:
             d_current = d_buffers[current_idx]
 
-            # 2D filtering
-            if parameters.get("filter2d", False):
-                d_current = filter_2d(cp, cp.fft, d_current, parameters["filter2d_low"])
-            
             res = {}
 
             phase_term = None
@@ -553,7 +737,7 @@ def process(file_path, parameters):
                 )
 
             for k, v in res.items():
-                if k in ["M0ff", "M0", "M1", "M2"] or "band_" in k:
+                if isinstance(v, cp.ndarray) and v.ndim == 2:
                     res[k] = apply_register_images_shifts(
                         cp, cp.fft, v, shift_y, shift_x
                     )
@@ -567,7 +751,7 @@ def process(file_path, parameters):
 
         if res:
             for k, v in res.items():
-                output[k].append(v)
+                output_np[k].append(cp.asnumpy(v))
 
         processed_batches += 1
 
@@ -578,19 +762,26 @@ def process(file_path, parameters):
         if processed_batches >= num_batch:
             break
 
-    output = {k: cp.stack(v, axis=0) for k, v in output.items()}
+    # Free memory
+    for i in range(PREFETCH_DEPTH):
+        d_buffers[i] = None
+        h2d_events[i] = None
+        compute_events[i] = None
+    del d_buffers, h2d_events, compute_events, buffer_ready
+
+    for k, v in output_np.items():
+        output_np[k] = np.stack(v, axis=0)
 
     if parameters.get("square", False):
-        output = {k: square_cupy(v) if v.ndim == 3 else v for k, v in output.items()}
+        output_np = {
+            k: cp.asnumpy(square_cupy(cp.array(v))) if v.ndim == 3 else v for k, v in output_np.items()
+        }
 
-    # transfer to cpu
-    output_np = {k: cp.asnumpy(v) for k, v in output.items()}
+    # Use output_np as the main numpy result dict
 
-    output.clear()
-    del output
     cp.get_default_memory_pool().free_all_blocks()
 
-    target_dir = _get_default_output_path(file_reader.file_path)
+    target_dir = _get_default_output_path(file_reader.file_path) / "SPLIT_APERTURES"
 
     if "saving_to_folder" in parameters:
         target_dir = Path(parameters["saving_to_folder"])
@@ -598,14 +789,13 @@ def process(file_path, parameters):
     _create_directories(target_dir, "FULL")
 
     save_to_h5_list = [
-        "M0ff",
-        "M0",
-        "M1",
-        "M2",
+        # "M0ff",
+        # "M0",
+        # "M1",
+        # "M2",
         "shack_hartmann_zernike_coefs",
         "registration",
-        "spectrum_line",
-    ] + [key for key in output_np.keys() if "band_" in key]
+    ] #+ [key for key in output_np.keys() if "band_" in key]
 
     _save_h5_2(target_dir, output_np, parameters, save_only_list=save_to_h5_list)
 

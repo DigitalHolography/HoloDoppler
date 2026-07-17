@@ -262,6 +262,7 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
             self.q.put(("img", img))
         except Exception as e:
             import traceback
+
             traceback.print_exc()
             self.q.put(("err", str(e)))
         finally:
@@ -336,7 +337,10 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
 
     def choose_config(self):
         p = filedialog.askopenfilename(
-            filetypes=[("JSON config or YAML", "*.json *.yml *.yaml"), ("All files", "*.*")],
+            filetypes=[
+                ("JSON config or YAML", "*.json *.yml *.yaml"),
+                ("All files", "*.*"),
+            ],
             initialdir=self.config_path.parent,
         )
         if p:
@@ -344,11 +348,7 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
             self.config_var.set(str(self.config_path))
 
     def _load_params(self):
-        return (
-            load_config(self.config_path)
-            if self.config_path.exists()
-            else {}
-        )
+        return load_config(self.config_path) if self.config_path.exists() else {}
 
     # ------------------------------------------------------------------
     # DRAG & DROP (full window, no separate label)

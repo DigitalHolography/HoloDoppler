@@ -13,6 +13,7 @@ except ImportError:
     cp = None
 import numpy as np
 
+
 def _load_json(path) -> dict:
     try:
         with path.open("r", encoding="utf-8") as file:
@@ -25,39 +26,42 @@ def _load_json(path) -> dict:
 
     return data
 
-def plot_debug_safe(res,parameters):
+
+def plot_debug_safe(res, parameters):
     debug_manager = DebugPlotterManager(parameters) if parameters.get("debug") else None
-    
+
     out = debug_manager.plot_all(res) if parameters.get("debug") else {}
 
     return out
 
+
 def calibration_calc_res(file_reader, parameters):
     res = {}
-    
-    
-    
-    frames = file_reader.read_frames(parameters["first_frame"], parameters["batch_size"])
-    
+
+    frames = file_reader.read_frames(
+        parameters["first_frame"], parameters["batch_size"]
+    )
+
     N = frames.shape[0] * 1
-    
-    
-    res["average_signal"] = np.mean(frames, axis=(-1,-2))
-    
+
+    res["average_signal"] = np.mean(frames, axis=(-1, -2))
+
     ft = fft(frames, n=N, axis=0)
-    
+
     psd = np.abs(ft) ** 2
-    
-    res["calibration_spectrum_line"] = np.mean(psd, axis=(-1,-2))
-    
+
+    res["calibration_spectrum_line"] = np.mean(psd, axis=(-1, -2))
+
     freqs = np.fft.fftfreq(N, 1 / parameters["sampling_freq"])
-    
-    idxs = (parameters["high_freq"] > np.abs(freqs)) & (np.abs(freqs) > parameters["low_freq"])
-    
+
+    idxs = (parameters["high_freq"] > np.abs(freqs)) & (
+        np.abs(freqs) > parameters["low_freq"]
+    )
+
     freqs = freqs[idxs]
-    
-    res["M0"] = np.sum( psd[idxs] * (freqs[..., np.newaxis, np.newaxis] ** 0),axis=0)
-    
+
+    res["M0"] = np.sum(psd[idxs] * (freqs[..., np.newaxis, np.newaxis] ** 0), axis=0)
+
     return res
 
 
@@ -85,14 +89,14 @@ def save_debug_images(debug_dict, save_dir, prefix="debug"):
         iio.imwrite(filename, img_np)
 
         print(f"Saved: {filename} | shape={img_np.shape} dtype={img_np.dtype}")
-        
+
 
 def _cmd(args):
-    
+
     sref = np.fft.fftshift(np.load(Path(args.inputa)))
     sobj = np.fft.fftshift(np.load(Path(args.inputb)))
     stot = np.fft.fftshift(np.load(Path(args.inputc)))
-    
+
     assert sref.shape == sobj.shape == stot.shape
 
     n = sref.size
@@ -119,7 +123,7 @@ def _cmd(args):
 
     # For log-log, remove f=0 and use positive frequencies only
     pos = freq > 0
-    
+
     import matplotlib.pyplot as plt
 
     plt.figure(figsize=(9, 5.5))
@@ -147,10 +151,13 @@ def _cmd(args):
     plt.legend()
     plt.tight_layout()
     plt.show()
-    
+
     return 0
 
+
 import argparse
+
+
 def _existing_file(value: str) -> Path:
     path = Path(value).expanduser().resolve()
 
@@ -158,6 +165,7 @@ def _existing_file(value: str) -> Path:
         raise argparse.ArgumentTypeError(f"File does not exist: {path}")
 
     return path
+
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -167,35 +175,37 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "inputa",
         type=_existing_file,
-        nargs="?",  
+        nargs="?",
         default=None,
         help="Input file path. Ref",
     )
-    
+
     parser.add_argument(
         "inputb",
         type=_existing_file,
-        nargs="?",  
+        nargs="?",
         default=None,
         help="Input file path. Obj",
     )
-    
+
     parser.add_argument(
         "inputc",
         type=_existing_file,
-        nargs="?",  
+        nargs="?",
         default=None,
         help="Input file path. Tot",
     )
-    
+
     parser.add_argument("--fs", type=float, default=37037.0)
     parser.set_defaults(func=_cmd)
     return parser
+
 
 def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
     return args.func(args)
+
 
 if __name__ == "__main__":
     main()
