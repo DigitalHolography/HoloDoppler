@@ -26,11 +26,15 @@ from functools import cache
 
 
 # For exact dimensions instead of scale
-def square_cupy(video_frames):
+def square_cupy(video_frames, newy=None, newx=None):
     h, w = video_frames.shape[1], video_frames.shape[2]
-    m = max(h, w)
-    scale_h = m / h
-    scale_w = m / w
+    if newx is None or newy is None:
+        m = max(h, w)
+        scale_h = m / h
+        scale_w = m / w
+    else:
+        scale_h = newy / h
+        scale_w = newx / w
     return zoom_gpu(video_frames, (1, scale_h, scale_w), order=3)
 
 
