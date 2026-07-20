@@ -4,13 +4,13 @@ pipeline_name: "pca_accumulation"
 batch_size: 32
 first_frame: 0
 batch_stride: 32
-end_frame: -1  # -1 means process all frames
+end_frame: 1000  # -1 means process all frames
 accumulation: 32
 
 # Propagation parameters
 spatial_propagation: "Fresnel"  # Options: "Fresnel" or "AngularSpectrum"
 z: "use_holovibes"  # Propagation distance in meters
-wavelength: 852.0e-9  # Wavelength in meters
+wavelength: 532.0e-9  # Wavelength in meters
 pixel_pitch: "use_holovibes"  # Pixel pitch in meters [y, x]
 
 # Fresnel specific
@@ -20,8 +20,8 @@ Fresnel_use_ouput_kernel: false  # Use output kernel for Fresnel transform
 # Time transform
 time_transform: "FFT" # "FFT"
 # PCA projection
-pca_range: [0, 16]
-low_freq: 0.2  # Low frequency cutoff in reduced frequency
+pca_range: [0, 15]
+low_freq: 0.05  # Low frequency cutoff in reduced frequency
 high_freq: 0.5  # High frequency cutoff in reduced frequency
 
 # Image registration
