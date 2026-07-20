@@ -296,15 +296,15 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         combinations_moments[cname] = cres
         output_dict.update(cres)
 
-    # Normalization
-    psd_q_norm = {}
-    for cname, psd in psd_c.items():
-        M0 = combinations_moments[cname][cname + "_M0"]
-        total_energy = xp.sum(M0)  # scalar
-        if total_energy == 0:
-            total_energy = 1e-24
-        psd_q_norm[cname] = psd / total_energy
-    del M0, total_energy
+    # # Normalization
+    # psd_q_norm = {}
+    # for cname, psd in psd_c.items():
+    #     M0 = combinations_moments[cname][cname + "_M0"]
+    #     total_energy = xp.sum(M0)  # scalar
+    #     if total_energy == 0:
+    #         total_energy = 1e-24
+    #     psd_q_norm[cname] = psd / total_energy
+    # del M0, total_energy
 
     # Full pupil image reconstruction
     output_dict["M0"] = moment(xp, U_main[idxs], freqs, 0)
