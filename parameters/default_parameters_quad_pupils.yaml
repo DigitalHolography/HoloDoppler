@@ -16,7 +16,7 @@ pixel_pitch: "use_holovibes"  # Pixel pitch in meters [y, x]
 Fresnel_use_ouput_kernel: true  # Use output kernel for Fresnel transform
 
 # SVD filtering
-svd_threshold: 39
+svd_threshold: 20
 svd_filter_mode: "number_of_values"  # Options: "number_of_values", "amplitude_threshold"
 svd_remove_dc: true
 
@@ -30,6 +30,10 @@ high_freq: 18300  # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
 frequency_bands:
   - [3000, 9000]
   - [9000, 18000]
+
+# Filtering 2D frequencies
+filter2d: false
+filter2d_low: 0.03
 
 # Image registration
 image_registration: true

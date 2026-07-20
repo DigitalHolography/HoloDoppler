@@ -37,6 +37,8 @@ from holodoppler.filtering import (
     frequency_symmetric_filtering,
     fourier_time_transform,
     corner_compensation,
+    pca_time_transform,
+    filter_2d,
 )
 from holodoppler.moments import moment
 from holodoppler.registration import (
@@ -209,21 +211,9 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             )
     del frames
 
-
-    # use combinations of quadrants here :
-
-    combs = [[("NW",), ("SE",)], [("NE",), ("SW",)]] # only diagonals here
-
-    U_combs = {}
-    for addition_names, soustraction_names in combs:
-        cname = ''.join(["+" + nm for nm in addition_names]) + ''.join(["-" + nm for nm in soustraction_names])
-        U_combs[cname] = sum([U_quadrants[nm] for nm in addition_names]) - sum([U_quadrants[nm] for nm in soustraction_names])
-    U_quadrants.clear()  # free memory
-    del U_quadrants
-
-    # SVD filtering per c
+    # SVD filtering per q
     U_q_filt = {}
-    for qname, U_q in U_combs.items():
+    for qname, U_q in U_quadrants.items():
         U_q_filt[qname] = svd_filter(
             xp,
             U_q,
@@ -231,8 +221,8 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             filter_mode=parameters["svd_filter_mode"],
             remove_dc=parameters["svd_remove_dc"],
         )
-    U_combs.clear()  # free memory
-    del U_combs
+    U_quadrants.clear()  # free memory
+    del U_quadrants
     
 
     U_main = svd_filter(
@@ -246,10 +236,47 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     if output_dict is None:
         output_dict = {}
 
+    combs = [
+            # ["NW", "SW"],
+            # ["NE", "SE"],
+            # ["NW", "NE"],
+            # ["SW", "SE"],
+            ["NW", "SE"],
+            ["NE", "SW"],
+            ] # only diagonals here
+
+    # Temporal transform
+    idxs, freqs = frequency_symmetric_filtering(
+        xp,
+        fft,
+        nt_sub,
+        parameters["sampling_freq"],
+        parameters["low_freq"],
+        parameters.get("high_freq"),
+    )
+
+    psd_c = {}
+    for a_name, b_name in combs:
+        cname = a_name +"x"+ b_name
+        psd_c[cname] = U_q_filt[a_name] * U_q_filt[b_name].conj()
+
+        A = xp.abs(fourier_time_transform(xp, fft, psd_c[cname]))
+
+        P = xp.abs(fourier_time_transform(xp, fft, xp.exp(1j*xp.angle(psd_c[cname])))) **2
+
+        output_dict[f"{cname}_M0"] = xp.sum(A[idxs], axis=0)
+
+        output_dict[f"{cname}_M0_phase"] = moment(xp, P[idxs], freqs, 0)
+        output_dict[f"{cname}_M1_phase"] = moment(xp, P[idxs], freqs, 1)
+
     # Temporal transform
     spectrum_f_q = {}
     for qname, U_q in U_q_filt.items():
         if parameters.get("temporal_transformation") == "FourierTransform":
+            arg_U_q = xp.angle(U_q)
+            spectrum_f_phase = fourier_time_transform(xp, fft, xp.exp(1j*arg_U_q))
+            output_dict[qname + "_M0_phase"] = moment(xp, xp.abs(spectrum_f_phase[idxs]) **2, freqs, 0)
+            output_dict[qname + "_M1_phase"] = moment(xp, xp.abs(spectrum_f_phase[idxs]) **2, freqs, 1)
             spectrum_f = fourier_time_transform(xp, fft, U_q)
         else:
             spectrum_f = U_q
@@ -257,6 +284,9 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
 
     U_q_filt.clear()  # free memory
     del U_q_filt
+
+    output_dict["M0_phase"] = moment(xp, xp.abs(fourier_time_transform(xp, fft,  xp.exp(1j*xp.angle(U_main)))[idxs])**2, freqs, 0)
+    output_dict["M1_phase"] = moment(xp, xp.abs(fourier_time_transform(xp, fft,  xp.exp(1j*xp.angle(U_main)))[idxs])**2, freqs, 1)
 
     U_main = fourier_time_transform(xp, fft, U_main)
 
@@ -279,38 +309,34 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
 
     U_main = xp.abs(U_main) ** 2
 
-    if parameters.get("corner_compensation", False):
-        for qname, psd in psd_q.items():
-            psd_q[qname] = corner_compensation(xp, psd)
-
     # Moments
     quadrant_moments = {}
     for qname, psd in psd_q.items():
         qres = {
             qname + "_M0": moment(xp, psd[idxs], freqs, 0),
-            qname + "_M1": moment(xp, psd[idxs], freqs, 1),
-            qname + "_M2": moment(xp, psd[idxs], freqs, 2),
+            qname + "_M1": moment(xp, psd[idxs], freqs, 1), 
+            # qname + "_M2": moment(xp, psd[idxs], freqs, 2),   à réactiver
         }
-        qres[qname + "_M0ff"] = gaussian_flatfield(
-            qres[qname + "_M0"],
-            parameters.get("registration_flatfield_gw", 1.0),
-            gaussian_filter,
-        )
+        # qres[qname + "_M0ff"] = gaussian_flatfield( 
+        #     qres[qname + "_M0"],
+        #     parameters.get("registration_flatfield_gw", 1.0),
+        #     gaussian_filter,
+        # )
         quadrant_moments[qname] = qres
         output_dict.update(qres)
 
-    # # Normalization
-    # psd_q_norm = {}
-    # for cname, psd in psd_c.items():
-    #     M0 = combinations_moments[cname][cname + "_M0"]
-    #     total_energy = xp.sum(M0)  # scalar
-    #     if total_energy == 0:
-    #         total_energy = 1e-24
-    #     psd_q_norm[cname] = psd / total_energy
-    # del M0, total_energy
 
     # Full pupil image reconstruction
     output_dict["M0"] = moment(xp, U_main[idxs], freqs, 0)
+
+    sq = 0
+    for qname, moments in quadrant_moments.items():
+        sq += moments[qname + "_M0"] #xp.squeeze(square_cupy(moments[qname + "_M0"][xp.newaxis, ...], newy=ny, newx=nx))
+    output_dict["QSum_M0"] = sq
+
+    jo = sq - xp.squeeze(square_cupy(output_dict["M0"][xp.newaxis, ...], newy=sq.shape[0], newx=sq.shape[1]))
+    output_dict["J0_M0"] = jo
+    
     output_dict["M1"] = moment(xp, U_main[idxs], freqs, 1)
     output_dict["M2"] = moment(xp, U_main[idxs], freqs, 2)
     output_dict["M0ff"] = gaussian_flatfield(
@@ -319,56 +345,16 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         gaussian_filter,
     )
 
-    # Frequency bands
-    for qname, psd in psd_q.items():
-        bands = {}
-        for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-            idxs_band, _ = frequency_symmetric_filtering(
-                xp, fft, nt_sub, parameters["sampling_freq"], f1, f2
-            )
-            band = xp.mean(psd[idxs_band], axis=0)
-            bands[f"{qname}_band_{k}_{f1}_{f2}"] = band
-            output_dict.update(bands)
-
-    # # Full pupil image reconstruction
-    # psd_full = psd_q["NW"].copy()
-    # psd_full += psd_q["NE"]
-    # psd_full += psd_q["SW"]
-    # psd_full += psd_q["SE"]
-
-    # del psd_q  # free memory
-
-    # I_full = xp.mean(psd_full, axis=0)
-
-    # B_inc = sum(quadrant_moments[q][f"{q}_M0"] for q in quadrant_idxs.keys())
-
-    # B_R = quadrant_moments["NE"]["NE_M0"] + quadrant_moments["SE"]["SE_M0"]
-    # B_L = quadrant_moments["NW"]["NW_M0"] + quadrant_moments["SW"]["SW_M0"]
-    # B_S = quadrant_moments["NW"]["NW_M0"] + quadrant_moments["NE"]["NE_M0"]
-    # B_I = quadrant_moments["SW"]["SW_M0"] + quadrant_moments["SE"]["SE_M0"]
-
-    # del psd_full, quadrant_moments
-
-    # eps = 1e-12
-    # Ax = (B_R - B_L) / (B_R + B_L + eps)
-    # Ay = (B_S - B_I) / (B_S + B_I + eps)
-    # A_mag = xp.sqrt(Ax**2 + Ay**2)
-
-    # output_dict.update(
-    #     {
-    #         "I_full": I_full,
-    #         "B_inc": B_inc,
-    #         "B_R": B_R,
-    #         "B_L": B_L,
-    #         "B_S": B_S,
-    #         "B_I": B_I,
-    #         "Ax": Ax,
-    #         "Ay": Ay,
-    #         "A_mag": A_mag,
-    #     }
-    # )
-
-    # del I_full, B_inc, B_R, B_L, B_S, B_I, Ax, Ay, A_mag
+    # # Frequency bands à réactiver
+    # for qname, psd in psd_q.items():
+    #     bands = {}
+    #     for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
+    #         idxs_band, _ = frequency_symmetric_filtering(
+    #             xp, fft, nt_sub, parameters["sampling_freq"], f1, f2
+    #         )
+    #         band = xp.mean(psd[idxs_band], axis=0)
+    #         bands[f"{qname}_band_{k}_{f1}_{f2}"] = band
+    #         output_dict.update(bands)
 
 
 def _process_shack_hartmann(parameters, frames, output_dict=None):
@@ -543,6 +529,10 @@ def preview(file_path, parameters):
     # transfer to gpu
     frames = cp.array(frames, dtype=cp.float32)
 
+    # 2D filtering
+    if parameters.get("filter2d", False):
+        frames = filter_2d(cp, cp.fft, frames, parameters["filter2d_low"])
+
     res = {}
 
     phase_term = None
@@ -611,6 +601,11 @@ def process(file_path, parameters):
             batch_size=parameters["registration_ref_batch_size"],
         )
         frames = cp.array(frames)
+
+        # 2D filtering
+        if parameters.get("filter2d", False):
+            frames = filter_2d(cp, cp.fft, frames, parameters["filter2d_low"])
+        
         phase_term = None
         if parameters.get("shack_hartmann", False):
             phase_term = _process_shack_hartmann(parameters, frames)
@@ -660,6 +655,10 @@ def process(file_path, parameters):
 
             with compute_stream:
                 d_current = d_buffers[current_idx]
+
+                # 2D filtering
+                if parameters.get("filter2d", False):
+                    d_current = filter_2d(cp, cp.fft, d_current, parameters["filter2d_low"])
 
                 res = {}
 
@@ -722,6 +721,10 @@ def process(file_path, parameters):
 
         with compute_stream:
             d_current = d_buffers[current_idx]
+
+            # 2D filtering
+            if parameters.get("filter2d", False):
+                d_current = filter_2d(cp, cp.fft, d_current, parameters["filter2d_low"])
 
             res = {}
 
@@ -786,7 +789,7 @@ def process(file_path, parameters):
 
     if parameters.get("square", False):
         output_np = {
-            k: cp.asnumpy(square_cupy(cp.array(v))) if v.ndim == 3 else v for k, v in output_np.items()
+            k: cp.asnumpy(square_cupy(cp.array(v), newy=512, newx=512)) if v.ndim == 3 else v for k, v in output_np.items()
         }
 
     # Use output_np as the main numpy result dict
