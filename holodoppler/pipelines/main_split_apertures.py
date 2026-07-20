@@ -143,14 +143,11 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     prop_method = parameters["spatial_propagation"]
 
     # Split into four quadrants
-    # masks = make_quadrant_masks(frames.shape[1:], center=parameters.get("pupil_center"))
     mask_names = ["NW", "NE", "SW", "SE"]
-    # quadrant_masks = dict(zip(mask_names, masks))
-
-    quadrant_indices = make_quadrant_indices(
-        frames.shape[1:], center=parameters.get("pupil_center")
-    )
+    quadrant_indices = make_quadrant_indices(frames.shape[1:], center=None)
     quadrant_idxs = dict(zip(mask_names, quadrant_indices))
+
+    combs = [["NW", "SE"], ["NE", "SW"]] # only diagonals here
 
     # Propagation
     U_quadrants = {}
@@ -212,9 +209,18 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             )
     del frames
 
+
+    # use combinations of quadrants here :
+    U_combs = {}
+    for cname in combs:
+        qa,qb = cname
+        U_combs[qa+qb] = U_quadrants[qa] - U_quadrants[qb]
+    U_quadrants.clear()  # free memory
+    del U_quadrants
+
     # SVD filtering per quadrant
     U_q_filt = {}
-    for qname, U_q in U_quadrants.items():
+    for qname, U_q in U_combs.items():
         U_q_filt[qname] = svd_filter(
             xp,
             U_q,
@@ -222,8 +228,9 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             filter_mode=parameters["svd_filter_mode"],
             remove_dc=parameters["svd_remove_dc"],
         )
-    U_quadrants.clear()  # free memory
-    del U_quadrants
+    U_combs.clear()  # free memory
+    del U_combs
+    
 
     U_main = svd_filter(
         xp,
@@ -320,45 +327,45 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             bands[f"{qname}_band_{k}_{f1}_{f2}"] = band
             output_dict.update(bands)
 
-    # Full pupil image reconstruction
-    psd_full = psd_q["NW"].copy()
-    psd_full += psd_q["NE"]
-    psd_full += psd_q["SW"]
-    psd_full += psd_q["SE"]
+    # # Full pupil image reconstruction
+    # psd_full = psd_q["NW"].copy()
+    # psd_full += psd_q["NE"]
+    # psd_full += psd_q["SW"]
+    # psd_full += psd_q["SE"]
 
-    del psd_q  # free memory
+    # del psd_q  # free memory
 
-    I_full = xp.mean(psd_full, axis=0)
+    # I_full = xp.mean(psd_full, axis=0)
 
-    B_inc = sum(quadrant_moments[q][f"{q}_M0"] for q in quadrant_idxs.keys())
+    # B_inc = sum(quadrant_moments[q][f"{q}_M0"] for q in quadrant_idxs.keys())
 
-    B_R = quadrant_moments["NE"]["NE_M0"] + quadrant_moments["SE"]["SE_M0"]
-    B_L = quadrant_moments["NW"]["NW_M0"] + quadrant_moments["SW"]["SW_M0"]
-    B_S = quadrant_moments["NW"]["NW_M0"] + quadrant_moments["NE"]["NE_M0"]
-    B_I = quadrant_moments["SW"]["SW_M0"] + quadrant_moments["SE"]["SE_M0"]
+    # B_R = quadrant_moments["NE"]["NE_M0"] + quadrant_moments["SE"]["SE_M0"]
+    # B_L = quadrant_moments["NW"]["NW_M0"] + quadrant_moments["SW"]["SW_M0"]
+    # B_S = quadrant_moments["NW"]["NW_M0"] + quadrant_moments["NE"]["NE_M0"]
+    # B_I = quadrant_moments["SW"]["SW_M0"] + quadrant_moments["SE"]["SE_M0"]
 
-    del psd_full, quadrant_moments
+    # del psd_full, quadrant_moments
 
-    eps = 1e-12
-    Ax = (B_R - B_L) / (B_R + B_L + eps)
-    Ay = (B_S - B_I) / (B_S + B_I + eps)
-    A_mag = xp.sqrt(Ax**2 + Ay**2)
+    # eps = 1e-12
+    # Ax = (B_R - B_L) / (B_R + B_L + eps)
+    # Ay = (B_S - B_I) / (B_S + B_I + eps)
+    # A_mag = xp.sqrt(Ax**2 + Ay**2)
 
-    output_dict.update(
-        {
-            "I_full": I_full,
-            "B_inc": B_inc,
-            "B_R": B_R,
-            "B_L": B_L,
-            "B_S": B_S,
-            "B_I": B_I,
-            "Ax": Ax,
-            "Ay": Ay,
-            "A_mag": A_mag,
-        }
-    )
+    # output_dict.update(
+    #     {
+    #         "I_full": I_full,
+    #         "B_inc": B_inc,
+    #         "B_R": B_R,
+    #         "B_L": B_L,
+    #         "B_S": B_S,
+    #         "B_I": B_I,
+    #         "Ax": Ax,
+    #         "Ay": Ay,
+    #         "A_mag": A_mag,
+    #     }
+    # )
 
-    del I_full, B_inc, B_R, B_L, B_S, B_I, Ax, Ay, A_mag
+    # del I_full, B_inc, B_R, B_L, B_S, B_I, Ax, Ay, A_mag
 
 
 def _process_shack_hartmann(parameters, frames, output_dict=None):
