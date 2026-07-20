@@ -5,8 +5,8 @@ import threading
 from opto import Opto
 
 # Configuration des courants
-A_CURRENT_mA = 95
-B_CURRENT_mA = 104
+A_CURRENT_mA = 98
+B_CURRENT_mA = 109.5
 TIME_DELAY = 2.0  # Temps entre chaque commutation (en secondes)
 
 # État global
