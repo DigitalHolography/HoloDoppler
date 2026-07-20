@@ -147,7 +147,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     quadrant_indices = make_quadrant_indices(frames.shape[1:], center=None)
     quadrant_idxs = dict(zip(mask_names, quadrant_indices))
 
-    combs = [["NW", "SE"], ["NE", "SW"]] # only diagonals here
+    
 
     # Propagation
     U_quadrants = {}
@@ -211,14 +211,17 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
 
 
     # use combinations of quadrants here :
+
+    combs = [[("NW",), ("SE",)], [("NE",), ("SW",)]] # only diagonals here
+
     U_combs = {}
-    for cname in combs:
-        qa,qb = cname
-        U_combs[qa+qb] = U_quadrants[qa] - U_quadrants[qb]
+    for addition_names, soustraction_names in combs:
+        cname = ''.join(["+" + nm for nm in addition_names]) + ''.join(["-" + nm for nm in soustraction_names])
+        U_combs[cname] = sum([U_quadrants[nm] for nm in addition_names]) - sum([U_quadrants[nm] for nm in soustraction_names])
     U_quadrants.clear()  # free memory
     del U_quadrants
 
-    # SVD filtering per quadrant
+    # SVD filtering per c
     U_q_filt = {}
     for qname, U_q in U_combs.items():
         U_q_filt[qname] = svd_filter(
