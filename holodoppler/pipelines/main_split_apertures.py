@@ -218,10 +218,10 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     U_quadrants.clear()  # free memory
     del U_quadrants
 
-    # SVD filtering per combination
-    U_c_filt = {}
-    for cname, U_c in U_combs.items():
-        U_c_filt[cname] = svd_filter(
+    # SVD filtering per quadrant
+    U_q_filt = {}
+    for qname, U_q in U_combs.items():
+        U_q_filt[qname] = svd_filter(
             xp,
             U_q,
             parameters["svd_threshold"],
@@ -244,16 +244,16 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         output_dict = {}
 
     # Temporal transform
-    spectrum_f_c = {}
-    for cname, U_c in U_c_filt.items():
+    spectrum_f_q = {}
+    for qname, U_q in U_q_filt.items():
         if parameters.get("temporal_transformation") == "FourierTransform":
-            spectrum_f = fourier_time_transform(xp, fft, U_c)
+            spectrum_f = fourier_time_transform(xp, fft, U_q)
         else:
-            spectrum_f = U_c
-        spectrum_f_c[cname] = spectrum_f
+            spectrum_f = U_q
+        spectrum_f_q[qname] = spectrum_f
 
-    U_c_filt.clear()  # free memory
-    del U_c_filt
+    U_q_filt.clear()  # free memory
+    del U_q_filt
 
     U_main = fourier_time_transform(xp, fft, U_main)
 
@@ -267,34 +267,34 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         parameters.get("high_freq"),
     )
 
-    psd_c = {}
-    for cname, spectrum_f in spectrum_f_c.items():
+    psd_q = {}
+    for qname, spectrum_f in spectrum_f_q.items():
         psd = xp.abs(spectrum_f) ** 2
-        psd_c[cname] = psd
-    spectrum_f_c.clear()  # free memory
-    del spectrum_f_c
+        psd_q[qname] = psd
+    spectrum_f_q.clear()  # free memory
+    del spectrum_f_q
 
     U_main = xp.abs(U_main) ** 2
 
     if parameters.get("corner_compensation", False):
-        for cname, psd in psd_c.items():
-            psd_c[cname] = corner_compensation(xp, psd)
+        for qname, psd in psd_q.items():
+            psd_q[qname] = corner_compensation(xp, psd)
 
     # Moments
-    combinations_moments = {}
-    for cname, psd in psd_c.items():
-        cres = {
-            cname + "_M0": moment(xp, psd[idxs], freqs, 0),
-            cname + "_M1": moment(xp, psd[idxs], freqs, 1),
-            cname + "_M2": moment(xp, psd[idxs], freqs, 2),
+    quadrant_moments = {}
+    for qname, psd in psd_q.items():
+        qres = {
+            qname + "_M0": moment(xp, psd[idxs], freqs, 0),
+            qname + "_M1": moment(xp, psd[idxs], freqs, 1),
+            qname + "_M2": moment(xp, psd[idxs], freqs, 2),
         }
-        cres[cname + "_M0ff"] = gaussian_flatfield(
-            cres[cname + "_M0"],
+        qres[qname + "_M0ff"] = gaussian_flatfield(
+            qres[qname + "_M0"],
             parameters.get("registration_flatfield_gw", 1.0),
             gaussian_filter,
         )
-        combinations_moments[cname] = cres
-        output_dict.update(cres)
+        quadrant_moments[qname] = qres
+        output_dict.update(qres)
 
     # # Normalization
     # psd_q_norm = {}
@@ -317,14 +317,14 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     )
 
     # Frequency bands
-    for cname, psd in psd_c.items():
+    for qname, psd in psd_q.items():
         bands = {}
         for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
             idxs_band, _ = frequency_symmetric_filtering(
                 xp, fft, nt_sub, parameters["sampling_freq"], f1, f2
             )
             band = xp.mean(psd[idxs_band], axis=0)
-            bands[f"{cname}_band_{k}_{f1}_{f2}"] = band
+            bands[f"{qname}_band_{k}_{f1}_{f2}"] = band
             output_dict.update(bands)
 
     # # Full pupil image reconstruction
