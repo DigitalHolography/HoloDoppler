@@ -114,26 +114,41 @@ def fresnel_transform_with_phase_2(
     wavelength,
     phase_term,
     idx,
+    nxny=[0,0],
     zero_padding=False,
     use_output_kernel=True,
 ):
     """Apply Fresnel transform with phase correction"""
 
-    ny, nx = phase_term.shape[-2:]
+    if phase_term is None :
+        ny, nx = nxny
+
     kernel_in = build_fresnel_kernel_in(
         xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
     )
 
-    result = fft.fftshift(
-        fft.fft2(
-            frames
-            * kernel_in[:, idx[0][0] : idx[0][1], idx[1][0] : idx[1][1]]
-            * phase_term[xp.newaxis, idx[0][0] : idx[0][1], idx[1][0] : idx[1][1]],
+    if phase_term is None :
+        result = fft.fftshift(
+            fft.fft2(
+                frames
+                * kernel_in[:, idx[0][0] : idx[0][1], idx[1][0] : idx[1][1]],
+                axes=(-1, -2),
+                norm="ortho",
+            ),
             axes=(-1, -2),
-            norm="ortho",
-        ),
-        axes=(-1, -2),
-    )
+        )
+    else:
+
+        result = fft.fftshift(
+            fft.fft2(
+                frames
+                * kernel_in[:, idx[0][0] : idx[0][1], idx[1][0] : idx[1][1]]
+                * phase_term[xp.newaxis, idx[0][0] : idx[0][1], idx[1][0] : idx[1][1]],
+                axes=(-1, -2),
+                norm="ortho",
+            ),
+            axes=(-1, -2),
+        )
 
     return result
 
@@ -165,10 +180,13 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
                     parameters["pixel_pitch"],
                     parameters["wavelength"],
                     phase_term,
+                    nxny= frames.shape[-2:],
                     idx=quadrant_idxs[qname],
                     zero_padding=parameters.get("Fresnel_zero_padding", False),
                     use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
                 )
+
+
         else:
             if prop_method == "Fresnel":
                 U_q = fresnel_transform_with_phase_2(
@@ -179,6 +197,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
                     parameters["pixel_pitch"],
                     parameters["wavelength"],
                     None,
+                    nxny= frames.shape[-2:],
                     idx=quadrant_idxs[qname],
                     use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
                 )
@@ -199,14 +218,13 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             )
     else:
         if prop_method == "Fresnel":
-            U_main = fresnel_transform_with_phase(
+            U_main = fresnel_transform(
                 xp,
                 fft,
                 frames,
                 parameters["z"],
                 parameters["pixel_pitch"],
                 parameters["wavelength"],
-                None,
                 use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
             )
     del frames
@@ -262,21 +280,21 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
 
         A = xp.abs(fourier_time_transform(xp, fft, psd_c[cname]))
 
-        P = xp.abs(fourier_time_transform(xp, fft, xp.exp(1j*xp.angle(psd_c[cname])))) **2
+        # P = xp.abs(fourier_time_transform(xp, fft, xp.exp(1j*xp.angle(psd_c[cname])))) **2
 
         output_dict[f"{cname}_M0"] = xp.sum(A[idxs], axis=0)
 
-        output_dict[f"{cname}_M0_phase"] = moment(xp, P[idxs], freqs, 0)
-        output_dict[f"{cname}_M1_phase"] = moment(xp, P[idxs], freqs, 1)
+        # output_dict[f"{cname}_M0_phase"] = moment(xp, P[idxs], freqs, 0)
+        # output_dict[f"{cname}_M1_phase"] = moment(xp, P[idxs], freqs, 1)
 
     # Temporal transform
     spectrum_f_q = {}
     for qname, U_q in U_q_filt.items():
         if parameters.get("temporal_transformation") == "FourierTransform":
-            arg_U_q = xp.angle(U_q)
-            spectrum_f_phase = fourier_time_transform(xp, fft, xp.exp(1j*arg_U_q))
-            output_dict[qname + "_M0_phase"] = moment(xp, xp.abs(spectrum_f_phase[idxs]) **2, freqs, 0)
-            output_dict[qname + "_M1_phase"] = moment(xp, xp.abs(spectrum_f_phase[idxs]) **2, freqs, 1)
+            # arg_U_q = xp.angle(U_q)
+            # spectrum_f_phase = fourier_time_transform(xp, fft, xp.exp(1j*arg_U_q))
+            # output_dict[qname + "_M0_phase"] = moment(xp, xp.abs(spectrum_f_phase[idxs]) **2, freqs, 0)
+            # output_dict[qname + "_M1_phase"] = moment(xp, xp.abs(spectrum_f_phase[idxs]) **2, freqs, 1)
             spectrum_f = fourier_time_transform(xp, fft, U_q)
         else:
             spectrum_f = U_q
@@ -285,8 +303,8 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     U_q_filt.clear()  # free memory
     del U_q_filt
 
-    output_dict["M0_phase"] = moment(xp, xp.abs(fourier_time_transform(xp, fft,  xp.exp(1j*xp.angle(U_main)))[idxs])**2, freqs, 0)
-    output_dict["M1_phase"] = moment(xp, xp.abs(fourier_time_transform(xp, fft,  xp.exp(1j*xp.angle(U_main)))[idxs])**2, freqs, 1)
+    # output_dict["M0_phase"] = moment(xp, xp.abs(fourier_time_transform(xp, fft,  xp.exp(1j*xp.angle(U_main)))[idxs])**2, freqs, 0)
+    # output_dict["M1_phase"] = moment(xp, xp.abs(fourier_time_transform(xp, fft,  xp.exp(1j*xp.angle(U_main)))[idxs])**2, freqs, 1)
 
     U_main = fourier_time_transform(xp, fft, U_main)
 
@@ -345,16 +363,23 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         gaussian_filter,
     )
 
-    # # Frequency bands à réactiver
-    # for qname, psd in psd_q.items():
-    #     bands = {}
-    #     for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-    #         idxs_band, _ = frequency_symmetric_filtering(
-    #             xp, fft, nt_sub, parameters["sampling_freq"], f1, f2
-    #         )
-    #         band = xp.mean(psd[idxs_band], axis=0)
-    #         bands[f"{qname}_band_{k}_{f1}_{f2}"] = band
-    #         output_dict.update(bands)
+    # Frequency bands à réactiver
+    for qname, psd in psd_q.items():
+        bands = {}
+        for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
+            idxs_band, _ = frequency_symmetric_filtering(
+                xp, fft, nt_sub, parameters["sampling_freq"], f1, f2
+            )
+            band = xp.mean(psd[idxs_band], axis=0)
+            bands[f"{qname}_band_{k}_{f1}_{f2}"] = band
+            output_dict.update(bands)
+
+    for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
+        idxs_band, _ = frequency_symmetric_filtering(
+                xp, fft, nt_sub, parameters["sampling_freq"], f1, f2
+            )
+        band = xp.mean(U_main[idxs_band], axis=0)
+        output_dict[f"band_{k}_{f1}_{f2}"] = band
 
 
 def _process_shack_hartmann(parameters, frames, output_dict=None):

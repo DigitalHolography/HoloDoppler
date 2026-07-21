@@ -8,7 +8,7 @@ end_frame: -1 # -1 means process all frames
 
 # Propagation parameters
 spatial_propagation: "Fresnel"  # Options: "Fresnel" or "AngularSpectrum"
-z: "use_holovibes"  # Propagation distance in meters
+z: 0.44  # Propagation distance in meters
 wavelength: 852.0e-9  # Wavelength in meters
 pixel_pitch: "use_holovibes"  # Pixel pitch in meters [y, x]
 
@@ -16,7 +16,7 @@ pixel_pitch: "use_holovibes"  # Pixel pitch in meters [y, x]
 Fresnel_use_ouput_kernel: true  # Use output kernel for Fresnel transform
 
 # SVD filtering
-svd_threshold: 20
+svd_threshold: 15
 svd_filter_mode: "number_of_values"  # Options: "number_of_values", "amplitude_threshold"
 svd_remove_dc: true
 
@@ -24,12 +24,12 @@ svd_remove_dc: true
 temporal_transformation: "FourierTransform"  # Options: "FourierTransform" or None
 sampling_freq: "use_holovibes"  # Sampling frequency in Hz
 low_freq: 6000  # Low frequency cutoff in Hz
-high_freq: 18300  # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
+high_freq: 18000  # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
 
 # Frequency bands for different cutoffs of the psd in Hz. It will give the average of the psd in the symmetric frequency range
 frequency_bands:
   - [3000, 9000]
-  - [9000, 18000]
+#   - [9000, 18000]
 
 # Filtering 2D frequencies
 filter2d: false
@@ -39,7 +39,7 @@ filter2d_low: 0.03
 image_registration: true
 registration_ref_first_frame: 0
 registration_ref_batch_size: 512
-registration_radius: 0.8
+registration_radius: [0.7,0.9]
 registration_sub_pixel: true
 registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
 
@@ -59,7 +59,7 @@ smoothing_gaussian: false # smoothing images with a gaussian kernel only applied
 smoothing_gaussian_size: 2
 
 # Shack-Hartmann wavefront sensing
-shack_hartmann: true  # Enable Shack-Hartmann processing
+shack_hartmann: false  # Enable Shack-Hartmann processing
 shack_hartmann_nx_subap: 5  # Number of subapertures in X
 shack_hartmann_ny_subap: 5  # Number of subapertures in Y
 shack_hartmann_svd_threshold: 10
