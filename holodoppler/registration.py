@@ -78,8 +78,16 @@ def register_images_shifts(
     sub_pixel=False,
 ):
     ny, nx = fixed.shape[-2:]
+    # print(radius)
+    if radius is not None and len(radius)>0:
 
-    mask = elliptical_mask(ny, nx, radius, xp) if radius else None
+        r1, r2 = radius
+        m1 = ~elliptical_mask(ny, nx, r1, xp)
+        m2 = elliptical_mask(ny, nx, r2, xp)
+        mask = m1 & m2
+
+    else:
+        mask = elliptical_mask(ny, nx, radius, xp) if radius else None
 
     fixed_f = fixed.astype(xp.float32, copy=False)
     moving_f = moving.astype(xp.float32, copy=False)
@@ -98,6 +106,10 @@ def register_images_shifts(
         gaussian_sigma=gaussian_sigma,
         gaussian_filter=gaussian_filter,
     )
+
+    # import matplotlib.pyplot as plt
+    # plt.imshow(moving_e.get())
+    # plt.show()
 
     if not sub_pixel:
         shift_y, shift_x = intensity_corr_integer(xp, fft, fixed_e, moving_e)
