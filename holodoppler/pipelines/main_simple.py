@@ -31,6 +31,7 @@ from holodoppler.file_reader import FileReaderFactory
 
 
 import cupy as cp
+import numpy as np
 
 # import numpy as np
 from cupyx.scipy.ndimage import gaussian_filter
@@ -505,7 +506,7 @@ def process(file_path, parameters):
 
             if res:
                 for k, v in res.items():
-                    output[k].append(v)
+                    output[k].append(v.get()) # transfer to cpu
 
             processed_batches += 1
 
@@ -567,7 +568,7 @@ def process(file_path, parameters):
 
         if res:
             for k, v in res.items():
-                output[k].append(v)
+                output[k].append(v.get()) # transfer to cpu
 
         processed_batches += 1
 
@@ -578,16 +579,11 @@ def process(file_path, parameters):
         if processed_batches >= num_batch:
             break
 
-    output = {k: cp.stack(v, axis=0) for k, v in output.items()}
+    output = {k: np.stack(v, axis=0) for k, v in output.items()}
 
     if parameters.get("square", False):
-        output = {k: square_cupy(v) if v.ndim == 3 else v for k, v in output.items()}
+        output = {k: square_cupy(cp.array(v)).get() if v.ndim == 3 else v for k, v in output.items()}
 
-    # transfer to cpu
-    output_np = {k: cp.asnumpy(v) for k, v in output.items()}
-
-    output.clear()
-    del output
     cp.get_default_memory_pool().free_all_blocks()
 
     target_dir = _get_default_output_path(file_reader.file_path)
@@ -598,10 +594,10 @@ def process(file_path, parameters):
     _create_directories(target_dir, "FULL")
 
     # renaming for compatibility with Doppler View
-    output_np["moment0"] = output_np.pop("M0")
-    output_np["moment0ff"] = output_np.pop("M0ff")
-    output_np["moment1"] = output_np.pop("M1")
-    output_np["moment2"] = output_np.pop("M2")
+    output["moment0"] = output.pop("M0")
+    output["moment0ff"] = output.pop("M0ff")
+    output["moment1"] = output.pop("M1")
+    output["moment2"] = output.pop("M2")
 
     save_to_h5_list = [
         "moment0ff",
@@ -611,15 +607,15 @@ def process(file_path, parameters):
         "shack_hartmann_zernike_coefs",
         "registration",
         "spectrum_line",
-    ] + [key for key in output_np.keys() if "band_" in key]
+    ] + [key for key in output.keys() if "band_" in key]
 
-    _save_h5_2(target_dir, output_np, parameters, save_only_list=save_to_h5_list)
+    _save_h5_2(target_dir, output, parameters, save_only_list=save_to_h5_list)
 
     # Save videos (sequential to avoid encoding conflicts)
-    _save_videos(target_dir, output_np, 30)
+    _save_videos(target_dir, output, 30)
 
     # Save PNGs (parallel)
-    _save_pngs(target_dir, output_np)
+    _save_pngs(target_dir, output)
 
     # Save metadata (fast)
     _save_metadata(target_dir, file_reader, parameters)
