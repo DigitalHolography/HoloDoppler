@@ -415,6 +415,11 @@ def _apply_cli_overrides(parameters: dict, args: argparse.Namespace) -> dict:
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     """Add common arguments to a parser."""
     parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Prints the full traceback in case of error.",
+    )
+    parser.add_argument(
         "--tictoc",
         action="store_true",
         help="Force 'tictoc': true in parameters.",
@@ -629,7 +634,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return EXIT_FAILURE
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
-        if getattr(args, "debug", False):
+        if getattr(args, "verbose", False):
             import traceback
 
             traceback.print_exc(file=sys.stderr)

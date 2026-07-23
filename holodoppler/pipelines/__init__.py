@@ -1,47 +1,41 @@
 """
-holodoppler.pipelines - Holographic Doppler processing library - pipelines lib
+holodoppler.pipelines
 """
 
-# from .dask_xp import process_moments_classical, process_template
-# from .dask_xp2 import process_moments_daskxp2
-# from .dask_xp3 import process_moments_daskxp3
-# from .numba_np import process_moments_cpu
+from importlib import import_module
+from pathlib import Path
+import pkgutil
 
-from holodoppler.pipelines import main_split_apertures
+pipelines = {}
 
-from .main_pipeline_xp_on_ram_dp import process_moments, preview_process_moments
 
-from . import main_simple
-from . import main_sh_avg
-from . import main_sliding
-from . import main_sliding_shack_hart
-from . import main_pca_accumulation
-from . import main_simple_numpy
-from . import main_split_apertures
+def _lazy_function(module_name: str, function_name: str):
+    """Return a callable that imports the module on first use."""
 
-pipelines = {
-    "main": process_moments,
-    "preview_main": preview_process_moments,
+    def wrapper(*args, **kwargs):
+        module = import_module(f".{module_name}", package=__name__)
+        func = getattr(module, function_name)
+        return func(*args, **kwargs)
 
-    "simple" : main_simple.process,
-    "preview_simple" : main_simple.preview,
+    wrapper.__name__ = function_name
+    wrapper.__qualname__ = f"{module_name}.{function_name}"
+    # wrapper.__module__ = __name__
 
-    "sh_avg" : main_sh_avg.process,
-    "preview_sh_avg": main_sh_avg.preview,
+    return wrapper
 
-    "sliding" : main_sliding.process,
-    "preview_sliding" : main_sliding.preview,
-    
-    "sliding_shack_hartmann" : main_sliding_shack_hart.process,
-    "preview_sliding_shack_hartmann" : main_sliding_shack_hart.preview,
 
-    "pca_accumulation" : main_pca_accumulation.process,
-    "preview_pca_accumulation" : main_pca_accumulation.preview,
+# Discover every module in this package
+_package_dir = Path(__file__).parent
 
-    "simple_numpy" : main_simple_numpy.process,
-    "preview_simple_numpy" : main_simple_numpy.preview,
+for info in pkgutil.iter_modules([str(_package_dir)]):
 
-    "simple_split_apertures" : main_split_apertures.process,
-    "preview_simple_split_apertures" : main_split_apertures.preview,
+    module_name = info.name
 
-}
+    if module_name.startswith("_"):
+        continue
+
+    # Strip optional "main_" prefix for the dictionary key
+    key = module_name.removeprefix("main_")
+
+    pipelines[key] = _lazy_function(module_name, "process")
+    pipelines[f"preview_{key}"] = _lazy_function(module_name, "preview")
