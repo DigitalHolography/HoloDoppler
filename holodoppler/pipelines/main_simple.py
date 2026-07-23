@@ -20,7 +20,7 @@ from holodoppler.shack_hartmann import (
     calculate_displacements_graph_laplacian,
 )
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum
-from holodoppler.utils import gaussian_flatfield, update_from_footer, normalize_to_uint8, square_cupy, stretchlim, imadjust, temporal_gaussian
+from holodoppler.utils import gaussian_flatfield, update_from_footer, square_cupy
 from holodoppler.filtering import filter_2d, svd_filter, frequency_symmetric_filtering, fourier_time_transform, corner_compensation
 from holodoppler.moments import moment
 from holodoppler.registration import (
@@ -340,7 +340,7 @@ def preview(file_path, parameters):
 
     # calc on gpu
     _process_batch(parameters, frames=frames, phase_term=phase_term, output_dict=res)
-
+    
     if parameters.get("square", False):
         res = {
             k: cp.squeeze(square_cupy(v[cp.newaxis, ...])) if v.ndim == 2 else v
