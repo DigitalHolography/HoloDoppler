@@ -79,7 +79,7 @@ def register_images_shifts(
 ):
     ny, nx = fixed.shape[-2:]
     # print(radius)
-    if radius is not None and len(radius)>0:
+    if radius is not None and isinstance(radius,tuple):
 
         r1, r2 = radius
         m1 = ~elliptical_mask(ny, nx, r1, xp)
