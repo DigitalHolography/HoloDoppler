@@ -22,17 +22,17 @@ svd_remove_dc: true
 
 # Temporal transformation (Fourier AND pca)
 sampling_freq: "use_holovibes"  # Sampling frequency in Hz
-low_freq: 6000  # Low frequency cutoff in Hz
+low_freq: 2000  # Low frequency cutoff in Hz
 high_freq: "use_holovibes"  # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
 frequency_bands: # Frequency bands for different cutoffs of the psd in Hz. It will give the average of the psd in the symmetric frequency range
-  - [500, 999999]
+  - [1000, 999999]
 #   - [9000, 18000]
 
 pca_indices: [0,16]
 
 # Filtering 2D frequencies
 filter2d: true
-filter2d_low: 0.03
+filter2d_low: 0.02
 
 # Image registration
 image_registration: false
