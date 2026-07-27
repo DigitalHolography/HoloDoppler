@@ -1,9 +1,9 @@
-pipeline_name: "simple_split_apertures"
+pipeline_name: "split_apertures"
 
 # Core parameters
-batch_size: 128
+batch_size: 256
 first_frame: 0
-batch_stride: 128
+batch_stride: 256
 end_frame: -1 # -1 means process all frames
 
 # Propagation parameters
@@ -20,16 +20,15 @@ svd_threshold: 2
 svd_filter_mode: "number_of_values"  # Options: "number_of_values", "amplitude_threshold"
 svd_remove_dc: true
 
-# Temporal transformation
-temporal_transformation: "FourierTransform"  # Options: "FourierTransform" or None
+# Temporal transformation (Fourier AND pca)
 sampling_freq: "use_holovibes"  # Sampling frequency in Hz
-low_freq: 1500  # Low frequency cutoff in Hz
+low_freq: 6000  # Low frequency cutoff in Hz
 high_freq: "use_holovibes"  # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
-
-# Frequency bands for different cutoffs of the psd in Hz. It will give the average of the psd in the symmetric frequency range
-frequency_bands:
-  - [100, 1500]
+frequency_bands: # Frequency bands for different cutoffs of the psd in Hz. It will give the average of the psd in the symmetric frequency range
+  - [500, 999999]
 #   - [9000, 18000]
+
+pca_indices: [0,16]
 
 # Filtering 2D frequencies
 filter2d: true
