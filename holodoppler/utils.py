@@ -10,7 +10,6 @@ from scipy.ndimage import zoom as zoom_cpu
 import cupy as cp
 from cupyx.scipy.ndimage import zoom as zoom_gpu
 
-# in utils.py
 import cv2
 
 from pathlib import Path
@@ -19,13 +18,113 @@ import json
 
 from functools import cache
 
-# # Assuming video_frames is a GPU array of shape (n_frames, height, width, channels)
-# def resize_cupy(video_frames, scale_factor):
-#     # zoom works on spatial dimensions only
-#     return zoom(video_frames, (1, scale_factor, scale_factor, 1), order=1)
+@cache
+def elliptical_mask(ny, nx, radius_frac, xp):
+    """Create elliptical boolean mask"""
+    radius_frac = max(0.0, min(1.0, float(radius_frac)))
+    a = (nx / 2) * radius_frac
+    b = (ny / 2) * radius_frac
+
+    Y, X = xp.ogrid[:ny, :nx]
+    cy, cx = ny / 2, nx / 2
+
+    mask = ((X - cx) / a) ** 2 + ((Y - cy) / b) ** 2 <= 1.0
+    return mask
 
 
-# For exact dimensions instead of scale
+def gaussian_flatfield(A, gaussian_width, gaussian_filter_func):
+    """Apply Gaussian flatfield correction"""
+    return A / gaussian_filter_func(A, gaussian_width)
+
+
+def subpixel_parabola(vm, v0, vp):
+    """Subpixel refinement using parabola fit"""
+    denom = vm - 2.0 * v0 + vp
+    if abs(float(denom)) < 1e-12:
+        return 0.0
+    return 0.5 * float(vm - vp) / float(denom)
+
+
+def signed_peak(ky, kx, ny, nx):
+    """Convert peak indices to signed shifts"""
+    if ky > ny // 2:
+        ky -= ny
+    if kx > nx // 2:
+        kx -= nx
+    return float(ky), float(kx)
+
+
+def normalize_image(arr):
+    """Normalize image to 0-255 range"""
+    arr = arr.astype(np.float32)
+    lo, hi = arr.min(), arr.max()
+    if hi > lo:
+        return ((arr - lo) / (hi - lo) * 255).astype(np.uint8)
+    return arr.astype(np.uint8)
+
+
+def temporal_gaussian(arr, sigma):
+    if sigma == 0:
+        return arr
+    return gaussian_filter1d(arr.astype(np.float32), sigma=sigma, axis=0)
+
+
+def flatfield3D(arr, gw):
+    if arr.ndim != 3:
+        raise ValueError("Input array must be 3D")
+    if gw <= 1:
+        return arr
+    blurred = np_gaussian_filter(arr, sigma=(gw, gw, 1))
+    blurred[blurred == 0] = 1
+    return arr / blurred
+
+def pad_array_centrally(arr, new_shape, xp):
+    """Pad array centrally to new shape"""
+    if isinstance(new_shape, int):
+        new_shape = (new_shape, new_shape)
+
+    ny, nx = arr.shape[-2:]
+    new_ny, new_nx = new_shape
+
+    if new_ny < ny or new_nx < nx:
+        raise ValueError("new_shape must be >= current shape")
+
+    pad_y0 = (new_ny - ny) // 2
+    pad_y1 = new_ny - ny - pad_y0
+    pad_x0 = (new_nx - nx) // 2
+    pad_x1 = new_nx - nx - pad_x0
+
+    pad_width = [(0, 0)] * arr.ndim
+    pad_width[-2] = (pad_y0, pad_y1)
+    pad_width[-1] = (pad_x0, pad_x1)
+
+    return xp.pad(arr, pad_width, mode="constant")
+
+
+def crop_array_centrally(arr, target_shape, xp):
+    """Crop array centrally to target shape"""
+    if isinstance(target_shape, int):
+        target_shape = (target_shape, target_shape)
+
+    ny, nx = arr.shape[-2:]
+    tgt_ny, tgt_nx = target_shape
+
+    if tgt_ny > ny or tgt_nx > nx:
+        raise ValueError("target_shape must be <= current shape")
+
+    crop_y0 = (ny - tgt_ny) // 2
+    crop_y1 = crop_y0 + tgt_ny
+    crop_x0 = (nx - tgt_nx) // 2
+    crop_x1 = crop_x0 + tgt_nx
+
+    slices = [slice(None)] * arr.ndim
+    slices[-2] = slice(crop_y0, crop_y1)
+    slices[-1] = slice(crop_x0, crop_x1)
+
+    return arr[tuple(slices)]
+
+
+
 def square_cupy(video_frames, newy=None, newx=None):
     h, w = video_frames.shape[1], video_frames.shape[2]
     if newx is None or newy is None:
@@ -37,6 +136,7 @@ def square_cupy(video_frames, newy=None, newx=None):
         scale_w = newx / w
     return zoom_gpu(video_frames, (1, scale_h, scale_w), order=3)
 
+# video saving
 
 def normalize_to_uint8(data):
     """
@@ -56,32 +156,6 @@ def normalize_to_uint8(data):
     # vectorized normalization
     normalized = 255 * (data - vmin) / (vmax - vmin + 1e-12)
     return np.clip(normalized, 0, 255).astype(np.uint8)
-
-
-def write_video_file(path, frames, fps, fourcc_code="mp4v"):
-    """
-    Writes a video file.
-    Expects frames as (T, H, W) or (T, H, W, C) in uint8.
-    """
-    if frames.ndim == 3:  # (T, H, W)
-        h, w = frames.shape[1:]
-        is_color = False
-    elif frames.ndim == 4:  # (T, H, W, C)
-        h, w = frames.shape[1:3]
-        is_color = frames.shape[3] == 3
-        if is_color:
-            # Convert RGB to BGR for OpenCV
-            frames = frames[..., ::-1]
-    else:
-        raise ValueError(f"Invalid frame shape: {frames.shape}")
-
-    out = cv2.VideoWriter(
-        path, cv2.VideoWriter_fourcc(*fourcc_code), fps, (w, h), isColor=is_color
-    )
-    for frame in frames:
-        out.write(frame)
-    out.release()
-
 
 def resize_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
     """
@@ -315,113 +389,6 @@ def resize_fft2_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
 #     # Reshape back to target axes and move axes back
 #     res_t = out.reshape(new_h, new_w, *img_t.shape[2:])
 #     return np.moveaxis(res_t, (0, 1), axes)
-
-
-def pad_array_centrally(arr, new_shape, xp):
-    """Pad array centrally to new shape"""
-    if isinstance(new_shape, int):
-        new_shape = (new_shape, new_shape)
-
-    ny, nx = arr.shape[-2:]
-    new_ny, new_nx = new_shape
-
-    if new_ny < ny or new_nx < nx:
-        raise ValueError("new_shape must be >= current shape")
-
-    pad_y0 = (new_ny - ny) // 2
-    pad_y1 = new_ny - ny - pad_y0
-    pad_x0 = (new_nx - nx) // 2
-    pad_x1 = new_nx - nx - pad_x0
-
-    pad_width = [(0, 0)] * arr.ndim
-    pad_width[-2] = (pad_y0, pad_y1)
-    pad_width[-1] = (pad_x0, pad_x1)
-
-    return xp.pad(arr, pad_width, mode="constant")
-
-
-def crop_array_centrally(arr, target_shape, xp):
-    """Crop array centrally to target shape"""
-    if isinstance(target_shape, int):
-        target_shape = (target_shape, target_shape)
-
-    ny, nx = arr.shape[-2:]
-    tgt_ny, tgt_nx = target_shape
-
-    if tgt_ny > ny or tgt_nx > nx:
-        raise ValueError("target_shape must be <= current shape")
-
-    crop_y0 = (ny - tgt_ny) // 2
-    crop_y1 = crop_y0 + tgt_ny
-    crop_x0 = (nx - tgt_nx) // 2
-    crop_x1 = crop_x0 + tgt_nx
-
-    slices = [slice(None)] * arr.ndim
-    slices[-2] = slice(crop_y0, crop_y1)
-    slices[-1] = slice(crop_x0, crop_x1)
-
-    return arr[tuple(slices)]
-
-
-@cache
-def elliptical_mask(ny, nx, radius_frac, xp):
-    """Create elliptical boolean mask"""
-    radius_frac = max(0.0, min(1.0, float(radius_frac)))
-    a = (nx / 2) * radius_frac
-    b = (ny / 2) * radius_frac
-
-    Y, X = xp.ogrid[:ny, :nx]
-    cy, cx = ny / 2, nx / 2
-
-    mask = ((X - cx) / a) ** 2 + ((Y - cy) / b) ** 2 <= 1.0
-    return mask
-
-
-def gaussian_flatfield(A, gaussian_width, gaussian_filter_func):
-    """Apply Gaussian flatfield correction"""
-    return A / gaussian_filter_func(A, gaussian_width)
-
-
-def subpixel_parabola(vm, v0, vp):
-    """Subpixel refinement using parabola fit"""
-    denom = vm - 2.0 * v0 + vp
-    if abs(float(denom)) < 1e-12:
-        return 0.0
-    return 0.5 * float(vm - vp) / float(denom)
-
-
-def signed_peak(ky, kx, ny, nx):
-    """Convert peak indices to signed shifts"""
-    if ky > ny // 2:
-        ky -= ny
-    if kx > nx // 2:
-        kx -= nx
-    return float(ky), float(kx)
-
-
-def normalize_image(arr):
-    """Normalize image to 0-255 range"""
-    arr = arr.astype(np.float32)
-    lo, hi = arr.min(), arr.max()
-    if hi > lo:
-        return ((arr - lo) / (hi - lo) * 255).astype(np.uint8)
-    return arr.astype(np.uint8)
-
-
-def temporal_gaussian(arr, sigma):
-    if sigma == 0:
-        return arr
-    return gaussian_filter1d(arr.astype(np.float32), sigma=sigma, axis=0)
-
-
-def flatfield3D(arr, gw):
-    if arr.ndim != 3:
-        raise ValueError("Input array must be 3D")
-    if gw <= 1:
-        return arr
-    blurred = np_gaussian_filter(arr, sigma=(gw, gw, 1))
-    blurred[blurred == 0] = 1
-    return arr / blurred
 
 
 def complex_to_color(complex_img, mode="hsv", normalize=True):

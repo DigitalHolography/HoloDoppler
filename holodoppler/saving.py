@@ -636,6 +636,30 @@ def _write_video_fast(
         for frame in frames:
             writer.append_data(frame)
 
+def write_video_file(path, frames, fps, fourcc_code="mp4v"):
+    """
+    Writes a video file with cv2.
+    Expects frames as (T, H, W) or (T, H, W, C) in uint8.
+    """
+    if frames.ndim == 3:  # (T, H, W)
+        h, w = frames.shape[1:]
+        is_color = False
+    elif frames.ndim == 4:  # (T, H, W, C)
+        h, w = frames.shape[1:3]
+        is_color = frames.shape[3] == 3
+        if is_color:
+            # Convert RGB to BGR for OpenCV
+            frames = frames[..., ::-1]
+    else:
+        raise ValueError(f"Invalid frame shape: {frames.shape}")
+
+    out = cv2.VideoWriter(
+        path, cv2.VideoWriter_fourcc(*fourcc_code), fps, (w, h), isColor=is_color
+    )
+    for frame in frames:
+        out.write(frame)
+    out.release()
+
 
 def _normalize_to_uint8(data):
     """Helper function to normalize various data types to uint8"""
