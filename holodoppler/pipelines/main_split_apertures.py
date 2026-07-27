@@ -59,6 +59,7 @@ from pathlib import Path
 
 
 from collections import defaultdict
+from functools import cache
 
 
 # ----------------------------------------------------------------------
@@ -84,6 +85,32 @@ def make_quadrant_indices(shape, center=None):
     idx_SE = ((cy , ny + 1), (cx , nx + 1))
     
     return idx_NW, idx_NE, idx_SW, idx_SE
+
+@cache
+def phase_shift_out(xp,
+    fft,
+    pixel_pitch,
+    wavelength,
+    idx,
+    nxny):
+
+    ny, nx = nxny
+
+    ppy, ppx = pixel_pitch
+
+    y0 = (idx[0][0] + idx[0][1] - ny / 2) / 2 * ppy
+    x0 = (idx[1][0] + idx[1][1] - nx / 2) / 2 * ppx
+
+    fx = xp.fft.fftfreq(nx, d=ppx)
+    fx = xp.fft.fftshift(fx)
+    fy = xp.fft.fftfreq(ny, d=ppy)
+    fy = xp.fft.fftshift(fy)
+    FX, FY = xp.meshgrid(fx, fy)
+
+    X = wavelength * z * FX
+    Y = wavelength * z * FY    
+    
+    return xp.exp(-1j * 2 * xp.pi * (Y * y0 + X * xo) / (wavelength * z))
 
 
 def fresnel_transform_with_phase_2(
@@ -132,6 +159,14 @@ def fresnel_transform_with_phase_2(
             ),
             axes=(-1, -2),
         )
+
+    if use_output_kernel:
+        kernel_out = build_fresnel_kernel_out(
+            xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+        )
+        result = result * kernel_out
+
+    result *= phase_shift_out(xp,fft,pixel_pitch,wavelength,idx, nxny)
 
     return result
 
