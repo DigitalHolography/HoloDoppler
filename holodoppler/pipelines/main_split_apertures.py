@@ -235,6 +235,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         output_dict = {}
 
     # Temporal transform
+
     idxs, freqs = frequency_symmetric_filtering(
         xp,
         fft,
@@ -245,35 +246,25 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     )
 
     # Temporal transform
-    spectrum_f_q = {}
-    for qname, U_q in U_q_filt.items():
-        if parameters.get("temporal_transformation") == "FourierTransform":
-            # arg_U_q = xp.angle(U_q)
-            # spectrum_f_phase = fourier_time_transform(xp, fft, xp.exp(1j*arg_U_q))
-            # output_dict[qname + "_M0_phase"] = moment(xp, xp.abs(spectrum_f_phase[idxs]) **2, freqs, 0)
-            # output_dict[qname + "_M1_phase"] = moment(xp, xp.abs(spectrum_f_phase[idxs]) **2, freqs, 1)
-            spectrum_f = fourier_time_transform(xp, fft, U_q)
-        else:
-            spectrum_f = U_q
-        spectrum_f_q[qname] = spectrum_f
-
-    # U_q_filt.clear()  # free memory
-    # del U_q_filt
-
-    # output_dict["M0_phase"] = moment(xp, xp.abs(fourier_time_transform(xp, fft,  xp.exp(1j*xp.angle(U_main)))[idxs])**2, freqs, 0)
-    # output_dict["M1_phase"] = moment(xp, xp.abs(fourier_time_transform(xp, fft,  xp.exp(1j*xp.angle(U_main)))[idxs])**2, freqs, 1)
 
     U_main = fourier_time_transform(xp, fft, U_main)
+    U_main = xp.abs(U_main) ** 2
 
-    # Frequency selection
-    idxs, freqs = frequency_symmetric_filtering(
-        xp,
-        fft,
-        nt_sub,
-        parameters["sampling_freq"],
-        parameters["low_freq"],
-        parameters.get("high_freq"),
-    )
+    spectrum_f_q = {}
+    for qname, U_q in U_q_filt.items():
+        spectrum_f = fourier_time_transform(xp, fft, U_q)
+        psd = xp.abs(spectrum_f) ** 2
+        qres = {
+            qname + "_M0": moment(xp, psd[idxs], freqs, 0),
+            qname + "_M1": moment(xp, psd[idxs], freqs, 1), 
+        }
+        qres[qname + "_M0ff"] = gaussian_flatfield( 
+            qres[qname + "_M0"],
+            parameters.get("registration_flatfield_gw", 1.0),
+            gaussian_filter,
+        )
+        quadrant_moments[qname] = qres
+        output_dict.update(qres)
 
     combs = [
             # ["NW", "SW"],
@@ -284,46 +275,41 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             ["NE", "SW"],
             ] # only diagonals here
 
-    for a_name, b_name in combs:
-        cname = a_name +"x"+ b_name
-        spectr = fourier_time_transform(xp, fft, U_q_filt[a_name] * U_q_filt[b_name].conj())
-
-        A = xp.abs(spectr) ** 2
+    def process_combination(spectr, name, output_dict):
+        A = xp.abs(spectr)
 
         P = xp.angle(spectr)
 
-        output_dict[f"{cname}_M0"] = xp.sum(A[idxs], axis=0)
-        output_dict[f"{cname}_phi_band"] = xp.mean(P[idxs], axis=0)
+        output_dict[f"{cname}_{name}_amp_M0_HF"] = moment(xp, A[idxs], freqs, 0)
+        output_dict[f"{cname}_{name}_amp_M1_HF"] = moment(xp, A[idxs], freqs, 1)
+        output_dict[f"{cname}_{name}_phi_M0_HF"] = moment(xp, P[idxs], freqs, 0)
+        output_dict[f"{cname}_{name}_phi_M1_HF"] = moment(xp, P[idxs], freqs, 1)
 
-        # output_dict[f"{cname}_M0_phase"] = moment(xp, P[idxs], freqs, 0)
-        # output_dict[f"{cname}_M1_phase"] = moment(xp, P[idxs], freqs, 1)
+        for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
+            idxs_band, _ = frequency_symmetric_filtering(
+                xp, fft, nt_sub, parameters["sampling_freq"], f1, f2
+            )
+            output_dict[f"{cname}_{name}_amp_M0_LF_{k}"] = moment(xp, A[idxs_band], freqs, 0)
+            output_dict[f"{cname}_{name}_amp_M1_LF_{k}"] = moment(xp, A[idxs_band], freqs, 1)
+            output_dict[f"{cname}_{name}_phi_M0_LF_{k}"] = moment(xp, P[idxs_band], freqs, 0)
+            output_dict[f"{cname}_{name}_phi_M1_LF_{k}"] = moment(xp, P[idxs_band], freqs, 1)
+
+
+    for a_name, b_name in combs:
+        cname = a_name +"x"+ b_name
+
+        # 1----- H conj
+        spectr = fourier_time_transform(xp, fft, U_q_filt[a_name] * U_q_filt[b_name].conj())
+
+        process_combination(spectr, "Hconj", output_dict)
+
+        # 2------- SH conj
+        spectr = fourier_time_transform(xp, fft, U_q_filt[a_name]) * fourier_time_transform(xp, fft, U_q_filt[b_name]).conj()
+
+        process_combination(spectr, "SHconj", output_dict)
+
     U_q_filt.clear()  # free memory
     del U_q_filt
-
-    psd_q = {}
-    for qname, spectrum_f in spectrum_f_q.items():
-        psd = xp.abs(spectrum_f) ** 2
-        psd_q[qname] = psd
-    spectrum_f_q.clear()  # free memory
-    del spectrum_f_q
-
-    U_main = xp.abs(U_main) ** 2
-
-    # Moments
-    quadrant_moments = {}
-    for qname, psd in psd_q.items():
-        qres = {
-            qname + "_M0": moment(xp, psd[idxs], freqs, 0),
-            qname + "_M1": moment(xp, psd[idxs], freqs, 1), 
-            # qname + "_M2": moment(xp, psd[idxs], freqs, 2),   à réactiver
-        }
-        # qres[qname + "_M0ff"] = gaussian_flatfield( 
-        #     qres[qname + "_M0"],
-        #     parameters.get("registration_flatfield_gw", 1.0),
-        #     gaussian_filter,
-        # )
-        quadrant_moments[qname] = qres
-        output_dict.update(qres)
 
     
     # B_E = quadrant_moments["NE"]["NE_M0"] + quadrant_moments["SE"]["SE_M0"]
@@ -380,15 +366,15 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     )
 
     # Frequency bands à réactiver
-    for qname, psd in psd_q.items():
-        bands = {}
-        for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-            idxs_band, _ = frequency_symmetric_filtering(
-                xp, fft, nt_sub, parameters["sampling_freq"], f1, f2
-            )
-            band = xp.mean(psd[idxs_band], axis=0)
-            bands[f"{qname}_band_{k}_{f1}_{f2}"] = band
-            output_dict.update(bands)
+    # for qname, psd in psd_q.items():
+    #     bands = {}
+    #     for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
+    #         idxs_band, _ = frequency_symmetric_filtering(
+    #             xp, fft, nt_sub, parameters["sampling_freq"], f1, f2
+    #         )
+    #         band = xp.mean(psd[idxs_band], axis=0)
+    #         bands[f"{qname}_band_{k}_{f1}_{f2}"] = band
+    #         output_dict.update(bands)
 
     for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
         idxs_band, _ = frequency_symmetric_filtering(

@@ -7,7 +7,7 @@ from .utils import pad_array_centrally
 
 
 @cache
-def build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None):
+def build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, offset_to_center=None, zero_padding=None):
     """Build input Fresnel kernel"""
 
     # if isinstance(pixel_pitch, (float, int)):
@@ -22,6 +22,19 @@ def build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding
     X, Y = xp.meshgrid(x, y)
 
     kernel = xp.exp(1j * xp.pi / (wavelength * z) * (X**2 + Y**2)).astype(xp.complex64)
+
+    if offset_to_center is not None:
+        (oy_pix, ox_pix) = offset_to_center
+
+        # convert pixel offset to cycles/meter
+        ox = ox_pix / (nx * ppx)
+        oy = oy_pix / (ny * ppy)
+
+        linear_ramp = xp.exp(
+            -1j * 2 * xp.pi * (oy * Y + ox * X)
+        ).astype(xp.complex64)
+
+        kernel *= linear_ramp
 
     if zero_padding:
         kernel = pad_array_centrally(kernel, zero_padding, xp)
