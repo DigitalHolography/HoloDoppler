@@ -45,6 +45,8 @@ from holodoppler.registration import (
     register_images_shifts,
     apply_register_images_shifts,
 )
+from holodoppler.utils import elliptical_mask
+
 from holodoppler.file_reader import FileReaderFactory
 
 import cupy as cp
@@ -95,7 +97,7 @@ def fresnel_transform_with_phase_2(
     wavelength,
     phase_term,
     idx,
-    nxny=[0, 0],
+    nxny=(0, 0),
     zero_padding=False,
     use_output_kernel=True,
 ):
@@ -161,7 +163,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
                     parameters["wavelength"],
                     phase_term,
                     nxny=frames.shape[-2:],
-                    idx=quadrant_idxs[qname],
+                    idx=idx,
                     zero_padding=parameters.get("Fresnel_zero_padding", False),
                     use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
                 )
@@ -177,7 +179,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
                     parameters["wavelength"],
                     None,
                     nxny=frames.shape[-2:],
-                    idx=quadrant_idxs[qname],
+                    idx=idx,
                     use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
                 )
         U_quadrants[qname] = U_q
@@ -265,10 +267,10 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         output_dict.update(qres)
 
     combs = [
-        ["NW", "SW"],
-        ["NE", "SE"],
-        ["NW", "NE"],
-        ["SW", "SE"],
+        # ["NW", "SW"],
+        # ["NE", "SE"],
+        # ["NW", "NE"],
+        # ["SW", "SE"],
         ["NW", "SE"],
         ["NE", "SW"],
     ]  # only diagonals here
@@ -310,14 +312,20 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     for a_name, b_name in combs:
         cname = a_name + "x" + b_name
 
+        process_combination(U_q_filt[a_name], U_q_filt[b_name], cname, "", output_dict)
         process_combination(
-            U_q_filt[a_name], U_q_filt[b_name], cname, "", output_dict
+            xp.abs(U_q_filt[a_name]),
+            xp.abs(U_q_filt[b_name]),
+            cname,
+            "amp",
+            output_dict,
         )
         process_combination(
-            xp.abs(U_q_filt[a_name]), xp.abs(U_q_filt[b_name]), cname, "amp", output_dict
-        )
-        process_combination(
-            xp.angle(U_q_filt[a_name]), xp.angle(U_q_filt[b_name]), cname, "phi", output_dict
+            xp.angle(U_q_filt[a_name]),
+            xp.angle(U_q_filt[b_name]),
+            cname,
+            "phi",
+            output_dict,
         )
 
     U_q_filt.clear()  # free memory
@@ -440,12 +448,16 @@ def _process_shack_hartmann(parameters, frames, output_dict=None):
             parameters["shack_hartmann_svd_threshold"],
         )
 
+    _, _, Ny, Nx = U.shape
+
     # Displacement estimation
     if parameters.get("shack_hartmann_graph_laplacian", False):  # Use all the sub aps
+        radius = parameters.get("shack_hartmann_radius", None)
         shifts_y, shifts_x = calculate_displacements_graph_laplacian(
             cp,
             fft,
             U,
+            mask = elliptical_mask(Ny, Nx, radius, cp) ,
             pupil_threshold=parameters.get("shack_hartmann_pupil_threshold", 1.0),
             deviation_threshold=parameters.get(
                 "shack_hartmann_deviation_threshold", 3.0
@@ -602,6 +614,8 @@ def preview(file_path, parameters):
         res_np,
         _get_default_output_path(file_reader.file_path) / "preview" / "SPLIT_APERTURES",
     )
+    (_get_default_output_path(file_reader.file_path) / "preview" / "SPLIT_APERTURES" / "h5").mkdir(exist_ok=True)
+    _save_h5_2(_get_default_output_path(file_reader.file_path) / "preview" / "SPLIT_APERTURES",res_np,parameters)
 
     return res_np["M0ff"]
 
@@ -636,7 +650,7 @@ def process(file_path, parameters):
     else:
         num_batch = int((end_frame - first_frame) / batch_stride)
     if num_batch <= 0:
-        return None
+        pass
 
     output_np = defaultdict(list)
 
@@ -848,7 +862,7 @@ def process(file_path, parameters):
     if parameters.get("square", False):
         output_np = {
             k: (
-                cp.asnumpy(square_cupy(cp.array(v), newy=512, newx=512))
+                cp.asnumpy(square_cupy(cp.array(v), newy=v.shape[-2]*2, newx=v.shape[-1]*2))
                 if v.ndim == 3
                 else v
             )

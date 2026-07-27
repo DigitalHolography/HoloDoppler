@@ -8,7 +8,7 @@ end_frame: -1 # -1 means process all frames
 
 # Propagation parameters
 spatial_propagation: "Fresnel"  # Options: "Fresnel" or "AngularSpectrum"
-z: "use_holovibes"  # Propagation distance in meters
+z: 0.48  # Propagation distance in meters
 wavelength: 852.0e-9  # Wavelength in meters
 pixel_pitch: "use_holovibes"  # Pixel pitch in meters [y, x]
 
@@ -46,7 +46,8 @@ registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
 square: true
 
 # Shack-Hartmann wavefront sensing
-shack_hartmann: false  # Enable Shack-Hartmann processing
+shack_hartmann: true  # Enable Shack-Hartmann processing
+shack_hartmann_radius: 0.9
 shack_hartmann_nx_subap: 5  # Number of subapertures in X
 shack_hartmann_ny_subap: 5  # Number of subapertures in Y
 shack_hartmann_svd_threshold: 10
