@@ -248,6 +248,7 @@ def calculate_displacements_graph_laplacian(
     xp,
     fft,
     U_subaps,
+    mask=None,
     pupil_threshold=1.0,
     deviation_threshold=3.0,
     shifts_range=20.0,
@@ -258,6 +259,10 @@ def calculate_displacements_graph_laplacian(
     eps = 1e-12
 
     U = U_subaps.reshape(B, Ny, Nx)
+    if mask is not None:
+        mask_f = mask.astype(xp.float32, copy=False)
+        mean = xp.sum(U * mask_f, axis=(-2,-1)) / xp.maximum(xp.sum(mask_f, axis=(-2,-1)), 1.0)
+        U = (U - mean[:, xp.newaxis, xp.newaxis]) * mask_f
 
     yy, xx = xp.meshgrid(
         xp.linspace(-1, 1, ny_s),
