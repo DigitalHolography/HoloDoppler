@@ -453,11 +453,22 @@ def _process_shack_hartmann(parameters, frames, output_dict=None):
     # Displacement estimation
     if parameters.get("shack_hartmann_graph_laplacian", False):  # Use all the sub aps
         radius = parameters.get("shack_hartmann_radius", None)
+        if isinstance(radius, tuple):
+            r1, r2 = radius
+            mask1 = elliptical_mask(Ny, Nx, r1, cp)
+            mask2 = elliptical_mask(Ny, Nx, r2, cp)
+            mask = mask1 & mask2
+        else:
+            if radius is None:
+                mask = None
+            else: 
+                mask = elliptical_mask(Ny, Nx, radius, cp)
+
         shifts_y, shifts_x = calculate_displacements_graph_laplacian(
             cp,
             fft,
             U,
-            mask = elliptical_mask(Ny, Nx, radius, cp) ,
+            mask = mask,
             pupil_threshold=parameters.get("shack_hartmann_pupil_threshold", 1.0),
             deviation_threshold=parameters.get(
                 "shack_hartmann_deviation_threshold", 3.0
@@ -467,7 +478,6 @@ def _process_shack_hartmann(parameters, frames, output_dict=None):
             ),
         )
     else:  # Use only the shifts to the central sub ap
-        ny_s, nx_s, Ny, Nx = U.shape
         shifts_y, shifts_x = calculate_displacements(
             cp,
             fft,
