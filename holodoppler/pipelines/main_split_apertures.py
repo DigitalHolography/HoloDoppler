@@ -93,6 +93,7 @@ def phase_shift_out(xp,
     fft,
     pixel_pitch,
     wavelength,
+    z,
     idx,
     nxny):
 
@@ -112,7 +113,7 @@ def phase_shift_out(xp,
     X = wavelength * z * FX
     Y = wavelength * z * FY    
     
-    return xp.exp(-1j * 2 * xp.pi * (Y * y0 + X * xo) / (wavelength * z))
+    return xp.exp(-1j * 2 * xp.pi * (Y * y0 + X * x0) / (wavelength * z))
 
 
 def fresnel_transform_with_phase_2(
@@ -161,13 +162,15 @@ def fresnel_transform_with_phase_2(
             axes=(-1, -2),
         )
 
+    Ny, Nx = result.shape[-2:]
+
     if use_output_kernel:
         kernel_out = build_fresnel_kernel_out(
-            xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+            xp, z, pixel_pitch, wavelength, Ny, Nx, zero_padding=None
         )
         result = result * kernel_out
 
-    result *= phase_shift_out(xp,fft,pixel_pitch,wavelength,idx, nxny)
+    result *= phase_shift_out(xp,fft,pixel_pitch,wavelength,z,idx, (Ny, Nx))
 
     return result
 
@@ -313,10 +316,11 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     def process_spectr(spectr, prefix, suffix, output_dict):
         A = xp.abs(spectr)
 
-        # P = xp.angle(spectr)
+        P = xp.angle(spectr)
 
         output_dict[f"{prefix}_{suffix}_M0_HF"] = moment(xp, A[idxs], freqs, 0)
-        output_dict[f"{prefix}_{suffix}_M1_HF"] = moment(xp, A[idxs], freqs, 1)
+        output_dict[f"{prefix}_{suffix}_M0_HF_phi"] = moment(xp, P[idxs], freqs, 0)
+        # output_dict[f"{prefix}_{suffix}_M1_HF"] = moment(xp, A[idxs], freqs, 1)
 
         for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
             idxs_band, freqs_band = frequency_symmetric_filtering(
@@ -325,11 +329,21 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             output_dict[f"{prefix}_{suffix}_M0_LF_{k}"] = moment(
                 xp, A[idxs_band], freqs_band, 0
             )
-            output_dict[f"{prefix}_{suffix}_M1_LF_{k}"] = moment(
-                xp, A[idxs_band], freqs_band, 1
-            )
+            # output_dict[f"{prefix}_{suffix}_M1_LF_{k}"] = moment(
+            #     xp, A[idxs_band], freqs_band, 1
+            # )
+    
+    def process_cube(cube, prefix, suffix, output_dict):
+        A = xp.abs(cube)
+        # P = xp.angle(cube)
+        for k, (i1, i2) in enumerate(parameters.get("pca_indices", [])):
+            output_dict[f"{prefix}_{suffix}_PCA_{k}"] = xp.mean(A[i1:i2], axis=0)
+            # output_dict[f"{prefix}_{suffix}_PCA_{k}_phi"] = xp.mean(P[i1:i2], axis=0)
+
 
     def process_combination(U_q_filta, U_q_filtb, cname, suffix, output_dict):
+
+        # A time fft
 
         # 1----- H conj
         spectr = fourier_time_transform(xp, fft, U_q_filta * U_q_filtb.conj())
@@ -344,24 +358,31 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
 
         process_spectr(spectr, cname, f"{suffix}_SHconj", output_dict)
 
+        # B time pca
+
+        proj_cube = pca_time_transform(xp, U_q_filta * U_q_filtb.conj(), remove_dc=True)
+        process_cube(proj_cube, cname, f"{suffix}_Hconj", output_dict)
+
+
+
     for a_name, b_name in combs:
         cname = a_name + "x" + b_name
 
         process_combination(U_q_filt[a_name], U_q_filt[b_name], cname, "", output_dict)
-        process_combination(
-            xp.abs(U_q_filt[a_name]),
-            xp.abs(U_q_filt[b_name]),
-            cname,
-            "amp",
-            output_dict,
-        )
-        process_combination(
-            xp.angle(U_q_filt[a_name]),
-            xp.angle(U_q_filt[b_name]),
-            cname,
-            "phi",
-            output_dict,
-        )
+        # process_combination(
+        #     xp.abs(U_q_filt[a_name]),
+        #     xp.abs(U_q_filt[b_name]),
+        #     cname,
+        #     "amp",
+        #     output_dict,
+        # )
+        # process_combination(
+        #     xp.angle(U_q_filt[a_name]),
+        #     xp.angle(U_q_filt[b_name]),
+        #     cname,
+        #     "phi",
+        #     output_dict,
+        # )
 
     U_q_filt.clear()  # free memory
     del U_q_filt

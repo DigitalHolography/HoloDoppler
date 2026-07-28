@@ -28,7 +28,9 @@ frequency_bands: # Frequency bands for different cutoffs of the psd in Hz. It wi
   - [1000, 999999]
 #   - [9000, 18000]
 
-pca_indices: [0,16]
+pca_indices: 
+  - [0,16]
+  - [0,39]
 
 # Filtering 2D frequencies
 filter2d: true
@@ -47,7 +49,7 @@ square: true
 
 # Shack-Hartmann wavefront sensing
 shack_hartmann: true  # Enable Shack-Hartmann processing
-shack_hartmann_radius: 0.9
+shack_hartmann_radius: Null
 shack_hartmann_nx_subap: 5  # Number of subapertures in X
 shack_hartmann_ny_subap: 5  # Number of subapertures in Y
 shack_hartmann_svd_threshold: 10
