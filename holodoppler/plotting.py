@@ -612,6 +612,26 @@ class CalibrationSpectrumPlotter:
     def close(self):
         self.fig.clear()
 
+def subaperture_montage(U_subaps):
+    rows = []
+    for iy in range(U_subaps.shape[0]):
+        row_imgs = []
+        for ix in range(U_subaps.shape[1]):
+            img = U_subaps[iy, ix]
+
+            if self.normalize_per_frame:
+                # Normalize each frame individually
+                img = normalize_image(img)
+            else:
+                # Keep as is for global normalization later
+                img = img.astype(np.float32)
+
+            row_imgs.append(img)
+        rows.append(np.hstack(row_imgs))
+
+    # Create the full montage
+    return np.vstack(rows)
+
 
 class SubapertureMontagePlotter:
     """Montage of subaperture images"""
