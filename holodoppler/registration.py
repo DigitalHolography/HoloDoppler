@@ -6,6 +6,43 @@ from .utils import elliptical_mask
 from .utils import signed_peak, subpixel_parabola
 
 
+def register_laplacian(xp, fft, video, radius=None, gauge="minimal", ref_frame=0):
+    """Estimate globally consistent integer shifts from all frame pairs."""
+    nt, ny, nx = video.shape
+    mask = elliptical_mask(ny, nx, radius, xp) if radius else None
+    preprocessed = xp.zeros((nt, ny, nx), dtype=xp.float32)
+    for index in range(nt):
+        frame = video[index].astype(xp.float32, copy=False)
+        preprocessed[index] = _preprocess(xp, frame, mask=mask)
+
+    pairwise_y = xp.zeros((nt, nt), dtype=xp.float32)
+    pairwise_x = xp.zeros((nt, nt), dtype=xp.float32)
+    counts = xp.zeros((nt, nt), dtype=xp.float32)
+    for first in range(nt):
+        for second in range(first + 1, nt):
+            shift_y, shift_x = intensity_corr_integer(
+                xp,
+                fft,
+                preprocessed[first],
+                preprocessed[second],
+            )
+            pairwise_y[first, second] = shift_y
+            pairwise_x[first, second] = shift_x
+            pairwise_y[second, first] = -shift_y
+            pairwise_x[second, first] = -shift_x
+            counts[first, second] = counts[second, first] = 1
+
+    row_counts = xp.maximum(xp.sum(counts, axis=1), 1)
+    shifts_y = xp.sum(pairwise_y, axis=1) / row_counts
+    shifts_x = xp.sum(pairwise_x, axis=1) / row_counts
+
+    if gauge == "minimal":
+        return shifts_y - xp.mean(shifts_y), shifts_x - xp.mean(shifts_x)
+    if gauge == "reference":
+        return shifts_y - shifts_y[ref_frame], shifts_x - shifts_x[ref_frame]
+    raise ValueError(f"gauge must be 'minimal' or 'reference', got {gauge!r}")
+
+
 
 
 
@@ -19,17 +56,37 @@ def register_images_shifts(
     gaussian_sigma=None,
     gaussian_filter=None,
     integer_translation=True,
+    sub_pixel=None,
 ):
     ny, nx = fixed.shape[-2:]
 
-    mask = elliptical_mask(ny, nx, radius, xp) if radius else None
+    if isinstance(radius, (tuple, list)) and len(radius) == 2:
+        inner_radius, outer_radius = radius
+        mask = ~elliptical_mask(ny, nx, inner_radius, xp)
+        mask &= elliptical_mask(ny, nx, outer_radius, xp)
+    else:
+        mask = elliptical_mask(ny, nx, radius, xp) if radius else None
 
     fixed_f = fixed.astype(xp.float32, copy=False)
     moving_f = moving.astype(xp.float32, copy=False)
 
-    fixed_e = _preprocess(xp, fixed_f, mask=mask, gaussian_sigma=gaussian_sigma, gaussian_filter=gaussian_filter)
-    moving_e = _preprocess(xp, moving_f, mask=mask, gaussian_sigma=gaussian_sigma, gaussian_filter=gaussian_filter)
+    fixed_e = _preprocess(
+        xp,
+        fixed_f,
+        mask=mask,
+        gaussian_sigma=gaussian_sigma,
+        gaussian_filter=gaussian_filter,
+    )
+    moving_e = _preprocess(
+        xp,
+        moving_f,
+        mask=mask,
+        gaussian_sigma=gaussian_sigma,
+        gaussian_filter=gaussian_filter,
+    )
 
+    if sub_pixel is not None:
+        integer_translation = not sub_pixel
     if integer_translation:
         shift_y, shift_x = intensity_corr_integer(xp, fft, fixed_e, moving_e)
     else:
@@ -40,11 +97,26 @@ def register_images_shifts(
 def apply_register_images_shifts(
     xp,
     image,
-    shift_y,
-    shift_x,
+    shift_y=None,
+    shift_x=None,
+    *extra,
     fft=None,
-    integer_translation=True,
+    integer_translation=None,
 ):
+    """Apply release-style or dev-style registration shift arguments."""
+    if extra:
+        if len(extra) != 1:
+            raise TypeError("Unexpected positional arguments for image registration.")
+        supplied_fft = image
+        image, shift_y, shift_x = shift_y, shift_x, extra[0]
+        if fft is None:
+            fft = supplied_fft
+
+    if shift_y is None or shift_x is None:
+        raise TypeError("Both shift_y and shift_x are required.")
+    if integer_translation is None:
+        integer_translation = isinstance(shift_y, int) and isinstance(shift_x, int)
+
     if integer_translation:
         return xp.roll(
             xp.roll(image, int(round(float(shift_y))), axis=-2),
@@ -275,6 +347,9 @@ def intensity_corr_subpixel(xp, fft, fixed, moving):
     )
 
     return -(peak_y + sub_y), -(peak_x + sub_x)
+
+
+intensity_corr_sub_pixel = intensity_corr_subpixel
 
 
 def phase_corr_subpixel(xp, fft, fixed, moving):

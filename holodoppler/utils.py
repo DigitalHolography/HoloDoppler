@@ -26,12 +26,15 @@ from functools import cache
 #     return zoom(video_frames, (1, scale_factor, scale_factor, 1), order=1)
 
 # For exact dimensions instead of scale
-def square_cupy(video_frames):
+def square_cupy(video_frames, newy=None, newx=None):
     h, w = video_frames.shape[1], video_frames.shape[2]
-    m = max(h,w)
-    scale_h = m / h
-    scale_w = m / w
-    return zoom_gpu(video_frames, (1, scale_h, scale_w), order=1)
+    if newy is None or newx is None:
+        target_height = target_width = max(h, w)
+    else:
+        target_height, target_width = newy, newx
+    scale_h = target_height / h
+    scale_w = target_width / w
+    return zoom_gpu(video_frames, (1, scale_h, scale_w), order=3)
 
 def normalize_to_uint8(data):
     """
@@ -715,6 +718,20 @@ def update_from_footer(parameters, holofooter):
     try:
         if parameters.get("wavelength") == "use_holovibes" and holofooter is not None:
             parameters["wavelength"] = holofooter["compute_settings"]["image_rendering"]["lambda"]
+        if parameters.get("spatial_propagation") == "use_holovibes" and holofooter is not None:
+            holovibes_transform = holofooter["compute_settings"]["image_rendering"][
+                "space_transformation"
+            ]
+            if holovibes_transform == "FRESNELTR":
+                parameters["spatial_propagation"] = "Fresnel"
+            elif holovibes_transform == "ANGULARTR":
+                parameters["spatial_propagation"] = "AngularSpectrum"
+            else:
+                print(
+                    "Couldn't parse spatial transform name in Holovibes footer "
+                    f"({holovibes_transform!r}); using Fresnel."
+                )
+                parameters["spatial_propagation"] = "Fresnel"
         if parameters.get("z") == "use_holovibes" and holofooter is not None:
             parameters["z"] = holofooter["compute_settings"]["image_rendering"]["propagation_distance"]
         if parameters.get("pixel_pitch") == "use_holovibes" and holofooter is not None:

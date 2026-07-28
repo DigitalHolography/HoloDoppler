@@ -57,16 +57,22 @@ class HoloFileReader:
         self.file_path = file_path
         self.file_header: Optional[FileHeader] = None
         self.file_footer: Optional[dict] = None
+        self._frame_data: Optional[np.memmap] = None
         self._read_header()
         self._read_footer()
 
     def open(self):
-        """Compatibility method - does nothing, kept for backward compatibility."""
-        pass
+        """Open the cached memory-mapped frame view."""
+        self.get_np_memmap()
+        return self
 
     def close(self):
-        """Compatibility method - does nothing, kept for backward compatibility."""
-        pass
+        """Release the cached memory map while keeping the reader reusable."""
+        if self._frame_data is not None:
+            mmap_handle = getattr(self._frame_data, "_mmap", None)
+            if mmap_handle is not None and not mmap_handle.closed:
+                mmap_handle.close()
+            self._frame_data = None
 
     def _read_header(self) -> FileHeader:
         """Read and parse the 64-byte file header from self.file_path."""
@@ -174,69 +180,34 @@ class HoloFileReader:
             for batch in reader.read_frames(batch_size=16, batch_stride=8):
                 gpu_process(batch)  # batch shape: (16, height, width)
         """
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive.")
         if batch_stride is None:
             batch_stride = batch_size
+        if batch_stride <= 0:
+            raise ValueError("batch_stride must be positive.")
 
-        # Calculate frame range
-        if end_frame is None:
-            end_frame = self.header.num_frames
-        total_available = end_frame - first_frame
+        frame_step = skip_every if skip_every is not None and skip_every > 1 else 1
+        stop = self.header.num_frames if end_frame is None else min(
+            end_frame,
+            self.header.num_frames,
+        )
         if num_frames is not None:
-            total_available = min(num_frames, total_available)
+            stop = min(stop, first_frame + num_frames)
 
-        frame_start_offset = self.HEADER_SIZE + first_frame * self.header.frame_size_bytes
-
-        with open(self.file_path, "rb") as f:
-            buffer = []
-            frames_in_buffer = 0
-            frames_since_last_batch = 0
-            batches_yielded = 0
-            total_frames_encountered = 0
-
-            for frame_idx in range(total_available):
-
-                # Apply frame skipping
-                total_frames_encountered += 1
-                if skip_every is not None and skip_every > 1:
-                    if (total_frames_encountered - 1) % skip_every != 0:
-                        continue
-
-                # Handle striding between batches
-                if frames_in_buffer == 0:
-                    frames_since_last_batch += 1
-                    if frames_since_last_batch < batch_stride and len(buffer) > 0:
-                        continue  # Skip frames in stride gap
-
-                # Read frame
-                byte_offset = frame_start_offset + frame_idx * self.header.frame_size_bytes
-                frame = self._get_frame_at_offset(f, byte_offset)
-                if frame is None:
-                    break
-
-                buffer.append(frame)
-                frames_in_buffer += 1
-
-                if frames_in_buffer == batch_size:
-                    # Yield batch
-                    if batch_size == 1:
-                        yield buffer[0]  # Return single frame without extra dimension
-                    else:
-                        yield np.stack(buffer, axis=0)
-
-                    batches_yielded += 1
-
-
-                    # Prepare for next batch
-                    if batch_stride < batch_size:
-                        # Keep overlap frames
-                        overlap = batch_size - batch_stride
-                        buffer = buffer[-overlap:] if overlap > 0 else []
-                        frames_in_buffer = len(buffer)
-                    else:
-                        buffer = []
-                        frames_in_buffer = 0
-
-                    frames_since_last_batch = 0
+        frames = self.get_np_memmap()
+        start = first_frame
+        while start < stop:
+            final_index = start + (batch_size - 1) * frame_step
+            if final_index >= stop:
+                break
+            if frame_step == 1:
+                batch = frames[start : start + batch_size]
+            else:
+                indices = start + np.arange(batch_size) * frame_step
+                batch = frames[indices]
+            yield batch[0] if batch_size == 1 else batch
+            start += batch_stride
 
     def read_frames(
         self,
@@ -244,7 +215,13 @@ class HoloFileReader:
         batch_size: int = 1,
         skip_every: Optional[int] = None
     ) -> np.ndarray:
-        return next(self.iter_frames( batch_size= batch_size, skip_every = skip_every, first_frame = first_frame))
+        return next(
+            self.iter_frames(
+                batch_size=batch_size,
+                skip_every=skip_every,
+                first_frame=first_frame,
+            )
+        )
 
 
     def read_selected_frames(self, indices: List[int]) -> Iterator[np.ndarray]:
@@ -257,16 +234,10 @@ class HoloFileReader:
         Yields:
             numpy arrays of shape (height, width)
         """
-        frame_start = self.HEADER_SIZE
-
-        with open(self.file_path, "rb") as f:
-            for idx in sorted(indices):
-                if idx >= self.header.num_frames:
-                    continue
-                byte_offset = frame_start + idx * self.header.frame_size_bytes
-                frame = self._get_frame_at_offset(f, byte_offset)
-                if frame is not None:
-                    yield frame
+        frames = self.get_np_memmap()
+        for idx in sorted(indices):
+            if 0 <= idx < self.header.num_frames:
+                yield frames[idx]
 
     # ===== CONTEXT MANAGER SUPPORT =====
 
@@ -276,8 +247,13 @@ class HoloFileReader:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Nothing to clean up since we don't hold file handles."""
-        pass
+        self.close()
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
 
     @property
     def frame_shape(self) -> Tuple[int, int]:
@@ -314,18 +290,20 @@ class HoloFileReader:
 
         Also note: memmap dtype must match your data's bit depth and endianness.
         """
-        return np.memmap(
-            self.file_path,
-            dtype=self.header.get_dtype(),
-            mode='r',
-            offset=self.HEADER_SIZE,
-            order='C',
-            shape=(
-                self.header.num_frames,
-                self.header.height,
-                self.header.width
+        if self._frame_data is None:
+            self._frame_data = np.memmap(
+                self.file_path,
+                dtype=self.header.get_dtype(),
+                mode="r",
+                offset=self.HEADER_SIZE,
+                order="C",
+                shape=(
+                    self.header.num_frames,
+                    self.header.height,
+                    self.header.width,
+                ),
             )
-        )
+        return self._frame_data
 
 @njit
 def _unpack_12bitL(data: bytes, width: int, height: int) -> np.ndarray:

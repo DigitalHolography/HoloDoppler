@@ -23,12 +23,52 @@ class ParameterField:
 
 class SettingsEditor(ttk.Frame):
     GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-        ("Processing", ("pipeline_name", "batch_size", "batch_stride", "accumulation", "first_frame", "end_frame")),
+        (
+            "Processing",
+            (
+                "pipeline_name",
+                "batch_size",
+                "batch_stride",
+                "accumulation",
+                "time_window",
+                "time_stride",
+                "time_slide",
+                "sh_time_accumulation",
+                "num_workers",
+                "first_frame",
+                "end_frame",
+            ),
+        ),
         ("Optics", ("wavelength", "pixel_pitch", "spatial_propagation", "zero_padding", "z")),
         ("Registration", ("image_registration", "image_registration_type", "registration_", "apply_registration")),
         ("Shack-Hartmann", ("shack_hartmann",)),
-        ("Frequency", ("temporal_transformation", "sampling_freq", "low_freq", "high_freq", "frequency_bands", "svd_threshold")),
-        ("Output", ("square", "transpose", "flip_x", "flip_y", "debug")),
+        (
+            "Frequency",
+            (
+                "temporal_transformation",
+                "time_transform",
+                "sampling_freq",
+                "low_freq",
+                "high_freq",
+                "frequency_bands",
+                "filter2d",
+                "pca_",
+                "svd_",
+            ),
+        ),
+        (
+            "Output",
+            (
+                "saving_to_folder",
+                "square",
+                "transpose",
+                "flip_x",
+                "flip_y",
+                "contrast",
+                "smoothing",
+                "debug",
+            ),
+        ),
     )
 
     CHOICES: dict[str, tuple[str, ...]] = {
@@ -316,7 +356,16 @@ def _pipeline_choice_pairs() -> tuple[tuple[str, str], ...]:
         if name.startswith("preview_")
     }
     process_names = sorted(name for name in pipelines if not name.startswith("preview_"))
-    preferred_order = ["sliding_shack_hartmann", "sliding", "simple", "main"]
+    preferred_order = [
+        "simple",
+        "sliding",
+        "sliding_shack_hartmann",
+        "split_apertures",
+        "pca_accumulation",
+        "sh_avg",
+        "simple_numpy",
+        "main",
+    ]
     ordered_names = [
         name for name in preferred_order if name in process_names
     ] + [
@@ -337,6 +386,10 @@ def _pipeline_label(name: str, *, supports_preview: bool) -> str:
         "sliding_shack_hartmann": "Sliding Shack-Hartmann",
         "sliding": "Sliding",
         "simple": "Simple",
+        "simple_numpy": "Simple (CPU multiprocessing)",
+        "split_apertures": "Split apertures",
+        "pca_accumulation": "PCA accumulation",
+        "sh_avg": "Shack-Hartmann average",
         "main": "Legacy moments main",
         "moments_main_pipeline": "Moments main pipeline",
     }

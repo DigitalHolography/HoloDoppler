@@ -5,16 +5,37 @@ Filtering operations: SVD, frequency filtering
 from functools import cache
 from .utils import elliptical_mask
 
-def svd_filter(xp, H, svd_threshold, filter_mode="number_of_values", remove_dc=False, debug=False):
+
+def filter_2d(xp, fft, frames, filter2d_low):
+    nt, ny, nx = frames.shape
+
+    F = fft.fft2(frames)
+
+    mask = elliptical_mask(ny, nx, filter2d_low, xp)
+
+    # import matplotlib.pyplot as plt
+    # plt.imshow(fft.fftshift(~mask).get())
+    # plt.show()
+
+    F = F * fft.fftshift(~mask)
+
+    F = fft.ifft2(F)
+
+    return F
+
+
+def svd_filter(
+    xp, H, svd_threshold, filter_mode="number_of_values", remove_dc=False, debug=False
+):
     """SVD filtering to remove tissue signal"""
 
     if svd_threshold < 0:
         if debug:
-            return H, None,  None, None, None, None, None
+            return H, None, None, None, None, None, None
         return H
 
     if remove_dc:
-        dc = xp.mean(H,axis=0)
+        dc = xp.mean(H, axis=0)
         H = H - dc
     else:
         dc = None
@@ -47,21 +68,38 @@ def svd_filter(xp, H, svd_threshold, filter_mode="number_of_values", remove_dc=F
         Ht = H2 - H2 @ Vtbar @ Vtbar.conj().T
         H2 -= U @ Vt.conj().T
         # filtered H (complex), removed features U (complex), removed H (complex), eigenvalues S (real >=0), cov matrix (complex), eigenvectors (complex), dc image (complex)
-        return H2.T.reshape(sz), U.reshape((sz[-2],sz[-1],-1)), Ht.T.reshape(sz), S, cov, V, dc
+        return (
+            H2.T.reshape(sz),
+            U.reshape((sz[-2], sz[-1], -1)),
+            Ht.T.reshape(sz),
+            S,
+            cov,
+            V,
+            dc,
+        )
 
     H2 -= H2 @ Vt @ Vt.conj().T
     return H2.T.reshape(sz)
 
-def svd_filter_stdmeanratio(xp, H, svd_threshold, stdmeanratio = 0.5, filter_mode="number_of_values", remove_dc=False, debug=False):
+
+def svd_filter_stdmeanratio(
+    xp,
+    H,
+    svd_threshold,
+    stdmeanratio=0.5,
+    filter_mode="number_of_values",
+    remove_dc=False,
+    debug=False,
+):
     """SVD filtering to remove tissue signal"""
 
     if svd_threshold < 0:
         if debug:
-            return H, None,  None, None, None, None, None
+            return H, None, None, None, None, None, None
         return H
 
     if remove_dc:
-        dc = xp.mean(H,axis=0)
+        dc = xp.mean(H, axis=0)
         H = H - dc
     else:
         dc = None
@@ -91,28 +129,34 @@ def svd_filter_stdmeanratio(xp, H, svd_threshold, stdmeanratio = 0.5, filter_mod
 
     U = H2 @ Vt
 
-    U = U.reshape((sz[-2],sz[-1],-1))
+    U = U.reshape((sz[-2], sz[-1], -1))
 
-    ratios = xp.std(U,axis = (0,1)) / xp.mean(U,axis = (0,1))
+    ratios = xp.std(U, axis=(0, 1)) / xp.mean(U, axis=(0, 1))
 
     second_mask = ratios < stdmeanratio
     Vtt = Vt[:, second_mask]
 
-
-
-
     if debug:
-        U = U[:,:,second_mask]
-        U = U.reshape((-1,U.shape[-1]))
+        U = U[:, :, second_mask]
+        U = U.reshape((-1, U.shape[-1]))
         # print(Vtbar.shape, Vt[:, ~second_mask].shape)
-        Vttbar = xp.concatenate([Vtbar,Vt[:, ~second_mask]], axis=-1)
+        Vttbar = xp.concatenate([Vtbar, Vt[:, ~second_mask]], axis=-1)
         Ht = H2 - H2 @ Vttbar @ Vttbar.conj().T
         H2 -= U @ Vtt.conj().T
         # filtered H (complex), removed features U (complex), removed H (complex), eigenvalues S (real >=0), cov matrix (complex), eigenvectors (complex), dc image (complex)
-        return H2.T.reshape(sz), U.reshape((sz[-2],sz[-1],-1)), Ht.T.reshape(sz), S, cov, V, dc
+        return (
+            H2.T.reshape(sz),
+            U.reshape((sz[-2], sz[-1], -1)),
+            Ht.T.reshape(sz),
+            S,
+            cov,
+            V,
+            dc,
+        )
 
     H2 -= H2 @ Vtt @ Vtt.conj().T
     return H2.T.reshape(sz)
+
 
 def svd_filter_batched(xp, U_subaps, svd_threshold):
     """Batched SVD filter for subapertures"""
@@ -155,9 +199,25 @@ def frequency_symmetric_filtering(
 
     return idxs, freqs[idxs]
 
+
 def fourier_time_transform(xp, fft, H):
     """FFT along time axis"""
     return fft.fft(H, axis=0, norm="ortho")
+
+
+def pca_time_transform(xp, H, remove_dc=False):
+    if remove_dc:
+        dc = xp.mean(H, axis=0)
+        H = H - dc
+    sz = H.shape
+    H2 = H.reshape((sz[0], sz[-1] * sz[-2])).T
+
+    cov = H2.conj().T @ H2
+
+    S, V = xp.linalg.eigh(cov)
+
+    return (H2 @ V).T.reshape(sz)
+
 
 def corner_compensation(xp, psd):
     n_freqs, ny, nx = psd.shape

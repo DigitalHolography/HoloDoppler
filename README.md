@@ -36,6 +36,22 @@ holodoppler preview "D:\path\to\holo.holo" "./parameters/default_parameters_debu
 
 The `--debug` provides more output visually and `--tictoc` provides information about processing time.
 
+### Available Processing Presets
+
+The GUI and installer include presets for:
+
+- `simple`: GPU processing with optional 2D filtering and subpixel registration.
+- `sliding`: sliding-window processing.
+- `sliding_shack_hartmann`: accumulated Shack-Hartmann correction.
+- `split_apertures`: split-aperture and quadrant correlations.
+- `pca_accumulation`: PCA/FFT accumulation.
+- `sh_avg`: Shack-Hartmann spectrum averaging.
+- `simple_numpy`: CPU multiprocessing.
+- `main`: the legacy backend-selectable moments pipeline.
+
+Select the matching preset in the GUI before changing its pipeline name; each
+pipeline has its own required parameters.
+
 ### Run the GUI
 
 ```bash

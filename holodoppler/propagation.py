@@ -14,7 +14,16 @@ def hashable_pixel_pitch(pixel_pitch):
 
 
 @cache
-def build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None):
+def build_fresnel_kernel_in(
+    xp,
+    z,
+    pixel_pitch,
+    wavelength,
+    ny,
+    nx,
+    offset_to_center=None,
+    zero_padding=None,
+):
     """Build input Fresnel kernel"""
 
     # if isinstance(pixel_pitch, (float, int)):
@@ -30,10 +39,18 @@ def build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding
 
     kernel = xp.exp(1j * xp.pi / (wavelength * z) * (X**2 + Y**2)).astype(xp.complex64)
 
+    if offset_to_center is not None:
+        offset_y_pixels, offset_x_pixels = offset_to_center
+        offset_x = offset_x_pixels / (nx * ppx)
+        offset_y = offset_y_pixels / (ny * ppy)
+        kernel *= xp.exp(
+            -1j * 2 * xp.pi * (offset_y * Y + offset_x * X)
+        ).astype(xp.complex64)
+
     if zero_padding:
         kernel = pad_array_centrally(kernel, zero_padding, xp)
 
-    return kernel[xp.newaxis, :, :]
+    return kernel[xp.newaxis, :, :].astype(xp.complex64)
 
 @cache
 def build_fresnel_kernel_out(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None):

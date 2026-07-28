@@ -380,6 +380,7 @@ def _write_pyinstaller_entrypoint() -> Path:
             """
             from __future__ import annotations
 
+            import multiprocessing
             import os
             import sys
             import traceback
@@ -429,6 +430,7 @@ def _write_pyinstaller_entrypoint() -> Path:
                 return cli_main()
 
             if __name__ == "__main__":
+                multiprocessing.freeze_support()
                 try:
                     raise SystemExit(main())
                 except SystemExit:

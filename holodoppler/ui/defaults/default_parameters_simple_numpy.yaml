@@ -1,9 +1,9 @@
-pipeline_name: "sliding"
+pipeline_name: "simple_numpy"
+
 # Core parameters
-time_window: 256
-time_stride: 256
-time_slide_range: [64,4] # (delay between windows from the first one, number of repetition of this delay zero is same as one which is no sliding average)
+batch_size: 256
 first_frame: 0
+batch_stride: 256
 end_frame: -1  # -1 means process all frames
 
 # Propagation parameters
@@ -16,7 +16,7 @@ pixel_pitch: "use_holovibes"  # Pixel pitch in meters [y, x]
 Fresnel_use_ouput_kernel: false  # Use output kernel for Fresnel transform
 
 # SVD filtering
-svd_threshold: 0
+svd_threshold: 39
 svd_filter_mode: "number_of_values"  # Options: "number_of_values", "amplitude_threshold"
 svd_remove_dc: true
 
@@ -39,17 +39,21 @@ registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
 corner_compensation: false
 
 # Image resizing
-square: false
+square: true
 
 # Image contrast
 contrast: false
-contrast_low_max_percent: [0.5, 99.5] # Applied only to rendered avi/png/report outputs, not raw h5.
+contrast_low_max_percent: [0.5, 99.5] # percent lim removed for image contrast only applied in the avi and png outputs not the h5
 contrast_gamma: 1.0
+
+# Image sliding average
+smoothing_gaussian: false # smoothing images with a gaussian kernel only applied in the avi and png outputs not the h5
+smoothing_gaussian_size: 2
 
 # Shack-Hartmann wavefront sensing
 shack_hartmann: false  # Enable Shack-Hartmann processing
-shack_hartmann_nx_subap: 3  # Number of subapertures in X
-shack_hartmann_ny_subap: 3  # Number of subapertures in Y
+shack_hartmann_nx_subap: 5  # Number of subapertures in X
+shack_hartmann_ny_subap: 5  # Number of subapertures in Y
 shack_hartmann_svd_threshold: 10
 shack_hartmann_pupil_threshold: 1.5 # Rejection of the side sub images if they are too
 shack_hartmann_deviation_threshold: 10.0 # Max displacement accepted in number of the std

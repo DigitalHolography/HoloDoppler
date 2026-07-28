@@ -4,7 +4,7 @@ time_window: 256
 time_stride: 256
 time_slide_range: [64,4] # (delay between windows from the first one, number of repetition of this delay zero is same as one which is no sliding average)
 first_frame: 0
-end_frame: 5000  # -1 means process all frames
+end_frame: -1  # -1 means process all frames
 
 # Propagation parameters
 spatial_propagation: "Fresnel"  # Options: "Fresnel" or "AngularSpectrum"
@@ -24,7 +24,7 @@ svd_remove_dc: true
 temporal_transformation: "FourierTransform"  # Options: "FourierTransform" or None
 sampling_freq: "use_holovibes"  # Sampling frequency in Hz
 low_freq: 6000  # Low frequency cutoff in Hz
-high_freq: "use_holovibes"  # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
+high_freq: 18300  # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
 
 # Frequency bands for different cutoffs of the psd in Hz. It will give the average of the psd in the symmetric frequency range
 frequency_bands:
@@ -47,7 +47,7 @@ contrast_low_max_percent: [0.5, 99.5] # Applied only to rendered avi/png/report 
 contrast_gamma: 1.0
 
 # Shack-Hartmann wavefront sensing
-shack_hartmann: true  # Enable Shack-Hartmann processing
+shack_hartmann: false  # Enable Shack-Hartmann processing
 shack_hartmann_nx_subap: 3  # Number of subapertures in X
 shack_hartmann_ny_subap: 3  # Number of subapertures in Y
 shack_hartmann_svd_threshold: 10

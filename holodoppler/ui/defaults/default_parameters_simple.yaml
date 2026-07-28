@@ -17,6 +17,10 @@ pixel_pitch: "use_holovibes"  # Pixel pitch in meters [y, x]
 # Fresnel specific
 Fresnel_use_ouput_kernel: false  # Use output kernel for Fresnel transform
 
+# Filtering 2D frequencies
+filter2d: false
+filter2d_low: 0.03
+
 # SVD filtering
 svd_threshold: 39
 svd_filter_mode: "number_of_values"  # Options: "number_of_values", "amplitude_threshold"
@@ -35,6 +39,10 @@ frequency_bands:
 
 # Image registration
 image_registration: true
+registration_ref_first_frame: 0
+registration_ref_batch_size: 512
+registration_radius: 0.8
+registration_sub_pixel: true
 registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
 
 # Corner compensation

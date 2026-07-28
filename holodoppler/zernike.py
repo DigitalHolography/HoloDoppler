@@ -184,6 +184,7 @@ def fit_zernike_fresnel(
 
     return coefs.astype(xp.float32), phase.astype(xp.float32)
 
+
 def fit_zernike_angular_spectrum(
     xp,
     ny,
@@ -201,7 +202,9 @@ def fit_zernike_angular_spectrum(
     zernike_modes = tuple(zernike_modes)
     nysubabs, nxsubabs = shifts_y.shape
 
-    slopes_y = (shifts_y) * pixel_pitch_y * nysubabs / z_prop # much simpler in angularsp
+    slopes_y = (
+        (shifts_y) * pixel_pitch_y * nysubabs / z_prop
+    )  # much simpler in angularsp
     slopes_x = (shifts_x) * pixel_pitch_x * nxsubabs / z_prop
 
     s = xp.stack([slopes_y, slopes_x])

@@ -1,10 +1,11 @@
-pipeline_name: "sliding"
+pipeline_name: "pca_accumulation"
+
 # Core parameters
-time_window: 256
-time_stride: 256
-time_slide_range: [64,4] # (delay between windows from the first one, number of repetition of this delay zero is same as one which is no sliding average)
+batch_size: 32
 first_frame: 0
+batch_stride: 32
 end_frame: -1  # -1 means process all frames
+accumulation: 32
 
 # Propagation parameters
 spatial_propagation: "Fresnel"  # Options: "Fresnel" or "AngularSpectrum"
@@ -15,41 +16,26 @@ pixel_pitch: "use_holovibes"  # Pixel pitch in meters [y, x]
 # Fresnel specific
 Fresnel_use_ouput_kernel: false  # Use output kernel for Fresnel transform
 
-# SVD filtering
-svd_threshold: 0
-svd_filter_mode: "number_of_values"  # Options: "number_of_values", "amplitude_threshold"
-svd_remove_dc: true
 
-# Temporal transformation
-temporal_transformation: "FourierTransform"  # Options: "FourierTransform" or None
-sampling_freq: "use_holovibes"  # Sampling frequency in Hz
-low_freq: 6000  # Low frequency cutoff in Hz
-high_freq: 18300  # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
-
-# Frequency bands for different cutoffs of the psd in Hz. It will give the average of the psd in the symmetric frequency range
-frequency_bands:
-  - [3000, 9000]
-  - [9000, 18000]
+# Time transform
+time_transform: "FFT" # "FFT"
+# PCA projection
+pca_range: [0, 16]
+low_freq: 0.2  # Low frequency cutoff in reduced frequency
+high_freq: 0.5  # High frequency cutoff in reduced frequency
 
 # Image registration
 image_registration: true
 registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
 
-# Corner compensation
-corner_compensation: false
-
 # Image resizing
-square: false
-
-# Image contrast
-contrast: false
-contrast_low_max_percent: [0.5, 99.5] # Applied only to rendered avi/png/report outputs, not raw h5.
-contrast_gamma: 1.0
+square: true
 
 # Shack-Hartmann wavefront sensing
+
 shack_hartmann: false  # Enable Shack-Hartmann processing
-shack_hartmann_nx_subap: 3  # Number of subapertures in X
-shack_hartmann_ny_subap: 3  # Number of subapertures in Y
+shack_hartmann_nx_subap: 5  # Number of subapertures in X
+shack_hartmann_ny_subap: 5  # Number of subapertures in Y
 shack_hartmann_svd_threshold: 10
 shack_hartmann_pupil_threshold: 1.5 # Rejection of the side sub images if they are too
 shack_hartmann_deviation_threshold: 10.0 # Max displacement accepted in number of the std

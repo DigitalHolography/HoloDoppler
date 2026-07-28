@@ -134,7 +134,7 @@ def _h5_dataset_name(name):
     return H5_DATASET_RENAMES.get(name, name)
 
 
-def save_preview_images(save_dict, save_dir, prefix="debug"):
+def save_preview_images(save_dict, save_dir, prefix="debug", square=False):
     os.makedirs(save_dir, exist_ok=True)
     for key, img in save_dict.items():
         if img is None:
@@ -142,6 +142,13 @@ def save_preview_images(save_dict, save_dir, prefix="debug"):
         img_np = np.asarray(img)
         if img_np.ndim not in [2, 3]:
             continue
+        if square:
+            if img_np.ndim == 3 and img_np.shape[-1] in (3, 4):
+                axes = (0, 1)
+            else:
+                axes = (-2, -1)
+            size = max(img_np.shape[axis] for axis in axes)
+            img_np = resize_slicewise(img_np, size, size, axes=axes)
         if img_np.dtype != np.uint8:
             img_np = normalize_to_uint8(img_np)
         filename = os.path.join(save_dir, f"{prefix}_{key}.png")
@@ -163,6 +170,48 @@ def preview_image_from_results(results):
         if image is not None:
             return normalize_to_uint8(image)
     return None
+
+
+def save_result_map(
+    target_dir,
+    raw_map,
+    parameters,
+    file_reader,
+    *,
+    num_batch=None,
+    end_frame=None,
+    first_frame=None,
+):
+    """Save a pipeline result map with the release rendering/report behavior."""
+    target_dir = Path(target_dir)
+    _create_directories(target_dir, "FULL")
+    display_map = apply_contrast_adjustments(
+        raw_map,
+        parameters,
+        skip_debug=True,
+    )
+    uint8_map = {
+        name: normalize_to_uint8(data)
+        for name, data in display_map.items()
+        if data is not None
+    }
+    video_fps = _calculate_fps(
+        num_batch,
+        end_frame,
+        first_frame,
+        parameters,
+    )
+    _save_videos(target_dir, uint8_map, video_fps)
+    _save_pngs(target_dir, uint8_map)
+    _save_metadata(target_dir, file_reader, parameters)
+    _save_reports(
+        target_dir,
+        display_map,
+        uint8_map,
+        parameters,
+        file_reader,
+    )
+    return uint8_map
 
 
 def _preview_image_candidate(data):
@@ -374,7 +423,7 @@ def _positive_float(value):
 
 
 def _prepare_mp4_frames(frames, source_fps, max_fps=MP4_MAX_FPS):
-    """Limit MP4 playback FPS by dropping frames without changing duration."""
+    """Limit MP4 playback FPS while preserving duration as closely as possible."""
     frames = np.asarray(frames)
     source_fps = _positive_float(source_fps)
     max_fps = _positive_float(max_fps)
@@ -395,7 +444,7 @@ def _prepare_mp4_frames(frames, source_fps, max_fps=MP4_MAX_FPS):
         np.arange(retained_count, dtype=np.float64) * frame_count / retained_count
     ).astype(np.intp)
     mp4_frames = frames[indices]
-    mp4_fps = source_fps * retained_count / frame_count
+    mp4_fps = min(source_fps * retained_count / frame_count, max_fps)
     return mp4_frames, mp4_fps
 
 
@@ -473,10 +522,11 @@ def _save_videos(target_dir, uint8_map, source_fps):
     """Save real-time AVI files and compatibility MP4 previews."""
     start_time = time.time()
     completed = 0
-    for name, uint8_data in uint8_map.items():
+    for name, data in uint8_map.items():
 
-        if uint8_data.ndim !=3 and uint8_data.ndim !=4 : #check to avoid failure for outputs that are not videos exemple : list of coefficients
+        if data.ndim !=3 and data.ndim !=4 : #check to avoid failure for outputs that are not videos exemple : list of coefficients
             continue
+        uint8_data = normalize_to_uint8(data)
         # MP4 previews target broadly supported playback rates. Frames may be
         # discarded here only; AVI and H5 outputs retain every processed frame.
         mp4_data, mp4_fps = _prepare_mp4_frames(uint8_data, source_fps)
@@ -518,9 +568,10 @@ def _save_pngs(target_dir, uint8_map):
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         tasks = []
-        for name, uint8_data in uint8_map.items():
-            if uint8_data.ndim !=3 and uint8_data.ndim !=4 : #check to avoid failure for outputs that are not videos exemple : list of coefficients
+        for name, data in uint8_map.items():
+            if data.ndim !=3 and data.ndim !=4 : #check to avoid failure for outputs that are not videos exemple : list of coefficients
                 continue
+            uint8_data = normalize_to_uint8(data)
             png_path = target_dir / "png" / f"{name}.png"
             mean_frame = np.mean(uint8_data, axis=0).astype(np.uint8)
             tasks.append(executor.submit(iio.imwrite, png_path, mean_frame))
@@ -1034,7 +1085,7 @@ def _save_metadata(target_dir, file_reader, parameters):
     elapsed = time.time() - start_time
     print(f"Metadata saved in {elapsed:.2f} seconds")
 
-def _save_h5_2(target_dir, save_map, parameters):
+def _save_h5_2(target_dir, save_map, parameters, save_only_list=None):
     """
     Saves raw data to HDF5.
     """
@@ -1051,6 +1102,8 @@ def _save_h5_2(target_dir, save_map, parameters):
     with h5py.File(h5_path, "w") as f:
 
         for k, v in save_map.items():
+            if save_only_list is not None and k not in save_only_list:
+                continue
             dataset_name = _h5_dataset_name(k)
             f.create_dataset(
                 dataset_name,

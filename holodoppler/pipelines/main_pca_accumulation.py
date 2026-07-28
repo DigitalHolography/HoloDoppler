@@ -27,21 +27,21 @@ from holodoppler.utils import (
     update_from_footer,
     normalize_to_uint8,
     square_cupy,
-    stretchlimcp,
-    scaling,
+    stretchlim,
+    imadjust,
+    temporal_gaussian,
 )
 from holodoppler.filtering import (
     svd_filter,
     frequency_symmetric_filtering,
     fourier_time_transform,
     corner_compensation,
-    filter_2d,
+    pca_time_transform,
 )
 from holodoppler.moments import moment
 from holodoppler.registration import (
     register_images_shifts,
     apply_register_images_shifts,
-    register_laplacian,
 )
 from holodoppler.file_reader import FileReaderFactory
 
@@ -54,14 +54,15 @@ from cupyx.scipy.ndimage import gaussian_filter
 # from cupyx.scipy.ndimage import zoom
 from tqdm import tqdm
 
+from pathlib import Path
+
+
 from collections import defaultdict
-from collections import deque
 
 
-def _process_batch(parameters, frames, phase_term=None, output_dict=None):
+def _process_batch(parameters, frames, phase_term=None):
     xp = cp
     fft = cp.fft
-    nt_sub = frames.shape[0]
     prop_method = parameters["spatial_propagation"]
 
     # Propagation
@@ -108,64 +109,33 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
                 parameters["wavelength"],
             )
 
-    # SVD filtering
-    if parameters.get("svd_filtering", False):
-        holograms = svd_filter(
+    if parameters["time_transform"] == "PCA":
+
+        # PCA projection
+        holograms = pca_time_transform(cp, holograms, remove_dc=False)
+
+        # Moments
+        start, end = parameters["pca_range"]
+        return cp.sum(cp.abs(holograms)[start:end], axis=0)
+    elif parameters["time_transform"] == "FFT":
+
+        spectrum_f = fourier_time_transform(xp, fft, holograms)
+
+        psd = xp.abs(spectrum_f) ** 2
+
+        idxs, freqs = frequency_symmetric_filtering(
             xp,
-            holograms,
-            parameters["svd_threshold"],
-            filter_mode=parameters["svd_filter_mode"],
-            remove_dc=parameters["svd_remove_dc"],
+            fft,
+            psd.shape[0],
+            1.0,
+            parameters["low_freq"],
+            parameters.get("high_freq"),
         )
 
-    if output_dict is None:
-        output_dict = {}
-
-    # Temporal transform
-    if parameters.get("temporal_transformation") == "FourierTransform":
-        spectrum = fourier_time_transform(xp, fft, holograms)
-        # spectrum_f_angle = fourier_time_transform(xp, fft, xp.angle(holograms_f))
-    else:
-        spectrum = holograms
-
-    # Frequency selection
-    idxs, freqs = frequency_symmetric_filtering(
-        xp,
-        fft,
-        nt_sub,
-        parameters["sampling_freq"],
-        parameters["low_freq"],
-        parameters.get("high_freq"),
-    )
-    psd = xp.abs(spectrum) ** 2
-
-    # psd_angle = xp.abs(spectrum_f_angle) ** 2
-
-    if parameters.get("corner_compensation", False):
-        psd = corner_compensation(xp, psd)
-
-    # Moments
-    output_dict["M0"] = moment(xp, psd[idxs], freqs, 0)
-    # output_dict["M1"] = moment(xp, psd[idxs], freqs, 1)
-    # output_dict["M2"] = moment(xp, psd[idxs], freqs, 2)
-    output_dict["M0ff"] = gaussian_flatfield(
-        output_dict["M0"],
-        parameters.get("registration_flatfield_gw", 1.0),
-        gaussian_filter,
-    )
-    low, high = stretchlimcp(output_dict["M0ff"])
-    output_dict["M0ff"] = scaling(output_dict["M0ff"], low, high)
-
-    # Frequency bands
-    for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-        idxs_band, _ = frequency_symmetric_filtering(
-            xp, fft, nt_sub, parameters["sampling_freq"], f1, f2
-        )
-        band = xp.mean(psd[idxs_band], axis=0)
-        output_dict[f"band_{k}_{f1}_{f2}"] = band
+        return moment(xp, psd[idxs], freqs, 0)
 
 
-def _process_shack_hartmann_U(parameters, frames, output_dict=None):
+def _process_shack_hartmann_U(parameters, frames):
 
     fft = cp.fft
     nt, ny, nx = frames.shape
@@ -312,8 +282,9 @@ def _process_shack_hartmann_phase(parameters, U, ny, nx, output_dict=None):
         #         parameters["wavelength"], shifts_y, shifts_x
         #     )
         if output_dict is not None:
+            print(coefs)
             output_dict["shack_hartmann_zernike_coefs"] = coefs
-            output_dict["shack_hartmann_wavefront_phase"] = phase % (2 * cp.pi)
+            output_dict["shack_hartmann_wavefront_phase"] = phase
     else:
         phase = None
 
@@ -326,80 +297,93 @@ def _process_shack_hartmann_phase(parameters, U, ny, nx, output_dict=None):
     return phase_term
 
 
+def accumulate_on_frames(
+    file_reader, n_accu, first_frame, batch_size, batch_stride, func
+):
+    U = None
+    for i in range(n_accu):
+        frames = file_reader.read_frames(
+            first_frame=first_frame + i * batch_stride, batch_size=batch_size
+        )
+        # transfer to gpu
+        frames = cp.array(frames, dtype=cp.float32)
+        if U is None:
+            U = func(frames)
+        else:
+            if U is dict:
+                res = func(frames)
+                for k in U.keys():
+                    U[k] += res[k]
+            else:
+                U += func(frames)
+    if U is dict:
+        for k in U.keys():
+            U[k] /= n_accu
+    else:
+        U /= n_accu
+    return U
+
+
 def preview(file_path, parameters, save_debug=True):
     file_reader = FileReaderFactory.create(file_path)
 
     if file_reader.ext == ".holo":
         print("file header :", file_reader.file_header)
+        ny, nx = file_reader.file_header.height, file_reader.file_header.width
         parameters = update_from_footer(parameters, file_reader.file_footer)
 
     if file_reader.ext == ".cine":
         print("file header :", file_reader.metadata)
     print("parameters : ", parameters)
 
-    time_window = parameters["time_window"]
-    time_stride = parameters["time_stride"]
+    batch_size = parameters["batch_size"]
+    batch_stride = parameters["batch_stride"]
     first_frame = parameters["first_frame"]
-
-    time_slide_repetition = parameters["sh_time_accumulation"]
-
-    if time_slide_repetition <= 0:
-        time_slide_repetition = 1
-
-    U_tot = None
-    res = {}
+    n_accu = parameters["accumulation"]
 
     if parameters.get("shack_hartmann", False):
-        for n in range(time_slide_repetition):
-            frames = file_reader.read_frames(
-                first_frame=first_frame + n * time_stride, batch_size=time_window
-            )
-            # transfer to gpu
-            frames = cp.array(frames)
-
-            U = _process_shack_hartmann_U(parameters, frames)
-            if U_tot is None:
-                U_tot = U
-            else:
-                U_tot += U
-        del U
+        U_tot = accumulate_on_frames(
+            file_reader,
+            n_accu,
+            first_frame,
+            batch_size,
+            batch_stride,
+            lambda frames: _process_shack_hartmann_U(parameters, frames),
+        )
+    res = {}
 
     phase_term = None
     if parameters.get("shack_hartmann", False):
-        ny, nx = frames.shape[-2:]
         phase_term = _process_shack_hartmann_phase(
             parameters, U_tot, ny, nx, output_dict=res
         )
 
-    frames = file_reader.read_frames(first_frame=first_frame, batch_size=time_window)
-    # transfer to gpu
-    frames = cp.array(frames)
+    Projection_tot = accumulate_on_frames(
+        file_reader,
+        n_accu,
+        first_frame,
+        batch_size,
+        batch_stride,
+        lambda frames: _process_batch(parameters, frames=frames, phase_term=phase_term),
+    )
 
-    # 2D filtering
-    if parameters.get("filter2d", False):
-        frames = filter_2d(cp, cp.fft, frames, parameters["filter2d_low"])
-
-    # calc on gpu
-    _process_batch(parameters, frames=frames, phase_term=phase_term, output_dict=res)
-
-    if U_tot is not None:
-        sy, sx, numy, numx = U_tot.shape
-        U_tot = cp.transpose(U_tot, axes=(0, 2, 1, 3))
-        res["shack_hartmann_sub_images"] = cp.reshape(U_tot, (numy * sy, numx * sx))
-
-    # transfer to cpu
     res_np = {k: cp.asnumpy(v) for k, v in res.items()}
 
+    # transfer to cpu
+    res_np["Projection"] = cp.asnumpy(Projection_tot)
+    if parameters.get("shack_hartmann", False):
+        res_np["shack_hartmann_sub_images"] = cp.asnumpy(U_tot)
+
     # free gpu ram
-    del res
+    del Projection_tot
+    if parameters.get("shack_hartmann", False):
+        del U_tot
     cp.get_default_memory_pool().free_all_blocks()
 
     if save_debug:
         save_preview_images(
             res_np,
-            _get_default_output_path(file_reader.file_path)
-            / "preview"
-            / "SLIDING_SHACK_HARTMANN",
+            _get_default_output_path(file_reader.file_path) / "preview" / "PCA_ACCU",
             square=parameters.get("square", False),
         )
     return preview_image_from_results(res_np)
@@ -411,22 +395,18 @@ def process(file_path, parameters, progress_callback=None):
     if file_reader.ext == ".holo":
         print("file header :", file_reader.file_header)
         parameters = update_from_footer(parameters, file_reader.file_footer)
+        ny, nx = file_reader.file_header.height, file_reader.file_header.width
 
     if file_reader.ext == ".cine":
         print("file header :", file_reader.metadata)
 
     print("parameters : ", parameters)
 
-    time_window = parameters["time_window"]
-    time_stride = parameters["time_stride"]
-
+    batch_size = parameters["batch_size"]
+    batch_stride = parameters["batch_stride"]
     first_frame = parameters["first_frame"]
     end_frame = parameters.get("end_frame", 0)
-
-    time_slide_repetition = parameters["sh_time_accumulation"]
-
-    if time_slide_repetition <= 0:
-        time_slide_repetition = 1
+    n_accu = parameters["accumulation"]
 
     if end_frame <= 0:
         end_frame = (
@@ -435,126 +415,85 @@ def process(file_path, parameters, progress_callback=None):
             else file_reader.TotalImageCount
         )
 
-    if time_stride >= (end_frame - first_frame):
-        num_batch = 1 if time_window <= (end_frame - first_frame) else 0
+    if batch_stride >= (end_frame - first_frame):
+        num_batch = 1 if batch_size <= (end_frame - first_frame) else 0
     else:
-        num_batch = int((end_frame - first_frame) / time_stride)
-
+        num_batch = int((end_frame - first_frame) / (batch_stride * n_accu))
     if num_batch <= 0:
         return None
 
     output = defaultdict(list)
 
-    M0_reg = None
-
-    # Create CUDA streams
-    h2d_stream = cp.cuda.Stream(non_blocking=True)
-    # d2h_stream = cp.cuda.Stream(non_blocking=True)
-    compute_stream = cp.cuda.Stream(non_blocking=True)
+    reg_img = None
 
     processed_batches = 0
-
-    # Use simple double-buffering with explicit state
-    d_current = None
-    d_next = None
-    h2d_event_current = None
-    h2d_event_next = None
-
-    U_buffer = deque(maxlen=time_slide_repetition)
 
     # Start reading frames
     for i in tqdm(range(num_batch)):
 
+        if parameters.get("shack_hartmann", False):
+            U_tot = accumulate_on_frames(
+                file_reader,
+                n_accu,
+                first_frame,
+                batch_size,
+                batch_stride,
+                lambda frames: _process_shack_hartmann_U(parameters, frames),
+            )
         res = {}
 
-        # Start async H2D transfer for this batch
-        with h2d_stream:
-
-            frames = file_reader.read_frames(
-                first_frame=first_frame + i * time_stride, batch_size=time_window
+        phase_term = None
+        if parameters.get("shack_hartmann", False):
+            phase_term = _process_shack_hartmann_phase(
+                parameters, U_tot, ny, nx, output_dict=res
             )
-            d_next = cp.asarray(frames)
-            h2d_event_next = cp.cuda.Event()
-            h2d_event_next.record(h2d_stream)
 
-        # If we have a previous batch, wait for its H2D and compute it
-        if d_current is not None:
-            # Wait for H2D of current batch to complete
-            h2d_event_current.synchronize()
+        Projection_tot = accumulate_on_frames(
+            file_reader,
+            n_accu,
+            first_frame + i * batch_stride * n_accu,
+            batch_size,
+            batch_stride,
+            lambda frames: _process_batch(
+                parameters, frames=frames, phase_term=phase_term
+            ),
+        )
+        Projection_tot_ff = gaussian_flatfield(
+            Projection_tot,
+            parameters.get("registration_flatfield_gw", 35.0),
+            gaussian_filter,
+        )
+        if parameters.get("image_registration", False):
 
-            # Compute current batch on compute stream
-            with compute_stream:
+            if reg_img is None:
+                reg_img = Projection_tot_ff
 
-                # 2D filtering
-                if parameters.get("filter2d", False):
-                    d_current = filter_2d(
-                        cp, cp.fft, d_current, parameters["filter2d_low"]
-                    )
+            shift_y, shift_x = register_images_shifts(
+                cp,
+                cp.fft,
+                reg_img,
+                Projection_tot_ff,
+                radius=0.8,
+                gaussian_sigma=0,
+                gaussian_filter=gaussian_filter,
+            )
 
-                U = _process_shack_hartmann_U(parameters, d_current)
-                U_buffer.append(U)
+            Projection_tot = apply_register_images_shifts(
+                cp, cp.fft, Projection_tot, shift_y, shift_x
+            )
 
-                U_tot = sum(U_buffer)  # sum of the last time_slide_repetition U arrays
+            Projection_tot_ff = apply_register_images_shifts(
+                cp, cp.fft, Projection_tot_ff, shift_y, shift_x
+            )
 
-                ny, nx = frames.shape[-2:]
-
-                phase_term = None
-                if parameters.get("shack_hartmann", False):
-                    phase_term = _process_shack_hartmann_phase(
-                        parameters, U_tot, ny, nx, output_dict=res
-                    )
-
-                _process_batch(
-                    parameters, d_current, phase_term=phase_term, output_dict=res
-                )
-
-                if (
-                    M0_reg is None
-                    and parameters.get("image_registration", False)
-                ):  # first batch is used for fixed batch
-                    M0_reg = res["M0ff"]
-
-                if M0_reg is not None:
-                    shift_y, shift_x = register_images_shifts(
-                        cp,
-                        cp.fft,
-                        M0_reg,
-                        res["M0ff"],
-                        radius=0.8,
-                        gaussian_sigma=2,
-                        gaussian_filter=gaussian_filter,
-                    )
-
-                if parameters.get("image_registration", False):
-                    for k, v in res.items():
-                        if (
-                            k in ["M0ff", "M0", "M1", "M2"] or "band_" in k
-                        ):  # select the outputs that need the registration from M0ff applied
-                            res[k] = apply_register_images_shifts(
-                                cp, cp.fft, v, shift_y, shift_x
-                            )
-
-                    res["registration"] = cp.stack(
-                        [cp.array(shift_y), cp.array(shift_x)]
-                    )
-
-                compute_event = cp.cuda.Event()
-                compute_event.record(compute_stream)
-
-            # Wait for compute to finish
-            compute_event.synchronize()
-
-        # Advance: next becomes current
-        d_current = d_next
-        h2d_event_current = h2d_event_next
-
-        # if U_tot is not None: # saving of U_sub_aps
-        #     sy, sx, numy, numx = U_tot.shape
-        #     U_tot = cp.transpose(U_tot, axes=(0,2,1,3))
-        # res["shack_hartmann_sub_images"] = cp.reshape(U_tot,(numy*sy,numx*sx))
+            res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
 
         for k, v in res.items():
-            output[k].append(res[k])
+            output[k].append(v)
+        output["Projection"].append(Projection_tot)
+        output["Projectionff"].append(Projection_tot_ff)
+        if parameters.get("shack_hartmann", False):
+            output["shack_hartmann_sub_images"].append(U_tot)
 
         processed_batches += 1
         if progress_callback is not None:
@@ -566,23 +505,6 @@ def process(file_path, parameters, progress_callback=None):
 
     output = {k: cp.stack(v, axis=0) for k, v in output.items()}
 
-    if parameters.get("registration_laplacian", False):
-        shifts_y, shifts_x = register_laplacian(cp, cp.fft, output["M0ff"], radius=0.7)
-        shifts_y, shifts_x = shifts_y - shifts_y[0], shifts_x - shifts_x[0]
-        output["register_laplacian"] = cp.stack([shifts_y, shifts_x])
-        shifts_y, shifts_x = cp.rint(shifts_y).astype(cp.int64), cp.rint(
-            shifts_x
-        ).astype(cp.int64)
-        for k, v in output.items():
-            if (
-                k in ["M0ff", "M0", "M1", "M2"] or "band_" in k
-            ):  # select the outputs that need the registration from M0ff applied
-                for m in range(v.shape[0]):
-                    shift_y, shift_x = int(shifts_y[m]), int(shifts_x[m])
-                    output[k][m] = apply_register_images_shifts(
-                        cp, cp.fft, v[m], shift_y, shift_x
-                    )
-
     if parameters.get("square", False):
         output = {k: square_cupy(v) if v.ndim >= 3 else v for k, v in output.items()}
 
@@ -592,20 +514,31 @@ def process(file_path, parameters, progress_callback=None):
     del output
     cp.get_default_memory_pool().free_all_blocks()
 
-    target_dir = (
-        _get_default_output_path(file_reader.file_path) / "SLIDING_SHACK_HARTMANN"
-    )
+    target_dir = _get_default_output_path(file_reader.file_path) / "PCA_ACCU"
+
+    if "saving_to_folder" in parameters:
+        target_dir = Path(parameters["saving_to_folder"])
 
     _create_directories(target_dir, "FULL")
 
-    save_to_h5_list = [
-        "M0ff",
-        "shack_hartmann_zernike_coefs",
-        "register_laplacian",
-        "registration",
-    ]
+    # save_to_h5_list = ["M0ff","M0","M1","M2","shack_hartmann_zernike_coefs", "shack_hartmann_sub_images"] "_bands"
 
-    _save_h5_2(target_dir, output_np, parameters, save_only_list=save_to_h5_list)
+    _save_h5_2(target_dir, output_np, parameters)
+
+    import time
+
+    start_time = time.time()
+
+    if parameters.get("smoothing_gaussian", False):
+        smoothing_gaussian_size = parameters.get("smoothing_gaussian_size", 2)
+        for k in output_np.keys():
+            output_np[k] = temporal_gaussian(
+                output_np[k], sigma=smoothing_gaussian_size
+            )
+
+    elapsed = time.time() - start_time
+    print(f"smoothing_gaussian in {elapsed:.1f} seconds")
+
     save_result_map(
         target_dir,
         output_np,

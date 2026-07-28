@@ -22,8 +22,21 @@ from holodoppler.shack_hartmann import (
     calculate_displacements_graph_laplacian,
 )
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum
-from holodoppler.utils import gaussian_flatfield, update_from_footer, square_cupy
-from holodoppler.filtering import filter_2d, svd_filter, frequency_symmetric_filtering, fourier_time_transform, corner_compensation
+from holodoppler.utils import (
+    gaussian_flatfield,
+    update_from_footer,
+    normalize_to_uint8,
+    square_cupy,
+    stretchlim,
+    imadjust,
+    temporal_gaussian,
+)
+from holodoppler.filtering import (
+    svd_filter,
+    frequency_symmetric_filtering,
+    fourier_time_transform,
+    corner_compensation,
+)
 from holodoppler.moments import moment
 from holodoppler.registration import (
     register_images_shifts,
@@ -33,7 +46,6 @@ from holodoppler.file_reader import FileReaderFactory
 
 
 import cupy as cp
-import numpy as np
 
 # import numpy as np
 from cupyx.scipy.ndimage import gaussian_filter
@@ -129,6 +141,8 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     )
     psd = xp.abs(spectrum_f) ** 2
 
+    output_dict["psd"] = psd
+
     # psd_angle = xp.abs(spectrum_f_angle) ** 2
 
     if parameters.get("corner_compensation", False):
@@ -136,27 +150,19 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
 
     # Moments
     output_dict["M0"] = moment(xp, psd[idxs], freqs, 0)
-    output_dict["M1"] = moment(xp, psd[idxs], freqs, 1)
-    output_dict["M2"] = moment(xp, psd[idxs], freqs, 2)
-    # output_dict["M3"] = moment(xp, psd[idxs], freqs, 3)
-    # output_dict["M4"] = moment(xp, psd[idxs], freqs, 4)
-    # output_dict["M5"] = moment(xp, psd[idxs], freqs, 5)
-    # output_dict["M6"] = moment(xp, psd[idxs], freqs, 6)
+    # output_dict["M1"] = moment(xp, psd[idxs], freqs, 1)
+    # output_dict["M2"] = moment(xp, psd[idxs], freqs, 2)
     output_dict["M0ff"] = gaussian_flatfield(
         output_dict["M0"],
         parameters.get("registration_flatfield_gw", 1.0),
         gaussian_filter,
     )
 
-    output_dict["spectrum_line"] = xp.mean(psd, axis=(-2, -1))
-
     # Frequency bands
-    for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
-        idxs_band, _ = frequency_symmetric_filtering(
-            xp, fft, nt_sub, parameters["sampling_freq"], f1, f2
-        )
-        band = xp.mean(psd[idxs_band], axis=0)
-        output_dict[f"band_{k}_{f1}_{f2}"] = band
+    # for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
+    #     idxs_band, _ = frequency_symmetric_filtering(xp, fft, nt_sub, parameters["sampling_freq"], f1, f2)
+    #     band = xp.mean(psd[idxs_band], axis=0)
+    #     output_dict[f"band_{k}_{f1}_{f2}"] = band
 
 
 def _process_shack_hartmann(parameters, frames, output_dict=None):
@@ -331,10 +337,6 @@ def preview(file_path, parameters, save_debug=True):
     # transfer to gpu
     frames = cp.array(frames, dtype=cp.float32)
 
-    # 2D filtering
-    if parameters.get("filter2d", False):
-        frames = filter_2d(cp, cp.fft, frames, parameters["filter2d_low"])
-
     res = {}
 
     phase_term = None
@@ -344,12 +346,6 @@ def preview(file_path, parameters, save_debug=True):
     # calc on gpu
     _process_batch(parameters, frames=frames, phase_term=phase_term, output_dict=res)
 
-    if parameters.get("square", False):
-        res = {
-            k: cp.squeeze(square_cupy(v[cp.newaxis, ...])) if v.ndim == 2 else v
-            for k, v in res.items()
-        }
-
     # transfer to cpu
     res_np = {k: cp.asnumpy(v) for k, v in res.items()}
 
@@ -357,13 +353,16 @@ def preview(file_path, parameters, save_debug=True):
     del res
     cp.get_default_memory_pool().free_all_blocks()
 
-    preview_path = _get_default_output_path(file_reader.file_path) / "preview"
+    target_dir = _get_default_output_path(file_reader.file_path) / "preview" / "SH_AVG"
 
     if save_debug:
-        save_preview_images(res_np, preview_path)
-        (preview_path / "h5").mkdir(parents=True, exist_ok=True)
-        _save_h5_2(preview_path, res_np, parameters)
-
+        (target_dir / "h5").mkdir(parents=True, exist_ok=True)
+        save_preview_images(
+            res_np,
+            target_dir,
+            square=parameters.get("square", False),
+        )
+        _save_h5_2(target_dir, res_np, parameters)
     return preview_image_from_results(res_np)
 
 
@@ -399,73 +398,43 @@ def process(file_path, parameters, progress_callback=None):
 
     output = defaultdict(list)
 
-    # creating the registration reference image
     M0_reg = None
-    if parameters.get("image_registration", False) and (
-        parameters.get("registration_ref_first_frame", 0) != 0
-        or parameters.get("registration_ref_batch_size", batch_size) != batch_size
-    ):
-        frames = file_reader.read_frames(
-            first_frame=parameters.get("registration_ref_first_frame", 0),
-            batch_size=parameters.get("registration_ref_batch_size", batch_size),
-        )
-        frames = cp.array(frames)
-        # 2D filtering
-        if parameters.get("filter2d", False):
-            frames = filter_2d(cp, cp.fft, frames, parameters["filter2d_low"])
-        phase_term = None
-        if parameters.get("shack_hartmann", False):
-            phase_term = _process_shack_hartmann(parameters, frames)
-        res = {}
-        _process_batch(parameters, frames, phase_term=phase_term, output_dict=res)
-        M0_reg = res["M0ff"].copy()
-        print(res.keys())
-        del frames, phase_term  # Memory footprint reduction
-        res.clear()
-        del res
 
+    # Create CUDA streams
     h2d_stream = cp.cuda.Stream(non_blocking=True)
     # d2h_stream = cp.cuda.Stream(non_blocking=True)
     compute_stream = cp.cuda.Stream(non_blocking=True)
 
     processed_batches = 0
 
-    PREFETCH_DEPTH = 4  # Number of batches to prefetch ahead (set to 3 or 4)
+    # Use simple double-buffering with explicit state
+    d_current = None
+    d_next = None
+    h2d_event_current = None
+    h2d_event_next = None
 
-    # prefetch buffers
-    d_buffers = [None] * PREFETCH_DEPTH
-    h2d_events = [None] * PREFETCH_DEPTH
-    compute_events = [None] * PREFETCH_DEPTH
-    buffer_ready = [False] * PREFETCH_DEPTH
+    psd_tot = None
 
-    current_idx = 0
-    processed_batches = 0
+    # Start reading frames
+    for i in tqdm(range(num_batch)):
 
-    for i in tqdm(range(num_batch + PREFETCH_DEPTH)):
+        # Start async H2D transfer for this batch
+        with h2d_stream:
 
-        prefetch_idx = i % PREFETCH_DEPTH
+            frames = file_reader.read_frames(
+                first_frame=first_frame + i * batch_stride, batch_size=batch_size
+            )
+            d_next = cp.asarray(frames)
+            h2d_event_next = cp.cuda.Event()
+            h2d_event_next.record(h2d_stream)
 
-        if i < num_batch:
-            with h2d_stream:
-                frames = file_reader.read_frames(
-                    first_frame=first_frame + i * batch_stride, batch_size=batch_size
-                )
-                d_buffers[prefetch_idx] = cp.asarray(frames)
+        # If we have a previous batch, wait for its H2D and compute it
+        if d_current is not None:
+            # Wait for H2D of current batch to complete
+            h2d_event_current.synchronize()
 
-                h2d_events[prefetch_idx] = cp.cuda.Event()
-                h2d_events[prefetch_idx].record(h2d_stream)
-                buffer_ready[prefetch_idx] = True
-
-        while buffer_ready[current_idx] and current_idx != prefetch_idx:
-
-            h2d_events[current_idx].synchronize()
-
+            # Compute current batch on compute stream
             with compute_stream:
-                d_current = d_buffers[current_idx]
-
-                # 2D filtering
-                if parameters.get("filter2d", False):
-                    d_current = filter_2d(cp, cp.fft, d_current, parameters["filter2d_low"])
 
                 res = {}
 
@@ -491,26 +460,44 @@ def process(file_path, parameters, progress_callback=None):
                         cp.fft,
                         M0_reg,
                         res["M0ff"],
-                        radius=parameters.get("registration_radius", 0.8),
-                        sub_pixel=parameters.get("registration_sub_pixel", False),
+                        radius=0.8,
+                        gaussian_sigma=3,
+                        gaussian_filter=gaussian_filter,
                     )
 
                     for k, v in res.items():
-                        if k in ["M0ff", "M0", "M1", "M2"] or "band_" in k:
+                        if (
+                            k in ["M0ff", "M0", "M1", "M2", "psd"]
+                            or "band_" in k
+                        ):
                             res[k] = apply_register_images_shifts(
                                 cp, cp.fft, v, shift_y, shift_x
                             )
 
-                    res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
+                    res["registration"] = cp.stack(
+                        [cp.array(shift_y), cp.array(shift_x)]
+                    )
 
-                compute_events[current_idx] = cp.cuda.Event()
-                compute_events[current_idx].record(compute_stream)
+                if psd_tot is None:
+                    psd_tot = res["psd"]
+                else:
+                    psd_tot += res["psd"]
 
-            compute_events[current_idx].synchronize()
+                del res["psd"]  # Needed for memory to not get out of control
 
-            if res:
-                for k, v in res.items():
-                    output[k].append(v.get()) # transfer to cpu
+                compute_event = cp.cuda.Event()
+                compute_event.record(compute_stream)
+
+            # Wait for compute to finish
+            compute_event.synchronize()
+
+            if res is None:
+                break
+
+            for k, v in res.items():
+                output[k].append(v)
+
+            del res
 
             processed_batches += 1
             if progress_callback is not None:
@@ -520,117 +507,51 @@ def process(file_path, parameters, progress_callback=None):
                     f"Batch {processed_batches}/{num_batch}",
                 )
 
-            buffer_ready[current_idx] = False
-            d_buffers[current_idx] = None  # Free memory
-            current_idx = (current_idx + 1) % PREFETCH_DEPTH
+        # Advance: next becomes current
+        d_current = d_next
+        h2d_event_current = h2d_event_next
 
-            if processed_batches >= num_batch:
-                break
+    output = {k: cp.stack(v, axis=0) for k, v in output.items()}
 
-    while buffer_ready[current_idx]:
-
-        h2d_events[current_idx].synchronize()
-
-        with compute_stream:
-            d_current = d_buffers[current_idx]
-
-            # 2D filtering
-            if parameters.get("filter2d", False):
-                d_current = filter_2d(cp, cp.fft, d_current, parameters["filter2d_low"])
-
-            res = {}
-
-            phase_term = None
-            if parameters.get("shack_hartmann", False):
-                phase_term = _process_shack_hartmann(
-                    parameters, d_current, output_dict=res
-                )
-
-            _process_batch(
-                parameters, d_current, phase_term=phase_term, output_dict=res
-            )
-
-            if M0_reg is None and parameters.get("image_registration", False):
-                M0_reg = res["M0ff"]
-
-            if M0_reg is not None:
-                shift_y, shift_x = register_images_shifts(
-                    cp,
-                    cp.fft,
-                    M0_reg,
-                    res["M0ff"],
-                    radius=parameters.get("registration_radius", 0.8),
-                    sub_pixel=parameters.get("registration_sub_pixel", False),
-                )
-
-                for k, v in res.items():
-                    if k in ["M0ff", "M0", "M1", "M2"] or "band_" in k:
-                        res[k] = apply_register_images_shifts(
-                            cp, cp.fft, v, shift_y, shift_x
-                        )
-
-                res["registration"] = cp.stack(
-                    [cp.array(shift_y), cp.array(shift_x)]
-                )
-
-            compute_events[current_idx] = cp.cuda.Event()
-            compute_events[current_idx].record(compute_stream)
-
-        compute_events[current_idx].synchronize()
-
-        if res:
-            for k, v in res.items():
-                output[k].append(v.get()) # transfer to cpu
-
-        processed_batches += 1
-        if progress_callback is not None:
-            progress_callback(
-                processed_batches,
-                num_batch,
-                f"Batch {processed_batches}/{num_batch}",
-            )
-
-        buffer_ready[current_idx] = False
-        d_buffers[current_idx] = None
-        current_idx = (current_idx + 1) % PREFETCH_DEPTH
-
-        if processed_batches >= num_batch:
-            break
-
-    output = {k: np.stack(v, axis=0) for k, v in output.items()}
+    output["sh_avg"] = psd_tot
 
     if parameters.get("square", False):
-        output = {k: square_cupy(cp.array(v)).get() if v.ndim == 3 else v for k, v in output.items()}
+        output = {k: square_cupy(v) if v.ndim >= 3 else v for k, v in output.items()}
 
+    # transfer to cpu
+    output_np = {k: cp.asnumpy(v) for k, v in output.items()}
+
+    del output
     cp.get_default_memory_pool().free_all_blocks()
 
-    target_dir = _get_default_output_path(file_reader.file_path)
+    target_dir = _get_default_output_path(file_reader.file_path) / "SH_AVG"
 
     if "saving_to_folder" in parameters:
         target_dir = Path(parameters["saving_to_folder"])
 
     _create_directories(target_dir, "FULL")
 
-    # renaming for compatibility with Doppler View
-    output["moment0"] = output.pop("M0")
-    output["moment0ff"] = output.pop("M0ff")
-    output["moment1"] = output.pop("M1")
-    output["moment2"] = output.pop("M2")
+    # save_to_h5_list = ["M0ff","M0","M1","M2","shack_hartmann_zernike_coefs", "shack_hartmann_sub_images"] "_bands"
 
-    save_to_h5_list = [
-        "moment0ff",
-        "moment0",
-        "moment1",
-        "moment2",
-        "shack_hartmann_zernike_coefs",
-        "registration",
-        "spectrum_line",
-    ] + [key for key in output.keys() if "band_" in key]
+    _save_h5_2(target_dir, output_np, parameters)
 
-    _save_h5_2(target_dir, output, parameters, save_only_list=save_to_h5_list)
+    import time
+
+    start_time = time.time()
+
+    if parameters.get("smoothing_gaussian", False):
+        smoothing_gaussian_size = parameters.get("smoothing_gaussian_size", 2)
+        for k in output_np.keys():
+            output_np[k] = temporal_gaussian(
+                output_np[k], sigma=smoothing_gaussian_size
+            )
+
+    elapsed = time.time() - start_time
+    print(f"smoothing_gaussian in {elapsed:.1f} seconds")
+
     save_result_map(
         target_dir,
-        output,
+        output_np,
         parameters,
         file_reader,
         num_batch=num_batch,
