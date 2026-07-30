@@ -2,8 +2,176 @@
 Image registration using phase correlation for Translation, Rotation, and Scale (TRS).
 """
 
-from .utils import elliptical_mask
-from .utils import signed_peak, subpixel_parabola
+from .utils import elliptical_mask, signed_peak, subpixel_parabola
+
+
+def register_images_shifts(
+    xp,
+    fft,
+    fixed,
+    moving,
+    radius=None
+):
+    ny, nx = fixed.shape[-2:]
+    # print(radius)
+    if radius is not None and isinstance(radius, tuple):
+
+        r1, r2 = radius
+        m1 = ~elliptical_mask(ny, nx, r1, xp)
+        m2 = elliptical_mask(ny, nx, r2, xp)
+        mask = m1 & m2
+
+    else:
+        mask = elliptical_mask(ny, nx, radius, xp) if radius else None
+
+    fixed_f = fixed.astype(xp.float32, copy=False)
+    moving_f = moving.astype(xp.float32, copy=False)
+
+    fixed_e = _preprocess(
+        xp,
+        fixed_f,
+        mask=mask
+    )
+    moving_e = _preprocess(
+        xp,
+        moving_f,
+        mask=mask
+    )
+
+    shift_y, shift_x = intensity_corr_sub_pixel(xp, fft, fixed_e, moving_e)
+
+    return shift_y, shift_x
+
+
+def apply_register_images_shifts(xp, fft, image, shift_y, shift_x):
+    if isinstance(shift_y, int) and isinstance(shift_x, int):
+        return xp.roll(xp.roll(image, shift_y, axis=-2), shift_x, axis=-1)
+    else:
+        ny, nx = image.shape[-2:]
+
+        fy = fft.fftfreq(ny).reshape(ny, 1)
+        fx = fft.fftfreq(nx).reshape(1, nx)
+
+        phase = xp.exp(-2j * xp.pi * (fy * shift_y + fx * shift_x))
+
+        out = fft.ifft2(
+            fft.fft2(image, axes=(-2, -1)) * phase,
+            axes=(-2, -1),
+        )
+
+        return xp.real(out)
+
+
+def _preprocess(xp, img, mask=None, gaussian_sigma=None, gaussian_filter=None):
+    """Convert to float32, optionally smooth, subtract masked mean, and apply mask."""
+    out = img.astype(xp.float32, copy=False)
+
+    if gaussian_sigma is not None and gaussian_sigma > 0:
+        out = gaussian_filter(out, sigma=gaussian_sigma)
+
+    if mask is None:
+        return out - xp.mean(out)
+
+    # Usually faster and cleaner than out[mask] on GPU because it avoids compaction.
+    mask_f = mask.astype(xp.float32, copy=False)
+    mean = xp.sum(out * mask_f) / xp.maximum(xp.sum(mask_f), 1.0)
+
+    return (out - mean) * mask_f
+
+
+def intensity_corr_sub_pixel(xp, fft, fixed, moving):
+    """Integer-pixel intensity-correlation shift estimate."""
+    ny, nx = fixed.shape[-2:]
+
+    fa = fft.fft2(fixed, axes=(-2, -1))
+    fb = fft.fft2(moving, axes=(-2, -1))
+
+    cps = fb * fa.conj()
+
+    corr = fft.ifft2(cps, axes=(-2, -1))
+    mag = xp.abs(corr)
+
+    idx = xp.argmax(mag)
+    ky, kx = xp.unravel_index(idx, mag.shape)
+    ky, kx = int(ky), int(kx)
+
+    peak_y, peak_x = signed_peak(ky, kx, ny, nx)
+
+    sub_y = subpixel_parabola(
+        mag[(ky - 1) % ny, kx],
+        mag[ky, kx],
+        mag[(ky + 1) % ny, kx],
+    )
+    sub_x = subpixel_parabola(
+        mag[ky, (kx - 1) % nx],
+        mag[ky, kx],
+        mag[ky, (kx + 1) % nx],
+    )
+
+    return -(peak_y + sub_y), -(peak_x + sub_x)
+
+
+def phase_corr_subpixel(xp, fft, fixed, moving):
+    """Subpixel phase-correlation shift estimate."""
+    ny, nx = fixed.shape[-2:]
+
+    fa = fft.fft2(fixed, axes=(-2, -1))
+    fb = fft.fft2(moving, axes=(-2, -1))
+
+    cps = fb * fa.conj()
+    cps *= 1.0 / (xp.abs(cps) + _EPS)
+
+    corr = fft.ifft2(cps, axes=(-2, -1))
+    mag = xp.abs(corr)
+
+    idx = xp.argmax(mag)
+    ky, kx = xp.unravel_index(idx, mag.shape)
+    ky, kx = int(ky), int(kx)
+
+    peak_y, peak_x = signed_peak(ky, kx, ny, nx)
+
+    sub_y = subpixel_parabola(
+        mag[(ky - 1) % ny, kx],
+        mag[ky, kx],
+        mag[(ky + 1) % ny, kx],
+    )
+    sub_x = subpixel_parabola(
+        mag[ky, (kx - 1) % nx],
+        mag[ky, kx],
+        mag[ky, (kx + 1) % nx],
+    )
+
+    return -(peak_y + sub_y), -(peak_x + sub_x)
+
+
+def logpolar_transform(xp, ndi, img, radial_bins, angular_bins):
+    """Log-polar transform for rotation/scale estimation."""
+    ny, nx = img.shape[-2:]
+    cy, cx = (ny - 1) * 0.5, (nx - 1) * 0.5
+
+    max_radius = min(nx, ny) /2
+
+    log_r = xp.linspace(0.0, xp.log(max_radius), radial_bins, dtype=xp.float32)
+    theta = xp.linspace(
+        0.0,
+        2.0 * xp.pi,
+        angular_bins,
+        endpoint=False,
+        dtype=xp.float32,
+    )
+
+    rr = xp.exp(log_r)[:, None]
+    tt = theta[None, :]
+
+    yy = cy + rr * xp.sin(tt)
+    xx = cx + rr * xp.cos(tt)
+
+    coords = xp.stack((yy, xx), axis=0)
+
+    return ndi.map_coordinates(img, coords, order=3, mode="constant", cval=0.0)
+
+
+# ---------------- functions in tests
 
 
 def register_laplacian(xp, fft, video, radius=None, gauge="minimal", ref_frame=0):
@@ -66,94 +234,322 @@ def register_laplacian(xp, fft, video, radius=None, gauge="minimal", ref_frame=0
 
     return shifts_y_final, shifts_x_final
 
+def crop_inscribed_rectangle(xp, img, radius):
 
-def register_images_shifts(
+    if radius is None:
+        return img
+
+    ny, nx = img.shape[-2:]
+
+    if isinstance(radius, tuple):
+        ry_frac, rx_frac = radius
+    else:
+        ry_frac = rx_frac = radius
+
+    cy = ny // 2
+    cx = nx // 2
+
+    # ellipse semi-axes (pixels)
+    ry = ry_frac * ny / 2
+    rx = rx_frac * nx / 2
+
+    # inscribed rectangle half sizes
+    hy = int(ry / xp.sqrt(2))
+    hx = int(rx / xp.sqrt(2))
+
+    return img[
+        cy - hy : cy + hy,
+        cx - hx : cx + hx,
+    ]
+
+def register_rotation_scale(
     xp,
     fft,
+    ndi,
     fixed,
     moving,
     radius=None,
-    gaussian_sigma=None,
-    gaussian_filter=None,
-    sub_pixel=False,
+    radial_bins=None,
+    angular_bins=360 * 2,
 ):
-    ny, nx = fixed.shape[-2:]
-    # print(radius)
-    if radius is not None and isinstance(radius,tuple):
-
-        r1, r2 = radius
-        m1 = ~elliptical_mask(ny, nx, r1, xp)
-        m2 = elliptical_mask(ny, nx, r2, xp)
-        mask = m1 & m2
-
-    else:
-        mask = elliptical_mask(ny, nx, radius, xp) if radius else None
 
     fixed_f = fixed.astype(xp.float32, copy=False)
     moving_f = moving.astype(xp.float32, copy=False)
 
-    fixed_e = _preprocess(
+    fixed_e = crop_inscribed_rectangle(xp, fixed_f, radius)
+    moving_e = crop_inscribed_rectangle(xp, moving_f, radius)
+
+    ny, nx = fixed_e.shape[-2:]
+
+    if radial_bins is None:
+        radial_bins = min(ny, nx) // 2
+
+    # Optional Hann window
+    # wy = xp.hanning(ny)
+    # wx = xp.hanning(nx)
+    # window = wy[:, None] * wx[None, :]
+    # fixed_e *= window
+    # moving_e *= window
+
+    F_fixed = xp.abs(fft.fftshift(fft.fft2(fixed_e)))
+    F_moving = xp.abs(fft.fftshift(fft.fft2(moving_e)))
+
+    # # Radial high-pass weighting
+    # yy, xx = xp.mgrid[:ny, :nx]
+    # cy = (ny - 1) / 2
+    # cx = (nx - 1) / 2
+
+    # rr = xp.sqrt((yy - cy) ** 2 + (xx - cx) ** 2)
+
+    # F_fixed *= rr
+    # F_moving *= rr
+
+    LP_fixed = logpolar_transform(
         xp,
-        fixed_f,
-        mask=mask,
-        gaussian_sigma=gaussian_sigma,
-        gaussian_filter=gaussian_filter,
+        ndi,
+        F_fixed,
+        radial_bins,
+        angular_bins,
     )
-    moving_e = _preprocess(
+
+    LP_moving = logpolar_transform(
         xp,
-        moving_f,
-        mask=mask,
-        gaussian_sigma=gaussian_sigma,
-        gaussian_filter=gaussian_filter,
+        ndi,
+        F_moving,
+        radial_bins,
+        angular_bins,
     )
 
-    # import matplotlib.pyplot as plt
-    # plt.imshow(moving_e.get())
-    # plt.show()
+    # Optional:
+    # cut = radial_bins // 10
+    # LP_fixed = LP_fixed[cut:]
+    # LP_moving = LP_moving[cut:]
 
-    if not sub_pixel:
-        shift_y, shift_x = intensity_corr_integer(xp, fft, fixed_e, moving_e)
-    else:
-        shift_y, shift_x = intensity_corr_sub_pixel(xp, fft, fixed_e, moving_e)
+    dr, dtheta = intensity_corr_sub_pixel(
+        xp,
+        fft,
+        LP_fixed,
+        LP_moving,
+    )
 
-    return shift_y, shift_x
+    angle = -360.0 * dtheta / angular_bins
 
+    max_radius = min(nx, ny) /2
+    log_step = xp.log(max_radius) / (radial_bins - 1)
+    scale = float(xp.exp(dr * log_step))
 
-def apply_register_images_shifts(xp, fft, image, shift_y, shift_x):
-    if isinstance(shift_y, int) and isinstance(shift_x, int):
-        return xp.roll(xp.roll(image, shift_y, axis=-2), shift_x, axis=-1)
-    else:
-        ny, nx = image.shape[-2:]
-
-        fy = fft.fftfreq(ny).reshape(ny, 1)
-        fx = fft.fftfreq(nx).reshape(1, nx)
-
-        phase = xp.exp(-2j * xp.pi * (fy * shift_y + fx * shift_x))
-
-        out = fft.ifft2(
-            fft.fft2(image, axes=(-2, -1)) * phase,
-            axes=(-2, -1),
-        )
-
-        return xp.real(out)
+    return angle, scale
 
 
-def _preprocess(xp, img, mask=None, gaussian_sigma=None, gaussian_filter=None):
-    """Convert to float32, optionally smooth, subtract masked mean, and apply mask."""
-    out = img.astype(xp.float32, copy=False)
+def translation_matrix(xp, ty, tx):
+    M = xp.eye(3, dtype=xp.float32)
+    M[0, 2] = tx
+    M[1, 2] = ty
+    return M
 
-    if gaussian_sigma is not None and gaussian_sigma > 0:
-        out = gaussian_filter(out, sigma=gaussian_sigma)
 
-    if mask is None:
-        return out - xp.mean(out)
+def rotation_scale_matrix(xp, angle_deg, scale):
+    theta = xp.deg2rad(angle_deg)
 
-    # Usually faster and cleaner than out[mask] on GPU because it avoids compaction.
-    mask_f = mask.astype(xp.float32, copy=False)
-    mean = xp.sum(out * mask_f) / xp.maximum(xp.sum(mask_f), 1.0)
+    c = xp.cos(theta) * scale
+    s = xp.sin(theta) * scale
 
-    return (out - mean) * mask_f
+    M = xp.eye(3, dtype=xp.float32)
 
+    M[0, 0] = c
+    M[0, 1] = -s
+    M[1, 0] = s
+    M[1, 1] = c
+
+    return M
+
+
+def registration(
+    xp,
+    fft,
+    ndi,
+    fixed,
+    moving,
+    registration_mode="TL",
+    radius = None,
+):
+    """
+    Returns
+    -------
+    registered : ndarray
+    M : (3,3) homogeneous transform matrix
+
+    M maps the ORIGINAL moving image onto the registered image.
+    """
+
+    ny,nx = fixed.shape[-2:]
+
+    registered = moving.copy()
+
+    M = xp.eye(3, dtype=xp.float32)
+
+    for op in registration_mode.upper():
+
+        if op == "T":
+
+            ty, tx = register_images_shifts(
+                xp,
+                fft,
+                fixed,
+                registered,
+                radius=radius
+            )
+
+            registered = apply_register_images_shifts(
+                xp,
+                fft,
+                registered,
+                ty,
+                tx,
+            )
+
+            T = translation_matrix(xp, ty, tx)
+
+            # compose
+            M = T @ M
+
+        elif op == "L":
+
+            angle, scale = register_rotation_scale(
+                xp,
+                fft,
+                ndi,
+                fixed,
+                registered,
+                radius=radius
+            )
+
+            registered = apply_rotation_scale(
+                xp,
+                ndi,
+                registered,
+                angle,
+                scale,
+            )
+
+            L = rotation_scale_matrix(
+                xp,
+                angle,
+                scale,
+            )
+
+            cy = (ny - 1) / 2.0
+            cx = (nx - 1) / 2.0
+
+            Tc = xp.array([[1,0,-cx],
+                        [0,1,-cy],
+                        [0,0,1]], dtype=xp.float32)
+
+            Tc_inv = xp.array([[1,0,cx],
+                            [0,1,cy],
+                            [0,0,1]], dtype=xp.float32)
+
+            L = Tc_inv @ rotation_scale_matrix(xp, angle, scale) @ Tc # rotation scale is centered when usinf rotation
+
+            M = L @ M
+
+        else:
+
+            raise ValueError(f"Unknown registration mode '{op}'")
+
+    return registered, M
+
+
+def registration_apply(
+    xp,
+    ndi,
+    image,
+    M,
+    order=3,
+    mode="mirror", # other option could be "constant" or "reflect"
+    cval=0.0,
+):
+    """
+    Apply a registration matrix returned by registration().
+
+    Parameters
+    ----------
+    image : ndarray
+    M : (3,3)
+        Homogeneous transform returned by registration().
+    """
+
+    ny, nx = image.shape[-2:]
+
+    cy = (ny - 1) / 2.0
+    cx = (nx - 1) / 2.0
+
+    Tc = xp.array(
+        [
+            [1, 0, -cx],
+            [0, 1, -cy],
+            [0, 0, 1],
+        ],
+        dtype=xp.float32,
+    )
+
+    Tc_inv = xp.array(
+        [
+            [1, 0, cx],
+            [0, 1, cy],
+            [0, 0, 1],
+        ],
+        dtype=xp.float32,
+    )
+
+    # rotate/scale about image centre
+    M_center = Tc_inv @ M @ Tc
+
+    # affine_transform expects output->input mapping
+    A = xp.linalg.inv(M_center)
+
+    matrix = A[:2, :2]
+    offset = A[:2, 2]
+    offset = offset[::-1]
+
+    return ndi.affine_transform(
+        image,
+        matrix,
+        offset=offset,
+        order=order,
+        mode=mode,
+        cval=cval,
+    )
+
+def matrix_to_trs(xp, M):
+    """
+    Recover translation, rotation and isotropic scale from a
+    homogeneous 3x3 similarity transform.
+
+    Returns
+    -------
+    ty : float
+    tx : float
+    rot : float   # degrees
+    scale : float
+    """
+
+    tx = float(M[0, 2])
+    ty = float(M[1, 2])
+
+    a = M[0, 0]
+    c = M[1, 0]
+
+    # isotropic scale
+    scale = float(xp.sqrt(a * a + c * c))
+
+    # rotation
+    rot = float(xp.rad2deg(xp.arctan2(c, a)))
+
+    return xp.array([ty, tx, rot, scale]).astype(xp.float32)
+
+
+# ---------------- deprecated (keep for compatibility)
 
 _EPS = 1e-12
 
@@ -305,71 +701,6 @@ def intensity_corr_integer(xp, fft, fixed, moving):
     return -int(peak_y), -int(peak_x)
 
 
-def intensity_corr_sub_pixel(xp, fft, fixed, moving):
-    """Integer-pixel intensity-correlation shift estimate."""
-    ny, nx = fixed.shape[-2:]
-
-    fa = fft.fft2(fixed, axes=(-2, -1))
-    fb = fft.fft2(moving, axes=(-2, -1))
-
-    cps = fb * fa.conj()
-
-    corr = fft.ifft2(cps, axes=(-2, -1))
-    mag = xp.abs(corr)
-
-    idx = xp.argmax(mag)
-    ky, kx = xp.unravel_index(idx, mag.shape)
-    ky, kx = int(ky), int(kx)
-
-    peak_y, peak_x = signed_peak(ky, kx, ny, nx)
-
-    sub_y = subpixel_parabola(
-        mag[(ky - 1) % ny, kx],
-        mag[ky, kx],
-        mag[(ky + 1) % ny, kx],
-    )
-    sub_x = subpixel_parabola(
-        mag[ky, (kx - 1) % nx],
-        mag[ky, kx],
-        mag[ky, (kx + 1) % nx],
-    )
-
-    return -(peak_y + sub_y), -(peak_x + sub_x)
-
-
-def phase_corr_subpixel(xp, fft, fixed, moving):
-    """Subpixel phase-correlation shift estimate."""
-    ny, nx = fixed.shape[-2:]
-
-    fa = fft.fft2(fixed, axes=(-2, -1))
-    fb = fft.fft2(moving, axes=(-2, -1))
-
-    cps = fb * fa.conj()
-    cps *= 1.0 / (xp.abs(cps) + _EPS)
-
-    corr = fft.ifft2(cps, axes=(-2, -1))
-    mag = xp.abs(corr)
-
-    idx = xp.argmax(mag)
-    ky, kx = xp.unravel_index(idx, mag.shape)
-    ky, kx = int(ky), int(kx)
-
-    peak_y, peak_x = signed_peak(ky, kx, ny, nx)
-
-    sub_y = subpixel_parabola(
-        mag[(ky - 1) % ny, kx],
-        mag[ky, kx],
-        mag[(ky + 1) % ny, kx],
-    )
-    sub_x = subpixel_parabola(
-        mag[ky, (kx - 1) % nx],
-        mag[ky, kx],
-        mag[ky, (kx + 1) % nx],
-    )
-
-    return -(peak_y + sub_y), -(peak_x + sub_x)
-
-
 def fourier_magnitude(xp, fft, img, dc_radius_factor=32):
     """Fourier magnitude with DC component removal."""
     mag = xp.abs(fft.fftshift(fft.fft2(img, axes=(-2, -1))))
@@ -384,33 +715,6 @@ def fourier_magnitude(xp, fft, img, dc_radius_factor=32):
 
     mag[dc_mask] = 0
     return mag
-
-
-def logpolar_transform(xp, ndi, img, radial_bins, angular_bins):
-    """Log-polar transform for rotation/scale estimation."""
-    ny, nx = img.shape[-2:]
-    cy, cx = (ny - 1) * 0.5, (nx - 1) * 0.5
-
-    max_radius = min(cx, cy)
-
-    log_r = xp.linspace(0.0, xp.log(max_radius), radial_bins, dtype=xp.float32)
-    theta = xp.linspace(
-        0.0,
-        2.0 * xp.pi,
-        angular_bins,
-        endpoint=False,
-        dtype=xp.float32,
-    )
-
-    rr = xp.exp(log_r)[:, None]
-    tt = theta[None, :]
-
-    yy = cy + rr * xp.sin(tt)
-    xx = cx + rr * xp.cos(tt)
-
-    coords = xp.stack((yy, xx), axis=0)
-
-    return ndi.map_coordinates(img, coords, order=1, mode="constant", cval=0.0)
 
 
 def estimate_rotation_scale(
@@ -466,7 +770,7 @@ def apply_rotation_scale(xp, ndi, img, angle_deg, scale):
         img,
         matrix,
         offset=offset,
-        order=1,
+        order=3,
         mode="nearest",
     )
 

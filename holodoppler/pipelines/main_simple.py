@@ -1,48 +1,56 @@
-from holodoppler.saving import (
-    save_preview_images,
-    _get_default_output_path,
-    _save_videos,
-    _save_h5_2,
-    _create_directories,
-    _save_pngs,
-    _save_metadata,
-)
-from holodoppler.propagation import (
-    fresnel_transform,
-    fresnel_transform_with_phase,
-    angular_spectrum_transform,
-    angular_spectrum_transform_with_phase,
-)
-from holodoppler.shack_hartmann import (
-    construct_subapertures_fresnel,
-    construct_subapertures_angular,
-    calculate_displacements,
-    calculate_displacements_graph_laplacian,
-)
-from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum
-from holodoppler.utils import gaussian_flatfield, update_from_footer, square_cupy
-from holodoppler.filtering import filter_2d, svd_filter, frequency_symmetric_filtering, fourier_time_transform, corner_compensation
-from holodoppler.moments import moment
-from holodoppler.registration import (
-    register_images_shifts,
-    apply_register_images_shifts,
-)
-from holodoppler.file_reader import FileReaderFactory
-
+from collections import defaultdict
+from pathlib import Path
 
 import cupy as cp
+import cupyx.scipy.ndimage as ndi
 import numpy as np
-
-# import numpy as np
 from cupyx.scipy.ndimage import gaussian_filter
 
 # from cupyx.scipy.ndimage import zoom
 from tqdm import tqdm
 
-from pathlib import Path
-
-
-from collections import defaultdict
+from holodoppler.file_reader import FileReaderFactory
+from holodoppler.filtering import (
+    corner_compensation,
+    filter_2d,
+    fourier_time_transform,
+    frequency_symmetric_filtering,
+    svd_filter,
+)
+from holodoppler.moments import moment
+from holodoppler.propagation import (
+    angular_spectrum_transform,
+    angular_spectrum_transform_with_phase,
+    fresnel_transform,
+    fresnel_transform_with_phase,
+)
+from holodoppler.registration import (
+    matrix_to_trs,
+    registration,
+    registration_apply,
+)
+from holodoppler.saving import (
+    _create_directories,
+    _get_default_output_path,
+    _save_h5_2,
+    _save_metadata,
+    _save_pngs,
+    _save_videos,
+    save_preview_images,
+)
+from holodoppler.shack_hartmann import (
+    calculate_displacements,
+    calculate_displacements_graph_laplacian,
+    construct_subapertures_angular,
+    construct_subapertures_fresnel,
+)
+from holodoppler.utils import (
+    elliptical_mask,
+    gaussian_flatfield,
+    square_cupy,
+    update_from_footer,
+)
+from holodoppler.zernike import fit_zernike_angular_spectrum, fit_zernike_fresnel
 
 
 def _process_batch(parameters, frames, phase_term=None, output_dict=None):
@@ -160,7 +168,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
 def _process_shack_hartmann(parameters, frames, output_dict=None):
 
     fft = cp.fft
-    nt, ny, nx = frames.shape
+    _, ny, nx = frames.shape
 
     prop_method = parameters["spatial_propagation"]
 
@@ -212,7 +220,6 @@ def _process_shack_hartmann(parameters, frames, output_dict=None):
             ),
         )
     else:  # Use only the shifts to the central sub ap
-        ny_s, nx_s, Ny, Nx = U.shape
         shifts_y, shifts_x = calculate_displacements(
             cp,
             fft,
@@ -341,7 +348,7 @@ def preview(file_path, parameters):
 
     # calc on gpu
     _process_batch(parameters, frames=frames, phase_term=phase_term, output_dict=res)
-    
+
     if parameters.get("square", False):
         res = {
             k: cp.squeeze(square_cupy(v[cp.newaxis, ...])) if v.ndim == 2 else v
@@ -392,7 +399,7 @@ def process(file_path, parameters):
     else:
         num_batch = int((end_frame - first_frame) / batch_stride)
     if num_batch <= 0:
-        return None
+        return
 
     output = defaultdict(list)
 
@@ -462,8 +469,10 @@ def process(file_path, parameters):
 
                 # 2D filtering
                 if parameters.get("filter2d", False):
-                    d_current = filter_2d(cp, cp.fft, d_current, parameters["filter2d_low"])
-                
+                    d_current = filter_2d(
+                        cp, cp.fft, d_current, parameters["filter2d_low"]
+                    )
+
                 res = {}
 
                 phase_term = None
@@ -482,22 +491,21 @@ def process(file_path, parameters):
                     M0_reg = res["M0ff"]
 
                 if M0_reg is not None:
-                    shift_y, shift_x = register_images_shifts(
+                    _, reg = registration(
                         cp,
                         cp.fft,
+                        ndi,
                         M0_reg,
                         res["M0ff"],
-                        radius=parameters["registration_radius"],
-                        sub_pixel=parameters["registration_sub_pixel"],
+                        registration_mode=parameters.get("registration_mode", "TL"),
+                        radius=parameters.get("registration_radius",0.8),
                     )
 
                     for k, v in res.items():
                         if k in ["M0ff", "M0", "M1", "M2"] or "band_" in k:
-                            res[k] = apply_register_images_shifts(
-                                cp, cp.fft, v, shift_y, shift_x
-                            )
+                            res[k] = registration_apply(cp, ndi, v, reg)
 
-                    res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
+                    res["registration"] = matrix_to_trs(cp, reg)
 
                 compute_events[current_idx] = cp.cuda.Event()
                 compute_events[current_idx].record(compute_stream)
@@ -506,7 +514,7 @@ def process(file_path, parameters):
 
             if res:
                 for k, v in res.items():
-                    output[k].append(v.get()) # transfer to cpu
+                    output[k].append(v.get())  # transfer to cpu
 
             processed_batches += 1
 
@@ -527,7 +535,7 @@ def process(file_path, parameters):
             # 2D filtering
             if parameters.get("filter2d", False):
                 d_current = filter_2d(cp, cp.fft, d_current, parameters["filter2d_low"])
-            
+
             res = {}
 
             phase_term = None
@@ -544,22 +552,21 @@ def process(file_path, parameters):
                 M0_reg = res["M0ff"]
 
             if M0_reg is not None:
-                shift_y, shift_x = register_images_shifts(
-                    cp,
-                    cp.fft,
-                    M0_reg,
-                    res["M0ff"],
-                    radius=parameters["registration_radius"],
-                    sub_pixel=parameters["registration_sub_pixel"],
-                )
-
-            for k, v in res.items():
-                if k in ["M0ff", "M0", "M1", "M2"] or "band_" in k:
-                    res[k] = apply_register_images_shifts(
-                        cp, cp.fft, v, shift_y, shift_x
+                    reg = registration(
+                        cp,
+                        cp.fft,
+                        ndi,
+                        M0_reg,
+                        res["M0ff"],
+                        registration_mode=parameters.get("registration_mode", "TL"),
+                        radius=parameters.get("registration_radius",0.8),
                     )
 
-            res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
+                    for k, v in res.items():
+                        if k in ["M0ff", "M0", "M1", "M2"] or "band_" in k:
+                            res[k] = registration_apply(cp, ndi, v, reg)
+
+                    res["registration"] = reg
 
             compute_events[current_idx] = cp.cuda.Event()
             compute_events[current_idx].record(compute_stream)
@@ -568,7 +575,7 @@ def process(file_path, parameters):
 
         if res:
             for k, v in res.items():
-                output[k].append(v.get()) # transfer to cpu
+                output[k].append(v.get())  # transfer to cpu
 
         processed_batches += 1
 
@@ -582,7 +589,10 @@ def process(file_path, parameters):
     output = {k: np.stack(v, axis=0) for k, v in output.items()}
 
     if parameters.get("square", False):
-        output = {k: square_cupy(cp.array(v)).get() if v.ndim == 3 else v for k, v in output.items()}
+        output = {
+            k: square_cupy(cp.array(v)).get() if v.ndim == 3 else v
+            for k, v in output.items()
+        }
 
     cp.get_default_memory_pool().free_all_blocks()
 
@@ -592,6 +602,15 @@ def process(file_path, parameters):
         target_dir = Path(parameters["saving_to_folder"])
 
     _create_directories(target_dir, "FULL")
+
+    if M0_reg is not None: #saving M0_reg
+        radius = parameters.get("registration_radius",None)
+        mask = elliptical_mask(M0_reg.shape[-2], M0_reg.shape[-1], radius, cp) if radius else None
+        M0_reg = M0_reg * mask if mask is not None else M0_reg
+        mean = cp.sum(M0_reg * mask) / cp.maximum(cp.sum(mask), 1.0)
+        M0_reg = (M0_reg - mean) * mask
+        M0_reg = square_cupy(M0_reg[cp.newaxis ,...]) if parameters.get("square", False) else M0_reg 
+        output["M0_reg"] = M0_reg.get()
 
     # renaming for compatibility with Doppler View
     output["moment0"] = output.pop("M0")
@@ -607,7 +626,7 @@ def process(file_path, parameters):
         "shack_hartmann_zernike_coefs",
         "registration",
         "spectrum_line",
-    ] + [key for key in output.keys() if "band_" in key]
+    ] + [key for key in output if "band_" in key]
 
     _save_h5_2(target_dir, output, parameters, save_only_list=save_to_h5_list)
 

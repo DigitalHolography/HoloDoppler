@@ -337,10 +337,13 @@ def _save_pngs(target_dir, np_map):
     with ThreadPoolExecutor(max_workers=8) as executor:
         tasks = []
         for name, data in np_map.items():
-            if data.ndim != 3 and data.ndim != 4:
+            if data.ndim != 2 and data.ndim != 3 and data.ndim != 4:
                 continue
             png_path = target_dir / "png" / f"{name}.png"
-            mean_frame = np.mean(data, axis=0)
+            if data.ndim == 2:
+                mean_frame = data
+            else:
+                mean_frame = np.mean(data, axis=0)
 
             # Preserve original dtype for PNG saving
             if data.dtype == np.uint16:
