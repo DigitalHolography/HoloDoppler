@@ -39,7 +39,7 @@ high_freq: 18300  # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
 
 # Image registration
 image_registration: true
-registration_mode: "TL" # T for Translation L for LogPolar rotation and scale estimate. Using "TLTL" does two passes of translation then rotation
+registration_mode: "T" # T for Translation L for LogPolar rotation and scale estimate. Using "TLTL" does two passes of translation then rotation
 registration_radius: 0.8
 registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
 registration_laplacian: false
