@@ -3,9 +3,9 @@ pipeline_name: "sliding_shack_hart"
 # Core parameters
 time_window: 256
 time_stride: 256
-sh_time_accumulation: 4 # number of accumulation of sh sub images at each batch
-first_frame: 235520 # 258048 # 235520
-end_frame: 258048  # -1 means process all frames
+sh_time_accumulation: 8 # number of accumulation of sh sub images at each batch
+first_frame: 0 # 258048 # 235520
+end_frame: -1  # -1 means process all frames
 
 # Propagation parameters
 spatial_propagation: "use_holovibes"  # Options: "Fresnel" or "AngularSpectrum"
