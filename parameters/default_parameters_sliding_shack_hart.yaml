@@ -1,11 +1,11 @@
-pipeline_name: "sliding_shack_hartmann"
+pipeline_name: "sliding_shack_hart"
 
 # Core parameters
 time_window: 256
 time_stride: 256
-sh_time_accumulation: 4 # number of repetition of sh at each batch
-first_frame: 0
-end_frame: -1  # -1 means process all frames
+sh_time_accumulation: 4 # number of accumulation of sh sub images at each batch
+first_frame: 235520 # 258048 # 235520
+end_frame: 258048  # -1 means process all frames
 
 # Propagation parameters
 spatial_propagation: "use_holovibes"  # Options: "Fresnel" or "AngularSpectrum"
@@ -33,12 +33,14 @@ low_freq: 6000  # Low frequency cutoff in Hz
 high_freq: 18300  # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
 
 # Frequency bands for different cutoffs of the psd in Hz. It will give the average of the psd in the symmetric frequency range
-frequency_bands:
-  - [3000, 9000]
-  - [9000, 18000]
+# frequency_bands:
+#   - [3000, 9000]
+#   - [9000, 18000]
 
 # Image registration
 image_registration: true
+registration_mode: "TL" # T for Translation L for LogPolar rotation and scale estimate. Using "TLTL" does two passes of translation then rotation
+registration_radius: 0.8
 registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
 registration_laplacian: false
 

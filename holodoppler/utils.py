@@ -764,3 +764,88 @@ def update_from_footer(parameters, holofooter):
     except Exception as e:
         print(f"Issue from holovibes footer: {e}")
     return parameters
+
+def create_holo(file_path, data, version=777, bit_depth=8, footer=None):
+    """data is a 3D array that you want to save into a holo file
+    footer is a optional dict"""
+
+    HEADER_SIZE = 64
+   
+    if data.ndim != 3:
+        raise ValueError(f"Expected 3D array, got {data.ndim}D array")
+   
+    height, width = data.shape[-2:]
+    num_frames = data.shape[0]
+   
+    bytes_per_pixel = bit_depth // 8
+    if bit_depth % 8 != 0:
+        raise ValueError(f"bit_depth must be multiple of 8, got {bit_depth}")
+   
+    frame_size_bytes = height * width * bytes_per_pixel
+   
+    data_size = num_frames * frame_size_bytes
+    total_size = HEADER_SIZE + data_size
+   
+    footer_bytes = b""
+    if footer:
+        try:
+            footer_json = json.dumps(footer).encode("utf-8")
+            footer_bytes = footer_json
+            total_size += len(footer_bytes)
+        except Exception as e:
+            raise ValueError(f"Failed to serialize footer: {e}")
+   
+    magic_number = b"HOLO"  # verify magic number
+    header = bytearray(HEADER_SIZE)
+   
+    header[0:4] = magic_number[:4].ljust(4, b'\0')
+   
+    header[4:6] = version.to_bytes(2, "little")
+   
+    header[6:8] = bit_depth.to_bytes(2, "little")
+   
+    header[8:12] = width.to_bytes(4, "little")
+   
+    header[12:16] = height.to_bytes(4, "little")
+   
+    header[16:20] = num_frames.to_bytes(4, "little")
+   
+    header[20:28] = total_size.to_bytes(8, "little")
+   
+    header[28] = 0
+   
+    with open(file_path, "wb") as f:
+        f.write(header)
+       
+        dtype = None
+        if bit_depth == 8:
+            dtype = np.uint8
+        elif bit_depth == 16:
+            dtype = np.uint16
+        elif bit_depth == 32:
+            dtype = np.uint32
+        elif bit_depth == 64:
+            dtype = np.uint64
+        else:
+            raise ValueError(f"Unsupported bit_depth: {bit_depth}")
+       
+        data_typed = data.astype(dtype)
+       
+        for frame_idx in range(num_frames):
+            frame_data = data_typed[frame_idx].flatten()
+            frame_bytes = frame_data.tobytes()
+            f.write(frame_bytes)
+       
+        if footer_bytes:
+            f.write(footer_bytes)
+   
+    return {
+        "file_path": file_path,
+        "version": version,
+        "bit_depth": bit_depth,
+        "width": width,
+        "height": height,
+        "num_frames": num_frames,
+        "total_size": total_size,
+        "has_footer": bool(footer)
+    }

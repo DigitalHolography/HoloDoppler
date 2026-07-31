@@ -1,59 +1,58 @@
-from holodoppler.saving import (
-    save_preview_images,
-    _get_default_output_path,
-    _save_videos,
-    _save_h5_2,
-    _create_directories,
-    _save_pngs,
-    _save_metadata,
-)
-from holodoppler.propagation import (
-    fresnel_transform,
-    fresnel_transform_with_phase,
-    angular_spectrum_transform,
-    angular_spectrum_transform_with_phase,
-)
-from holodoppler.shack_hartmann import (
-    construct_subapertures_fresnel,
-    construct_subapertures_angular,
-    calculate_displacements,
-    calculate_displacements_graph_laplacian,
-)
-from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum
-from holodoppler.utils import (
-    gaussian_flatfield,
-    update_from_footer,
-    normalize_to_uint8,
-    square_cupy,
-    stretchlimcp,
-    scaling,
-)
-from holodoppler.filtering import (
-    svd_filter,
-    frequency_symmetric_filtering,
-    fourier_time_transform,
-    corner_compensation,
-    filter_2d,
-)
-from holodoppler.moments import moment
-from holodoppler.registration import (
-    register_images_shifts,
-    apply_register_images_shifts,
-    register_laplacian,
-)
-from holodoppler.file_reader import FileReaderFactory
-
+from collections import defaultdict, deque
 
 import cupy as cp
 
 # import numpy as np
+import cupyx.scipy.ndimage as ndi
 from cupyx.scipy.ndimage import gaussian_filter
 
 # from cupyx.scipy.ndimage import zoom
 from tqdm import tqdm
 
-from collections import defaultdict
-from collections import deque
+from holodoppler.file_reader import FileReaderFactory
+from holodoppler.filtering import (
+    corner_compensation,
+    filter_2d,
+    fourier_time_transform,
+    frequency_symmetric_filtering,
+    svd_filter,
+)
+from holodoppler.moments import moment
+from holodoppler.propagation import (
+    angular_spectrum_transform,
+    angular_spectrum_transform_with_phase,
+    fresnel_transform,
+    fresnel_transform_with_phase,
+)
+from holodoppler.registration import (
+    matrix_to_trs,
+    registration,
+    registration_apply,
+)
+from holodoppler.saving import (
+    _create_directories,
+    _get_default_output_path,
+    _save_h5_2,
+    _save_metadata,
+    _save_pngs,
+    _save_videos,
+    save_preview_images,
+)
+from holodoppler.shack_hartmann import (
+    calculate_displacements,
+    calculate_displacements_graph_laplacian,
+    construct_subapertures_angular,
+    construct_subapertures_fresnel,
+)
+from holodoppler.utils import (
+    gaussian_flatfield,
+    normalize_to_uint8,
+    scaling,
+    square_cupy,
+    stretchlimcp,
+    update_from_footer,
+)
+from holodoppler.zernike import fit_zernike_angular_spectrum, fit_zernike_fresnel
 
 
 def _process_batch(parameters, frames, phase_term=None, output_dict=None):
@@ -166,7 +165,6 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
 def _process_shack_hartmann_U(parameters, frames, output_dict=None):
 
     fft = cp.fft
-    nt, ny, nx = frames.shape
 
     prop_method = parameters["spatial_propagation"]
 
@@ -227,7 +225,6 @@ def _process_shack_hartmann_phase(parameters, U, ny, nx, output_dict=None):
             ),
         )
     else:  # Use only the shifts to the central sub ap
-        ny_s, nx_s, Ny, Nx = U.shape
         shifts_y, shifts_x = calculate_displacements(
             cp,
             fft,
@@ -437,7 +434,7 @@ def process(file_path, parameters):
         num_batch = int((end_frame - first_frame) / time_stride)
 
     if num_batch <= 0:
-        return None
+        return
 
     output = defaultdict(list)
 
@@ -510,28 +507,21 @@ def process(file_path, parameters):
                     M0_reg = res["M0ff"]
 
                 if M0_reg is not None:
-                    shift_y, shift_x = register_images_shifts(
+                    _, reg = registration(
                         cp,
                         cp.fft,
+                        ndi,
                         M0_reg,
                         res["M0ff"],
-                        radius=0.8,
-                        gaussian_sigma=2,
-                        gaussian_filter=gaussian_filter,
+                        registration_mode=parameters.get("registration_mode", "TL"),
+                        radius=parameters.get("registration_radius",0.8),
                     )
 
-                if parameters["image_registration"]:
                     for k, v in res.items():
-                        if (
-                            k in ["M0ff", "M0", "M1", "M2"] or "band_" in k
-                        ):  # select the outputs that need the registration from M0ff applied
-                            res[k] = apply_register_images_shifts(
-                                cp, cp.fft, v, shift_y, shift_x
-                            )
+                        if k in ["M0ff", "M0", "M1", "M2"] or "band_" in k:
+                            res[k] = registration_apply(cp, ndi, v, reg)
 
-                    res["registration"] = cp.stack(
-                        [cp.array(shift_y), cp.array(shift_x)]
-                    )
+                    res["registration"] = matrix_to_trs(cp, reg)
 
                 compute_event = cp.cuda.Event()
                 compute_event.record(compute_stream)
@@ -549,28 +539,11 @@ def process(file_path, parameters):
         # res["shack_hartmann_sub_images"] = cp.reshape(U_tot,(numy*sy,numx*sx))
 
         for k, v in res.items():
-            output[k].append(res[k])
+            output[k].append(v)
 
         processed_batches += 1
 
     output = {k: cp.stack(v, axis=0) for k, v in output.items()}
-
-    if parameters.get("registration_laplacian", False):
-        shifts_y, shifts_x = register_laplacian(cp, cp.fft, output["M0ff"], radius=0.7)
-        shifts_y, shifts_x = shifts_y - shifts_y[0], shifts_x - shifts_x[0]
-        output["register_laplacian"] = cp.stack([shifts_y, shifts_x])
-        shifts_y, shifts_x = cp.rint(shifts_y).astype(cp.int64), cp.rint(
-            shifts_x
-        ).astype(cp.int64)
-        for k, v in output.items():
-            if (
-                k in ["M0ff", "M0", "M1", "M2"] or "band_" in k
-            ):  # select the outputs that need the registration from M0ff applied
-                for m in range(v.shape[0]):
-                    shift_y, shift_x = int(shifts_y[m]), int(shifts_x[m])
-                    output[k][m] = apply_register_images_shifts(
-                        cp, cp.fft, v[m], shift_y, shift_x
-                    )
 
     if parameters.get("square", False):
         output = {k: square_cupy(v) if v.ndim >= 3 else v for k, v in output.items()}
@@ -589,6 +562,7 @@ def process(file_path, parameters):
 
     save_to_h5_list = [
         "M0ff",
+        "M0",
         "shack_hartmann_zernike_coefs",
         "register_laplacian",
         "registration",
