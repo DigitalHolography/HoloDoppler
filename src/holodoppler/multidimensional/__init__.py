@@ -1,0 +1,121 @@
+"""Multidimensional processing for ultrahigh-speed holographic fields.
+
+The public compatibility convention is time-first ``H[t, ..., y, x]`` and
+frequency-first, unshifted ``SH[f, ..., y, x]``.
+"""
+
+from .representations import build_field_representations, phase_validity_mask
+from .aperture import (
+    HADAMARD,
+    MODE_NAMES,
+    QUADRANT_NAMES,
+    analyze_cross_spectral_matrix,
+    analyze_quadrant_spectra,
+    apply_aperture_masks,
+    band_angular_analysis,
+    modal_cross_spectral_matrix,
+    power_asymmetries,
+    quadrant_cross_spectral_matrix,
+    quadrant_masks,
+)
+from .delays import (
+    delayed_recombination_power,
+    delayed_recombination_spectra,
+    modal_one_frame_difference,
+    one_frame_reciprocal_analysis,
+)
+from .decomposition import (
+    analyze_axial_gouy,
+    axial_mode_svd,
+    band_limited_svd,
+    depth_aperture_time_svd,
+    depth_spectral_power_svd,
+    depth_time_svd,
+    gouy_symmetric_depth_correlation,
+    matrix_svd,
+    rank_gouy_candidates,
+    space_time_svd,
+    unfold_depth_aperture_time,
+    unfold_depth_time,
+    unfold_space_time,
+)
+from .diagnostics import export_diagnostic_images
+from .io import save_analysis_h5
+from .pipeline import FieldAnalysis, analyze_field_block
+from .spectral import (
+    average_power_spectrum,
+    cross_spectrum,
+    energy_normalized_tapers,
+    normalized_coherence,
+    representation_coupling,
+    spectral_estimate_nbytes,
+    spectral_estimate_shape,
+    sum_frequency_band,
+    symmetric_frequency_band,
+    temporal_spectral_estimates,
+)
+from .types import (
+    AngularAnalysis,
+    AxialSVDResult,
+    CouplingResult,
+    FieldRepresentations,
+    GouyCorrelationResult,
+    OneFrameDelayResult,
+    SVDResult,
+    SpectralEstimates,
+)
+
+__all__ = [
+    "AngularAnalysis",
+    "AxialSVDResult",
+    "CouplingResult",
+    "FieldRepresentations",
+    "FieldAnalysis",
+    "GouyCorrelationResult",
+    "HADAMARD",
+    "MODE_NAMES",
+    "OneFrameDelayResult",
+    "SVDResult",
+    "SpectralEstimates",
+    "QUADRANT_NAMES",
+    "analyze_cross_spectral_matrix",
+    "analyze_field_block",
+    "analyze_axial_gouy",
+    "analyze_quadrant_spectra",
+    "apply_aperture_masks",
+    "axial_mode_svd",
+    "band_limited_svd",
+    "average_power_spectrum",
+    "build_field_representations",
+    "cross_spectrum",
+    "band_angular_analysis",
+    "delayed_recombination_power",
+    "delayed_recombination_spectra",
+    "depth_aperture_time_svd",
+    "depth_spectral_power_svd",
+    "depth_time_svd",
+    "energy_normalized_tapers",
+    "export_diagnostic_images",
+    "gouy_symmetric_depth_correlation",
+    "matrix_svd",
+    "normalized_coherence",
+    "modal_cross_spectral_matrix",
+    "modal_one_frame_difference",
+    "one_frame_reciprocal_analysis",
+    "phase_validity_mask",
+    "power_asymmetries",
+    "quadrant_cross_spectral_matrix",
+    "quadrant_masks",
+    "rank_gouy_candidates",
+    "representation_coupling",
+    "save_analysis_h5",
+    "spectral_estimate_nbytes",
+    "spectral_estimate_shape",
+    "space_time_svd",
+    "sum_frequency_band",
+    "symmetric_frequency_band",
+    "temporal_spectral_estimates",
+    "unfold_depth_aperture_time",
+    "unfold_depth_time",
+    "unfold_space_time",
+]

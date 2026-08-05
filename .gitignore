@@ -8,11 +8,12 @@ wheels/
 *.spec
 
 # Virtual environments
-.venv
+.venv/
 
-/debug_outputs
-<<<<<<< HEAD
-=======
-
+# Local recordings and generated analysis artifacts
+*.holo
+*.cine
+*.h5
+*.hdf5
+debug_outputs/
 .debug_paths.json
->>>>>>> a046356 (okay)
