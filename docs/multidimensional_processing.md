@@ -52,6 +52,7 @@ needed crop or derived quantity.
 | Reciprocal one-frame delay contrast | `one_frame_reciprocal_analysis` |
 | Space/time and joint unfoldings | `unfold_space_time`, `unfold_depth_time`, `unfold_depth_aperture_time` |
 | Exact or truncated SVD | `matrix_svd` and the `*_svd` wrappers |
+| Retinal space-time SVD filtering | `space_time_svd_filter` or `analyze_field_block(..., svd_remove_modes=N)` |
 | Band-limited SVD | `band_limited_svd` |
 | Axial modes and Gouy candidates | `axial_mode_svd`, `analyze_axial_gouy` |
 | Selected HDF5 results | `save_analysis_h5` |
@@ -88,6 +89,15 @@ The unfolding and SVD wrappers accept fixed `sample_mask` and
 `sample_weights` arrays matching all non-time axes. This implements the
 manuscript's time-invariant region selection and block weighting before the
 decomposition. The caller must report those choices with the result.
+
+`space_time_svd_filter` implements the retinal-Doppler coherent-motion
+rejection used by the legacy processing path. It unfolds `H[t, y, x]` into
+`X[pixel, time]`, diagonalizes the small temporal covariance `X^H X`, orders
+the temporal modes by decreasing singular value, and subtracts the projection
+onto the requested number of leading modes. `analyze_field_block` applies the
+same operation before representations, aperture selection, and spectral
+estimation when `svd_remove_modes` is positive. No temporal-mean subtraction
+is performed unless `svd_center_rows=True` is explicitly requested.
 
 ## Large-data workflow
 
@@ -141,6 +151,31 @@ save_analysis_h5(
 
 `export_diagnostic_images` accepts only caller-selected 2-D arrays. Slice or
 band-reduce multidimensional results before calling it.
+
+## Sliding AVI diagnostics
+
+`analyze_sliding_window` computes the same reduced SVD, Doppler,
+log-amplitude/phase coupling, and one-frame reciprocal-aperture maps for one
+bounded complex64 field block. `SlidingAnalysisAVIWriter` encodes four labeled
+overview streams without retaining the complete recording or any volumetric
+spectral result in host memory. Display scaling is diagnostic: scalar maps use
+per-window robust percentiles, coherence keeps its fixed 0-to-1 scale, and all
+directional contrasts in a window share one symmetric scale.
+
+The command-line exporter accepts paths and never embeds a recording path in
+the repository:
+
+```powershell
+python scripts/export_sliding_multidimensional_avi.py `
+  "E:\recordings\example.holo" `
+  "C:\outputs\example_sliding_avi" `
+  --window-length 64 --stride 64 --svd-remove-modes 4
+```
+
+The default MJPG AVI playback rate is capped at 65 frames/s for compatibility;
+the manifest records both playback rate and the physical analysis rate
+`sampling_frequency / stride`. Use `--max-windows 2` for a bounded codec and
+GPU smoke test before exporting a complete recording.
 
 ## Real-recording validation
 

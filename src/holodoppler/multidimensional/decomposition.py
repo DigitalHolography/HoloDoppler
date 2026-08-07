@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from ._backend import array_namespace
-from .types import AxialSVDResult, GouyCorrelationResult, SVDResult
+from .types import (
+    AxialSVDResult,
+    GouyCorrelationResult,
+    SpaceTimeSVDFilterResult,
+    SVDResult,
+)
 
 
 SVDMethod = Literal["gram", "randomized"]
@@ -254,6 +259,72 @@ def space_time_svd(
             H, sample_mask=sample_mask, sample_weights=sample_weights
         ),
         **kwargs,
+    )
+
+
+def space_time_svd_filter(
+    H: Any,
+    number_of_modes: int,
+    *,
+    center_rows: bool = False,
+) -> SpaceTimeSVDFilterResult:
+    """Remove leading coherent space-time modes from ``H[t, y, x]``.
+
+    This is the temporal-covariance implementation traditionally used for
+    retinal laser-Doppler holography. The field is unfolded as
+    ``X[pixel, time]`` and the leading eigenvectors of ``X.conj().T @ X`` are
+    projected out without materializing the much larger spatial-mode matrix.
+
+    ``center_rows=True`` subtracts each pixel's temporal mean before the SVD;
+    the mean is intentionally not restored in the returned filtered field.
+    """
+
+    if getattr(H, "ndim", 0) != 3:
+        raise ValueError("H must have shape (N_t, N_y, N_x).")
+    if any(int(length) < 1 for length in H.shape):
+        raise ValueError("H cannot contain an empty dimension.")
+
+    try:
+        selected_modes = int(number_of_modes)
+    except (TypeError, ValueError) as error:
+        raise ValueError("number_of_modes must be an integer.") from error
+    if selected_modes != number_of_modes:
+        raise ValueError("number_of_modes must be an integer.")
+    if selected_modes < 0 or selected_modes > H.shape[0]:
+        raise ValueError(
+            f"number_of_modes must lie between 0 and {H.shape[0]}."
+        )
+
+    xp = array_namespace(H)
+    matrix = unfold_space_time(H)
+    working = (
+        matrix - xp.mean(matrix, axis=1, keepdims=True)
+        if center_rows
+        else matrix
+    )
+
+    covariance = working.conj().T @ working
+    eigenvalues, temporal_modes = xp.linalg.eigh(covariance)
+    order = xp.argsort(eigenvalues)[::-1]
+    eigenvalues = xp.maximum(xp.real(eigenvalues[order]), 0)
+    temporal_modes = temporal_modes[:, order]
+    singular_values = xp.sqrt(eigenvalues)
+
+    if selected_modes:
+        rejected_modes = temporal_modes[:, :selected_modes]
+        filtered_matrix = working - (
+            (working @ rejected_modes) @ rejected_modes.conj().T
+        )
+    else:
+        filtered_matrix = working.copy()
+
+    return SpaceTimeSVDFilterResult(
+        filtered_field=filtered_matrix.T.reshape(H.shape),
+        singular_values=singular_values,
+        temporal_modes=temporal_modes,
+        removed_mode_count=selected_modes,
+        input_shape=tuple(map(int, H.shape)),
+        centered_rows=bool(center_rows),
     )
 
 

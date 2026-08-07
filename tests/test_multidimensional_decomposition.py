@@ -7,6 +7,7 @@ from holodoppler.multidimensional import (
     depth_time_svd,
     matrix_svd,
     space_time_svd,
+    space_time_svd_filter,
     unfold_depth_aperture_time,
     unfold_depth_time,
     unfold_space_time,
@@ -95,6 +96,35 @@ def test_full_temporal_fourier_transform_preserves_singular_values():
         atol=3e-5,
         rtol=3e-5,
     )
+
+
+def test_space_time_svd_filter_projects_out_largest_temporal_modes():
+    rng = np.random.default_rng(19)
+    H = (
+        rng.standard_normal((16, 5, 6)) + 1j * rng.standard_normal((16, 5, 6))
+    ).astype(np.complex64)
+
+    result = space_time_svd_filter(H, 3)
+    original = unfold_space_time(H)
+    rejected = result.temporal_modes[:, :3]
+    expected = original - (original @ rejected) @ rejected.conj().T
+    filtered = unfold_space_time(result.filtered_field)
+
+    assert result.filtered_field.shape == H.shape
+    assert result.filtered_field.dtype == np.complex64
+    assert result.singular_values.dtype == np.float32
+    assert result.removed_mode_count == 3
+    assert np.all(np.diff(result.singular_values) <= 0)
+    np.testing.assert_allclose(filtered, expected, atol=2e-5, rtol=2e-5)
+    np.testing.assert_allclose(filtered @ rejected, 0, atol=3e-5)
+
+
+def test_space_time_svd_filter_validates_mode_count():
+    H = np.ones((4, 2, 3), dtype=np.complex64)
+
+    for invalid in (-1, 5, 1.5):
+        with np.testing.assert_raises(ValueError):
+            space_time_svd_filter(H, invalid)
 
 
 def test_axial_svd_shapes_and_gouy_candidate_ranking():

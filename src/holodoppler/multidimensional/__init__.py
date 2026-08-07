@@ -35,6 +35,7 @@ from .decomposition import (
     matrix_svd,
     rank_gouy_candidates,
     space_time_svd,
+    space_time_svd_filter,
     unfold_depth_aperture_time,
     unfold_depth_time,
     unfold_space_time,
@@ -42,6 +43,12 @@ from .decomposition import (
 from .diagnostics import export_diagnostic_images
 from .io import save_analysis_h5
 from .pipeline import FieldAnalysis, analyze_field_block
+from .sliding import (
+    DEFAULT_VIDEO_BANDS,
+    SlidingWindowAnalysis,
+    analyze_sliding_window,
+    sliding_window_starts,
+)
 from .spectral import (
     average_power_spectrum,
     cross_spectrum,
@@ -61,27 +68,35 @@ from .types import (
     FieldRepresentations,
     GouyCorrelationResult,
     OneFrameDelayResult,
+    SpaceTimeSVDFilterResult,
     SVDResult,
     SpectralEstimates,
 )
+from .video import SlidingAnalysisAVIWriter, VIDEO_FILENAMES
 
 __all__ = [
     "AngularAnalysis",
     "AxialSVDResult",
     "CouplingResult",
+    "DEFAULT_VIDEO_BANDS",
     "FieldRepresentations",
     "FieldAnalysis",
     "GouyCorrelationResult",
     "HADAMARD",
     "MODE_NAMES",
     "OneFrameDelayResult",
+    "SpaceTimeSVDFilterResult",
+    "SlidingAnalysisAVIWriter",
+    "SlidingWindowAnalysis",
     "SVDResult",
     "SpectralEstimates",
     "QUADRANT_NAMES",
+    "VIDEO_FILENAMES",
     "analyze_cross_spectral_matrix",
     "analyze_field_block",
     "analyze_axial_gouy",
     "analyze_quadrant_spectra",
+    "analyze_sliding_window",
     "apply_aperture_masks",
     "axial_mode_svd",
     "band_limited_svd",
@@ -112,6 +127,8 @@ __all__ = [
     "spectral_estimate_nbytes",
     "spectral_estimate_shape",
     "space_time_svd",
+    "space_time_svd_filter",
+    "sliding_window_starts",
     "sum_frequency_band",
     "symmetric_frequency_band",
     "temporal_spectral_estimates",

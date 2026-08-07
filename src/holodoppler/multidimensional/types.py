@@ -103,6 +103,23 @@ class SVDResult:
 
 
 @dataclass(frozen=True)
+class SpaceTimeSVDFilterResult:
+    """Retinal-Doppler space-time SVD filtering of ``H[t, y, x]``.
+
+    ``temporal_modes`` are ordered from the largest to the smallest singular
+    value. ``filtered_field`` is reconstructed after projecting out the first
+    ``removed_mode_count`` modes.
+    """
+
+    filtered_field: Any
+    singular_values: Any
+    temporal_modes: Any
+    removed_mode_count: int
+    input_shape: tuple[int, int, int]
+    centered_rows: bool
+
+
+@dataclass(frozen=True)
 class AxialSVDResult:
     """Axial-mode SVD of ``H[t, z, y, x]``."""
 
