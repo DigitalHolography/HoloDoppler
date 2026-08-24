@@ -3,7 +3,11 @@ import pytest
 import h5py
 
 import holodoppler.saving as saving
-from holodoppler.saving import _spectral_cube_frequency_indices
+from holodoppler.saving import (
+    _power_to_relative_db,
+    _spectral_cube_frequency_indices,
+    _time_average_spectral_cube,
+)
 from holodoppler.spectral_cube import (
     binned_fft_frequencies,
     estimated_cube_bytes,
@@ -67,9 +71,21 @@ def test_spectral_cube_frequency_indices_validate_bounds():
         _spectral_cube_frequency_indices([3], 3)
 
 
-def test_save_spectral_cube_avis_exports_time_axis_per_frequency(
-    tmp_path, monkeypatch
-):
+def test_time_average_spectral_cube_uses_t_axis(tmp_path):
+    h5_path = tmp_path / "cube.h5"
+    cube = np.arange(3 * 2 * 4 * 5, dtype=np.float32).reshape(3, 2, 4, 5)
+    with h5py.File(h5_path, "w") as handle:
+        dataset = handle.create_dataset("S", data=cube)
+        result = _time_average_spectral_cube(dataset, chunk_size=2)
+    np.testing.assert_allclose(result, np.mean(cube, axis=0))
+
+
+def test_power_to_relative_db_uses_power_decibels_and_floor():
+    result = _power_to_relative_db(np.array([1.0, 0.1, 0.0]), floor_db=-20)
+    np.testing.assert_allclose(result, [0.0, -10.0, -20.0])
+
+
+def test_save_spectral_cube_avi_exports_frequency_axis(tmp_path, monkeypatch):
     h5_path = tmp_path / "cube.h5"
     target_dir = tmp_path / "output"
     cube = np.arange(3 * 2 * 4 * 5, dtype=np.float32).reshape(3, 2, 4, 5)
@@ -83,21 +99,24 @@ def test_save_spectral_cube_avis_exports_time_axis_per_frequency(
         writes.append((path, np.asarray(frames), fps, kwargs))
 
     monkeypatch.setattr(saving, "_write_video_fast", record_write)
-    paths = saving.save_spectral_cube_avis(
+    path = saving.save_spectral_cube_avi(
         h5_path,
         target_dir,
         {
             "spectral_cube_avi": True,
             "spectral_cube_avi_frequency_indices": [1],
-            "sampling_freq": 20,
-            "batch_stride": 4,
+            "spectral_cube_avi_fps": 12,
+            "spectral_cube_avi_log_floor_db": -40,
+            "spectral_cube_avi_time_chunk": 2,
             "contrast": False,
         },
     )
 
-    assert len(paths) == 1
-    assert paths[0].name == "S_f_0001_+100_Hz.avi"
-    assert writes[0][1].shape == (3, 4, 5)
+    assert path.name == "spectral_cube_time_average_log_f.avi"
+    assert writes[0][1].shape == (1, 4, 5)
     assert writes[0][1].dtype == np.uint8
-    assert writes[0][2] == 5.0
+    assert writes[0][2] == 12.0
     assert writes[0][3] == {"codec": "mjpeg", "quality": 8}
+    frequency_csv = target_dir / "avi" / "spectral_cube_time_average_log_f_frequency_hz.csv"
+    assert frequency_csv.is_file()
+    assert "0,1,100" in frequency_csv.read_text()

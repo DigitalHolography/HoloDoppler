@@ -587,29 +587,55 @@ def _spectral_cube_frequency_indices(selection, frequency_count):
     return indices
 
 
-def _spectral_cube_avi_name(index, frequency_hz):
-    frequency_text = f"{float(frequency_hz):+.6f}".rstrip("0").rstrip(".")
-    return f"S_f_{index:04d}_{frequency_text}_Hz.avi"
+def _time_average_spectral_cube(cube, chunk_size=8):
+    """Average an HDF5 ``S(t,f,y,x)`` dataset without loading it all at once."""
+    if cube.ndim != 4 or cube.shape[0] == 0:
+        raise ValueError(f"Expected a non-empty S(t,f,y,x) dataset, got {cube.shape}")
+    chunk_size = int(chunk_size)
+    if chunk_size <= 0:
+        raise ValueError("spectral_cube_avi_time_chunk must be a positive integer")
+
+    accumulator = np.zeros(cube.shape[1:], dtype=np.float64)
+    for start in range(0, cube.shape[0], chunk_size):
+        stop = min(start + chunk_size, cube.shape[0])
+        accumulator += np.sum(
+            np.asarray(cube[start:stop], dtype=np.float32),
+            axis=0,
+            dtype=np.float64,
+        )
+    return (accumulator / cube.shape[0]).astype(np.float32)
 
 
-def save_spectral_cube_avis(h5_path, target_dir, parameters):
-    """Export one time-resolved grayscale AVI for each selected ``f`` bin."""
+def _power_to_relative_db(power, floor_db=-60.0):
+    """Convert non-negative power to dB relative to its finite global maximum."""
+    floor_db = float(floor_db)
+    if not np.isfinite(floor_db) or floor_db >= 0:
+        raise ValueError("spectral_cube_avi_log_floor_db must be finite and negative")
+
+    power = np.nan_to_num(
+        np.asarray(power, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0
+    )
+    power = np.maximum(power, 0.0)
+    peak = float(np.max(power))
+    if peak <= 0:
+        return np.full(power.shape, floor_db, dtype=np.float32)
+
+    floor_power = peak * 10.0 ** (floor_db / 10.0)
+    return (10.0 * np.log10(np.maximum(power, floor_power) / peak)).astype(
+        np.float32
+    )
+
+
+def save_spectral_cube_avi(h5_path, target_dir, parameters):
+    """Export time-averaged log-power maps as one frequency-sweep AVI."""
     if not parameters.get("spectral_cube_avi", True):
         print("Spectral-cube AVI export disabled")
-        return []
+        return None
 
     h5_path = Path(h5_path)
     target_dir = Path(target_dir)
-    avi_dir = target_dir / "avi" / "spectral_cube"
+    avi_dir = target_dir / "avi"
     avi_dir.mkdir(parents=True, exist_ok=True)
-
-    source_fps = _calculate_fps(
-        None,
-        parameters.get("end_frame"),
-        parameters.get("first_frame"),
-        parameters,
-    )
-    written_paths = []
     started = time.time()
 
     with h5py.File(h5_path, "r") as handle:
@@ -628,30 +654,49 @@ def save_spectral_cube_avis(h5_path, target_dir, parameters):
             parameters.get("spectral_cube_avi_frequency_indices", "all"),
             cube.shape[1],
         )
-        for position, index in enumerate(indices, start=1):
-            print(
-                "Spectral-cube AVI "
-                f"{position}/{len(indices)}: f[{index}]={frequencies[index]:.6g} Hz"
-            )
-            video = np.asarray(cube[:, index, :, :], dtype=np.float32)
-            display_video = apply_contrast_adjustment(video, parameters)
-            uint8_video = normalize_to_uint8(display_video)
-            avi_path = avi_dir / _spectral_cube_avi_name(index, frequencies[index])
-            _write_video_fast(
-                avi_path,
-                uint8_video,
-                source_fps,
-                codec="mjpeg",
-                quality=8,
-            )
-            written_paths.append(avi_path)
+        print(f"Averaging {cube.shape[0]} spectral-cube time samples")
+        mean_power = _time_average_spectral_cube(
+            cube,
+            chunk_size=parameters.get("spectral_cube_avi_time_chunk", 8),
+        )
+
+    mean_power = mean_power[indices]
+    selected_frequencies = frequencies[indices]
+    log_power = _power_to_relative_db(
+        mean_power,
+        floor_db=parameters.get("spectral_cube_avi_log_floor_db", -60.0),
+    )
+    display_video = apply_contrast_adjustment(log_power, parameters)
+    uint8_video = normalize_to_uint8(display_video)
+
+    playback_fps = _positive_float(parameters.get("spectral_cube_avi_fps", 30.0))
+    if playback_fps is None:
+        raise ValueError("spectral_cube_avi_fps must be a finite positive number")
+    avi_path = avi_dir / "spectral_cube_time_average_log_f.avi"
+    _write_video_fast(
+        avi_path,
+        uint8_video,
+        playback_fps,
+        codec="mjpeg",
+        quality=8,
+    )
+
+    frequency_path = avi_dir / "spectral_cube_time_average_log_f_frequency_hz.csv"
+    np.savetxt(
+        frequency_path,
+        np.column_stack((np.arange(len(indices)), indices, selected_frequencies)),
+        delimiter=",",
+        header="avi_frame,f_index,frequency_hz",
+        comments="",
+        fmt=["%d", "%d", "%.12g"],
+    )
 
     elapsed = time.time() - started
     print(
-        f"Spectral-cube AVIs saved in {elapsed:.1f} seconds "
-        f"({len(written_paths)} videos)"
+        f"Spectral-cube frequency-sweep AVI saved in {elapsed:.1f} seconds "
+        f"({len(indices)} frequency frames, {playback_fps:.6g} FPS)"
     )
-    return written_paths
+    return avi_path
 
 
 def _save_pngs(target_dir, uint8_map):
