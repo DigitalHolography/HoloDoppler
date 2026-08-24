@@ -40,6 +40,7 @@ from holodoppler.saving import (
 )
 from holodoppler.spectral_cube import (
     binned_fft_frequencies,
+    corner_ellipse_mask,
     corner_mean_power,
     estimated_cube_bytes,
     mean_bin_axis,
@@ -362,6 +363,29 @@ def _create_h5(path, file_reader, parameters, starts):
     corner_power.attrs["ellipse_radius_x_factor"] = radius_x_factor
     corner_power.attrs["ellipse_radius_y_pixels"] = radius_y_factor * ny / 2.0
     corner_power.attrs["ellipse_radius_x_pixels"] = radius_x_factor * nx / 2.0
+    corner_mask = corner_ellipse_mask(
+        np,
+        ny,
+        nx,
+        radius_y_factor,
+        radius_x_factor,
+    )
+    corner_pixel_count = int(np.count_nonzero(corner_mask))
+    corner_power.attrs["corner_pixel_count"] = corner_pixel_count
+    corner_power.attrs["corner_pixel_fraction"] = corner_pixel_count / (ny * nx)
+
+    corner_power_time_mean = handle.create_dataset(
+        "corner_average_power_time_mean",
+        shape=(len(f),),
+        dtype=np.float32,
+        chunks=None,
+        compression=None,
+        track_times=False,
+    )
+    corner_power_time_mean.attrs["axis_order"] = "f"
+    corner_power_time_mean.attrs["description"] = (
+        "Temporal mean of corner_average_power over all t windows"
+    )
 
     string_dtype = h5py.string_dtype(encoding="utf-8")
     handle.create_dataset(
@@ -373,7 +397,7 @@ def _create_h5(path, file_reader, parameters, starts):
     handle.create_dataset(
         "HD_version", data=f"py{get_version()}", dtype=string_dtype, track_times=False
     )
-    return handle, cube, registration, corner_power
+    return handle, cube, registration, corner_power, corner_power_time_mean
 
 
 def process(file_path, parameters, progress_callback=None):
@@ -399,9 +423,13 @@ def process(file_path, parameters, progress_callback=None):
     fixed_moment0ff = None
     handle = None
     try:
-        handle, cube, registration, corner_power_dataset = _create_h5(
-            h5_path, file_reader, parameters, starts
-        )
+        (
+            handle,
+            cube,
+            registration,
+            corner_power_dataset,
+            corner_power_time_mean_dataset,
+        ) = _create_h5(h5_path, file_reader, parameters, starts)
         for index, frame_start in enumerate(tqdm(starts, desc="Spectral cube")):
             frames = file_reader.read_frames(
                 first_frame=int(frame_start), batch_size=parameters["batch_size"]
@@ -430,6 +458,11 @@ def process(file_path, parameters, progress_callback=None):
                     f"Spectral window {index + 1}/{len(starts)}",
                 )
 
+        corner_power_time_mean_dataset[...] = np.mean(
+            np.asarray(corner_power_dataset, dtype=np.float32),
+            axis=0,
+            dtype=np.float64,
+        ).astype(np.float32)
         handle.attrs.modify("complete", True)
         handle.flush()
     finally:

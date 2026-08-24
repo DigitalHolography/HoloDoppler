@@ -682,15 +682,19 @@ def save_spectral_cube_avi(h5_path, target_dir, parameters):
             cube,
             chunk_size=parameters.get("spectral_cube_avi_time_chunk", 8),
         )
-        corner_floor = np.mean(
-            np.asarray(handle["corner_average_power"], dtype=np.float32),
-            axis=0,
-            dtype=np.float64,
-        ).astype(np.float32)
+        if "corner_average_power_time_mean" in handle:
+            corner_floor = np.asarray(
+                handle["corner_average_power_time_mean"], dtype=np.float32
+            )
+        else:
+            corner_floor = np.mean(
+                np.asarray(handle["corner_average_power"], dtype=np.float32),
+                axis=0,
+                dtype=np.float64,
+            ).astype(np.float32)
 
     mean_power = mean_power[indices]
     corner_floor = corner_floor[indices]
-    selected_frequencies = frequencies[indices]
     log_power = _power_to_relative_db(
         mean_power,
         floor_power=corner_floor,
@@ -710,17 +714,10 @@ def save_spectral_cube_avi(h5_path, target_dir, parameters):
         quality=8,
     )
 
-    frequency_path = avi_dir / "spectral_cube_time_average_log_f_frequency_hz.csv"
-    np.savetxt(
-        frequency_path,
-        np.column_stack(
-            (np.arange(len(indices)), indices, selected_frequencies, corner_floor)
-        ),
-        delimiter=",",
-        header="avi_frame,f_index,frequency_hz,corner_floor_power",
-        comments="",
-        fmt=["%d", "%d", "%.12g", "%.12g"],
+    legacy_frequency_path = (
+        avi_dir / "spectral_cube_time_average_log_f_frequency_hz.csv"
     )
+    legacy_frequency_path.unlink(missing_ok=True)
 
     elapsed = time.time() - started
     print(

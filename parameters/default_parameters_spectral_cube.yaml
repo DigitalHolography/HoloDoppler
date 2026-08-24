@@ -41,8 +41,8 @@ corner_compensation: false
 
 # AVI export. S is first averaged over t, converted to relative dB, then written
 # as one frequency-sweep AVI whose frame axis is f. The playback FPS controls
-# display speed only; it is not physiological time. A frequency CSV is written
-# beside the AVI. Use a list to export only selected f frames.
+# display speed only; it is not physiological time. The default exports all f
+# bins in signed FFT order. Use a list to export only selected f frames.
 spectral_cube_avi: true
 spectral_cube_avi_frequency_indices: "all"
 spectral_cube_avi_fps: 30

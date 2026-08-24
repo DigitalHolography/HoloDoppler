@@ -120,6 +120,13 @@ def test_save_spectral_cube_avi_exports_frequency_axis(tmp_path, monkeypatch):
             "corner_average_power",
             data=np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
         )
+        handle.create_dataset("corner_average_power_time_mean", data=[3.0, 4.0])
+
+    legacy_csv = (
+        target_dir / "avi" / "spectral_cube_time_average_log_f_frequency_hz.csv"
+    )
+    legacy_csv.parent.mkdir(parents=True)
+    legacy_csv.write_text("obsolete")
 
     writes = []
 
@@ -144,6 +151,4 @@ def test_save_spectral_cube_avi_exports_frequency_axis(tmp_path, monkeypatch):
     assert writes[0][1].dtype == np.uint8
     assert writes[0][2] == 12.0
     assert writes[0][3] == {"codec": "mjpeg", "quality": 8}
-    frequency_csv = target_dir / "avi" / "spectral_cube_time_average_log_f_frequency_hz.csv"
-    assert frequency_csv.is_file()
-    assert "0,1,100,4" in frequency_csv.read_text()
+    assert not legacy_csv.exists()
