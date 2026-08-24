@@ -606,8 +606,8 @@ def _time_average_spectral_cube(cube, chunk_size=8):
     return (accumulator / cube.shape[0]).astype(np.float32)
 
 
-def _power_to_relative_db(power, floor_db=-60.0):
-    """Convert non-negative power to dB relative to its finite global maximum."""
+def _power_to_relative_db(power, floor_power=None, floor_db=-60.0):
+    """Convert power to relative dB after applying a scalar or per-f floor."""
     floor_db = float(floor_db)
     if not np.isfinite(floor_db) or floor_db >= 0:
         raise ValueError("spectral_cube_avi_log_floor_db must be finite and negative")
@@ -620,8 +620,27 @@ def _power_to_relative_db(power, floor_db=-60.0):
     if peak <= 0:
         return np.full(power.shape, floor_db, dtype=np.float32)
 
-    floor_power = peak * 10.0 ** (floor_db / 10.0)
-    return (10.0 * np.log10(np.maximum(power, floor_power) / peak)).astype(
+    numerical_floor = peak * np.finfo(np.float32).eps
+    if floor_power is None:
+        effective_floor = peak * 10.0 ** (floor_db / 10.0)
+    else:
+        effective_floor = np.nan_to_num(
+            np.asarray(floor_power, dtype=np.float32),
+            nan=numerical_floor,
+            posinf=peak,
+            neginf=numerical_floor,
+        )
+        if effective_floor.ndim == 1 and power.ndim >= 3:
+            if effective_floor.shape[0] != power.shape[0]:
+                raise ValueError(
+                    "Per-frequency floor length must match the first power axis"
+                )
+            effective_floor = effective_floor.reshape(
+                (effective_floor.shape[0],) + (1,) * (power.ndim - 1)
+            )
+        effective_floor = np.maximum(effective_floor, numerical_floor)
+
+    return (10.0 * np.log10(np.maximum(power, effective_floor) / peak)).astype(
         np.float32
     )
 
@@ -639,8 +658,12 @@ def save_spectral_cube_avi(h5_path, target_dir, parameters):
     started = time.time()
 
     with h5py.File(h5_path, "r") as handle:
-        if "S" not in handle or "f" not in handle:
-            raise ValueError(f"Spectral-cube H5 must contain S and f datasets: {h5_path}")
+        required = {"S", "f", "corner_average_power"}
+        if not required.issubset(handle):
+            missing = sorted(required.difference(handle))
+            raise ValueError(
+                f"Spectral-cube H5 is missing required datasets {missing}: {h5_path}"
+            )
 
         cube = handle["S"]
         frequencies = np.asarray(handle["f"])
@@ -659,12 +682,18 @@ def save_spectral_cube_avi(h5_path, target_dir, parameters):
             cube,
             chunk_size=parameters.get("spectral_cube_avi_time_chunk", 8),
         )
+        corner_floor = np.mean(
+            np.asarray(handle["corner_average_power"], dtype=np.float32),
+            axis=0,
+            dtype=np.float64,
+        ).astype(np.float32)
 
     mean_power = mean_power[indices]
+    corner_floor = corner_floor[indices]
     selected_frequencies = frequencies[indices]
     log_power = _power_to_relative_db(
         mean_power,
-        floor_db=parameters.get("spectral_cube_avi_log_floor_db", -60.0),
+        floor_power=corner_floor,
     )
     display_video = apply_contrast_adjustment(log_power, parameters)
     uint8_video = normalize_to_uint8(display_video)
@@ -684,11 +713,13 @@ def save_spectral_cube_avi(h5_path, target_dir, parameters):
     frequency_path = avi_dir / "spectral_cube_time_average_log_f_frequency_hz.csv"
     np.savetxt(
         frequency_path,
-        np.column_stack((np.arange(len(indices)), indices, selected_frequencies)),
+        np.column_stack(
+            (np.arange(len(indices)), indices, selected_frequencies, corner_floor)
+        ),
         delimiter=",",
-        header="avi_frame,f_index,frequency_hz",
+        header="avi_frame,f_index,frequency_hz,corner_floor_power",
         comments="",
-        fmt=["%d", "%d", "%.12g"],
+        fmt=["%d", "%d", "%.12g", "%.12g"],
     )
 
     elapsed = time.time() - started

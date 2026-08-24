@@ -52,6 +52,7 @@ class SettingsEditor(ttk.Frame):
                 "high_freq",
                 "frequency_bands",
                 "f_bins",
+                "spectral_cube_corner_",
                 "filter2d",
                 "pca_",
                 "svd_",

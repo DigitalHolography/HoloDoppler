@@ -10,6 +10,8 @@ from holodoppler.saving import (
 )
 from holodoppler.spectral_cube import (
     binned_fft_frequencies,
+    corner_ellipse_mask,
+    corner_mean_power,
     estimated_cube_bytes,
     mean_bin_axis,
     spatial_block_mean,
@@ -61,6 +63,21 @@ def test_estimated_cube_bytes_uses_float32_by_default():
     assert estimated_cube_bytes(2, 3, 4, 5) == 2 * 3 * 4 * 5 * 4
 
 
+def test_corner_ellipse_mask_selects_only_outer_corners():
+    mask = corner_ellipse_mask(np, 10, 12, 1.2, 1.2)
+    assert mask[0, 0]
+    assert mask[-1, -1]
+    assert not mask[5, 6]
+
+
+def test_corner_mean_power_is_frequency_resolved():
+    mask = corner_ellipse_mask(np, 10, 12, 1.2, 1.2)
+    spectrum = np.zeros((2, 10, 12), dtype=np.float32)
+    spectrum[0, mask] = 3.0
+    spectrum[1, mask] = 7.0
+    np.testing.assert_allclose(corner_mean_power(np, spectrum), [3.0, 7.0])
+
+
 def test_spectral_cube_frequency_indices_support_all_and_deduplication():
     assert _spectral_cube_frequency_indices("all", 3) == [0, 1, 2]
     assert _spectral_cube_frequency_indices([2, 0, 2], 3) == [2, 0]
@@ -85,6 +102,13 @@ def test_power_to_relative_db_uses_power_decibels_and_floor():
     np.testing.assert_allclose(result, [0.0, -10.0, -20.0])
 
 
+def test_power_to_relative_db_accepts_per_frequency_floor():
+    power = np.array([[[10.0, 1.0]], [[10.0, 1.0]]], dtype=np.float32)
+    result = _power_to_relative_db(power, floor_power=np.array([1.0, 5.0]))
+    np.testing.assert_allclose(result[0], [[0.0, -10.0]])
+    np.testing.assert_allclose(result[1], [[0.0, 10 * np.log10(0.5)]])
+
+
 def test_save_spectral_cube_avi_exports_frequency_axis(tmp_path, monkeypatch):
     h5_path = tmp_path / "cube.h5"
     target_dir = tmp_path / "output"
@@ -92,6 +116,10 @@ def test_save_spectral_cube_avi_exports_frequency_axis(tmp_path, monkeypatch):
     with h5py.File(h5_path, "w") as handle:
         handle.create_dataset("S", data=cube)
         handle.create_dataset("f", data=[-100.0, 100.0])
+        handle.create_dataset(
+            "corner_average_power",
+            data=np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
+        )
 
     writes = []
 
@@ -106,7 +134,6 @@ def test_save_spectral_cube_avi_exports_frequency_axis(tmp_path, monkeypatch):
             "spectral_cube_avi": True,
             "spectral_cube_avi_frequency_indices": [1],
             "spectral_cube_avi_fps": 12,
-            "spectral_cube_avi_log_floor_db": -40,
             "spectral_cube_avi_time_chunk": 2,
             "contrast": False,
         },
@@ -119,4 +146,4 @@ def test_save_spectral_cube_avi_exports_frequency_axis(tmp_path, monkeypatch):
     assert writes[0][3] == {"codec": "mjpeg", "quality": 8}
     frequency_csv = target_dir / "avi" / "spectral_cube_time_average_log_f_frequency_hz.csv"
     assert frequency_csv.is_file()
-    assert "0,1,100" in frequency_csv.read_text()
+    assert "0,1,100,4" in frequency_csv.read_text()

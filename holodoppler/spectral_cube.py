@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import cache
+
 import numpy as np
 
 
@@ -106,6 +108,67 @@ def spatial_block_mean(xp, values, ratio_y: int, ratio_x: int):
         + (ny // ratio_y, ratio_y, nx // ratio_x, ratio_x)
     )
     return values.reshape(output_shape).mean(axis=(-3, -1))
+
+
+@cache
+def corner_ellipse_mask(
+    xp,
+    ny: int,
+    nx: int,
+    radius_y_factor: float = 1.2,
+    radius_x_factor: float = 1.2,
+):
+    """Return pixels outside a centered ellipse as a corner-region mask."""
+    radius_y_factor = float(radius_y_factor)
+    radius_x_factor = float(radius_x_factor)
+    if not np.isfinite(radius_y_factor) or radius_y_factor <= 0:
+        raise ValueError("radius_y_factor must be a positive finite number")
+    if not np.isfinite(radius_x_factor) or radius_x_factor <= 0:
+        raise ValueError("radius_x_factor must be a positive finite number")
+
+    radius_y = radius_y_factor * ny / 2.0
+    radius_x = radius_x_factor * nx / 2.0
+    center_y = (ny - 1) / 2.0
+    center_x = (nx - 1) / 2.0
+    yy, xx = xp.ogrid[:ny, :nx]
+    inside = (
+        ((yy - center_y) / radius_y) ** 2
+        + ((xx - center_x) / radius_x) ** 2
+        <= 1.0
+    )
+    corners = ~inside
+    if not bool(xp.any(corners)):
+        raise ValueError(
+            "The corner ellipse covers the complete frame; reduce one or both "
+            "radius factors"
+        )
+    return corners
+
+
+def corner_mean_power(
+    xp,
+    spectrum,
+    radius_y_factor: float = 1.2,
+    radius_x_factor: float = 1.2,
+):
+    """Average every frequency plane outside the configured centered ellipse."""
+    if spectrum.ndim != 3:
+        raise ValueError(f"Expected spectrum with shape (f,y,x), got {spectrum.shape}")
+    ny, nx = spectrum.shape[-2:]
+    corners = corner_ellipse_mask(
+        xp,
+        ny,
+        nx,
+        radius_y_factor=radius_y_factor,
+        radius_x_factor=radius_x_factor,
+    )
+    corners_float = corners.astype(xp.float32, copy=False)
+    count = xp.sum(corners_float)
+    return xp.sum(
+        spectrum * corners_float[xp.newaxis, :, :],
+        axis=(-2, -1),
+        dtype=xp.float32,
+    ) / count
 
 
 def estimated_cube_bytes(

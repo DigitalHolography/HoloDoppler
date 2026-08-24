@@ -40,6 +40,7 @@ from holodoppler.saving import (
 )
 from holodoppler.spectral_cube import (
     binned_fft_frequencies,
+    corner_mean_power,
     estimated_cube_bytes,
     mean_bin_axis,
     spatial_block_mean,
@@ -138,6 +139,19 @@ def _registered_and_binned_window(parameters, frames, fixed_moment0ff):
     )
     del phase_term
 
+    # Estimate the frequency-dependent display floor at full spatial resolution
+    # before registration can move image content into or out of the corners.
+    corner_power = corner_mean_power(
+        cp,
+        psd,
+        radius_y_factor=parameters.get(
+            "spectral_cube_corner_ellipse_radius_y_factor", 1.2
+        ),
+        radius_x_factor=parameters.get(
+            "spectral_cube_corner_ellipse_radius_x_factor", 1.2
+        ),
+    ).astype(cp.float32, copy=False)
+
     shift_y = 0.0
     shift_x = 0.0
     if parameters.get("image_registration", True):
@@ -168,7 +182,7 @@ def _registered_and_binned_window(parameters, frames, fixed_moment0ff):
         parameters["ratio_y"],
         parameters["ratio_x"],
     ).astype(cp.float32, copy=False)
-    return psd, fixed_moment0ff, (float(shift_y), float(shift_x))
+    return psd, fixed_moment0ff, (float(shift_y), float(shift_x)), corner_power
 
 
 def _total_frames(file_reader) -> int:
@@ -326,6 +340,29 @@ def _create_h5(path, file_reader, parameters, starts):
         "subpixel intensity correlation" if registration_enabled else "none"
     )
 
+    corner_power = handle.create_dataset(
+        "corner_average_power",
+        shape=(len(starts), len(f)),
+        dtype=np.float32,
+        chunks=None,
+        compression=None,
+        track_times=False,
+    )
+    corner_power.attrs["axis_order"] = "t,f"
+    corner_power.attrs["description"] = (
+        "Full-resolution spatial mean outside a centered ellipse before registration"
+    )
+    radius_y_factor = float(
+        parameters.get("spectral_cube_corner_ellipse_radius_y_factor", 1.2)
+    )
+    radius_x_factor = float(
+        parameters.get("spectral_cube_corner_ellipse_radius_x_factor", 1.2)
+    )
+    corner_power.attrs["ellipse_radius_y_factor"] = radius_y_factor
+    corner_power.attrs["ellipse_radius_x_factor"] = radius_x_factor
+    corner_power.attrs["ellipse_radius_y_pixels"] = radius_y_factor * ny / 2.0
+    corner_power.attrs["ellipse_radius_x_pixels"] = radius_x_factor * nx / 2.0
+
     string_dtype = h5py.string_dtype(encoding="utf-8")
     handle.create_dataset(
         "HD_parameters",
@@ -336,7 +373,7 @@ def _create_h5(path, file_reader, parameters, starts):
     handle.create_dataset(
         "HD_version", data=f"py{get_version()}", dtype=string_dtype, track_times=False
     )
-    return handle, cube, registration
+    return handle, cube, registration, corner_power
 
 
 def process(file_path, parameters, progress_callback=None):
@@ -362,7 +399,7 @@ def process(file_path, parameters, progress_callback=None):
     fixed_moment0ff = None
     handle = None
     try:
-        handle, cube, registration = _create_h5(
+        handle, cube, registration, corner_power_dataset = _create_h5(
             h5_path, file_reader, parameters, starts
         )
         for index, frame_start in enumerate(tqdm(starts, desc="Spectral cube")):
@@ -375,12 +412,16 @@ def process(file_path, parameters, progress_callback=None):
                     cp, cp.fft, frames, parameters.get("filter2d_low", 0.03)
                 )
 
-            reduced, fixed_moment0ff, shifts = _registered_and_binned_window(
-                parameters, frames, fixed_moment0ff
-            )
+            (
+                reduced,
+                fixed_moment0ff,
+                shifts,
+                corner_power,
+            ) = _registered_and_binned_window(parameters, frames, fixed_moment0ff)
             cube[index] = cp.asnumpy(reduced)
             registration[index] = shifts
-            del reduced
+            corner_power_dataset[index] = cp.asnumpy(corner_power)
+            del reduced, corner_power
 
             if progress_callback is not None:
                 progress_callback(
@@ -418,9 +459,12 @@ def preview(file_path, parameters, save_debug=True):
                 cp, cp.fft, frames, parameters.get("filter2d_low", 0.03)
             )
 
-        reduced, _fixed_moment0ff, _shifts = _registered_and_binned_window(
-            parameters, frames, None
-        )
+        (
+            reduced,
+            _fixed_moment0ff,
+            _shifts,
+            _corner_power,
+        ) = _registered_and_binned_window(parameters, frames, None)
         integrated_power = cp.asnumpy(cp.mean(reduced, axis=0))
         preview_image = normalize_to_uint8(integrated_power)
 

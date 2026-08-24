@@ -64,8 +64,13 @@ controlled by `svd_filter`; only the selected filtered or unfiltered cube is
 written. When `spectral_cube_avi` is enabled, `S` is averaged over `t`, converted
 to relative dB, and exported as `avi/spectral_cube_time_average_log_f.avi`, where
 successive video frames follow the signed `f` axis. A companion CSV maps every
-AVI frame to its frequency in Hz. `spectral_cube_avi_frequency_indices` may be
-set to `all`, one index, or a list of indices to control the exported frames.
+AVI frame to its frequency in Hz and its corner floor. For every `t` and `f`, the
+floor is measured at full resolution before registration by spatially averaging
+outside a centered ellipse. Its semiaxes default to `1.2 * Ny/2` and
+`1.2 * Nx/2` and are controlled by the corresponding
+`spectral_cube_corner_ellipse_radius_*_factor` parameters.
+`spectral_cube_avi_frequency_indices` may be set to `all`, one index, or a list
+of indices to control the exported frames.
 
 ### Run the GUI
 

@@ -46,8 +46,12 @@ corner_compensation: false
 spectral_cube_avi: true
 spectral_cube_avi_frequency_indices: "all"
 spectral_cube_avi_fps: 30
-spectral_cube_avi_log_floor_db: -60
 spectral_cube_avi_time_chunk: 8
+# Semiaxes of the centered exclusion ellipse, expressed as multipliers of
+# Ny/2 and Nx/2. The corner floor is measured outside this ellipse before
+# registration, independently for every t and f.
+spectral_cube_corner_ellipse_radius_y_factor: 1.2
+spectral_cube_corner_ellipse_radius_x_factor: 1.2
 contrast: true
 contrast_low_max_percent: [0.5, 99.5]
 contrast_gamma: 1.0
