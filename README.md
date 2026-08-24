@@ -48,9 +48,20 @@ The GUI and installer include presets for:
 - `sh_avg`: Shack-Hartmann spectrum averaging.
 - `simple_numpy`: CPU multiprocessing.
 - `main`: the legacy backend-selectable moments pipeline.
+- `spectral_cube`: streams a registered, reduced-resolution full signed-frequency
+  PSD cube to an uncompressed HDF5 dataset ordered as `(t, f, y, x)`.
 
 Select the matching preset in the GUI before changing its pipeline name; each
 pipeline has its own required parameters.
+
+The `spectral_cube` preset uses `batch_size` and `batch_stride` as its rectangular
+temporal FFT window and stride. It averages the full signed FFT range into
+`f_bins` bins, applies one fixed-subpixel translation per temporal window to all
+frequency planes at full spatial resolution, and only then performs exact block
+averaging by `ratio_y` and `ratio_x`. Its HDF5 file contains `S`, `t`, `f`, `y`,
+`x`, `frame_start`, `registration`, and processing metadata. SVD filtering is
+controlled by `svd_filter`; only the selected filtered or unfiltered cube is
+written.
 
 ### Run the GUI
 

@@ -51,6 +51,7 @@ class SettingsEditor(ttk.Frame):
                 "low_freq",
                 "high_freq",
                 "frequency_bands",
+                "f_bins",
                 "filter2d",
                 "pca_",
                 "svd_",
@@ -60,6 +61,8 @@ class SettingsEditor(ttk.Frame):
             "Output",
             (
                 "saving_to_folder",
+                "ratio_x",
+                "ratio_y",
                 "square",
                 "transpose",
                 "flip_x",
