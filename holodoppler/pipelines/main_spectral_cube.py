@@ -35,6 +35,7 @@ from holodoppler.saving import (
     _get_default_output_path,
     _save_metadata,
     normalize_to_uint8,
+    save_spectral_cube_avis,
     save_preview_images,
 )
 from holodoppler.spectral_cube import (
@@ -397,6 +398,7 @@ def process(file_path, parameters, progress_callback=None):
             file_reader.close()
         cp.get_default_memory_pool().free_all_blocks()
 
+    save_spectral_cube_avis(h5_path, target_dir, parameters)
     _save_metadata(target_dir, file_reader, parameters)
     elapsed = time.time() - started
     print(f"Spectral cube completed in {elapsed:.1f} seconds")

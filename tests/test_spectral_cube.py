@@ -1,6 +1,9 @@
 import numpy as np
 import pytest
+import h5py
 
+import holodoppler.saving as saving
+from holodoppler.saving import _spectral_cube_frequency_indices
 from holodoppler.spectral_cube import (
     binned_fft_frequencies,
     estimated_cube_bytes,
@@ -52,3 +55,49 @@ def test_spatial_block_mean_requires_exact_divisibility():
 
 def test_estimated_cube_bytes_uses_float32_by_default():
     assert estimated_cube_bytes(2, 3, 4, 5) == 2 * 3 * 4 * 5 * 4
+
+
+def test_spectral_cube_frequency_indices_support_all_and_deduplication():
+    assert _spectral_cube_frequency_indices("all", 3) == [0, 1, 2]
+    assert _spectral_cube_frequency_indices([2, 0, 2], 3) == [2, 0]
+
+
+def test_spectral_cube_frequency_indices_validate_bounds():
+    with pytest.raises(ValueError, match="outside"):
+        _spectral_cube_frequency_indices([3], 3)
+
+
+def test_save_spectral_cube_avis_exports_time_axis_per_frequency(
+    tmp_path, monkeypatch
+):
+    h5_path = tmp_path / "cube.h5"
+    target_dir = tmp_path / "output"
+    cube = np.arange(3 * 2 * 4 * 5, dtype=np.float32).reshape(3, 2, 4, 5)
+    with h5py.File(h5_path, "w") as handle:
+        handle.create_dataset("S", data=cube)
+        handle.create_dataset("f", data=[-100.0, 100.0])
+
+    writes = []
+
+    def record_write(path, frames, fps, **kwargs):
+        writes.append((path, np.asarray(frames), fps, kwargs))
+
+    monkeypatch.setattr(saving, "_write_video_fast", record_write)
+    paths = saving.save_spectral_cube_avis(
+        h5_path,
+        target_dir,
+        {
+            "spectral_cube_avi": True,
+            "spectral_cube_avi_frequency_indices": [1],
+            "sampling_freq": 20,
+            "batch_stride": 4,
+            "contrast": False,
+        },
+    )
+
+    assert len(paths) == 1
+    assert paths[0].name == "S_f_0001_+100_Hz.avi"
+    assert writes[0][1].shape == (3, 4, 5)
+    assert writes[0][1].dtype == np.uint8
+    assert writes[0][2] == 5.0
+    assert writes[0][3] == {"codec": "mjpeg", "quality": 8}

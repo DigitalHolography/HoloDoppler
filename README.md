@@ -61,7 +61,10 @@ frequency planes at full spatial resolution, and only then performs exact block
 averaging by `ratio_y` and `ratio_x`. Its HDF5 file contains `S`, `t`, `f`, `y`,
 `x`, `frame_start`, `registration`, and processing metadata. SVD filtering is
 controlled by `svd_filter`; only the selected filtered or unfiltered cube is
-written.
+written. When `spectral_cube_avi` is enabled, every selected `f` bin is also
+exported as a time-resolved grayscale MJPEG AVI under `avi/spectral_cube/`.
+`spectral_cube_avi_frequency_indices` may be set to `all`, one index, or a list
+of indices to control the number of generated videos.
 
 ### Run the GUI
 

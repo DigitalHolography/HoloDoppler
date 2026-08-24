@@ -61,6 +61,7 @@ class SettingsEditor(ttk.Frame):
             "Output",
             (
                 "saving_to_folder",
+                "spectral_cube_avi",
                 "ratio_x",
                 "ratio_y",
                 "square",

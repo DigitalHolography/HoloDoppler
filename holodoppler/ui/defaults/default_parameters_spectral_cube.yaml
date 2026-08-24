@@ -39,6 +39,15 @@ registration_flatfield_gw: 35.0
 # Applied before frequency and spatial averaging when enabled.
 corner_compensation: false
 
+# AVI export. A 4D cube is represented as one time-resolved grayscale AVI per
+# selected f bin under avi/spectral_cube/. Use a list such as [0, 32, 64, 96]
+# to limit export cost, or false to retain only the HDF5 cube.
+spectral_cube_avi: true
+spectral_cube_avi_frequency_indices: "all"
+contrast: true
+contrast_low_max_percent: [0.5, 99.5]
+contrast_gamma: 1.0
+
 # Optional Shack-Hartmann wavefront correction
 shack_hartmann: false
 shack_hartmann_nx_subap: 5

@@ -562,6 +562,98 @@ def _save_videos(target_dir, uint8_map, source_fps):
     print(f"Videos saved in {elapsed:.1f} seconds ({completed} videos)")
 
 
+def _spectral_cube_frequency_indices(selection, frequency_count):
+    """Resolve the configured frequency-bin selection without reordering it."""
+    if selection is None or (isinstance(selection, str) and selection.lower() == "all"):
+        return list(range(frequency_count))
+
+    if isinstance(selection, (int, np.integer)):
+        selection = [int(selection)]
+    if not isinstance(selection, (list, tuple)):
+        raise ValueError(
+            "spectral_cube_avi_frequency_indices must be 'all', an integer, "
+            "or a list of integers"
+        )
+
+    indices = []
+    for raw_index in selection:
+        index = int(raw_index)
+        if index < 0 or index >= frequency_count:
+            raise ValueError(
+                f"Frequency-bin index {index} is outside [0, {frequency_count - 1}]"
+            )
+        if index not in indices:
+            indices.append(index)
+    return indices
+
+
+def _spectral_cube_avi_name(index, frequency_hz):
+    frequency_text = f"{float(frequency_hz):+.6f}".rstrip("0").rstrip(".")
+    return f"S_f_{index:04d}_{frequency_text}_Hz.avi"
+
+
+def save_spectral_cube_avis(h5_path, target_dir, parameters):
+    """Export one time-resolved grayscale AVI for each selected ``f`` bin."""
+    if not parameters.get("spectral_cube_avi", True):
+        print("Spectral-cube AVI export disabled")
+        return []
+
+    h5_path = Path(h5_path)
+    target_dir = Path(target_dir)
+    avi_dir = target_dir / "avi" / "spectral_cube"
+    avi_dir.mkdir(parents=True, exist_ok=True)
+
+    source_fps = _calculate_fps(
+        None,
+        parameters.get("end_frame"),
+        parameters.get("first_frame"),
+        parameters,
+    )
+    written_paths = []
+    started = time.time()
+
+    with h5py.File(h5_path, "r") as handle:
+        if "S" not in handle or "f" not in handle:
+            raise ValueError(f"Spectral-cube H5 must contain S and f datasets: {h5_path}")
+
+        cube = handle["S"]
+        frequencies = np.asarray(handle["f"])
+        if cube.ndim != 4 or cube.shape[1] != len(frequencies):
+            raise ValueError(
+                "Expected S with axis order (t,f,y,x) matching the f coordinate; "
+                f"got S{cube.shape} and f{frequencies.shape}"
+            )
+
+        indices = _spectral_cube_frequency_indices(
+            parameters.get("spectral_cube_avi_frequency_indices", "all"),
+            cube.shape[1],
+        )
+        for position, index in enumerate(indices, start=1):
+            print(
+                "Spectral-cube AVI "
+                f"{position}/{len(indices)}: f[{index}]={frequencies[index]:.6g} Hz"
+            )
+            video = np.asarray(cube[:, index, :, :], dtype=np.float32)
+            display_video = apply_contrast_adjustment(video, parameters)
+            uint8_video = normalize_to_uint8(display_video)
+            avi_path = avi_dir / _spectral_cube_avi_name(index, frequencies[index])
+            _write_video_fast(
+                avi_path,
+                uint8_video,
+                source_fps,
+                codec="mjpeg",
+                quality=8,
+            )
+            written_paths.append(avi_path)
+
+    elapsed = time.time() - started
+    print(
+        f"Spectral-cube AVIs saved in {elapsed:.1f} seconds "
+        f"({len(written_paths)} videos)"
+    )
+    return written_paths
+
+
 def _save_pngs(target_dir, uint8_map):
     """Save mean frames as PNGs in parallel"""
     start_time = time.time()
