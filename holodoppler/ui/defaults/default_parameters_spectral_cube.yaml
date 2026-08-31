@@ -17,11 +17,8 @@ Fresnel_use_ouput_kernel: false
 filter2d: false
 filter2d_low: 0.03
 
-# Optional low-threshold SVD filtering before temporal spectral estimation.
-svd_filter: true
-svd_threshold: 5
-svd_filter_mode: "number_of_values"
-svd_remove_dc: true
+# SVD filtering always removes exactly the two strongest components without a
+# separate temporal-DC subtraction.
 
 # f_bins covers the complete signed FFT range.
 sampling_freq: "use_holovibes"

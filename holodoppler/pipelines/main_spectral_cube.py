@@ -85,14 +85,13 @@ def _process_spectral_window(parameters, frames, phase_term=None):
     holograms = _propagate(parameters, frames, phase_term=phase_term)
     del frames
 
-    if parameters.get("svd_filter", True):
-        holograms = svd_filter(
-            cp,
-            holograms,
-            parameters.get("svd_threshold", 5),
-            filter_mode=parameters.get("svd_filter_mode", "number_of_values"),
-            remove_dc=parameters.get("svd_remove_dc", True),
-        )
+    holograms = svd_filter(
+        cp,
+        holograms,
+        2,
+        filter_mode="number_of_values",
+        remove_dc=False,
+    )
 
     spectrum = fourier_time_transform(cp, cp.fft, holograms)
     del holograms
@@ -255,7 +254,9 @@ def _create_h5(path, file_reader, parameters, starts):
     signal.attrs["dtype"] = "float32"
     signal.attrs["units"] = "power (arbitrary units)"
     signal.attrs["spatial_registration"] = False
-    signal.attrs["svd_filter"] = bool(parameters.get("svd_filter", True))
+    signal.attrs["svd_filter"] = True
+    signal.attrs["svd_removed_components"] = 2
+    signal.attrs["svd_remove_dc"] = False
     signal.attrs["spatial_aggregation"] = "median"
     signal.attrs["corner_compensation"] = bool(
         parameters.get("corner_compensation", False)
@@ -298,7 +299,9 @@ def _create_h5(path, file_reader, parameters, starts):
     background.attrs["dtype"] = "float32"
     background.attrs["units"] = "power (arbitrary units)"
     background.attrs["spatial_registration"] = False
-    background.attrs["svd_filter"] = bool(parameters.get("svd_filter", True))
+    background.attrs["svd_filter"] = True
+    background.attrs["svd_removed_components"] = 2
+    background.attrs["svd_remove_dc"] = False
     background.attrs["spatial_aggregation"] = "median"
     background.attrs["corner_compensation"] = bool(
         parameters.get("corner_compensation", False)
