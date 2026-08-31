@@ -64,9 +64,10 @@ logarithm `ln(S/S0)`, protected only against division by zero by the smallest
 positive `float32` value. The HDF5 file contains the uncompressed `float32`
 datasets `S(t,f)`, `S0(t,f)`, and `L(t,f)`, plus `t`, `f`, `frame_start`,
 `registration`, and processing metadata. It also exports percentile-adjusted
-`png/S.png`, `png/S0.png`, and `png/L.png` maps with time on rows and frequency
-on columns. SVD filtering is controlled by `svd_filter`; all three quantities
-are derived from the selected filtered or unfiltered spectrum.
+`png/S.png`, `png/S0.png`, and `png/L.png` maps with frequency on rows (vertical)
+and time on columns (horizontal). SVD filtering is controlled by `svd_filter`;
+all three quantities are derived from the selected filtered or unfiltered
+spectrum.
 
 ### Run the GUI
 

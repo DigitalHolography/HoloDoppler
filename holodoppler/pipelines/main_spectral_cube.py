@@ -436,7 +436,7 @@ def _create_h5(path, file_reader, parameters, starts):
 
 
 def _save_endpoint_pngs(h5_path, target_dir, parameters):
-    """Save display-scaled endpoint maps with time on rows and frequency on columns."""
+    """Save endpoint maps with frequency vertical and time horizontal."""
     png_dir = Path(target_dir) / "png"
     png_dir.mkdir(parents=True, exist_ok=True)
     with h5py.File(h5_path, "r") as handle:
@@ -446,7 +446,8 @@ def _save_endpoint_pngs(h5_path, target_dir, parameters):
         }
 
     for name, values in endpoint_maps.items():
-        display = apply_contrast_adjustment(values, parameters)
+        # HDF5 remains (t,f); transposition is only for the PNG display axes.
+        display = apply_contrast_adjustment(values.T, parameters)
         path = png_dir / f"{name}.png"
         iio.imwrite(path, normalize_to_uint8(display))
         print(f"Saving: {path}")
