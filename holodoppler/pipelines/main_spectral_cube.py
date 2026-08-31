@@ -37,7 +37,7 @@ from holodoppler.saving import (
 from holodoppler.spectral_cube import (
     binned_fft_frequencies,
     centered_ellipse_mask,
-    ellipse_mean_power,
+    ellipse_median_power,
     estimated_endpoint_bytes,
     log_power_ratio,
     mean_bin_axis,
@@ -89,7 +89,7 @@ def _process_spectral_window(parameters, frames, phase_term=None):
         holograms = svd_filter(
             cp,
             holograms,
-            parameters["svd_threshold"],
+            parameters.get("svd_threshold", 5),
             filter_mode=parameters.get("svd_filter_mode", "number_of_values"),
             remove_dc=parameters.get("svd_remove_dc", True),
         )
@@ -126,7 +126,7 @@ def _endpoint_spectra_window(parameters, frames):
     )
     del phase_term
 
-    background_power = ellipse_mean_power(
+    background_power = ellipse_median_power(
         cp,
         psd,
         radius_y_factor=parameters.get(
@@ -138,7 +138,7 @@ def _endpoint_spectra_window(parameters, frames):
         outside=True,
     ).astype(cp.float32, copy=False)
 
-    signal_power = ellipse_mean_power(
+    signal_power = ellipse_median_power(
         cp,
         psd,
         radius_y_factor=parameters.get(
@@ -250,12 +250,13 @@ def _create_h5(path, file_reader, parameters, starts):
     )
     signal.attrs["axis_order"] = "t,f"
     signal.attrs["description"] = (
-        "Spatial mean of the non-registered PSD inside a centered ellipse"
+        "Spatial median of the non-registered PSD inside a centered ellipse"
     )
     signal.attrs["dtype"] = "float32"
     signal.attrs["units"] = "power (arbitrary units)"
     signal.attrs["spatial_registration"] = False
     signal.attrs["svd_filter"] = bool(parameters.get("svd_filter", True))
+    signal.attrs["spatial_aggregation"] = "median"
     signal.attrs["corner_compensation"] = bool(
         parameters.get("corner_compensation", False)
     )
@@ -292,12 +293,13 @@ def _create_h5(path, file_reader, parameters, starts):
     )
     background.attrs["axis_order"] = "t,f"
     background.attrs["description"] = (
-        "Spatial mean of the non-registered PSD outside a centered ellipse"
+        "Spatial median of the non-registered PSD outside a centered ellipse"
     )
     background.attrs["dtype"] = "float32"
     background.attrs["units"] = "power (arbitrary units)"
     background.attrs["spatial_registration"] = False
     background.attrs["svd_filter"] = bool(parameters.get("svd_filter", True))
+    background.attrs["spatial_aggregation"] = "median"
     background.attrs["corner_compensation"] = bool(
         parameters.get("corner_compensation", False)
     )

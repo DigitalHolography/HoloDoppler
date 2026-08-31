@@ -124,7 +124,7 @@ def centered_ellipse_mask(
     return inside
 
 
-def ellipse_mean_power(
+def ellipse_median_power(
     xp,
     spectrum,
     radius_y_factor: float,
@@ -132,7 +132,7 @@ def ellipse_mean_power(
     *,
     outside: bool = False,
 ):
-    """Average each frequency plane inside or outside a centered ellipse."""
+    """Take the spatial median inside or outside an ellipse for every frequency."""
     if spectrum.ndim != 3:
         raise ValueError(f"Expected spectrum with shape (f,y,x), got {spectrum.shape}")
     ny, nx = spectrum.shape[-2:]
@@ -149,13 +149,9 @@ def ellipse_mean_power(
         raise ValueError(
             f"The region {location} the centered ellipse contains no pixels"
         )
-    region_float = region.astype(xp.float32, copy=False)
-    count = xp.sum(region_float)
-    return xp.sum(
-        spectrum * region_float[xp.newaxis, :, :],
-        axis=(-2, -1),
-        dtype=xp.float32,
-    ) / count
+    frequency_planes = spectrum.reshape(spectrum.shape[0], -1)
+    region_values = frequency_planes[:, region.reshape(-1)]
+    return xp.median(region_values, axis=1).astype(xp.float32, copy=False)
 
 
 def corner_ellipse_mask(
@@ -175,14 +171,14 @@ def corner_ellipse_mask(
     )
 
 
-def corner_mean_power(
+def corner_median_power(
     xp,
     spectrum,
     radius_y_factor: float = 1.2,
     radius_x_factor: float = 1.2,
 ):
-    """Average every frequency plane outside the configured centered ellipse."""
-    return ellipse_mean_power(
+    """Take the spatial median outside the configured centered ellipse."""
+    return ellipse_median_power(
         xp,
         spectrum,
         radius_y_factor=radius_y_factor,

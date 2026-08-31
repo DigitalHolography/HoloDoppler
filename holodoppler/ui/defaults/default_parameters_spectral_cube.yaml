@@ -17,9 +17,9 @@ Fresnel_use_ouput_kernel: false
 filter2d: false
 filter2d_low: 0.03
 
-# Optional SVD filtering. The pipeline writes only this selected result.
+# Optional low-threshold SVD filtering before temporal spectral estimation.
 svd_filter: true
-svd_threshold: 39
+svd_threshold: 5
 svd_filter_mode: "number_of_values"
 svd_remove_dc: true
 

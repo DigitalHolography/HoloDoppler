@@ -56,18 +56,18 @@ pipeline has its own required parameters.
 
 The `spectral_cube` preset uses `batch_size` and `batch_stride` as its rectangular
 temporal FFT window and stride. It averages the full signed FFT range into
-`f_bins` bins. For every `(t,f)`, `S` is the spatial mean of non-registered data
+`f_bins` bins. For every `(t,f)`, `S` is the spatial median of non-registered data
 inside a centered ellipse whose default semiaxes are `0.8 * Ny/2` and
-`0.8 * Nx/2`. `S0` is measured from the same non-registered data outside a
-centered ellipse whose default semiaxes are `1.2 * Ny/2` and `1.2 * Nx/2`.
+`0.8 * Nx/2`. `S0` is the spatial median of the same non-registered data outside
+a centered ellipse whose default semiaxes are `1.2 * Ny/2` and `1.2 * Nx/2`.
 `L` is the natural logarithm `ln(S/S0)`, protected only against division by zero
 by the smallest positive `float32` value. The HDF5 file contains the
 uncompressed `float32` datasets `S(t,f)`, `S0(t,f)`, and `L(t,f)`, plus `t`, `f`,
 `frame_start`, and processing metadata. It also exports percentile-adjusted
 `png/S.png`, `png/S0.png`, and `png/L.png` maps with frequency on rows (vertical)
-and time on columns (horizontal). SVD filtering is controlled by `svd_filter`;
-all three quantities are derived from the selected filtered or unfiltered
-spectrum.
+and time on columns (horizontal). Low-threshold SVD filtering is controlled by
+`svd_filter` and defaults to a threshold of `5`; all three quantities are derived
+from the selected filtered or unfiltered spectrum. Registration is not applied.
 
 ### Run the GUI
 

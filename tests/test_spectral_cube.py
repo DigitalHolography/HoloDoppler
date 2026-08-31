@@ -4,9 +4,9 @@ from holodoppler.spectral_cube import (
     binned_fft_frequencies,
     centered_ellipse_mask,
     corner_ellipse_mask,
-    corner_mean_power,
+    corner_median_power,
     estimated_endpoint_bytes,
-    ellipse_mean_power,
+    ellipse_median_power,
     log_power_ratio,
     mean_bin_axis,
     window_starts,
@@ -47,21 +47,25 @@ def test_corner_ellipse_mask_selects_only_outer_corners():
     assert not mask[5, 6]
 
 
-def test_corner_mean_power_is_frequency_resolved():
+def test_corner_median_power_is_frequency_resolved_and_robust_to_outlier():
     mask = corner_ellipse_mask(np, 10, 12, 1.2, 1.2)
     spectrum = np.zeros((2, 10, 12), dtype=np.float32)
     spectrum[0, mask] = 3.0
     spectrum[1, mask] = 7.0
-    np.testing.assert_allclose(corner_mean_power(np, spectrum), [3.0, 7.0])
+    first_corner = np.flatnonzero(mask)[0]
+    spectrum[0].flat[first_corner] = 1000.0
+    np.testing.assert_allclose(corner_median_power(np, spectrum), [3.0, 7.0])
 
 
-def test_signal_ellipse_mean_power_is_frequency_resolved():
+def test_signal_ellipse_median_power_is_frequency_resolved_and_robust_to_outlier():
     mask = centered_ellipse_mask(np, 10, 12, 0.8, 0.8)
     spectrum = np.zeros((2, 10, 12), dtype=np.float32)
     spectrum[0, mask] = 5.0
     spectrum[1, mask] = 11.0
+    first_signal = np.flatnonzero(mask)[0]
+    spectrum[1].flat[first_signal] = 1000.0
     np.testing.assert_allclose(
-        ellipse_mean_power(np, spectrum, 0.8, 0.8),
+        ellipse_median_power(np, spectrum, 0.8, 0.8),
         [5.0, 11.0],
     )
 
