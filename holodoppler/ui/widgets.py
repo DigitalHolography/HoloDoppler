@@ -52,6 +52,7 @@ class SettingsEditor(ttk.Frame):
                 "high_freq",
                 "frequency_bands",
                 "f_bins",
+                "spectral_cube_signal_",
                 "spectral_cube_corner_",
                 "filter2d",
                 "pca_",
@@ -62,9 +63,6 @@ class SettingsEditor(ttk.Frame):
             "Output",
             (
                 "saving_to_folder",
-                "spectral_cube_avi",
-                "ratio_x",
-                "ratio_y",
                 "square",
                 "transpose",
                 "flip_x",

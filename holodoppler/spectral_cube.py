@@ -90,35 +90,15 @@ def binned_fft_frequencies(
     )
 
 
-def spatial_block_mean(xp, values, ratio_y: int, ratio_x: int):
-    """Downscale the last two axes by exact non-overlapping block averaging."""
-    for name, value in (("ratio_y", ratio_y), ("ratio_x", ratio_x)):
-        if not isinstance(value, (int, np.integer)) or value <= 0:
-            raise ValueError(f"{name} must be a positive integer")
-
-    ny, nx = values.shape[-2:]
-    if ny % ratio_y or nx % ratio_x:
-        raise ValueError(
-            "Spatial dimensions must be divisible by their binning ratios: "
-            f"input=(y={ny}, x={nx}), ratios=(y={ratio_y}, x={ratio_x})"
-        )
-
-    output_shape = (
-        tuple(values.shape[:-2])
-        + (ny // ratio_y, ratio_y, nx // ratio_x, ratio_x)
-    )
-    return values.reshape(output_shape).mean(axis=(-3, -1))
-
-
 @cache
-def corner_ellipse_mask(
+def centered_ellipse_mask(
     xp,
     ny: int,
     nx: int,
-    radius_y_factor: float = 1.2,
-    radius_x_factor: float = 1.2,
+    radius_y_factor: float,
+    radius_x_factor: float,
 ):
-    """Return pixels outside a centered ellipse as a corner-region mask."""
+    """Return pixels inside a centered ellipse."""
     radius_y_factor = float(radius_y_factor)
     radius_x_factor = float(radius_x_factor)
     if not np.isfinite(radius_y_factor) or radius_y_factor <= 0:
@@ -136,13 +116,63 @@ def corner_ellipse_mask(
         + ((xx - center_x) / radius_x) ** 2
         <= 1.0
     )
-    corners = ~inside
-    if not bool(xp.any(corners)):
+    if not bool(xp.any(inside)):
         raise ValueError(
-            "The corner ellipse covers the complete frame; reduce one or both "
-            "radius factors"
+            "The centered ellipse does not contain any pixels; increase one or "
+            "both radius factors"
         )
-    return corners
+    return inside
+
+
+def ellipse_mean_power(
+    xp,
+    spectrum,
+    radius_y_factor: float,
+    radius_x_factor: float,
+    *,
+    outside: bool = False,
+):
+    """Average each frequency plane inside or outside a centered ellipse."""
+    if spectrum.ndim != 3:
+        raise ValueError(f"Expected spectrum with shape (f,y,x), got {spectrum.shape}")
+    ny, nx = spectrum.shape[-2:]
+    inside = centered_ellipse_mask(
+        xp,
+        ny,
+        nx,
+        radius_y_factor=radius_y_factor,
+        radius_x_factor=radius_x_factor,
+    )
+    region = ~inside if outside else inside
+    if not bool(xp.any(region)):
+        location = "outside" if outside else "inside"
+        raise ValueError(
+            f"The region {location} the centered ellipse contains no pixels"
+        )
+    region_float = region.astype(xp.float32, copy=False)
+    count = xp.sum(region_float)
+    return xp.sum(
+        spectrum * region_float[xp.newaxis, :, :],
+        axis=(-2, -1),
+        dtype=xp.float32,
+    ) / count
+
+
+def corner_ellipse_mask(
+    xp,
+    ny: int,
+    nx: int,
+    radius_y_factor: float = 1.2,
+    radius_x_factor: float = 1.2,
+):
+    """Return pixels outside a centered ellipse as a corner-region mask."""
+    return ~centered_ellipse_mask(
+        xp,
+        ny,
+        nx,
+        radius_y_factor,
+        radius_x_factor,
+    )
 
 
 def corner_mean_power(
@@ -152,35 +182,38 @@ def corner_mean_power(
     radius_x_factor: float = 1.2,
 ):
     """Average every frequency plane outside the configured centered ellipse."""
-    if spectrum.ndim != 3:
-        raise ValueError(f"Expected spectrum with shape (f,y,x), got {spectrum.shape}")
-    ny, nx = spectrum.shape[-2:]
-    corners = corner_ellipse_mask(
+    return ellipse_mean_power(
         xp,
-        ny,
-        nx,
+        spectrum,
         radius_y_factor=radius_y_factor,
         radius_x_factor=radius_x_factor,
+        outside=True,
     )
-    corners_float = corners.astype(xp.float32, copy=False)
-    count = xp.sum(corners_float)
-    return xp.sum(
-        spectrum * corners_float[xp.newaxis, :, :],
-        axis=(-2, -1),
-        dtype=xp.float32,
-    ) / count
 
 
-def estimated_cube_bytes(
+def estimated_endpoint_bytes(
     time_points: int,
     frequency_bins: int,
-    output_y: int,
-    output_x: int,
     *,
+    endpoint_count: int = 3,
     bytes_per_value: int = 4,
 ) -> int:
-    """Return the payload size of an uncompressed spectral cube."""
-    dimensions = (time_points, frequency_bins, output_y, output_x)
+    """Return the payload size of uncompressed S, S0, and L arrays."""
+    dimensions = (time_points, frequency_bins, endpoint_count)
     if any(value < 0 for value in dimensions):
-        raise ValueError("Cube dimensions must be non-negative")
+        raise ValueError("Endpoint dimensions must be non-negative")
     return int(np.prod(dimensions, dtype=np.int64)) * bytes_per_value
+
+
+def log_power_ratio(xp, signal, background):
+    """Return the natural log of signal/background with float32 zero protection."""
+    if signal.shape != background.shape:
+        raise ValueError(
+            f"S and S0 must have identical shapes, got {signal.shape} and "
+            f"{background.shape}"
+        )
+    numerical_floor = xp.asarray(np.finfo(np.float32).tiny, dtype=xp.float32)
+    return xp.log(
+        xp.maximum(signal, numerical_floor)
+        / xp.maximum(background, numerical_floor)
+    ).astype(xp.float32, copy=False)

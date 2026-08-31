@@ -1,6 +1,6 @@
 pipeline_name: "spectral_cube"
 
-# Temporal windows. Each window produces one t sample in S(t, f, y, x).
+# Temporal windows. Each window produces one t sample in S(t,f), S0(t,f), and L(t,f).
 batch_size: 256
 first_frame: 0
 batch_stride: 256
@@ -23,35 +23,28 @@ svd_threshold: 39
 svd_filter_mode: "number_of_values"
 svd_remove_dc: true
 
-# Output size. f_bins covers the complete signed FFT range. Spatial dimensions
-# must be exactly divisible by ratio_y and ratio_x.
+# f_bins covers the complete signed FFT range.
 sampling_freq: "use_holovibes"
 f_bins: 128
-ratio_y: 8
-ratio_x: 8
 
 # Registration is estimated at full spatial resolution from M0ff. Subpixel
-# translation is always used and applied to every f plane before spatial binning.
+# translation is always used and applied to every f plane before measuring S.
 image_registration: true
 registration_radius: 0.8
 registration_flatfield_gw: 35.0
 
-# Applied before frequency and spatial averaging when enabled.
+# Applied before frequency and endpoint averaging when enabled.
 corner_compensation: false
 
-# AVI export. S is first averaged over t, converted to relative dB, then written
-# as one frequency-sweep AVI whose frame axis is f. The playback FPS controls
-# display speed only; it is not physiological time. The default exports all f
-# bins in signed FFT order. Use a list to export only selected f frames.
-spectral_cube_avi: true
-spectral_cube_avi_frequency_indices: "all"
-spectral_cube_avi_fps: 30
-spectral_cube_avi_time_chunk: 8
-# Semiaxes of the centered exclusion ellipse, expressed as multipliers of
-# Ny/2 and Nx/2. The corner floor is measured outside this ellipse before
-# registration, independently for every t and f.
+# S is measured after registration inside this centered ellipse.
+spectral_cube_signal_ellipse_radius_y_factor: 0.8
+spectral_cube_signal_ellipse_radius_x_factor: 0.8
+
+# S0 is measured before registration outside this centered ellipse.
 spectral_cube_corner_ellipse_radius_y_factor: 1.2
 spectral_cube_corner_ellipse_radius_x_factor: 1.2
+
+# Percentile display adjustment for the S.png, S0.png, and L.png maps.
 contrast: true
 contrast_low_max_percent: [0.5, 99.5]
 contrast_gamma: 1.0

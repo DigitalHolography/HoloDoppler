@@ -9,6 +9,7 @@ import time
 import cupy as cp
 from cupyx.scipy.ndimage import gaussian_filter
 import h5py
+import imageio as iio
 import numpy as np
 from tqdm import tqdm
 
@@ -34,17 +35,17 @@ from holodoppler.saving import (
     _create_directories,
     _get_default_output_path,
     _save_metadata,
+    apply_contrast_adjustment,
     normalize_to_uint8,
-    save_spectral_cube_avi,
     save_preview_images,
 )
 from holodoppler.spectral_cube import (
     binned_fft_frequencies,
-    corner_ellipse_mask,
-    corner_mean_power,
-    estimated_cube_bytes,
+    centered_ellipse_mask,
+    ellipse_mean_power,
+    estimated_endpoint_bytes,
+    log_power_ratio,
     mean_bin_axis,
-    spatial_block_mean,
     window_starts,
 )
 from holodoppler.utils import gaussian_flatfield, update_from_footer
@@ -140,9 +141,9 @@ def _registered_and_binned_window(parameters, frames, fixed_moment0ff):
     )
     del phase_term
 
-    # Estimate the frequency-dependent display floor at full spatial resolution
-    # before registration can move image content into or out of the corners.
-    corner_power = corner_mean_power(
+    # S0 is measured before registration so shifts cannot move signal into or
+    # out of the background region.
+    background_power = ellipse_mean_power(
         cp,
         psd,
         radius_y_factor=parameters.get(
@@ -151,6 +152,7 @@ def _registered_and_binned_window(parameters, frames, fixed_moment0ff):
         radius_x_factor=parameters.get(
             "spectral_cube_corner_ellipse_radius_x_factor", 1.2
         ),
+        outside=True,
     ).astype(cp.float32, copy=False)
 
     shift_y = 0.0
@@ -177,13 +179,23 @@ def _registered_and_binned_window(parameters, frames, fixed_moment0ff):
             )
     del moving_moment0ff
 
-    psd = spatial_block_mean(
+    signal_power = ellipse_mean_power(
         cp,
         psd,
-        parameters["ratio_y"],
-        parameters["ratio_x"],
+        radius_y_factor=parameters.get(
+            "spectral_cube_signal_ellipse_radius_y_factor", 0.8
+        ),
+        radius_x_factor=parameters.get(
+            "spectral_cube_signal_ellipse_radius_x_factor", 0.8
+        ),
+        outside=False,
     ).astype(cp.float32, copy=False)
-    return psd, fixed_moment0ff, (float(shift_y), float(shift_x)), corner_power
+    return (
+        signal_power,
+        fixed_moment0ff,
+        (float(shift_y), float(shift_x)),
+        background_power,
+    )
 
 
 def _total_frames(file_reader) -> int:
@@ -218,14 +230,10 @@ def _prepare(file_path, parameters):
             "for inputs without HoloVibes metadata"
         ) from exc
     f_bins = int(parameters.get("f_bins", 128))
-    ratio_y = int(parameters.get("ratio_y", 8))
-    ratio_x = int(parameters.get("ratio_x", 8))
     if not np.isfinite(sampling_frequency) or sampling_frequency <= 0:
         raise ValueError("sampling_freq must be a positive finite number")
     if f_bins <= 0:
         raise ValueError("f_bins must be a positive integer")
-    if ratio_y <= 0 or ratio_x <= 0:
-        raise ValueError("ratio_y and ratio_x must be positive integers")
     parameters.update(
         {
             "batch_size": batch_size,
@@ -234,17 +242,9 @@ def _prepare(file_path, parameters):
             "end_frame": end_frame,
             "sampling_freq": sampling_frequency,
             "f_bins": f_bins,
-            "ratio_y": ratio_y,
-            "ratio_x": ratio_x,
         }
     )
 
-    ny, nx = file_reader.frame_shape
-    if ny % ratio_y or nx % ratio_x:
-        raise ValueError(
-            "Input frame dimensions must be divisible by ratio_y and ratio_x: "
-            f"input=(y={ny}, x={nx}), ratios=(y={ratio_y}, x={ratio_x})"
-        )
     if f_bins > batch_size:
         raise ValueError(
             f"f_bins ({f_bins}) cannot exceed batch_size ({batch_size})"
@@ -260,8 +260,11 @@ def _output_path(file_reader, parameters) -> tuple[Path, Path]:
     _create_directories(target_dir, "FULL")
 
     filename = parameters.get(
-        "spectral_cube_filename",
-        f"{Path(file_reader.file_path).stem}_spectral_cube.h5",
+        "spectral_endpoints_filename",
+        parameters.get(
+            "spectral_cube_filename",
+            f"{Path(file_reader.file_path).stem}_spectral_endpoints.h5",
+        ),
     )
     filename = Path(filename).name
     if not filename.lower().endswith((".h5", ".hdf5")):
@@ -271,10 +274,6 @@ def _output_path(file_reader, parameters) -> tuple[Path, Path]:
 
 def _create_h5(path, file_reader, parameters, starts):
     ny, nx = file_reader.frame_shape
-    ratio_y = parameters["ratio_y"]
-    ratio_x = parameters["ratio_x"]
-    output_y = ny // ratio_y
-    output_x = nx // ratio_x
     f = binned_fft_frequencies(
         parameters["sampling_freq"], parameters["batch_size"], parameters["f_bins"]
     )
@@ -285,29 +284,118 @@ def _create_h5(path, file_reader, parameters, starts):
     handle = h5py.File(path, "w")
     handle.attrs["complete"] = False
     handle.attrs["source_file"] = str(file_reader.file_path)
-    handle.attrs["axis_order"] = "t,f,y,x"
+    handle.attrs["axis_order"] = "t,f"
 
-    cube = handle.create_dataset(
+    signal = handle.create_dataset(
         "S",
-        shape=(len(starts), len(f), output_y, output_x),
+        shape=(len(starts), len(f)),
         dtype=np.float32,
         chunks=None,
         compression=None,
         track_times=False,
     )
-    cube.attrs["axis_order"] = "t,f,y,x"
-    cube.attrs["description"] = "Registered, spatially and spectrally averaged PSD"
-    cube.attrs["dtype"] = "float32"
+    signal.attrs["axis_order"] = "t,f"
+    signal.attrs["description"] = (
+        "Spatial mean of the optionally registered PSD inside a centered ellipse"
+    )
+    signal.attrs["dtype"] = "float32"
+    signal.attrs["units"] = "power (arbitrary units)"
     registration_enabled = bool(parameters.get("image_registration", True))
-    cube.attrs["spatial_registration"] = registration_enabled
-    cube.attrs["registration_interpolation"] = (
+    signal.attrs["spatial_registration"] = registration_enabled
+    signal.attrs["registration_interpolation"] = (
         "subpixel Fourier shift" if registration_enabled else "none"
     )
-    cube.attrs["svd_filter"] = bool(parameters.get("svd_filter", True))
-    cube.attrs["temporal_window"] = "rectangular"
-    cube.attrs["frequency_binning"] = "contiguous mean"
-    cube.attrs["ratio_y"] = ratio_y
-    cube.attrs["ratio_x"] = ratio_x
+    signal.attrs["svd_filter"] = bool(parameters.get("svd_filter", True))
+    signal.attrs["corner_compensation"] = bool(
+        parameters.get("corner_compensation", False)
+    )
+    signal.attrs["temporal_window"] = "rectangular"
+    signal.attrs["frequency_binning"] = "contiguous mean"
+    signal_radius_y_factor = float(
+        parameters.get("spectral_cube_signal_ellipse_radius_y_factor", 0.8)
+    )
+    signal_radius_x_factor = float(
+        parameters.get("spectral_cube_signal_ellipse_radius_x_factor", 0.8)
+    )
+    signal.attrs["ellipse_radius_y_factor"] = signal_radius_y_factor
+    signal.attrs["ellipse_radius_x_factor"] = signal_radius_x_factor
+    signal.attrs["ellipse_radius_y_pixels"] = signal_radius_y_factor * ny / 2.0
+    signal.attrs["ellipse_radius_x_pixels"] = signal_radius_x_factor * nx / 2.0
+    signal_mask = centered_ellipse_mask(
+        np,
+        ny,
+        nx,
+        signal_radius_y_factor,
+        signal_radius_x_factor,
+    )
+    signal_pixel_count = int(np.count_nonzero(signal_mask))
+    signal.attrs["pixel_count"] = signal_pixel_count
+    signal.attrs["pixel_fraction"] = signal_pixel_count / (ny * nx)
+
+    background = handle.create_dataset(
+        "S0",
+        shape=(len(starts), len(f)),
+        dtype=np.float32,
+        chunks=None,
+        compression=None,
+        track_times=False,
+    )
+    background.attrs["axis_order"] = "t,f"
+    background.attrs["description"] = (
+        "Full-resolution spatial mean outside a centered ellipse before registration"
+    )
+    background.attrs["dtype"] = "float32"
+    background.attrs["units"] = "power (arbitrary units)"
+    background.attrs["spatial_registration"] = False
+    background.attrs["svd_filter"] = bool(parameters.get("svd_filter", True))
+    background.attrs["corner_compensation"] = bool(
+        parameters.get("corner_compensation", False)
+    )
+    background.attrs["temporal_window"] = "rectangular"
+    background.attrs["frequency_binning"] = "contiguous mean"
+    background_radius_y_factor = float(
+        parameters.get("spectral_cube_corner_ellipse_radius_y_factor", 1.2)
+    )
+    background_radius_x_factor = float(
+        parameters.get("spectral_cube_corner_ellipse_radius_x_factor", 1.2)
+    )
+    background.attrs["ellipse_radius_y_factor"] = background_radius_y_factor
+    background.attrs["ellipse_radius_x_factor"] = background_radius_x_factor
+    background.attrs["ellipse_radius_y_pixels"] = (
+        background_radius_y_factor * ny / 2.0
+    )
+    background.attrs["ellipse_radius_x_pixels"] = (
+        background_radius_x_factor * nx / 2.0
+    )
+    background_mask = ~centered_ellipse_mask(
+        np,
+        ny,
+        nx,
+        background_radius_y_factor,
+        background_radius_x_factor,
+    )
+    if not np.any(background_mask):
+        raise ValueError(
+            "The background ellipse covers the complete frame; reduce one or "
+            "both corner radius factors"
+        )
+    background_pixel_count = int(np.count_nonzero(background_mask))
+    background.attrs["pixel_count"] = background_pixel_count
+    background.attrs["pixel_fraction"] = background_pixel_count / (ny * nx)
+
+    log_ratio = handle.create_dataset(
+        "L",
+        shape=(len(starts), len(f)),
+        dtype=np.float32,
+        chunks=None,
+        compression=None,
+        track_times=False,
+    )
+    log_ratio.attrs["axis_order"] = "t,f"
+    log_ratio.attrs["description"] = "Natural logarithm of S/S0"
+    log_ratio.attrs["formula"] = "ln(max(S,tiny_float32)/max(S0,tiny_float32))"
+    log_ratio.attrs["dtype"] = "float32"
+    log_ratio.attrs["units"] = "dimensionless"
 
     f_dataset = handle.create_dataset("f", data=f, track_times=False)
     f_dataset.attrs["units"] = "Hz"
@@ -319,13 +407,6 @@ def _create_h5(path, file_reader, parameters, starts):
         "frame_start", data=starts, track_times=False
     )
     frame_start_dataset.attrs["units"] = "frame index"
-
-    x = (np.arange(output_x, dtype=np.float64) + 0.5) * ratio_x - 0.5
-    y = (np.arange(output_y, dtype=np.float64) + 0.5) * ratio_y - 0.5
-    x_dataset = handle.create_dataset("x", data=x, track_times=False)
-    y_dataset = handle.create_dataset("y", data=y, track_times=False)
-    x_dataset.attrs["units"] = "input pixel"
-    y_dataset.attrs["units"] = "input pixel"
 
     registration = handle.create_dataset(
         "registration",
@@ -341,52 +422,6 @@ def _create_h5(path, file_reader, parameters, starts):
         "subpixel intensity correlation" if registration_enabled else "none"
     )
 
-    corner_power = handle.create_dataset(
-        "corner_average_power",
-        shape=(len(starts), len(f)),
-        dtype=np.float32,
-        chunks=None,
-        compression=None,
-        track_times=False,
-    )
-    corner_power.attrs["axis_order"] = "t,f"
-    corner_power.attrs["description"] = (
-        "Full-resolution spatial mean outside a centered ellipse before registration"
-    )
-    radius_y_factor = float(
-        parameters.get("spectral_cube_corner_ellipse_radius_y_factor", 1.2)
-    )
-    radius_x_factor = float(
-        parameters.get("spectral_cube_corner_ellipse_radius_x_factor", 1.2)
-    )
-    corner_power.attrs["ellipse_radius_y_factor"] = radius_y_factor
-    corner_power.attrs["ellipse_radius_x_factor"] = radius_x_factor
-    corner_power.attrs["ellipse_radius_y_pixels"] = radius_y_factor * ny / 2.0
-    corner_power.attrs["ellipse_radius_x_pixels"] = radius_x_factor * nx / 2.0
-    corner_mask = corner_ellipse_mask(
-        np,
-        ny,
-        nx,
-        radius_y_factor,
-        radius_x_factor,
-    )
-    corner_pixel_count = int(np.count_nonzero(corner_mask))
-    corner_power.attrs["corner_pixel_count"] = corner_pixel_count
-    corner_power.attrs["corner_pixel_fraction"] = corner_pixel_count / (ny * nx)
-
-    corner_power_time_mean = handle.create_dataset(
-        "corner_average_power_time_mean",
-        shape=(len(f),),
-        dtype=np.float32,
-        chunks=None,
-        compression=None,
-        track_times=False,
-    )
-    corner_power_time_mean.attrs["axis_order"] = "f"
-    corner_power_time_mean.attrs["description"] = (
-        "Temporal mean of corner_average_power over all t windows"
-    )
-
     string_dtype = h5py.string_dtype(encoding="utf-8")
     handle.create_dataset(
         "HD_parameters",
@@ -397,27 +432,38 @@ def _create_h5(path, file_reader, parameters, starts):
     handle.create_dataset(
         "HD_version", data=f"py{get_version()}", dtype=string_dtype, track_times=False
     )
-    return handle, cube, registration, corner_power, corner_power_time_mean
+    return handle, signal, background, log_ratio, registration
+
+
+def _save_endpoint_pngs(h5_path, target_dir, parameters):
+    """Save display-scaled endpoint maps with time on rows and frequency on columns."""
+    png_dir = Path(target_dir) / "png"
+    png_dir.mkdir(parents=True, exist_ok=True)
+    with h5py.File(h5_path, "r") as handle:
+        endpoint_maps = {
+            name: np.asarray(handle[name], dtype=np.float32)
+            for name in ("S", "S0", "L")
+        }
+
+    for name, values in endpoint_maps.items():
+        display = apply_contrast_adjustment(values, parameters)
+        path = png_dir / f"{name}.png"
+        iio.imwrite(path, normalize_to_uint8(display))
+        print(f"Saving: {path}")
 
 
 def process(file_path, parameters, progress_callback=None):
-    """Compute and stream ``S(t, f, y, x)`` to an uncompressed HDF5 file."""
+    """Compute and stream ``S(t,f)``, ``S0(t,f)``, and ``L(t,f)`` to HDF5."""
     file_reader, parameters, starts = _prepare(file_path, parameters)
     target_dir, h5_path = _output_path(file_reader, parameters)
 
-    ny, nx = file_reader.frame_shape
-    output_y = ny // parameters["ratio_y"]
-    output_x = nx // parameters["ratio_x"]
-    output_bytes = estimated_cube_bytes(
-        len(starts), parameters["f_bins"], output_y, output_x
-    )
+    output_bytes = estimated_endpoint_bytes(len(starts), parameters["f_bins"])
     print(
-        "Spectral cube: "
-        f"shape=({len(starts)}, {parameters['f_bins']}, {output_y}, {output_x}) "
-        "(t,f,y,x), "
-        f"payload={output_bytes / 1024**3:.2f} GiB"
+        "Spectral endpoints: "
+        f"S, S0, and L shapes=({len(starts)}, {parameters['f_bins']}) (t,f), "
+        f"payload={output_bytes / 1024**2:.2f} MiB"
     )
-    print(f"Saving spectral cube to: {h5_path}")
+    print(f"Saving spectral endpoints to: {h5_path}")
 
     started = time.time()
     fixed_moment0ff = None
@@ -425,12 +471,12 @@ def process(file_path, parameters, progress_callback=None):
     try:
         (
             handle,
-            cube,
+            signal_dataset,
+            background_dataset,
+            log_ratio_dataset,
             registration,
-            corner_power_dataset,
-            corner_power_time_mean_dataset,
         ) = _create_h5(h5_path, file_reader, parameters, starts)
-        for index, frame_start in enumerate(tqdm(starts, desc="Spectral cube")):
+        for index, frame_start in enumerate(tqdm(starts, desc="Spectral endpoints")):
             frames = file_reader.read_frames(
                 first_frame=int(frame_start), batch_size=parameters["batch_size"]
             )
@@ -441,15 +487,17 @@ def process(file_path, parameters, progress_callback=None):
                 )
 
             (
-                reduced,
+                signal_power,
                 fixed_moment0ff,
                 shifts,
-                corner_power,
+                background_power,
             ) = _registered_and_binned_window(parameters, frames, fixed_moment0ff)
-            cube[index] = cp.asnumpy(reduced)
+            log_ratio = log_power_ratio(cp, signal_power, background_power)
+            signal_dataset[index] = cp.asnumpy(signal_power)
+            background_dataset[index] = cp.asnumpy(background_power)
+            log_ratio_dataset[index] = cp.asnumpy(log_ratio)
             registration[index] = shifts
-            corner_power_dataset[index] = cp.asnumpy(corner_power)
-            del reduced, corner_power
+            del signal_power, background_power, log_ratio
 
             if progress_callback is not None:
                 progress_callback(
@@ -458,11 +506,6 @@ def process(file_path, parameters, progress_callback=None):
                     f"Spectral window {index + 1}/{len(starts)}",
                 )
 
-        corner_power_time_mean_dataset[...] = np.mean(
-            np.asarray(corner_power_dataset, dtype=np.float32),
-            axis=0,
-            dtype=np.float64,
-        ).astype(np.float32)
         handle.attrs.modify("complete", True)
         handle.flush()
     finally:
@@ -472,15 +515,15 @@ def process(file_path, parameters, progress_callback=None):
             file_reader.close()
         cp.get_default_memory_pool().free_all_blocks()
 
-    save_spectral_cube_avi(h5_path, target_dir, parameters)
+    _save_endpoint_pngs(h5_path, target_dir, parameters)
     _save_metadata(target_dir, file_reader, parameters)
     elapsed = time.time() - started
-    print(f"Spectral cube completed in {elapsed:.1f} seconds")
+    print(f"Spectral endpoints completed in {elapsed:.1f} seconds")
     return h5_path
 
 
 def preview(file_path, parameters, save_debug=True):
-    """Return integrated power from the first reduced spectral window."""
+    """Return S, S0, and L spectra from the first temporal window."""
     file_reader, parameters, starts = _prepare(file_path, parameters)
     try:
         frames = file_reader.read_frames(
@@ -493,13 +536,16 @@ def preview(file_path, parameters, save_debug=True):
             )
 
         (
-            reduced,
+            signal_power,
             _fixed_moment0ff,
             _shifts,
-            _corner_power,
+            background_power,
         ) = _registered_and_binned_window(parameters, frames, None)
-        integrated_power = cp.asnumpy(cp.mean(reduced, axis=0))
-        preview_image = normalize_to_uint8(integrated_power)
+        log_ratio = log_power_ratio(cp, signal_power, background_power)
+        endpoint_spectra = cp.asnumpy(
+            cp.stack((signal_power, background_power, log_ratio))
+        )
+        preview_image = normalize_to_uint8(endpoint_spectra)
 
         if save_debug:
             if parameters.get("saving_to_folder"):
@@ -509,7 +555,7 @@ def preview(file_path, parameters, save_debug=True):
                     _get_default_output_path(file_reader.file_path) / "preview"
                 )
             save_preview_images(
-                {"spectral_cube_integrated_power": preview_image}, preview_path
+                {"spectral_endpoints": preview_image}, preview_path
             )
     finally:
         if hasattr(file_reader, "close"):
