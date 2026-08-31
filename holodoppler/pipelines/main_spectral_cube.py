@@ -7,7 +7,6 @@ from pathlib import Path
 import time
 
 import cupy as cp
-from cupyx.scipy.ndimage import gaussian_filter
 import h5py
 import imageio as iio
 import numpy as np
@@ -27,10 +26,6 @@ from holodoppler.propagation import (
     fresnel_transform,
     fresnel_transform_with_phase,
 )
-from holodoppler.registration import (
-    apply_register_images_shifts,
-    register_images_shifts,
-)
 from holodoppler.saving import (
     _create_directories,
     _get_default_output_path,
@@ -48,7 +43,7 @@ from holodoppler.spectral_cube import (
     mean_bin_axis,
     window_starts,
 )
-from holodoppler.utils import gaussian_flatfield, update_from_footer
+from holodoppler.utils import update_from_footer
 
 
 def _propagate(parameters, frames, phase_term=None):
@@ -86,7 +81,7 @@ def _propagate(parameters, frames, phase_term=None):
 
 
 def _process_spectral_window(parameters, frames, phase_term=None):
-    """Return frequency-binned PSD planes and the full-resolution M0 flatfield."""
+    """Return frequency-binned, non-registered PSD planes."""
     holograms = _propagate(parameters, frames, phase_term=phase_term)
     del frames
 
@@ -107,19 +102,9 @@ def _process_spectral_window(parameters, frames, phase_term=None):
     if parameters.get("corner_compensation", False):
         psd = corner_compensation(cp, psd).astype(cp.float32, copy=False)
 
-    moment0 = cp.sum(psd, axis=0, dtype=cp.float32)
-    moment0ff = gaussian_flatfield(
-        moment0,
-        parameters.get("registration_flatfield_gw", 35.0),
-        gaussian_filter,
-    ).astype(cp.float32, copy=False)
-    del moment0
-
     psd = cp.fft.fftshift(psd, axes=0)
-    # The same spatial translation is applied at every f, so frequency averaging
-    # commutes with registration and halves the default registration workload.
     psd = mean_bin_axis(cp, psd, parameters["f_bins"], axis=0)
-    return psd.astype(cp.float32, copy=False), moment0ff
+    return psd.astype(cp.float32, copy=False)
 
 
 def _phase_term(parameters, frames):
@@ -132,17 +117,15 @@ def _phase_term(parameters, frames):
     return _process_shack_hartmann(parameters, frames)
 
 
-def _registered_and_binned_window(parameters, frames, fixed_moment0ff):
+def _endpoint_spectra_window(parameters, frames):
     phase_term = _phase_term(parameters, frames)
-    psd, moving_moment0ff = _process_spectral_window(
+    psd = _process_spectral_window(
         parameters,
         frames,
         phase_term=phase_term,
     )
     del phase_term
 
-    # S0 is measured before registration so shifts cannot move signal into or
-    # out of the background region.
     background_power = ellipse_mean_power(
         cp,
         psd,
@@ -155,30 +138,6 @@ def _registered_and_binned_window(parameters, frames, fixed_moment0ff):
         outside=True,
     ).astype(cp.float32, copy=False)
 
-    shift_y = 0.0
-    shift_x = 0.0
-    if parameters.get("image_registration", True):
-        if fixed_moment0ff is None:
-            fixed_moment0ff = moving_moment0ff.copy()
-        else:
-            shift_y, shift_x = register_images_shifts(
-                cp,
-                cp.fft,
-                fixed_moment0ff,
-                moving_moment0ff,
-                radius=parameters.get("registration_radius", 0.8),
-                integer_translation=False,
-            )
-            psd = apply_register_images_shifts(
-                cp,
-                psd,
-                shift_y,
-                shift_x,
-                fft=cp.fft,
-                integer_translation=False,
-            )
-    del moving_moment0ff
-
     signal_power = ellipse_mean_power(
         cp,
         psd,
@@ -190,12 +149,7 @@ def _registered_and_binned_window(parameters, frames, fixed_moment0ff):
         ),
         outside=False,
     ).astype(cp.float32, copy=False)
-    return (
-        signal_power,
-        fixed_moment0ff,
-        (float(shift_y), float(shift_x)),
-        background_power,
-    )
+    return signal_power, background_power
 
 
 def _total_frames(file_reader) -> int:
@@ -296,15 +250,11 @@ def _create_h5(path, file_reader, parameters, starts):
     )
     signal.attrs["axis_order"] = "t,f"
     signal.attrs["description"] = (
-        "Spatial mean of the optionally registered PSD inside a centered ellipse"
+        "Spatial mean of the non-registered PSD inside a centered ellipse"
     )
     signal.attrs["dtype"] = "float32"
     signal.attrs["units"] = "power (arbitrary units)"
-    registration_enabled = bool(parameters.get("image_registration", True))
-    signal.attrs["spatial_registration"] = registration_enabled
-    signal.attrs["registration_interpolation"] = (
-        "subpixel Fourier shift" if registration_enabled else "none"
-    )
+    signal.attrs["spatial_registration"] = False
     signal.attrs["svd_filter"] = bool(parameters.get("svd_filter", True))
     signal.attrs["corner_compensation"] = bool(
         parameters.get("corner_compensation", False)
@@ -342,7 +292,7 @@ def _create_h5(path, file_reader, parameters, starts):
     )
     background.attrs["axis_order"] = "t,f"
     background.attrs["description"] = (
-        "Full-resolution spatial mean outside a centered ellipse before registration"
+        "Spatial mean of the non-registered PSD outside a centered ellipse"
     )
     background.attrs["dtype"] = "float32"
     background.attrs["units"] = "power (arbitrary units)"
@@ -408,20 +358,6 @@ def _create_h5(path, file_reader, parameters, starts):
     )
     frame_start_dataset.attrs["units"] = "frame index"
 
-    registration = handle.create_dataset(
-        "registration",
-        shape=(len(starts), 2),
-        dtype=np.float32,
-        chunks=None,
-        compression=None,
-        track_times=False,
-    )
-    registration.attrs["components"] = "shift_y,shift_x"
-    registration.attrs["units"] = "input pixel"
-    registration.attrs["method"] = (
-        "subpixel intensity correlation" if registration_enabled else "none"
-    )
-
     string_dtype = h5py.string_dtype(encoding="utf-8")
     handle.create_dataset(
         "HD_parameters",
@@ -432,7 +368,7 @@ def _create_h5(path, file_reader, parameters, starts):
     handle.create_dataset(
         "HD_version", data=f"py{get_version()}", dtype=string_dtype, track_times=False
     )
-    return handle, signal, background, log_ratio, registration
+    return handle, signal, background, log_ratio
 
 
 def _save_endpoint_pngs(h5_path, target_dir, parameters):
@@ -467,7 +403,6 @@ def process(file_path, parameters, progress_callback=None):
     print(f"Saving spectral endpoints to: {h5_path}")
 
     started = time.time()
-    fixed_moment0ff = None
     handle = None
     try:
         (
@@ -475,7 +410,6 @@ def process(file_path, parameters, progress_callback=None):
             signal_dataset,
             background_dataset,
             log_ratio_dataset,
-            registration,
         ) = _create_h5(h5_path, file_reader, parameters, starts)
         for index, frame_start in enumerate(tqdm(starts, desc="Spectral endpoints")):
             frames = file_reader.read_frames(
@@ -487,17 +421,13 @@ def process(file_path, parameters, progress_callback=None):
                     cp, cp.fft, frames, parameters.get("filter2d_low", 0.03)
                 )
 
-            (
-                signal_power,
-                fixed_moment0ff,
-                shifts,
-                background_power,
-            ) = _registered_and_binned_window(parameters, frames, fixed_moment0ff)
+            signal_power, background_power = _endpoint_spectra_window(
+                parameters, frames
+            )
             log_ratio = log_power_ratio(cp, signal_power, background_power)
             signal_dataset[index] = cp.asnumpy(signal_power)
             background_dataset[index] = cp.asnumpy(background_power)
             log_ratio_dataset[index] = cp.asnumpy(log_ratio)
-            registration[index] = shifts
             del signal_power, background_power, log_ratio
 
             if progress_callback is not None:
@@ -536,12 +466,7 @@ def preview(file_path, parameters, save_debug=True):
                 cp, cp.fft, frames, parameters.get("filter2d_low", 0.03)
             )
 
-        (
-            signal_power,
-            _fixed_moment0ff,
-            _shifts,
-            background_power,
-        ) = _registered_and_binned_window(parameters, frames, None)
+        signal_power, background_power = _endpoint_spectra_window(parameters, frames)
         log_ratio = log_power_ratio(cp, signal_power, background_power)
         endpoint_spectra = cp.asnumpy(
             cp.stack((signal_power, background_power, log_ratio))

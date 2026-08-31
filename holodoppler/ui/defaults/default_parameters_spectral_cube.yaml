@@ -27,20 +27,14 @@ svd_remove_dc: true
 sampling_freq: "use_holovibes"
 f_bins: 128
 
-# Registration is estimated at full spatial resolution from M0ff. Subpixel
-# translation is always used and applied to every f plane before measuring S.
-image_registration: true
-registration_radius: 0.8
-registration_flatfield_gw: 35.0
-
 # Applied before frequency and endpoint averaging when enabled.
 corner_compensation: false
 
-# S is measured after registration inside this centered ellipse.
+# S is measured from non-registered data inside this centered ellipse.
 spectral_cube_signal_ellipse_radius_y_factor: 0.8
 spectral_cube_signal_ellipse_radius_x_factor: 0.8
 
-# S0 is measured before registration outside this centered ellipse.
+# S0 is measured from non-registered data outside this centered ellipse.
 spectral_cube_corner_ellipse_radius_y_factor: 1.2
 spectral_cube_corner_ellipse_radius_x_factor: 1.2
 
