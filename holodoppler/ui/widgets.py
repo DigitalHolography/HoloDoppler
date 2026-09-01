@@ -54,6 +54,7 @@ class SettingsEditor(ttk.Frame):
                 "f_bins",
                 "spectral_cube_signal_",
                 "spectral_cube_corner_",
+                "spectral_endpoints_",
                 "filter2d",
                 "pca_",
                 "svd_",

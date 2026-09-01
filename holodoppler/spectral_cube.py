@@ -5,6 +5,8 @@ from __future__ import annotations
 from functools import cache
 
 import numpy as np
+from scipy.ndimage import gaussian_filter1d
+from scipy.signal import find_peaks
 
 
 def window_starts(
@@ -213,3 +215,370 @@ def log_power_ratio(xp, signal, background):
         xp.maximum(signal, numerical_floor)
         / xp.maximum(background, numerical_floor)
     ).astype(xp.float32, copy=False)
+
+
+def _robust_mad_scale(values: np.ndarray) -> float:
+    """Return a MAD-based scale with only a numerical fallback for flat data."""
+    values = np.asarray(values, dtype=np.float64)
+    center = float(np.median(values))
+    scale = 1.4826 * float(np.median(np.abs(values - center)))
+    numerical = np.finfo(np.float64).eps * max(1.0, float(np.max(np.abs(values))))
+    return max(scale, numerical)
+
+
+def resolve_cardiac_fc(configured_fc_hz: float, sampling_frequency_hz: float) -> float:
+    """Cap the configured cutoff at 80% of the temporal Nyquist frequency."""
+    configured_fc_hz = float(configured_fc_hz)
+    sampling_frequency_hz = float(sampling_frequency_hz)
+    if not np.isfinite(configured_fc_hz) or configured_fc_hz < 0:
+        raise ValueError("spectral_endpoints_cardiac_fc_hz must be non-negative")
+    if not np.isfinite(sampling_frequency_hz) or sampling_frequency_hz <= 0:
+        raise ValueError("sampling_freq must be a positive finite number")
+    return min(configured_fc_hz, 0.8 * sampling_frequency_hz / 2.0)
+
+
+def cardiac_detection_signal(
+    signal: np.ndarray,
+    t: np.ndarray,
+    f: np.ndarray,
+    fc_hz: float,
+    *,
+    smoothing_s: float = 0.0,
+):
+    """Compute g=sum_|f|>fc S and its derivative on the actual time axis."""
+    signal = np.asarray(signal)
+    t = np.asarray(t, dtype=np.float64)
+    f = np.asarray(f, dtype=np.float64)
+    fc_hz = float(fc_hz)
+    smoothing_s = float(smoothing_s)
+    if signal.ndim != 2 or signal.shape != (t.size, f.size):
+        raise ValueError(
+            "S, t, and f must have compatible shapes (time,frequency); got "
+            f"S{signal.shape}, t{t.shape}, f{f.shape}"
+        )
+    if t.size < 3:
+        raise ValueError("At least three long-time samples are required")
+    if not np.all(np.isfinite(t)) or not np.all(np.diff(t) > 0):
+        raise ValueError("t must be finite and strictly increasing")
+    if not np.isfinite(fc_hz) or fc_hz < 0:
+        raise ValueError("spectral_endpoints_cardiac_fc_hz must be non-negative")
+    if not np.isfinite(smoothing_s) or smoothing_s < 0:
+        raise ValueError("spectral_endpoints_cardiac_smoothing_s must be non-negative")
+
+    high_frequency = np.abs(f) > fc_hz
+    if not np.any(high_frequency):
+        raise ValueError(
+            "No Doppler-frequency bins satisfy abs(f) > "
+            f"spectral_endpoints_cardiac_fc_hz ({fc_hz:g} Hz)"
+        )
+    cardiac_signal = np.sum(
+        signal[:, high_frequency], axis=1, dtype=np.float64
+    )
+    smoothed = cardiac_signal.copy()
+    if smoothing_s > 0:
+        median_dt = float(np.median(np.diff(t)))
+        smoothed = gaussian_filter1d(
+            cardiac_signal,
+            sigma=smoothing_s / median_dt,
+            mode="nearest",
+        )
+    derivative = np.gradient(smoothed, t, edge_order=2)
+    return cardiac_signal, smoothed, derivative, high_frequency
+
+
+def detect_cardiac_landmarks(
+    derivative: np.ndarray,
+    t: np.ndarray,
+    *,
+    min_distance_s: float,
+    prominence_mad: float,
+):
+    """Select positive local maxima of dg/dt with robust prominence and spacing."""
+    derivative = np.asarray(derivative, dtype=np.float64)
+    t = np.asarray(t, dtype=np.float64)
+    min_distance_s = float(min_distance_s)
+    prominence_mad = float(prominence_mad)
+    if derivative.shape != t.shape:
+        raise ValueError("derivative and t must have identical shapes")
+    if not np.isfinite(min_distance_s) or min_distance_s <= 0:
+        raise ValueError("spectral_endpoints_peak_min_distance_s must be positive")
+    if not np.isfinite(prominence_mad) or prominence_mad < 0:
+        raise ValueError("spectral_endpoints_peak_prominence_mad must be non-negative")
+
+    resolved_prominence = prominence_mad * _robust_mad_scale(derivative)
+    candidates, properties = find_peaks(
+        derivative,
+        prominence=resolved_prominence,
+    )
+    positive = derivative[candidates] > 0
+    candidates = candidates[positive]
+    prominences = properties["prominences"][positive]
+
+    # Enforce separation using actual times. Stronger derivative events win when
+    # two otherwise valid local maxima are too close.
+    order = np.lexsort((-prominences, -derivative[candidates]))
+    accepted = []
+    for candidate in candidates[order]:
+        if all(abs(t[candidate] - t[other]) >= min_distance_s for other in accepted):
+            accepted.append(int(candidate))
+    landmarks = np.asarray(sorted(accepted), dtype=np.int64)
+    return landmarks, float(resolved_prominence)
+
+
+def resample_beats(
+    signal: np.ndarray,
+    background: np.ndarray,
+    t: np.ndarray,
+    landmarks: np.ndarray,
+    *,
+    phase_bins: int,
+    min_duration_s: float,
+    max_duration_s: float,
+):
+    """Linearly resample valid landmark-to-landmark beats onto [0,1)."""
+    signal = np.asarray(signal, dtype=np.float32)
+    background = np.asarray(background, dtype=np.float32)
+    t = np.asarray(t, dtype=np.float64)
+    landmarks = np.asarray(landmarks, dtype=np.int64)
+    phase_bins = int(phase_bins)
+    min_duration_s = float(min_duration_s)
+    max_duration_s = float(max_duration_s)
+    if signal.shape != background.shape or signal.shape[0] != t.size:
+        raise ValueError("S, S0, and t must have compatible shapes")
+    if phase_bins < 2:
+        raise ValueError("spectral_endpoints_phase_bins must be at least 2")
+    if (
+        not np.isfinite(min_duration_s)
+        or not np.isfinite(max_duration_s)
+        or min_duration_s <= 0
+        or max_duration_s <= min_duration_s
+    ):
+        raise ValueError("Beat-duration bounds must satisfy 0 < min < max")
+    if landmarks.size and (
+        np.any(landmarks < 0)
+        or np.any(landmarks >= t.size)
+        or np.any(np.diff(landmarks) <= 0)
+    ):
+        raise ValueError("landmarks must be strictly increasing valid indices")
+
+    phase = np.arange(phase_bins, dtype=np.float64) / phase_bins
+    periods = np.diff(t[landmarks]) if landmarks.size >= 2 else np.empty(0)
+    accepted = (periods >= min_duration_s) & (periods <= max_duration_s)
+    accepted_indices = np.flatnonzero(accepted).astype(np.int64)
+    rejected_indices = np.flatnonzero(~accepted).astype(np.int64)
+    signal_beats = []
+    background_beats = []
+    for beat_index in accepted_indices:
+        start = int(landmarks[beat_index])
+        stop = int(landmarks[beat_index + 1])
+        source_phase = (t[start : stop + 1] - t[start]) / (t[stop] - t[start])
+        signal_segment = signal[start : stop + 1]
+        background_segment = background[start : stop + 1]
+        signal_beats.append(
+            np.stack(
+                [
+                    np.interp(phase, source_phase, signal_segment[:, index])
+                    for index in range(signal.shape[1])
+                ],
+                axis=1,
+            ).astype(np.float32)
+        )
+        background_beats.append(
+            np.stack(
+                [
+                    np.interp(phase, source_phase, background_segment[:, index])
+                    for index in range(background.shape[1])
+                ],
+                axis=1,
+            ).astype(np.float32)
+        )
+
+    empty_shape = (0, phase_bins, signal.shape[1])
+    signal_beats = (
+        np.stack(signal_beats) if signal_beats else np.empty(empty_shape, np.float32)
+    )
+    background_beats = (
+        np.stack(background_beats)
+        if background_beats
+        else np.empty(empty_shape, np.float32)
+    )
+    return {
+        "phase": phase,
+        "S_beats": signal_beats,
+        "S0_beats": background_beats,
+        "beat_periods": periods.astype(np.float64),
+        "beat_accepted": accepted,
+        "accepted_beat_indices": accepted_indices,
+        "rejected_beat_indices": rejected_indices,
+    }
+
+
+def detect_streaks(
+    signal_beats: np.ndarray,
+    *,
+    prominence_mad: float,
+    threshold_mad: float,
+    min_width: float,
+    padding_phase_bins: int = 0,
+):
+    """Detect beat-specific sharp positive broadband peaks over cardiac phase."""
+    signal_beats = np.asarray(signal_beats, dtype=np.float32)
+    if signal_beats.ndim != 3:
+        raise ValueError("S_beats must have shape (beat,phase,frequency)")
+    prominence_mad = float(prominence_mad)
+    threshold_mad = float(threshold_mad)
+    min_width = float(min_width)
+    padding_phase_bins = int(padding_phase_bins)
+    if prominence_mad < 0 or threshold_mad < 0 or min_width <= 0:
+        raise ValueError(
+            "Streak prominence/threshold must be non-negative and width positive"
+        )
+    if padding_phase_bins < 0:
+        raise ValueError("Streak padding must be non-negative")
+
+    traces = np.mean(signal_beats, axis=2, dtype=np.float64)
+    mask = np.zeros(traces.shape, dtype=bool)
+    peak_counts = np.zeros(traces.shape[0], dtype=np.int64)
+    for beat_index, trace in enumerate(traces):
+        center = float(np.median(trace))
+        scale = _robust_mad_scale(trace)
+        threshold = center + threshold_mad * scale
+        peaks, _properties = find_peaks(
+            trace,
+            height=threshold,
+            prominence=prominence_mad * scale,
+            width=min_width,
+        )
+        peak_counts[beat_index] = len(peaks)
+        for peak in peaks:
+            left = int(peak)
+            right = int(peak)
+            while left > 0 and trace[left - 1] >= threshold:
+                left -= 1
+            while right + 1 < trace.size and trace[right + 1] >= threshold:
+                right += 1
+            left = max(0, left - padding_phase_bins)
+            right = min(trace.size - 1, right + padding_phase_bins)
+            mask[beat_index, left : right + 1] = True
+    return traces.astype(np.float32), mask, peak_counts
+
+
+def repair_streaks(
+    signal_beats: np.ndarray,
+    streak_mask: np.ndarray,
+    *,
+    min_clean_beats: int,
+):
+    """Repair only S from clean beats at the same phase; leave failures unchanged."""
+    signal_beats = np.asarray(signal_beats, dtype=np.float32)
+    streak_mask = np.asarray(streak_mask, dtype=bool)
+    min_clean_beats = int(min_clean_beats)
+    if signal_beats.ndim != 3 or streak_mask.shape != signal_beats.shape[:2]:
+        raise ValueError("streak_mask must match the beat and phase axes of S_beats")
+    if min_clean_beats < 1:
+        raise ValueError("spectral_endpoints_min_clean_beats must be positive")
+
+    repaired = signal_beats.copy()
+    insufficient = np.zeros(streak_mask.shape, dtype=bool)
+    for phase_index in range(signal_beats.shape[1]):
+        dirty = np.flatnonzero(streak_mask[:, phase_index])
+        if dirty.size == 0:
+            continue
+        clean = np.flatnonzero(~streak_mask[:, phase_index])
+        if clean.size < min_clean_beats:
+            insufficient[dirty, phase_index] = True
+            continue
+        replacement = np.mean(
+            signal_beats[clean, phase_index, :],
+            axis=0,
+            dtype=np.float64,
+        ).astype(np.float32)
+        repaired[dirty, phase_index, :] = replacement
+    return repaired, insufficient
+
+
+def aggregate_single_beat(repaired_signal_beats, background_beats):
+    """Median aggregate S and untouched S0, then compute log of their ratio."""
+    repaired_signal_beats = np.asarray(repaired_signal_beats, dtype=np.float32)
+    background_beats = np.asarray(background_beats, dtype=np.float32)
+    if (
+        repaired_signal_beats.ndim != 3
+        or repaired_signal_beats.shape != background_beats.shape
+        or repaired_signal_beats.shape[0] == 0
+    ):
+        raise ValueError("S_beats and S0_beats must be matching non-empty 3D arrays")
+    signal = np.median(repaired_signal_beats, axis=0).astype(np.float32)
+    background = np.median(background_beats, axis=0).astype(np.float32)
+    log_ratio = log_power_ratio(np, signal, background)
+    return signal, background, log_ratio
+
+
+def cardiac_phase_analysis(signal, background, t, f, parameters):
+    """Run segmentation, phase normalization, S-only repair, and aggregation."""
+    raw_g, smoothed_g, derivative, high_frequency_mask = cardiac_detection_signal(
+        signal,
+        t,
+        f,
+        parameters.get(
+            "spectral_endpoints_cardiac_fc_effective_hz",
+            parameters["spectral_endpoints_cardiac_fc_hz"],
+        ),
+        smoothing_s=parameters["spectral_endpoints_cardiac_smoothing_s"],
+    )
+    landmarks, resolved_prominence = detect_cardiac_landmarks(
+        derivative,
+        t,
+        min_distance_s=parameters["spectral_endpoints_peak_min_distance_s"],
+        prominence_mad=parameters["spectral_endpoints_peak_prominence_mad"],
+    )
+    beats = resample_beats(
+        signal,
+        background,
+        t,
+        landmarks,
+        phase_bins=parameters["spectral_endpoints_phase_bins"],
+        min_duration_s=parameters["spectral_endpoints_min_beat_duration_s"],
+        max_duration_s=parameters["spectral_endpoints_max_beat_duration_s"],
+    )
+    if beats["S_beats"].shape[0] == 0:
+        raise ValueError(
+            "No valid cardiac beats remain after landmark detection and duration QC"
+        )
+    streak_trace, streak_mask, streak_peak_count = detect_streaks(
+        beats["S_beats"],
+        prominence_mad=parameters["spectral_endpoints_streak_prominence"],
+        threshold_mad=parameters["spectral_endpoints_streak_threshold"],
+        min_width=parameters["spectral_endpoints_streak_min_width"],
+        padding_phase_bins=parameters["spectral_endpoints_streak_padding_phase_bins"],
+    )
+    repaired_signal, insufficient = repair_streaks(
+        beats["S_beats"],
+        streak_mask,
+        min_clean_beats=parameters["spectral_endpoints_min_clean_beats"],
+    )
+    single_signal, single_background, single_log_ratio = aggregate_single_beat(
+        repaired_signal,
+        beats["S0_beats"],
+    )
+    return {
+        **beats,
+        "g": raw_g,
+        "g_smoothed": smoothed_g,
+        "dg_dt": derivative,
+        "high_frequency_mask": high_frequency_mask,
+        "beat_landmark_indices": landmarks,
+        "beat_landmark_times": np.asarray(t, dtype=np.float64)[landmarks],
+        "resolved_peak_prominence": resolved_prominence,
+        "cardiac_fc_hz": parameters.get(
+            "spectral_endpoints_cardiac_fc_effective_hz",
+            parameters["spectral_endpoints_cardiac_fc_hz"],
+        ),
+        "streak_trace": streak_trace,
+        "streak_mask": streak_mask,
+        "streak_peak_count": streak_peak_count,
+        "streak_unrepaired_mask": insufficient,
+        "repaired_S_beats": repaired_signal,
+        "S": single_signal,
+        "S0": single_background,
+        "L": single_log_ratio,
+    }

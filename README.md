@@ -61,13 +61,27 @@ inside a centered ellipse whose default semiaxes are `0.8 * Ny/2` and
 `0.8 * Nx/2`. `S0` is the spatial median of the same non-registered data outside
 a centered ellipse whose default semiaxes are `1.2 * Ny/2` and `1.2 * Nx/2`.
 `L` is the natural logarithm `ln(S/S0)`, protected only against division by zero
-by the smallest positive `float32` value. The HDF5 file contains the
-uncompressed `float32` datasets `S(t,f)`, `S0(t,f)`, and `L(t,f)`, plus `t`, `f`,
-`frame_start`, and processing metadata. It also exports percentile-adjusted
-`png/S.png`, `png/S0.png`, and `png/L.png` maps with frequency on rows (vertical)
-and time on columns (horizontal). SVD filtering always removes exactly the two
-strongest singular components without a separate temporal-DC subtraction.
-Registration is not applied.
+by the smallest positive `float32` value. SVD filtering always removes exactly
+the two strongest singular components without a separate temporal-DC
+subtraction. Registration is not applied.
+
+The HDF5 `longtimes` group contains the uncompressed acquisition-time datasets
+`S(t,f)`, `S0(t,f)`, `L(t,f)`, `t`, `f`, and `frame_start`. Cardiac segmentation
+uses `g(t) = sum_{abs(f)>fc} S(t,f)`, where the resolved cutoff is the minimum of
+the configured cutoff (12 kHz by default) and `0.8 * Nyquist`. Positive local
+maxima of `dg/dt`, computed on the actual `t` axis, delimit beats. Valid beats
+are linearly resampled onto `[0,1)`. Beat-specific broadband streaks are
+detected from the frequency mean of each fundus beat and repaired only in `S`
+from clean beats at the same phase. The `singlebeat` group contains the median
+repaired `S(phase,f)`, independently median-aggregated `S0(phase,f)`, and
+`L = ln(S/S0)`, along with phase, frequency, beat timing, streak masks, and QC
+metadata.
+
+Percentile-adjusted maps are exported as `png/longtimes_S.png`,
+`png/longtimes_S0.png`, `png/longtimes_L.png`, `png/singlebeat_S.png`,
+`png/singlebeat_S0.png`, and `png/singlebeat_L.png`, with frequency vertical and
+acquisition time or cardiac phase horizontal. Cardiac landmark and streak QC
+plots are also written to the PNG directory.
 
 ### Run the GUI
 

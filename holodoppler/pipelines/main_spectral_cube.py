@@ -36,11 +36,13 @@ from holodoppler.saving import (
 )
 from holodoppler.spectral_cube import (
     binned_fft_frequencies,
+    cardiac_phase_analysis,
     centered_ellipse_mask,
     ellipse_median_power,
     estimated_endpoint_bytes,
     log_power_ratio,
     mean_bin_axis,
+    resolve_cardiac_fc,
     window_starts,
 )
 from holodoppler.utils import update_from_footer
@@ -183,10 +185,80 @@ def _prepare(file_path, parameters):
             "for inputs without HoloVibes metadata"
         ) from exc
     f_bins = int(parameters.get("f_bins", 128))
+    cardiac_parameters = {
+        "spectral_endpoints_cardiac_fc_hz": float(
+            parameters.get("spectral_endpoints_cardiac_fc_hz", 12000.0)
+        ),
+        "spectral_endpoints_cardiac_smoothing_s": float(
+            parameters.get("spectral_endpoints_cardiac_smoothing_s", 0.0)
+        ),
+        "spectral_endpoints_peak_min_distance_s": float(
+            parameters.get("spectral_endpoints_peak_min_distance_s", 0.3)
+        ),
+        "spectral_endpoints_peak_prominence_mad": float(
+            parameters.get("spectral_endpoints_peak_prominence_mad", 1.0)
+        ),
+        "spectral_endpoints_min_beat_duration_s": float(
+            parameters.get("spectral_endpoints_min_beat_duration_s", 0.35)
+        ),
+        "spectral_endpoints_max_beat_duration_s": float(
+            parameters.get("spectral_endpoints_max_beat_duration_s", 1.5)
+        ),
+        "spectral_endpoints_phase_bins": int(
+            parameters.get("spectral_endpoints_phase_bins", 128)
+        ),
+        "spectral_endpoints_streak_prominence": float(
+            parameters.get("spectral_endpoints_streak_prominence", 6.0)
+        ),
+        "spectral_endpoints_streak_threshold": float(
+            parameters.get("spectral_endpoints_streak_threshold", 6.0)
+        ),
+        "spectral_endpoints_streak_min_width": float(
+            parameters.get("spectral_endpoints_streak_min_width", 1.0)
+        ),
+        "spectral_endpoints_streak_padding_phase_bins": int(
+            parameters.get("spectral_endpoints_streak_padding_phase_bins", 0)
+        ),
+        "spectral_endpoints_min_clean_beats": int(
+            parameters.get("spectral_endpoints_min_clean_beats", 2)
+        ),
+    }
+    cardiac_parameters["spectral_endpoints_cardiac_fc_effective_hz"] = (
+        resolve_cardiac_fc(
+            cardiac_parameters["spectral_endpoints_cardiac_fc_hz"],
+            sampling_frequency,
+        )
+    )
     if not np.isfinite(sampling_frequency) or sampling_frequency <= 0:
         raise ValueError("sampling_freq must be a positive finite number")
     if f_bins <= 0:
         raise ValueError("f_bins must be a positive integer")
+    if cardiac_parameters["spectral_endpoints_cardiac_fc_hz"] < 0:
+        raise ValueError("spectral_endpoints_cardiac_fc_hz must be non-negative")
+    if cardiac_parameters["spectral_endpoints_cardiac_smoothing_s"] < 0:
+        raise ValueError("spectral_endpoints_cardiac_smoothing_s must be non-negative")
+    if cardiac_parameters["spectral_endpoints_peak_min_distance_s"] <= 0:
+        raise ValueError("spectral_endpoints_peak_min_distance_s must be positive")
+    if cardiac_parameters["spectral_endpoints_peak_prominence_mad"] < 0:
+        raise ValueError("spectral_endpoints_peak_prominence_mad must be non-negative")
+    min_beat = cardiac_parameters["spectral_endpoints_min_beat_duration_s"]
+    max_beat = cardiac_parameters["spectral_endpoints_max_beat_duration_s"]
+    if min_beat <= 0 or max_beat <= min_beat:
+        raise ValueError("Cardiac beat-duration bounds must satisfy 0 < min < max")
+    if cardiac_parameters["spectral_endpoints_phase_bins"] < 2:
+        raise ValueError("spectral_endpoints_phase_bins must be at least 2")
+    if cardiac_parameters["spectral_endpoints_streak_prominence"] < 0:
+        raise ValueError("spectral_endpoints_streak_prominence must be non-negative")
+    if cardiac_parameters["spectral_endpoints_streak_threshold"] < 0:
+        raise ValueError("spectral_endpoints_streak_threshold must be non-negative")
+    if cardiac_parameters["spectral_endpoints_streak_min_width"] <= 0:
+        raise ValueError("spectral_endpoints_streak_min_width must be positive")
+    if cardiac_parameters["spectral_endpoints_streak_padding_phase_bins"] < 0:
+        raise ValueError(
+            "spectral_endpoints_streak_padding_phase_bins must be non-negative"
+        )
+    if cardiac_parameters["spectral_endpoints_min_clean_beats"] < 1:
+        raise ValueError("spectral_endpoints_min_clean_beats must be positive")
     parameters.update(
         {
             "batch_size": batch_size,
@@ -195,6 +267,7 @@ def _prepare(file_path, parameters):
             "end_frame": end_frame,
             "sampling_freq": sampling_frequency,
             "f_bins": f_bins,
+            **cardiac_parameters,
         }
     )
 
@@ -237,9 +310,10 @@ def _create_h5(path, file_reader, parameters, starts):
     handle = h5py.File(path, "w")
     handle.attrs["complete"] = False
     handle.attrs["source_file"] = str(file_reader.file_path)
-    handle.attrs["axis_order"] = "t,f"
+    handle.attrs["axis_order"] = "longtimes:(t,f); singlebeat:(phase,f)"
+    longtimes = handle.create_group("longtimes", track_order=True)
 
-    signal = handle.create_dataset(
+    signal = longtimes.create_dataset(
         "S",
         shape=(len(starts), len(f)),
         dtype=np.float32,
@@ -284,7 +358,7 @@ def _create_h5(path, file_reader, parameters, starts):
     signal.attrs["pixel_count"] = signal_pixel_count
     signal.attrs["pixel_fraction"] = signal_pixel_count / (ny * nx)
 
-    background = handle.create_dataset(
+    background = longtimes.create_dataset(
         "S0",
         shape=(len(starts), len(f)),
         dtype=np.float32,
@@ -338,7 +412,7 @@ def _create_h5(path, file_reader, parameters, starts):
     background.attrs["pixel_count"] = background_pixel_count
     background.attrs["pixel_fraction"] = background_pixel_count / (ny * nx)
 
-    log_ratio = handle.create_dataset(
+    log_ratio = longtimes.create_dataset(
         "L",
         shape=(len(starts), len(f)),
         dtype=np.float32,
@@ -352,13 +426,13 @@ def _create_h5(path, file_reader, parameters, starts):
     log_ratio.attrs["dtype"] = "float32"
     log_ratio.attrs["units"] = "dimensionless"
 
-    f_dataset = handle.create_dataset("f", data=f, track_times=False)
+    f_dataset = longtimes.create_dataset("f", data=f, track_times=False)
     f_dataset.attrs["units"] = "Hz"
     f_dataset.attrs["description"] = "Mean frequency of each full-range FFT bin"
-    t_dataset = handle.create_dataset("t", data=t, track_times=False)
+    t_dataset = longtimes.create_dataset("t", data=t, track_times=False)
     t_dataset.attrs["units"] = "s"
     t_dataset.attrs["description"] = "Temporal-window center from acquisition start"
-    frame_start_dataset = handle.create_dataset(
+    frame_start_dataset = longtimes.create_dataset(
         "frame_start", data=starts, track_times=False
     )
     frame_start_dataset.attrs["units"] = "frame index"
@@ -376,22 +450,220 @@ def _create_h5(path, file_reader, parameters, starts):
     return handle, signal, background, log_ratio
 
 
+def _write_cardiac_h5(handle, analysis, parameters):
+    """Write cardiac detection QC and representative single-beat products."""
+    longtimes = handle["longtimes"]
+    g_dataset = longtimes.create_dataset(
+        "g", data=analysis["g"], track_times=False
+    )
+    g_dataset.attrs["description"] = (
+        "High-frequency fundus Doppler power used for cardiac segmentation"
+    )
+    g_dataset.attrs["formula"] = "sum_{abs(f)>fc} S(t,f)"
+    g_dataset.attrs["fc_hz"] = parameters[
+        "spectral_endpoints_cardiac_fc_effective_hz"
+    ]
+    g_dataset.attrs["configured_fc_hz"] = parameters[
+        "spectral_endpoints_cardiac_fc_hz"
+    ]
+    g_dataset.attrs["nyquist_hz"] = parameters["sampling_freq"] / 2.0
+    g_dataset.attrs["units"] = "power (arbitrary units)"
+    smoothed_dataset = longtimes.create_dataset(
+        "g_smoothed", data=analysis["g_smoothed"], track_times=False
+    )
+    smoothed_dataset.attrs["description"] = (
+        "Cardiac signal after configured Gaussian smoothing, used for differentiation"
+    )
+    smoothed_dataset.attrs["smoothing_s"] = parameters[
+        "spectral_endpoints_cardiac_smoothing_s"
+    ]
+    derivative_dataset = longtimes.create_dataset(
+        "dg_dt", data=analysis["dg_dt"], track_times=False
+    )
+    derivative_dataset.attrs["description"] = (
+        "Time derivative of the high-frequency cardiac signal g(t)"
+    )
+    derivative_dataset.attrs["formula"] = "d/dt sum_{abs(f)>fc} S(t,f)"
+    derivative_dataset.attrs["source"] = "g_smoothed"
+    derivative_dataset.attrs["smoothing_s"] = parameters[
+        "spectral_endpoints_cardiac_smoothing_s"
+    ]
+    derivative_dataset.attrs["units"] = "power (arbitrary units)/s"
+    mask_dataset = longtimes.create_dataset(
+        "cardiac_frequency_mask",
+        data=analysis["high_frequency_mask"],
+        track_times=False,
+    )
+    mask_dataset.attrs["description"] = "Frequency bins satisfying abs(f) > fc"
+
+    singlebeat = handle.create_group("singlebeat", track_order=True)
+    signal = singlebeat.create_dataset(
+        "S", data=analysis["S"], dtype=np.float32, compression=None, track_times=False
+    )
+    background = singlebeat.create_dataset(
+        "S0",
+        data=analysis["S0"],
+        dtype=np.float32,
+        compression=None,
+        track_times=False,
+    )
+    log_ratio = singlebeat.create_dataset(
+        "L", data=analysis["L"], dtype=np.float32, compression=None, track_times=False
+    )
+    phase = singlebeat.create_dataset(
+        "phase", data=analysis["phase"], track_times=False
+    )
+    singlebeat["f"] = longtimes["f"]
+
+    signal.attrs["axis_order"] = "phase,f"
+    signal.attrs["description"] = (
+        "Median across phase-normalized fundus beats after S-only streak repair"
+    )
+    signal.attrs["streak_repair"] = True
+    background.attrs["axis_order"] = "phase,f"
+    background.attrs["description"] = (
+        "Median across independently phase-normalized, unrepaired corner beats"
+    )
+    background.attrs["streak_repair"] = False
+    log_ratio.attrs["axis_order"] = "phase,f"
+    log_ratio.attrs["description"] = "Natural logarithm of aggregate S/S0"
+    log_ratio.attrs["formula"] = "ln(median(repaired_S_beats)/median(S0_beats))"
+    log_ratio.attrs["units"] = "dimensionless"
+    phase.attrs["units"] = "normalized cardiac phase"
+    phase.attrs["range"] = "[0,1)"
+
+    qc_datasets = {
+        "beat_landmark_indices": analysis["beat_landmark_indices"],
+        "beat_landmark_times": analysis["beat_landmark_times"],
+        "beat_periods": analysis["beat_periods"],
+        "beat_accepted": analysis["beat_accepted"],
+        "accepted_beat_indices": analysis["accepted_beat_indices"],
+        "rejected_beat_indices": analysis["rejected_beat_indices"],
+        "streak_trace": analysis["streak_trace"],
+        "streak_mask": analysis["streak_mask"],
+        "streak_peak_count": analysis["streak_peak_count"],
+        "streak_unrepaired_mask": analysis["streak_unrepaired_mask"],
+    }
+    for name, values in qc_datasets.items():
+        singlebeat.create_dataset(name, data=values, track_times=False)
+
+    repaired_mask = analysis["streak_mask"] & ~analysis["streak_unrepaired_mask"]
+    sample_count = int(analysis["streak_mask"].size)
+    singlebeat.attrs["detected_landmark_count"] = len(
+        analysis["beat_landmark_indices"]
+    )
+    singlebeat.attrs["detected_beat_count"] = len(analysis["beat_periods"])
+    singlebeat.attrs["accepted_beat_count"] = len(
+        analysis["accepted_beat_indices"]
+    )
+    singlebeat.attrs["rejected_beat_count"] = len(
+        analysis["rejected_beat_indices"]
+    )
+    singlebeat.attrs["repaired_phase_sample_count"] = int(
+        np.count_nonzero(repaired_mask)
+    )
+    singlebeat.attrs["repaired_phase_sample_fraction"] = (
+        float(np.count_nonzero(repaired_mask)) / sample_count if sample_count else 0.0
+    )
+    singlebeat.attrs["unrepaired_phase_sample_count"] = int(
+        np.count_nonzero(analysis["streak_unrepaired_mask"])
+    )
+    singlebeat.attrs["resolved_peak_prominence"] = analysis[
+        "resolved_peak_prominence"
+    ]
+    for name, value in parameters.items():
+        if name.startswith("spectral_endpoints_"):
+            singlebeat.attrs[name] = value
+
+
+def _save_cardiac_qc_plots(h5_path, png_dir):
+    """Save time-domain landmark QC and one beat-specific streak trace."""
+    import matplotlib
+
+    matplotlib.use("Agg", force=True)
+    import matplotlib.pyplot as plt
+
+    with h5py.File(h5_path, "r") as handle:
+        longtimes = handle["longtimes"]
+        singlebeat = handle["singlebeat"]
+        t = np.asarray(longtimes["t"])
+        g = np.asarray(longtimes["g"])
+        g_smoothed = np.asarray(longtimes["g_smoothed"])
+        derivative = np.asarray(longtimes["dg_dt"])
+        landmarks = np.asarray(singlebeat["beat_landmark_indices"], dtype=np.int64)
+        phase = np.asarray(singlebeat["phase"])
+        streak_trace = np.asarray(singlebeat["streak_trace"])
+        streak_mask = np.asarray(singlebeat["streak_mask"], dtype=bool)
+
+    figure, axes = plt.subplots(2, 1, sharex=True, figsize=(10, 6))
+    axes[0].plot(t, g, label="g(t)", linewidth=1.0)
+    if not np.array_equal(g, g_smoothed):
+        axes[0].plot(t, g_smoothed, label="smoothed g(t)", linewidth=1.0)
+    axes[0].set_ylabel("high-f power")
+    axes[0].legend(loc="best")
+    axes[1].plot(t, derivative, label="dg/dt", linewidth=1.0)
+    if landmarks.size:
+        axes[1].scatter(
+            t[landmarks],
+            derivative[landmarks],
+            color="red",
+            marker="x",
+            label="positive maxima",
+            zorder=3,
+        )
+    axes[1].set_xlabel("acquisition time (s)")
+    axes[1].set_ylabel("dg/dt")
+    axes[1].legend(loc="best")
+    figure.tight_layout()
+    figure.savefig(png_dir / "cardiac_segmentation_qc.png", dpi=150)
+    plt.close(figure)
+
+    iio.imwrite(
+        png_dir / "singlebeat_streak_mask.png",
+        (streak_mask.astype(np.uint8) * 255),
+    )
+    detected = np.flatnonzero(np.any(streak_mask, axis=1))
+    if detected.size:
+        beat_index = int(detected[0])
+        figure, axis = plt.subplots(figsize=(10, 3))
+        axis.plot(phase, streak_trace[beat_index], linewidth=1.0)
+        axis.fill_between(
+            phase,
+            0,
+            streak_trace[beat_index],
+            where=streak_mask[beat_index],
+            color="red",
+            alpha=0.3,
+            label="repaired interval",
+        )
+        axis.set_xlabel("normalized cardiac phase")
+        axis.set_ylabel("mean fundus power")
+        axis.set_title(f"Broadband streak QC, accepted beat {beat_index}")
+        axis.legend(loc="best")
+        figure.tight_layout()
+        figure.savefig(png_dir / f"streak_qc_beat_{beat_index:04d}.png", dpi=150)
+        plt.close(figure)
+
+
 def _save_endpoint_pngs(h5_path, target_dir, parameters):
-    """Save endpoint maps with frequency vertical and time horizontal."""
+    """Save long-time and cardiac-phase maps with frequency vertical."""
     png_dir = Path(target_dir) / "png"
     png_dir.mkdir(parents=True, exist_ok=True)
     with h5py.File(h5_path, "r") as handle:
-        endpoint_maps = {
-            name: np.asarray(handle[name], dtype=np.float32)
-            for name in ("S", "S0", "L")
-        }
+        endpoint_maps = {}
+        for group_name in ("longtimes", "singlebeat"):
+            for name in ("S", "S0", "L"):
+                endpoint_maps[f"{group_name}_{name}"] = np.asarray(
+                    handle[group_name][name], dtype=np.float32
+                )
 
     for name, values in endpoint_maps.items():
-        # HDF5 remains (t,f); transposition is only for the PNG display axes.
+        # HDF5 is (time-or-phase,f); transposition makes f vertical.
         display = apply_contrast_adjustment(values.T, parameters)
         path = png_dir / f"{name}.png"
         iio.imwrite(path, normalize_to_uint8(display))
         print(f"Saving: {path}")
+    _save_cardiac_qc_plots(h5_path, png_dir)
 
 
 def process(file_path, parameters, progress_callback=None):
@@ -442,6 +714,21 @@ def process(file_path, parameters, progress_callback=None):
                     f"Spectral window {index + 1}/{len(starts)}",
                 )
 
+        print("Detecting and aggregating cardiac beats")
+        analysis = cardiac_phase_analysis(
+            np.asarray(signal_dataset, dtype=np.float32),
+            np.asarray(background_dataset, dtype=np.float32),
+            np.asarray(handle["longtimes/t"], dtype=np.float64),
+            np.asarray(handle["longtimes/f"], dtype=np.float64),
+            parameters,
+        )
+        _write_cardiac_h5(handle, analysis, parameters)
+        print(
+            "Cardiac aggregation: "
+            f"{len(analysis['beat_landmark_indices'])} landmarks, "
+            f"{len(analysis['accepted_beat_indices'])} accepted beats, "
+            f"{np.count_nonzero(analysis['streak_mask'])} streak samples"
+        )
         handle.attrs.modify("complete", True)
         handle.flush()
     finally:

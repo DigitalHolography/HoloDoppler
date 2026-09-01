@@ -35,6 +35,25 @@ spectral_cube_signal_ellipse_radius_x_factor: 0.8
 spectral_cube_corner_ellipse_radius_y_factor: 1.2
 spectral_cube_corner_ellipse_radius_x_factor: 1.2
 
+# Cardiac segmentation from g(t) = sum_{abs(f)>fc} S(t,f). The effective cutoff
+# is min(configured fc, 0.8 * Nyquist). Other defaults are configurable QC
+# starting points, not physiological constants.
+spectral_endpoints_cardiac_fc_hz: 12000
+spectral_endpoints_cardiac_smoothing_s: 0.0
+spectral_endpoints_peak_min_distance_s: 0.3
+spectral_endpoints_peak_prominence_mad: 1.0
+spectral_endpoints_min_beat_duration_s: 0.35
+spectral_endpoints_max_beat_duration_s: 1.5
+spectral_endpoints_phase_bins: 128
+
+# Beat-specific broadband streak detection. Threshold and prominence are
+# multipliers of the robust MAD scale of each beat's frequency-mean trace.
+spectral_endpoints_streak_prominence: 6.0
+spectral_endpoints_streak_threshold: 6.0
+spectral_endpoints_streak_min_width: 1.0
+spectral_endpoints_streak_padding_phase_bins: 0
+spectral_endpoints_min_clean_beats: 2
+
 # Percentile display adjustment for the S.png, S0.png, and L.png maps.
 contrast: true
 contrast_low_max_percent: [0.5, 99.5]
