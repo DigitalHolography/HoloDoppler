@@ -285,7 +285,7 @@ def process(file_path, parameters, progress_callback=None):
             output[k] = temporal_gaussian(output[k], sigma=sigma)
         print(f"smoothing_gaussian in {time.time() - start_time:.1f} seconds")
 
-    save_result_map(
+    return save_result_map(
         target_dir,
         output,
         parameters,

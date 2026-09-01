@@ -556,7 +556,7 @@ def process(file_path, parameters, progress_callback=None):
     # save_to_h5_list = ["M0ff","M0","M1","M2","shack_hartmann_zernike_coefs", "shack_hartmann_sub_images"] "_bands"
 
     _save_h5_2(target_dir, output_np, parameters)
-    save_result_map(
+    return save_result_map(
         target_dir,
         output_np,
         parameters,
