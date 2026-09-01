@@ -187,7 +187,7 @@ def _prepare(file_path, parameters):
     f_bins = int(parameters.get("f_bins", 128))
     cardiac_parameters = {
         "spectral_endpoints_cardiac_fc_hz": float(
-            parameters.get("spectral_endpoints_cardiac_fc_hz", 12000.0)
+            parameters.get("spectral_endpoints_cardiac_fc_hz", 15000.0)
         ),
         "spectral_endpoints_cardiac_median_window_s": float(
             parameters.get("spectral_endpoints_cardiac_median_window_s", 0.035)
@@ -469,9 +469,21 @@ def _write_cardiac_h5(handle, analysis, parameters):
         "g", data=analysis["g"], track_times=False
     )
     g_dataset.attrs["description"] = (
-        "High-frequency fundus Doppler power used for cardiac segmentation"
+        "Leading temporal SVD mode used for cardiac segmentation"
     )
-    g_dataset.attrs["formula"] = "sum_{abs(f)>fc} S(t,f)"
+    g_dataset.attrs["formula"] = (
+        "sigma_1 * U[:,0] from temporally centered, median-filtered "
+        "S[:,abs(f)>fc]"
+    )
+    g_dataset.attrs["temporal_mean_removed_per_frequency"] = True
+    g_dataset.attrs["svd_mode_index"] = 0
+    g_dataset.attrs["svd_sign_orientation"] = (
+        "positive correlation with g_sum - mean(g_sum)"
+    )
+    g_dataset.attrs["svd_sign_multiplier"] = analysis["svd_sign"]
+    g_dataset.attrs["explained_variance_fraction"] = analysis[
+        "svd_explained_variance_fraction"
+    ]
     g_dataset.attrs["fc_hz"] = parameters[
         "spectral_endpoints_cardiac_fc_effective_hz"
     ]
@@ -480,31 +492,49 @@ def _write_cardiac_h5(handle, analysis, parameters):
     ]
     g_dataset.attrs["nyquist_hz"] = parameters["sampling_freq"] / 2.0
     g_dataset.attrs["units"] = "power (arbitrary units)"
-    median_dataset = longtimes.create_dataset(
-        "g_median_filtered",
-        data=analysis["g_median_filtered"],
+    sum_dataset = longtimes.create_dataset(
+        "g_sum", data=analysis["g_sum"], track_times=False
+    )
+    sum_dataset.attrs["description"] = (
+        "Unfiltered high-frequency fundus Doppler power sum"
+    )
+    sum_dataset.attrs["formula"] = "sum_{abs(f)>fc} S(t,f)"
+    sum_dataset.attrs["fc_hz"] = parameters[
+        "spectral_endpoints_cardiac_fc_effective_hz"
+    ]
+    sum_dataset.attrs["configured_fc_hz"] = parameters[
+        "spectral_endpoints_cardiac_fc_hz"
+    ]
+    sum_dataset.attrs["nyquist_hz"] = parameters["sampling_freq"] / 2.0
+    sum_dataset.attrs["units"] = "power (arbitrary units)"
+    median_sum_dataset = longtimes.create_dataset(
+        "g_sum_median_filtered",
+        data=analysis["g_sum_median_filtered"],
         track_times=False,
     )
-    median_dataset.attrs["description"] = (
-        "Cardiac signal after temporal median outlier filtering"
+    median_sum_dataset.attrs["description"] = (
+        "Sum of high-frequency S after per-frequency temporal median filtering"
     )
-    median_dataset.attrs["requested_window_s"] = parameters[
+    median_sum_dataset.attrs["formula"] = (
+        "sum_f median_filter_time(S[:,abs(f)>fc])"
+    )
+    median_sum_dataset.attrs["requested_window_s"] = parameters[
         "spectral_endpoints_cardiac_median_window_s"
     ]
-    median_dataset.attrs["resolved_window_samples"] = analysis[
+    median_sum_dataset.attrs["resolved_window_samples"] = analysis[
         "median_window_samples"
     ]
-    median_dataset.attrs["resolved_window_s"] = analysis[
+    median_sum_dataset.attrs["resolved_window_s"] = analysis[
         "median_window_resolved_s"
     ]
     smoothed_dataset = longtimes.create_dataset(
         "g_smoothed", data=analysis["g_smoothed"], track_times=False
     )
     smoothed_dataset.attrs["description"] = (
-        "Median-filtered cardiac signal after optional Gaussian smoothing, used "
-        "for differentiation"
+        "Leading temporal SVD mode after optional Gaussian smoothing, used for "
+        "differentiation"
     )
-    smoothed_dataset.attrs["source"] = "g_median_filtered"
+    smoothed_dataset.attrs["source"] = "g"
     smoothed_dataset.attrs["smoothing_s"] = parameters[
         "spectral_endpoints_cardiac_smoothing_s"
     ]
@@ -514,7 +544,7 @@ def _write_cardiac_h5(handle, analysis, parameters):
     derivative_dataset.attrs["description"] = (
         "Time derivative of the high-frequency cardiac signal g(t)"
     )
-    derivative_dataset.attrs["formula"] = "d/dt sum_{abs(f)>fc} S(t,f)"
+    derivative_dataset.attrs["formula"] = "d/dt (sigma_1 * U[:,0])"
     derivative_dataset.attrs["source"] = "g_smoothed"
     derivative_dataset.attrs["smoothing_s"] = parameters[
         "spectral_endpoints_cardiac_smoothing_s"
@@ -526,6 +556,23 @@ def _write_cardiac_h5(handle, analysis, parameters):
         track_times=False,
     )
     mask_dataset.attrs["description"] = "Frequency bins satisfying abs(f) > fc"
+    singular_values_dataset = longtimes.create_dataset(
+        "cardiac_singular_values",
+        data=analysis["cardiac_singular_values"],
+        track_times=False,
+    )
+    singular_values_dataset.attrs["description"] = (
+        "Singular values of centered, median-filtered high-frequency S"
+    )
+    frequency_mode_dataset = longtimes.create_dataset(
+        "cardiac_frequency_mode",
+        data=analysis["cardiac_frequency_mode"],
+        track_times=False,
+    )
+    frequency_mode_dataset.attrs["description"] = (
+        "Leading SVD frequency mode, zero outside the cardiac frequency mask"
+    )
+    frequency_mode_dataset.attrs["axis"] = "longtimes/f"
 
     singlebeat = handle.create_group("singlebeat", track_order=True)
     signal = singlebeat.create_dataset(
@@ -619,6 +666,7 @@ def _save_cardiac_qc_plots(h5_path, png_dir):
         singlebeat = handle["singlebeat"]
         t = np.asarray(longtimes["t"])
         g = np.asarray(longtimes["g"])
+        g_sum = np.asarray(longtimes["g_sum"])
         g_smoothed = np.asarray(longtimes["g_smoothed"])
         derivative = np.asarray(longtimes["dg_dt"])
         landmarks = np.asarray(singlebeat["beat_landmark_indices"], dtype=np.int64)
@@ -627,11 +675,17 @@ def _save_cardiac_qc_plots(h5_path, png_dir):
         streak_mask = np.asarray(singlebeat["streak_mask"], dtype=bool)
 
     figure, axes = plt.subplots(2, 1, sharex=True, figsize=(10, 6))
-    axes[0].plot(t, g, label="g(t)", linewidth=1.0)
+    axes[0].plot(t, g, label="SVD g(t)", linewidth=1.0)
     if not np.array_equal(g, g_smoothed):
         axes[0].plot(t, g_smoothed, label="filtered g(t)", linewidth=1.0)
     axes[0].set_ylabel("high-f power")
-    axes[0].legend(loc="best")
+    sum_axis = axes[0].twinx()
+    sum_line = sum_axis.plot(
+        t, g_sum, color="0.65", linewidth=0.7, label="raw g_sum(t)"
+    )[0]
+    sum_axis.set_ylabel("raw high-f sum", color="0.4")
+    handles, labels = axes[0].get_legend_handles_labels()
+    axes[0].legend(handles + [sum_line], labels + ["raw g_sum(t)"], loc="best")
     axes[1].plot(t, derivative, label="dg/dt", linewidth=1.0)
     if landmarks.size:
         axes[1].scatter(

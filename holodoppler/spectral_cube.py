@@ -246,7 +246,7 @@ def cardiac_detection_signal(
     median_window_s: float = 0.0,
     smoothing_s: float = 0.0,
 ):
-    """Compute g=sum_|f|>fc S and a robustly filtered time derivative."""
+    """Extract the dominant temporal SVD mode of median-filtered high-f S."""
     signal = np.asarray(signal)
     t = np.asarray(t, dtype=np.float64)
     f = np.asarray(f, dtype=np.float64)
@@ -277,9 +277,12 @@ def cardiac_detection_signal(
             "No Doppler-frequency bins satisfy abs(f) > "
             f"spectral_endpoints_cardiac_fc_hz ({fc_hz:g} Hz)"
         )
-    cardiac_signal = np.sum(
-        signal[:, high_frequency], axis=1, dtype=np.float64
+    high_frequency_signal = np.asarray(
+        signal[:, high_frequency], dtype=np.float64
     )
+    if not np.all(np.isfinite(high_frequency_signal)):
+        raise ValueError("Selected high-frequency S contains non-finite values")
+    cardiac_sum = np.sum(high_frequency_signal, axis=1, dtype=np.float64)
     median_dt = float(np.median(np.diff(t)))
     median_samples = 1
     if median_window_s > 0:
@@ -297,27 +300,61 @@ def cardiac_detection_signal(
             raise ValueError(
                 "Resolved cardiac median window exceeds the long-time signal length"
             )
-    median_filtered = median_filter(
-        cardiac_signal,
-        size=median_samples,
+    median_filtered_matrix = median_filter(
+        high_frequency_signal,
+        size=(median_samples, 1),
         mode="nearest",
     )
-    smoothed = median_filtered.copy()
+    median_filtered_sum = np.sum(
+        median_filtered_matrix, axis=1, dtype=np.float64
+    )
+    centered = median_filtered_matrix - np.mean(
+        median_filtered_matrix, axis=0, keepdims=True
+    )
+    temporal_modes, singular_values, frequency_modes = np.linalg.svd(
+        centered,
+        full_matrices=False,
+    )
+    if singular_values.size == 0 or singular_values[0] <= 0:
+        raise ValueError(
+            "The median-filtered high-frequency spectrum has no temporal variation"
+        )
+
+    cardiac_signal = singular_values[0] * temporal_modes[:, 0]
+    frequency_mode = frequency_modes[0].copy()
+    reference = cardiac_sum - np.mean(cardiac_sum)
+    svd_sign = 1
+    if float(np.dot(cardiac_signal, reference)) < 0:
+        cardiac_signal = -cardiac_signal
+        frequency_mode = -frequency_mode
+        svd_sign = -1
+
+    smoothed = cardiac_signal.copy()
     if smoothing_s > 0:
         smoothed = gaussian_filter1d(
-            median_filtered,
+            cardiac_signal,
             sigma=smoothing_s / median_dt,
             mode="nearest",
         )
     derivative = np.gradient(smoothed, t, edge_order=2)
-    return (
-        cardiac_signal,
-        median_filtered,
-        smoothed,
-        derivative,
-        high_frequency,
-        median_samples,
-    )
+    full_frequency_mode = np.zeros(f.size, dtype=np.float64)
+    full_frequency_mode[high_frequency] = frequency_mode
+    singular_power = np.square(singular_values)
+    explained_fraction = float(singular_power[0] / np.sum(singular_power))
+    return {
+        "g": cardiac_signal,
+        "g_sum": cardiac_sum,
+        "g_sum_median_filtered": median_filtered_sum,
+        "g_smoothed": smoothed,
+        "dg_dt": derivative,
+        "high_frequency_mask": high_frequency,
+        "median_window_samples": median_samples,
+        "median_window_resolved_s": median_samples * median_dt,
+        "cardiac_singular_values": singular_values,
+        "cardiac_frequency_mode": full_frequency_mode,
+        "svd_explained_variance_fraction": explained_fraction,
+        "svd_sign": svd_sign,
+    }
 
 
 def detect_cardiac_landmarks(
@@ -549,14 +586,7 @@ def aggregate_single_beat(repaired_signal_beats, background_beats):
 
 def cardiac_phase_analysis(signal, background, t, f, parameters):
     """Run segmentation, phase normalization, S-only repair, and aggregation."""
-    (
-        raw_g,
-        median_filtered_g,
-        smoothed_g,
-        derivative,
-        high_frequency_mask,
-        median_window_samples,
-    ) = cardiac_detection_signal(
+    detection = cardiac_detection_signal(
         signal,
         t,
         f,
@@ -570,7 +600,7 @@ def cardiac_phase_analysis(signal, background, t, f, parameters):
         smoothing_s=parameters["spectral_endpoints_cardiac_smoothing_s"],
     )
     landmarks, resolved_prominence = detect_cardiac_landmarks(
-        derivative,
+        detection["dg_dt"],
         t,
         min_distance_s=parameters["spectral_endpoints_peak_min_distance_s"],
         prominence_mad=parameters["spectral_endpoints_peak_prominence_mad"],
@@ -606,14 +636,7 @@ def cardiac_phase_analysis(signal, background, t, f, parameters):
     )
     return {
         **beats,
-        "g": raw_g,
-        "g_median_filtered": median_filtered_g,
-        "g_smoothed": smoothed_g,
-        "dg_dt": derivative,
-        "median_window_samples": median_window_samples,
-        "median_window_resolved_s": median_window_samples
-        * float(np.median(np.diff(np.asarray(t, dtype=np.float64)))),
-        "high_frequency_mask": high_frequency_mask,
+        **detection,
         "beat_landmark_indices": landmarks,
         "beat_landmark_times": np.asarray(t, dtype=np.float64)[landmarks],
         "resolved_peak_prominence": resolved_prominence,

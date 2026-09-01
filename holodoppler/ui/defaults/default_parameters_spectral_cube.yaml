@@ -35,10 +35,11 @@ spectral_cube_signal_ellipse_radius_x_factor: 0.8
 spectral_cube_corner_ellipse_radius_y_factor: 1.2
 spectral_cube_corner_ellipse_radius_x_factor: 1.2
 
-# Cardiac segmentation from g(t) = sum_{abs(f)>fc} S(t,f). The effective cutoff
-# is min(configured fc, 0.8 * Nyquist). Other defaults are configurable QC
-# starting points, not physiological constants.
-spectral_endpoints_cardiac_fc_hz: 12000
+# Cardiac segmentation from the leading temporal SVD mode of median-filtered,
+# time-centered S[:, abs(f)>fc]. The effective cutoff is
+# min(configured fc, 0.8 * Nyquist). Other defaults are configurable QC starting
+# points, not physiological constants.
+spectral_endpoints_cardiac_fc_hz: 15000
 spectral_endpoints_cardiac_median_window_s: 0.035
 spectral_endpoints_cardiac_smoothing_s: 0.0
 spectral_endpoints_peak_min_distance_s: 0.3
