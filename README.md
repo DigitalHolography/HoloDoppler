@@ -69,8 +69,10 @@ The HDF5 `longtimes` group contains the uncompressed acquisition-time datasets
 `S(t,f)`, `S0(t,f)`, `L(t,f)`, `t`, `f`, and `frame_start`. Cardiac segmentation
 uses `g(t) = sum_{abs(f)>fc} S(t,f)`, where the resolved cutoff is the minimum of
 the configured cutoff (12 kHz by default) and `0.8 * Nyquist`. Positive local
-maxima of `dg/dt`, computed on the actual `t` axis, delimit beats. Valid beats
-are linearly resampled onto `[0,1)`. Beat-specific broadband streaks are
+maxima of `dg/dt`, computed on the actual `t` axis after a configurable temporal
+median filter (35 ms by default) and optional Gaussian smoothing, delimit beats.
+The raw `g(t)` is retained. Valid beats are linearly resampled onto `[0,1)`.
+Beat-specific broadband streaks are
 detected from the frequency mean of each fundus beat and repaired only in `S`
 from clean beats at the same phase. The `singlebeat` group contains the median
 repaired `S(phase,f)`, independently median-aggregated `S0(phase,f)`, and

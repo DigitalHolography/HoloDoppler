@@ -189,6 +189,9 @@ def _prepare(file_path, parameters):
         "spectral_endpoints_cardiac_fc_hz": float(
             parameters.get("spectral_endpoints_cardiac_fc_hz", 12000.0)
         ),
+        "spectral_endpoints_cardiac_median_window_s": float(
+            parameters.get("spectral_endpoints_cardiac_median_window_s", 0.035)
+        ),
         "spectral_endpoints_cardiac_smoothing_s": float(
             parameters.get("spectral_endpoints_cardiac_smoothing_s", 0.0)
         ),
@@ -235,6 +238,15 @@ def _prepare(file_path, parameters):
         raise ValueError("f_bins must be a positive integer")
     if cardiac_parameters["spectral_endpoints_cardiac_fc_hz"] < 0:
         raise ValueError("spectral_endpoints_cardiac_fc_hz must be non-negative")
+    if (
+        not np.isfinite(
+            cardiac_parameters["spectral_endpoints_cardiac_median_window_s"]
+        )
+        or cardiac_parameters["spectral_endpoints_cardiac_median_window_s"] < 0
+    ):
+        raise ValueError(
+            "spectral_endpoints_cardiac_median_window_s must be non-negative"
+        )
     if cardiac_parameters["spectral_endpoints_cardiac_smoothing_s"] < 0:
         raise ValueError("spectral_endpoints_cardiac_smoothing_s must be non-negative")
     if cardiac_parameters["spectral_endpoints_peak_min_distance_s"] <= 0:
@@ -468,12 +480,31 @@ def _write_cardiac_h5(handle, analysis, parameters):
     ]
     g_dataset.attrs["nyquist_hz"] = parameters["sampling_freq"] / 2.0
     g_dataset.attrs["units"] = "power (arbitrary units)"
+    median_dataset = longtimes.create_dataset(
+        "g_median_filtered",
+        data=analysis["g_median_filtered"],
+        track_times=False,
+    )
+    median_dataset.attrs["description"] = (
+        "Cardiac signal after temporal median outlier filtering"
+    )
+    median_dataset.attrs["requested_window_s"] = parameters[
+        "spectral_endpoints_cardiac_median_window_s"
+    ]
+    median_dataset.attrs["resolved_window_samples"] = analysis[
+        "median_window_samples"
+    ]
+    median_dataset.attrs["resolved_window_s"] = analysis[
+        "median_window_resolved_s"
+    ]
     smoothed_dataset = longtimes.create_dataset(
         "g_smoothed", data=analysis["g_smoothed"], track_times=False
     )
     smoothed_dataset.attrs["description"] = (
-        "Cardiac signal after configured Gaussian smoothing, used for differentiation"
+        "Median-filtered cardiac signal after optional Gaussian smoothing, used "
+        "for differentiation"
     )
+    smoothed_dataset.attrs["source"] = "g_median_filtered"
     smoothed_dataset.attrs["smoothing_s"] = parameters[
         "spectral_endpoints_cardiac_smoothing_s"
     ]
@@ -598,7 +629,7 @@ def _save_cardiac_qc_plots(h5_path, png_dir):
     figure, axes = plt.subplots(2, 1, sharex=True, figsize=(10, 6))
     axes[0].plot(t, g, label="g(t)", linewidth=1.0)
     if not np.array_equal(g, g_smoothed):
-        axes[0].plot(t, g_smoothed, label="smoothed g(t)", linewidth=1.0)
+        axes[0].plot(t, g_smoothed, label="filtered g(t)", linewidth=1.0)
     axes[0].set_ylabel("high-f power")
     axes[0].legend(loc="best")
     axes[1].plot(t, derivative, label="dg/dt", linewidth=1.0)

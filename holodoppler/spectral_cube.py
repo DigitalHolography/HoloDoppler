@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import cache
 
 import numpy as np
-from scipy.ndimage import gaussian_filter1d
+from scipy.ndimage import gaussian_filter1d, median_filter
 from scipy.signal import find_peaks
 
 
@@ -243,13 +243,15 @@ def cardiac_detection_signal(
     f: np.ndarray,
     fc_hz: float,
     *,
+    median_window_s: float = 0.0,
     smoothing_s: float = 0.0,
 ):
-    """Compute g=sum_|f|>fc S and its derivative on the actual time axis."""
+    """Compute g=sum_|f|>fc S and a robustly filtered time derivative."""
     signal = np.asarray(signal)
     t = np.asarray(t, dtype=np.float64)
     f = np.asarray(f, dtype=np.float64)
     fc_hz = float(fc_hz)
+    median_window_s = float(median_window_s)
     smoothing_s = float(smoothing_s)
     if signal.ndim != 2 or signal.shape != (t.size, f.size):
         raise ValueError(
@@ -262,6 +264,10 @@ def cardiac_detection_signal(
         raise ValueError("t must be finite and strictly increasing")
     if not np.isfinite(fc_hz) or fc_hz < 0:
         raise ValueError("spectral_endpoints_cardiac_fc_hz must be non-negative")
+    if not np.isfinite(median_window_s) or median_window_s < 0:
+        raise ValueError(
+            "spectral_endpoints_cardiac_median_window_s must be non-negative"
+        )
     if not np.isfinite(smoothing_s) or smoothing_s < 0:
         raise ValueError("spectral_endpoints_cardiac_smoothing_s must be non-negative")
 
@@ -274,16 +280,44 @@ def cardiac_detection_signal(
     cardiac_signal = np.sum(
         signal[:, high_frequency], axis=1, dtype=np.float64
     )
-    smoothed = cardiac_signal.copy()
+    median_dt = float(np.median(np.diff(t)))
+    median_samples = 1
+    if median_window_s > 0:
+        requested_samples = median_window_s / median_dt
+        lower_odd = max(1, int(np.floor(requested_samples)))
+        if lower_odd % 2 == 0:
+            lower_odd -= 1
+        upper_odd = lower_odd + 2
+        median_samples = (
+            lower_odd
+            if requested_samples - lower_odd < upper_odd - requested_samples
+            else upper_odd
+        )
+        if median_samples > t.size:
+            raise ValueError(
+                "Resolved cardiac median window exceeds the long-time signal length"
+            )
+    median_filtered = median_filter(
+        cardiac_signal,
+        size=median_samples,
+        mode="nearest",
+    )
+    smoothed = median_filtered.copy()
     if smoothing_s > 0:
-        median_dt = float(np.median(np.diff(t)))
         smoothed = gaussian_filter1d(
-            cardiac_signal,
+            median_filtered,
             sigma=smoothing_s / median_dt,
             mode="nearest",
         )
     derivative = np.gradient(smoothed, t, edge_order=2)
-    return cardiac_signal, smoothed, derivative, high_frequency
+    return (
+        cardiac_signal,
+        median_filtered,
+        smoothed,
+        derivative,
+        high_frequency,
+        median_samples,
+    )
 
 
 def detect_cardiac_landmarks(
@@ -515,13 +549,23 @@ def aggregate_single_beat(repaired_signal_beats, background_beats):
 
 def cardiac_phase_analysis(signal, background, t, f, parameters):
     """Run segmentation, phase normalization, S-only repair, and aggregation."""
-    raw_g, smoothed_g, derivative, high_frequency_mask = cardiac_detection_signal(
+    (
+        raw_g,
+        median_filtered_g,
+        smoothed_g,
+        derivative,
+        high_frequency_mask,
+        median_window_samples,
+    ) = cardiac_detection_signal(
         signal,
         t,
         f,
         parameters.get(
             "spectral_endpoints_cardiac_fc_effective_hz",
             parameters["spectral_endpoints_cardiac_fc_hz"],
+        ),
+        median_window_s=parameters.get(
+            "spectral_endpoints_cardiac_median_window_s", 0.035
         ),
         smoothing_s=parameters["spectral_endpoints_cardiac_smoothing_s"],
     )
@@ -563,8 +607,12 @@ def cardiac_phase_analysis(signal, background, t, f, parameters):
     return {
         **beats,
         "g": raw_g,
+        "g_median_filtered": median_filtered_g,
         "g_smoothed": smoothed_g,
         "dg_dt": derivative,
+        "median_window_samples": median_window_samples,
+        "median_window_resolved_s": median_window_samples
+        * float(np.median(np.diff(np.asarray(t, dtype=np.float64)))),
         "high_frequency_mask": high_frequency_mask,
         "beat_landmark_indices": landmarks,
         "beat_landmark_times": np.asarray(t, dtype=np.float64)[landmarks],

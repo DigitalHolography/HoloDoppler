@@ -39,6 +39,7 @@ spectral_cube_corner_ellipse_radius_x_factor: 1.2
 # is min(configured fc, 0.8 * Nyquist). Other defaults are configurable QC
 # starting points, not physiological constants.
 spectral_endpoints_cardiac_fc_hz: 12000
+spectral_endpoints_cardiac_median_window_s: 0.035
 spectral_endpoints_cardiac_smoothing_s: 0.0
 spectral_endpoints_peak_min_distance_s: 0.3
 spectral_endpoints_peak_prominence_mad: 1.0
