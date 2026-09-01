@@ -18,6 +18,9 @@ class AdvancedView(ttk.Frame):
         self.store = store
         self.theme = theme
         self.status_var = tk.StringVar(value="Ready")
+        self.current_file_name = ""
+        self.file_progress_var = tk.StringVar(value="Current file progress")
+        self.batch_progress_var = tk.StringVar(value="Overall progress")
         self.preview_file_var = tk.StringVar()
         self.parameter_var = tk.StringVar()
         self.parameter_paths: dict[str, Path] = {}
@@ -64,20 +67,34 @@ class AdvancedView(ttk.Frame):
         self.status_var.set(message)
 
     def set_current_file(self, index: int, total: int, path: Path) -> None:
-        self.status_var.set(f"Processing {index}/{total}: {path.name}")
+        self.current_file_name = path.name
+        self.file_progress_var.set(f"{path.name}: starting...")
         self.file_progress.configure(value=0)
 
-    def set_file_progress(self, completed: int, total: int) -> None:
+    def set_file_progress(self, completed: int, total: int, message: str = "") -> None:
         value = 0 if total <= 0 else max(0, min(100, completed / total * 100))
         self.file_progress.configure(value=value)
+        if message == "File complete":
+            detail = "complete"
+        elif total > 0:
+            detail = f"{completed}/{total} batches"
+        else:
+            detail = message or "processing"
+        self.file_progress_var.set(f"{self.current_file_name}: {detail}")
 
     def set_batch_progress(self, completed: int, total: int) -> None:
         value = 0 if total <= 0 else max(0, min(100, completed / total * 100))
         self.batch_progress.configure(value=value)
+        self.batch_progress_var.set(
+            f"Overall progress: {completed}/{total} files completed" if total > 1 else "Overall progress"
+        )
 
     def reset_progress(self) -> None:
         self.file_progress.configure(value=0)
         self.batch_progress.configure(value=0)
+        self.current_file_name = ""
+        self.file_progress_var.set("Current file progress")
+        self.batch_progress_var.set("Overall progress")
 
     def show_preview(self, path: Path, array: object) -> None:
         image = array_to_photo_image(array, (760, 460), self)
@@ -191,10 +208,12 @@ class AdvancedView(ttk.Frame):
         progress = ttk.Frame(preview_panel)
         progress.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         progress.columnconfigure(0, weight=1)
+        ttk.Label(progress, textvariable=self.file_progress_var).grid(row=0, column=0, sticky="w")
         self.file_progress = ttk.Progressbar(progress, maximum=100, mode="determinate")
-        self.file_progress.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        self.file_progress.grid(row=1, column=0, sticky="ew", pady=(4, 8))
+        ttk.Label(progress, textvariable=self.batch_progress_var).grid(row=2, column=0, sticky="w")
         self.batch_progress = ttk.Progressbar(progress, maximum=100, mode="determinate")
-        self.batch_progress.grid(row=1, column=0, sticky="ew")
+        self.batch_progress.grid(row=3, column=0, sticky="ew", pady=(4, 0))
 
     def _build_settings_tab(self, notebook: ttk.Notebook) -> None:
         frame = ttk.Frame(notebook, padding=12)

@@ -20,13 +20,42 @@ def expand_input_paths(raw_paths: list[str | Path]) -> InputSelection:
     for raw_path in raw_paths:
         path = Path(raw_path).expanduser()
         suffix = path.suffix.lower()
-        if suffix in SUPPORTED_LIST_EXTENSIONS:
+        if path.is_dir():
+            _append_holo_directory(path, accepted, rejected, seen)
+        elif suffix in SUPPORTED_LIST_EXTENSIONS:
             for listed_path in _read_list_file(path):
                 _append_input_path(listed_path, accepted, rejected, seen)
         else:
             _append_input_path(path, accepted, rejected, seen)
 
     return InputSelection(paths=accepted, rejected=rejected)
+
+
+def _append_holo_directory(
+    directory: Path,
+    accepted: list[Path],
+    rejected: list[Path],
+    seen: set[Path],
+) -> None:
+    try:
+        holo_files = sorted(
+            (
+                path
+                for path in directory.resolve().rglob("*")
+                if path.is_file() and path.suffix.lower() == ".holo"
+            ),
+            key=lambda path: str(path).casefold(),
+        )
+    except OSError:
+        rejected.append(directory)
+        return
+
+    if not holo_files:
+        rejected.append(directory)
+        return
+
+    for path in holo_files:
+        _append_input_path(path, accepted, rejected, seen)
 
 
 def _append_input_path(

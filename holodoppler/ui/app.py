@@ -107,7 +107,7 @@ class UI(BaseTk):
         if self._busy():
             return
         if not self.input_paths:
-            messagebox.showinfo("Run", "Load a .holo, .cine, or .txt input list first.", parent=self)
+            messagebox.showinfo("Run", "Drop a folder or load a .holo, .cine, or .txt input list first.", parent=self)
             return
 
         try:
@@ -304,11 +304,9 @@ class UI(BaseTk):
         elif kind == "file_progress":
             completed = int(event["completed"])
             total = int(event["total"])
-            self.minimal.set_file_progress(completed, total)
-            self.advanced.set_file_progress(completed, total)
             message = str(event.get("message") or "")
-            if message:
-                self._set_status(message)
+            self.minimal.set_file_progress(completed, total, message)
+            self.advanced.set_file_progress(completed, total, message)
         elif kind == "batch_progress":
             completed = int(event["completed"])
             total = int(event["total"])
