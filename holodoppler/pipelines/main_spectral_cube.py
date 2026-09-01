@@ -201,6 +201,9 @@ def _prepare(file_path, parameters):
         "spectral_endpoints_peak_prominence_mad": float(
             parameters.get("spectral_endpoints_peak_prominence_mad", 1.0)
         ),
+        "spectral_endpoints_peak_relative_height": float(
+            parameters.get("spectral_endpoints_peak_relative_height", 0.5)
+        ),
         "spectral_endpoints_min_beat_duration_s": float(
             parameters.get("spectral_endpoints_min_beat_duration_s", 0.35)
         ),
@@ -253,6 +256,11 @@ def _prepare(file_path, parameters):
         raise ValueError("spectral_endpoints_peak_min_distance_s must be positive")
     if cardiac_parameters["spectral_endpoints_peak_prominence_mad"] < 0:
         raise ValueError("spectral_endpoints_peak_prominence_mad must be non-negative")
+    relative_height = cardiac_parameters["spectral_endpoints_peak_relative_height"]
+    if not np.isfinite(relative_height) or not 0 <= relative_height <= 1:
+        raise ValueError(
+            "spectral_endpoints_peak_relative_height must be between 0 and 1"
+        )
     min_beat = cardiac_parameters["spectral_endpoints_min_beat_duration_s"]
     max_beat = cardiac_parameters["spectral_endpoints_max_beat_duration_s"]
     if min_beat <= 0 or max_beat <= min_beat:
@@ -648,6 +656,9 @@ def _write_cardiac_h5(handle, analysis, parameters):
     )
     singlebeat.attrs["resolved_peak_prominence"] = analysis[
         "resolved_peak_prominence"
+    ]
+    singlebeat.attrs["resolved_peak_relative_height"] = analysis[
+        "resolved_peak_relative_height"
     ]
     for name, value in parameters.items():
         if name.startswith("spectral_endpoints_"):

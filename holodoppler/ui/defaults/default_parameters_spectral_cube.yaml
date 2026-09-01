@@ -44,6 +44,7 @@ spectral_endpoints_cardiac_median_window_s: 0.035
 spectral_endpoints_cardiac_smoothing_s: 0.0
 spectral_endpoints_peak_min_distance_s: 0.3
 spectral_endpoints_peak_prominence_mad: 1.0
+spectral_endpoints_peak_relative_height: 0.5
 spectral_endpoints_min_beat_duration_s: 0.35
 spectral_endpoints_max_beat_duration_s: 1.5
 spectral_endpoints_phase_bins: 128

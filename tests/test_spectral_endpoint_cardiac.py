@@ -33,11 +33,13 @@ def test_cardiac_landmarks_are_positive_derivative_maxima_of_signed_high_f_power
         100.0,
         smoothing_s=0.0,
     )
-    landmarks, _resolved_prominence = detect_cardiac_landmarks(
-        result["dg_dt"],
-        t,
-        min_distance_s=0.7,
-        prominence_mad=0.5,
+    landmarks, _resolved_prominence, _resolved_relative_height = (
+        detect_cardiac_landmarks(
+            result["dg_dt"],
+            t,
+            min_distance_s=0.7,
+            prominence_mad=0.5,
+        )
     )
 
     np.testing.assert_array_equal(
@@ -50,6 +52,23 @@ def test_cardiac_landmarks_are_positive_derivative_maxima_of_signed_high_f_power
     assert result["svd_explained_variance_fraction"] > 0.999
     np.testing.assert_allclose(t[landmarks], [1.0, 2.0, 3.0, 4.0], atol=0.02)
     assert np.all(result["dg_dt"][landmarks] > 0)
+
+
+def test_cardiac_landmarks_apply_final_half_maximum_threshold():
+    t = np.arange(7, dtype=np.float64)
+    derivative = np.array([0.0, 10.0, 0.0, 4.0, 0.0, 5.1, 0.0])
+
+    landmarks, _prominence, resolved_height = detect_cardiac_landmarks(
+        derivative,
+        t,
+        min_distance_s=0.5,
+        prominence_mad=0.0,
+        relative_height=0.5,
+    )
+
+    np.testing.assert_array_equal(landmarks, [1, 5])
+    assert resolved_height == 5.0
+    assert np.all(derivative[landmarks] > 0.5 * np.max(derivative[landmarks]))
 
 
 def test_cardiac_cutoff_is_capped_at_eighty_percent_nyquist():
@@ -230,6 +249,7 @@ def test_grouped_hdf5_schema_contains_longtimes_singlebeat_and_qc(tmp_path):
         "streak_peak_count": np.array([1]),
         "streak_unrepaired_mask": np.zeros((1, 4), dtype=bool),
         "resolved_peak_prominence": 2.5,
+        "resolved_peak_relative_height": 1.25,
         "median_window_samples": 5,
         "median_window_resolved_s": 0.5,
     }
@@ -239,6 +259,7 @@ def test_grouped_hdf5_schema_contains_longtimes_singlebeat_and_qc(tmp_path):
         "spectral_endpoints_cardiac_fc_effective_hz": 40.0,
         "spectral_endpoints_cardiac_median_window_s": 0.035,
         "spectral_endpoints_cardiac_smoothing_s": 0.0,
+        "spectral_endpoints_peak_relative_height": 0.5,
     }
 
     with h5py.File(path, "w") as handle:
@@ -289,6 +310,7 @@ def test_grouped_hdf5_schema_contains_longtimes_singlebeat_and_qc(tmp_path):
         assert handle["singlebeat/f"].id == handle["longtimes/f"].id
         assert handle["longtimes/g"].attrs["fc_hz"] == 40.0
         assert handle["longtimes/g"].attrs["svd_mode_index"] == 0
+        assert handle["singlebeat"].attrs["resolved_peak_relative_height"] == 1.25
 
     _save_endpoint_pngs(path, tmp_path, {"contrast": False})
     expected_pngs = {

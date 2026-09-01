@@ -363,18 +363,24 @@ def detect_cardiac_landmarks(
     *,
     min_distance_s: float,
     prominence_mad: float,
+    relative_height: float = 0.5,
 ):
-    """Select positive local maxima of dg/dt with robust prominence and spacing."""
+    """Select positive dg/dt maxima using prominence, spacing, and height QC."""
     derivative = np.asarray(derivative, dtype=np.float64)
     t = np.asarray(t, dtype=np.float64)
     min_distance_s = float(min_distance_s)
     prominence_mad = float(prominence_mad)
+    relative_height = float(relative_height)
     if derivative.shape != t.shape:
         raise ValueError("derivative and t must have identical shapes")
     if not np.isfinite(min_distance_s) or min_distance_s <= 0:
         raise ValueError("spectral_endpoints_peak_min_distance_s must be positive")
     if not np.isfinite(prominence_mad) or prominence_mad < 0:
         raise ValueError("spectral_endpoints_peak_prominence_mad must be non-negative")
+    if not np.isfinite(relative_height) or not 0 <= relative_height <= 1:
+        raise ValueError(
+            "spectral_endpoints_peak_relative_height must be between 0 and 1"
+        )
 
     resolved_prominence = prominence_mad * _robust_mad_scale(derivative)
     candidates, properties = find_peaks(
@@ -393,7 +399,15 @@ def detect_cardiac_landmarks(
         if all(abs(t[candidate] - t[other]) >= min_distance_s for other in accepted):
             accepted.append(int(candidate))
     landmarks = np.asarray(sorted(accepted), dtype=np.int64)
-    return landmarks, float(resolved_prominence)
+    resolved_relative_height = np.nan
+    if landmarks.size:
+        resolved_relative_height = relative_height * float(
+            np.max(derivative[landmarks])
+        )
+        landmarks = landmarks[
+            derivative[landmarks] > resolved_relative_height
+        ]
+    return landmarks, float(resolved_prominence), resolved_relative_height
 
 
 def resample_beats(
@@ -599,11 +613,18 @@ def cardiac_phase_analysis(signal, background, t, f, parameters):
         ),
         smoothing_s=parameters["spectral_endpoints_cardiac_smoothing_s"],
     )
-    landmarks, resolved_prominence = detect_cardiac_landmarks(
+    (
+        landmarks,
+        resolved_prominence,
+        resolved_relative_height,
+    ) = detect_cardiac_landmarks(
         detection["dg_dt"],
         t,
         min_distance_s=parameters["spectral_endpoints_peak_min_distance_s"],
         prominence_mad=parameters["spectral_endpoints_peak_prominence_mad"],
+        relative_height=parameters.get(
+            "spectral_endpoints_peak_relative_height", 0.5
+        ),
     )
     beats = resample_beats(
         signal,
@@ -640,6 +661,7 @@ def cardiac_phase_analysis(signal, background, t, f, parameters):
         "beat_landmark_indices": landmarks,
         "beat_landmark_times": np.asarray(t, dtype=np.float64)[landmarks],
         "resolved_peak_prominence": resolved_prominence,
+        "resolved_peak_relative_height": resolved_relative_height,
         "cardiac_fc_hz": parameters.get(
             "spectral_endpoints_cardiac_fc_effective_hz",
             parameters["spectral_endpoints_cardiac_fc_hz"],
