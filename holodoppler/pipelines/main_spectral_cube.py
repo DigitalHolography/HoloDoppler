@@ -184,7 +184,7 @@ def _prepare(file_path, parameters):
             "sampling_freq must resolve to a numeric value; set it explicitly "
             "for inputs without HoloVibes metadata"
         ) from exc
-    f_bins = int(parameters.get("f_bins", 256))
+    f_bins = int(parameters.get("f_bins", 128))
     cardiac_parameters = {
         "spectral_endpoints_cardiac_fc_hz": float(
             parameters.get("spectral_endpoints_cardiac_fc_hz", 15000.0)
@@ -211,7 +211,7 @@ def _prepare(file_path, parameters):
             parameters.get("spectral_endpoints_max_beat_duration_s", 1.5)
         ),
         "spectral_endpoints_phase_bins": int(
-            parameters.get("spectral_endpoints_phase_bins", 256)
+            parameters.get("spectral_endpoints_phase_bins", 128)
         ),
         "spectral_endpoints_streak_prominence": float(
             parameters.get("spectral_endpoints_streak_prominence", 6.0)
