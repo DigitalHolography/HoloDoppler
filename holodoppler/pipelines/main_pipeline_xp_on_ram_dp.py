@@ -1117,7 +1117,7 @@ def process_moments(
 
     if return_numpy:
         return vid_t
-    return None
+    return {"M0": vid_t[:, 0, :, :]}
 
 
 # ------------------------------------------------------------------

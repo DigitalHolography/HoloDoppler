@@ -107,7 +107,7 @@ class UI(BaseTk):
         if self._busy():
             return
         if not self.input_paths:
-            messagebox.showinfo("Run", "Load a .holo, .cine, or .txt input list first.", parent=self)
+            messagebox.showinfo("Run", "Drop a folder or load a .holo, .cine, or .txt input list first.", parent=self)
             return
 
         try:
@@ -258,7 +258,10 @@ class UI(BaseTk):
                         }
                     )
 
-                process(str(path), copy.deepcopy(parameters), progress_callback=on_progress)
+                results = process(str(path), copy.deepcopy(parameters), progress_callback=on_progress)
+                image = self._first_m0_frame(results)
+                del results
+                self.events.put({"kind": "processed_preview", "path": path, "image": image})
                 self.events.put({"kind": "file_progress", "completed": 1, "total": 1, "message": "File complete"})
                 self.events.put({"kind": "batch_progress", "completed": index, "total": total_files})
 
@@ -268,6 +271,36 @@ class UI(BaseTk):
             self.events.put({"kind": "error", "message": str(exc), "traceback": traceback.format_exc()})
         finally:
             self.events.put({"kind": "worker_done"})
+
+    @staticmethod
+    def _first_m0_frame(results: object) -> object | None:
+        if not isinstance(results, dict):
+            return None
+
+        import numpy as np
+
+        for name in (
+            "M0",
+            "moment_0",
+            "moment0",
+            "M0ff",
+            "moment_0_ff",
+            "moment0ff",
+            "Projection",
+            "Projectionff",
+        ):
+            if name not in results:
+                continue
+            frame = np.asarray(results[name])
+            if frame.size == 0:
+                continue
+            if np.iscomplexobj(frame):
+                frame = np.abs(frame)
+            while frame.ndim > 2:
+                frame = frame[0]
+            if frame.ndim == 2:
+                return frame.copy()
+        return None
 
     def _preview_worker(self, path: Path, parameters: dict[str, Any]) -> None:
         self.events.put({"kind": "preview_started", "path": path})
@@ -304,16 +337,17 @@ class UI(BaseTk):
         elif kind == "file_progress":
             completed = int(event["completed"])
             total = int(event["total"])
-            self.minimal.set_file_progress(completed, total)
-            self.advanced.set_file_progress(completed, total)
             message = str(event.get("message") or "")
-            if message:
-                self._set_status(message)
+            self.minimal.set_file_progress(completed, total, message)
+            self.advanced.set_file_progress(completed, total, message)
         elif kind == "batch_progress":
             completed = int(event["completed"])
             total = int(event["total"])
             self.minimal.set_batch_progress(completed, total)
+            self.advanced.set_file_completed(completed)
             self.advanced.set_batch_progress(completed, total)
+        elif kind == "processed_preview":
+            self.advanced.show_processed_preview(event["path"], event.get("image"))
         elif kind == "preview_started":
             path = event["path"]
             self._set_status(f"Loading preview: {path.name}")

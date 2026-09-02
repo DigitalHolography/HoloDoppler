@@ -7,8 +7,20 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .image_utils import array_to_photo_image
 from .settings_store import SettingsStore
-from .theme import configure_plain_widget
+from .theme import configure_plain_widget, plain_widget_colors
 from .widgets import RawJsonDialog, SettingsEditor
+
+
+_INPUT_STATE_COLORS = {
+    "light": {
+        "processing": ("#e8f1f8", "#c9e0f2"),
+        "completed": ("#e8f4ec", "#cce7d5"),
+    },
+    "dark": {
+        "processing": ("#293847", "#365775"),
+        "completed": ("#26362d", "#365a44"),
+    },
+}
 
 
 class AdvancedView(ttk.Frame):
@@ -18,10 +30,16 @@ class AdvancedView(ttk.Frame):
         self.store = store
         self.theme = theme
         self.status_var = tk.StringVar(value="Ready")
+        self.current_file_name = ""
+        self.file_progress_var = tk.StringVar(value="Current file progress")
+        self.batch_progress_var = tk.StringVar(value="Overall progress")
         self.preview_file_var = tk.StringVar()
         self.parameter_var = tk.StringVar()
         self.parameter_paths: dict[str, Path] = {}
         self.preview_image: tk.PhotoImage | None = None
+        self.displayed_input_paths: list[Path] = []
+        self.input_states: dict[Path, str] = {}
+        self.active_input_index: int | None = None
         self._build()
         self.refresh_parameter_choices()
 
@@ -34,14 +52,25 @@ class AdvancedView(ttk.Frame):
         return self.preview_frame
 
     def refresh_inputs(self, paths: list[Path]) -> None:
+        paths = list(paths)
+        if paths != self.displayed_input_paths:
+            self.input_states.clear()
+            self.active_input_index = None
+        self.displayed_input_paths = paths
+
         self.input_list.delete(0, "end")
-        for path in paths:
+        for index, path in enumerate(paths):
             self.input_list.insert("end", str(path))
+            self._apply_input_state(index, self.input_states.get(path))
         names = [path.name for path in paths]
         self.preview_combo.configure(values=names)
         if paths:
-            self.preview_combo.current(0)
-            self.preview_file_var.set(names[0])
+            index = self.active_input_index if self.active_input_index is not None else 0
+            index = min(index, len(paths) - 1)
+            self.preview_combo.current(index)
+            self.preview_file_var.set(names[index])
+            if self.active_input_index is not None:
+                self._select_input(index)
         else:
             self.preview_file_var.set("")
             self.preview_label.configure(text="Load inputs to preview files.", image="")
@@ -64,30 +93,106 @@ class AdvancedView(ttk.Frame):
         self.status_var.set(message)
 
     def set_current_file(self, index: int, total: int, path: Path) -> None:
-        self.status_var.set(f"Processing {index}/{total}: {path.name}")
+        self.current_file_name = path.name
+        self.file_progress_var.set(f"{path.name}: starting...")
         self.file_progress.configure(value=0)
+        self.active_input_index = index - 1
+        self._set_input_state(self.active_input_index, "processing")
+        keep_completed_preview = self.preview_image is not None
+        self._select_input(self.active_input_index, update_preview_choice=not keep_completed_preview)
+        if not keep_completed_preview:
+            self.preview_label.configure(
+                text=f"Processing {path.name}...\nM0 preview will appear when complete.",
+                image="",
+            )
 
-    def set_file_progress(self, completed: int, total: int) -> None:
+    def set_file_progress(self, completed: int, total: int, message: str = "") -> None:
         value = 0 if total <= 0 else max(0, min(100, completed / total * 100))
         self.file_progress.configure(value=value)
+        if message == "File complete":
+            detail = "complete"
+        elif total > 0:
+            detail = f"{completed}/{total} batches"
+        else:
+            detail = message or "processing"
+        self.file_progress_var.set(f"{self.current_file_name}: {detail}")
 
     def set_batch_progress(self, completed: int, total: int) -> None:
         value = 0 if total <= 0 else max(0, min(100, completed / total * 100))
         self.batch_progress.configure(value=value)
+        self.batch_progress_var.set(
+            f"Overall progress: {completed}/{total} files completed" if total > 1 else "Overall progress"
+        )
+
+    def set_file_completed(self, index: int) -> None:
+        self._set_input_state(index - 1, "completed")
 
     def reset_progress(self) -> None:
         self.file_progress.configure(value=0)
         self.batch_progress.configure(value=0)
+        self.current_file_name = ""
+        self.file_progress_var.set("Current file progress")
+        self.batch_progress_var.set("Overall progress")
+        self.active_input_index = None
+        self.input_states.clear()
+        for index in range(len(self.displayed_input_paths)):
+            self._apply_input_state(index, None)
 
     def show_preview(self, path: Path, array: object) -> None:
+        if not self._display_preview(path, array):
+            return
+        self.status_var.set(f"Preview loaded: {path.name}")
+
+    def show_processed_preview(self, path: Path, array: object) -> None:
+        if not self._display_preview(path, array):
+            return
+        try:
+            index = self.displayed_input_paths.index(path)
+        except ValueError:
+            return
+        self.preview_combo.current(index)
+        self.preview_file_var.set(path.name)
+
+    def _display_preview(self, path: Path, array: object) -> bool:
         image = array_to_photo_image(array, (760, 460), self)
         if image is None:
             self.preview_image = None
             self.preview_label.configure(text=f"No preview available for {path.name}", image="")
-            return
+            return False
         self.preview_image = image
         self.preview_label.configure(image=image, text="")
-        self.status_var.set(f"Preview loaded: {path.name}")
+        return True
+
+    def _select_input(self, index: int, *, update_preview_choice: bool = True) -> None:
+        if not 0 <= index < len(self.displayed_input_paths):
+            return
+        if update_preview_choice:
+            self.preview_combo.current(index)
+            self.preview_file_var.set(self.displayed_input_paths[index].name)
+        self.input_list.selection_clear(0, "end")
+        self.input_list.selection_set(index)
+        self.input_list.see(index)
+
+    def _set_input_state(self, index: int, state: str) -> None:
+        if not 0 <= index < len(self.displayed_input_paths):
+            return
+        self.input_states[self.displayed_input_paths[index]] = state
+        self._apply_input_state(index, state)
+
+    def _apply_input_state(self, index: int, state: str | None) -> None:
+        base_colors = plain_widget_colors(self.theme)
+        background = base_colors["bg"]
+        select_background = base_colors["selectbackground"]
+        if state in {"processing", "completed"}:
+            theme_colors = _INPUT_STATE_COLORS["light" if self.theme == "light" else "dark"]
+            background, select_background = theme_colors[state]
+        self.input_list.itemconfigure(
+            index,
+            background=background,
+            foreground=base_colors["fg"],
+            selectbackground=select_background,
+            selectforeground=base_colors["selectforeground"],
+        )
 
     def refresh_parameter_choices(self, *, load_selected: bool = False) -> None:
         files = self.store.parameter_files()
@@ -191,10 +296,12 @@ class AdvancedView(ttk.Frame):
         progress = ttk.Frame(preview_panel)
         progress.grid(row=2, column=0, sticky="ew", pady=(10, 0))
         progress.columnconfigure(0, weight=1)
+        ttk.Label(progress, textvariable=self.file_progress_var).grid(row=0, column=0, sticky="w")
         self.file_progress = ttk.Progressbar(progress, maximum=100, mode="determinate")
-        self.file_progress.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        self.file_progress.grid(row=1, column=0, sticky="ew", pady=(4, 8))
+        ttk.Label(progress, textvariable=self.batch_progress_var).grid(row=2, column=0, sticky="w")
         self.batch_progress = ttk.Progressbar(progress, maximum=100, mode="determinate")
-        self.batch_progress.grid(row=1, column=0, sticky="ew")
+        self.batch_progress.grid(row=3, column=0, sticky="ew", pady=(4, 0))
 
     def _build_settings_tab(self, notebook: ttk.Notebook) -> None:
         frame = ttk.Frame(notebook, padding=12)

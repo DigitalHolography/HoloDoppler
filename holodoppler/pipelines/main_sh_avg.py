@@ -549,7 +549,7 @@ def process(file_path, parameters, progress_callback=None):
     elapsed = time.time() - start_time
     print(f"smoothing_gaussian in {elapsed:.1f} seconds")
 
-    save_result_map(
+    return save_result_map(
         target_dir,
         output_np,
         parameters,

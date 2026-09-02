@@ -982,7 +982,7 @@ def process(file_path, parameters, progress_callback=None):
     ]  # + [key for key in output_np.keys() if "band_" in key]
 
     _save_h5_2(target_dir, output_np, parameters, save_only_list=save_to_h5_list)
-    save_result_map(
+    return save_result_map(
         target_dir,
         output_np,
         parameters,
