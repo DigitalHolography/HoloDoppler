@@ -19,7 +19,6 @@ from holodoppler.filtering import (
     fourier_time_transform,
     svd_filter,
 )
-from holodoppler.get_version import get_version
 from holodoppler.propagation import (
     angular_spectrum_transform,
     angular_spectrum_transform_with_phase,
@@ -27,14 +26,17 @@ from holodoppler.propagation import (
     fresnel_transform_with_phase,
 )
 from holodoppler.saving import (
+    H5_OUTPUT_PATH_PARAMETER,
     _create_directories,
     _get_default_output_path,
+    _get_h5_output_path,
     _save_metadata,
     apply_contrast_adjustment,
     normalize_to_uint8,
     save_preview_images,
 )
 from holodoppler.spectral_cube import (
+    CARDIAC_PULSE_NOT_DETECTED,
     binned_fft_frequencies,
     cardiac_phase_analysis,
     centered_ellipse_mask,
@@ -46,6 +48,48 @@ from holodoppler.spectral_cube import (
     window_starts,
 )
 from holodoppler.utils import update_from_footer
+
+
+_SPECTRAL_CUBE_SHARED_PARAMETER_NAMES = {
+    "batch_size",
+    "first_frame",
+    "batch_stride",
+    "end_frame",
+    "spatial_propagation",
+    "z",
+    "wavelength",
+    "pixel_pitch",
+    "Fresnel_use_ouput_kernel",
+    "filter2d",
+    "filter2d_low",
+    "sampling_freq",
+    "f_bins",
+    "corner_compensation",
+    "contrast",
+    "contrast_low_max_percent",
+    "contrast_gamma",
+}
+_SPECTRAL_CUBE_METADATA_EXCLUSIONS = {
+    "spectral_cube_enabled",
+    "spectral_cube_settings",
+    "spectral_cube_filename",
+    "spectral_endpoints_filename",
+}
+
+
+def _spectral_cube_parameters_for_h5(parameters):
+    """Return only settings used to compute or render the spectral products."""
+    return {
+        name: value
+        for name, value in parameters.items()
+        if name not in _SPECTRAL_CUBE_METADATA_EXCLUSIONS
+        and (
+            name in _SPECTRAL_CUBE_SHARED_PARAMETER_NAMES
+            or name.startswith("spectral_cube_")
+            or name.startswith("spectral_endpoints_")
+            or name.startswith("shack_hartmann")
+        )
+    }
 
 
 def _propagate(parameters, frames, phase_term=None):
@@ -300,22 +344,22 @@ def _prepare(file_path, parameters):
 
 
 def _output_path(file_reader, parameters) -> tuple[Path, Path]:
+    primary_h5_path = parameters.get(H5_OUTPUT_PATH_PARAMETER)
+    if primary_h5_path:
+        h5_path = Path(primary_h5_path)
+        target_dir = (
+            h5_path.parent.parent
+            if h5_path.parent.name.lower() == "h5"
+            else h5_path.parent
+        )
+        _create_directories(target_dir, "FULL")
+        return target_dir, h5_path
+
     target_dir = _get_default_output_path(file_reader.file_path)
     if parameters.get("saving_to_folder"):
         target_dir = Path(parameters["saving_to_folder"])
     _create_directories(target_dir, "FULL")
-
-    filename = parameters.get(
-        "spectral_endpoints_filename",
-        parameters.get(
-            "spectral_cube_filename",
-            f"{Path(file_reader.file_path).stem}_spectral_endpoints.h5",
-        ),
-    )
-    filename = Path(filename).name
-    if not filename.lower().endswith((".h5", ".hdf5")):
-        filename += ".h5"
-    return target_dir, target_dir / "h5" / filename
+    return target_dir, _get_h5_output_path(target_dir)
 
 
 def _create_h5(path, file_reader, parameters, starts):
@@ -327,11 +371,14 @@ def _create_h5(path, file_reader, parameters, starts):
         starts.astype(np.float64) + (parameters["batch_size"] - 1) / 2.0
     ) / parameters["sampling_freq"]
 
-    handle = h5py.File(path, "w")
-    handle.attrs["complete"] = False
-    handle.attrs["source_file"] = str(file_reader.file_path)
-    handle.attrs["axis_order"] = "longtimes:(t,f); singlebeat:(phase,f)"
-    longtimes = handle.create_group("longtimes", track_order=True)
+    handle = h5py.File(path, "a")
+    if "spectrograms" in handle:
+        del handle["spectrograms"]
+    spectrograms = handle.create_group("spectrograms", track_order=True)
+    spectrograms.attrs["complete"] = False
+    spectrograms.attrs["source_file"] = str(file_reader.file_path)
+    spectrograms.attrs["axis_order"] = "longtimes:(t,f); singlebeat:(phase,f)"
+    longtimes = spectrograms.create_group("longtimes", track_order=True)
 
     signal = longtimes.create_dataset(
         "S",
@@ -458,16 +505,13 @@ def _create_h5(path, file_reader, parameters, starts):
     frame_start_dataset.attrs["units"] = "frame index"
 
     string_dtype = h5py.string_dtype(encoding="utf-8")
-    handle.create_dataset(
-        "HD_parameters",
-        data=json.dumps(parameters, default=str),
+    spectrograms.create_dataset(
+        "spectral_cube_parameters",
+        data=json.dumps(_spectral_cube_parameters_for_h5(parameters), default=str),
         dtype=string_dtype,
         track_times=False,
     )
-    handle.create_dataset(
-        "HD_version", data=f"py{get_version()}", dtype=string_dtype, track_times=False
-    )
-    return handle, signal, background, log_ratio
+    return handle, spectrograms, signal, background, log_ratio
 
 
 def _write_cardiac_h5(handle, analysis, parameters):
@@ -582,7 +626,54 @@ def _write_cardiac_h5(handle, analysis, parameters):
     )
     frequency_mode_dataset.attrs["axis"] = "longtimes/f"
 
+    pulse_detected = bool(analysis.get("pulse_detected", True))
     singlebeat = handle.create_group("singlebeat", track_order=True)
+    phase = singlebeat.create_dataset(
+        "phase", data=analysis["phase"], track_times=False
+    )
+    singlebeat["f"] = longtimes["f"]
+    phase.attrs["units"] = "normalized cardiac phase"
+    phase.attrs["range"] = "[0,1)"
+
+    beat_qc_datasets = {
+        "beat_landmark_indices": analysis["beat_landmark_indices"],
+        "beat_landmark_times": analysis["beat_landmark_times"],
+        "beat_periods": analysis["beat_periods"],
+        "beat_accepted": analysis["beat_accepted"],
+        "accepted_beat_indices": analysis["accepted_beat_indices"],
+        "rejected_beat_indices": analysis["rejected_beat_indices"],
+    }
+    for name, values in beat_qc_datasets.items():
+        singlebeat.create_dataset(name, data=values, track_times=False)
+
+    singlebeat.attrs["pulse_detected"] = pulse_detected
+    singlebeat.attrs["representative_beat_available"] = pulse_detected
+    singlebeat.attrs["detected_landmark_count"] = len(
+        analysis["beat_landmark_indices"]
+    )
+    singlebeat.attrs["detected_beat_count"] = len(analysis["beat_periods"])
+    singlebeat.attrs["accepted_beat_count"] = len(
+        analysis["accepted_beat_indices"]
+    )
+    singlebeat.attrs["rejected_beat_count"] = len(
+        analysis["rejected_beat_indices"]
+    )
+    singlebeat.attrs["resolved_peak_prominence"] = analysis[
+        "resolved_peak_prominence"
+    ]
+    singlebeat.attrs["resolved_peak_relative_height"] = analysis[
+        "resolved_peak_relative_height"
+    ]
+    for name, value in parameters.items():
+        if name.startswith("spectral_endpoints_"):
+            singlebeat.attrs[name] = value
+
+    if not pulse_detected:
+        singlebeat.attrs["pulse_detection_error"] = analysis[
+            "pulse_detection_error"
+        ]
+        return
+
     signal = singlebeat.create_dataset(
         "S", data=analysis["S"], dtype=np.float32, compression=None, track_times=False
     )
@@ -596,11 +687,6 @@ def _write_cardiac_h5(handle, analysis, parameters):
     log_ratio = singlebeat.create_dataset(
         "L", data=analysis["L"], dtype=np.float32, compression=None, track_times=False
     )
-    phase = singlebeat.create_dataset(
-        "phase", data=analysis["phase"], track_times=False
-    )
-    singlebeat["f"] = longtimes["f"]
-
     signal.attrs["axis_order"] = "phase,f"
     signal.attrs["description"] = (
         "Median across phase-normalized fundus beats after S-only streak repair"
@@ -615,36 +701,18 @@ def _write_cardiac_h5(handle, analysis, parameters):
     log_ratio.attrs["description"] = "Natural logarithm of aggregate S/S0"
     log_ratio.attrs["formula"] = "ln(median(repaired_S_beats)/median(S0_beats))"
     log_ratio.attrs["units"] = "dimensionless"
-    phase.attrs["units"] = "normalized cardiac phase"
-    phase.attrs["range"] = "[0,1)"
 
-    qc_datasets = {
-        "beat_landmark_indices": analysis["beat_landmark_indices"],
-        "beat_landmark_times": analysis["beat_landmark_times"],
-        "beat_periods": analysis["beat_periods"],
-        "beat_accepted": analysis["beat_accepted"],
-        "accepted_beat_indices": analysis["accepted_beat_indices"],
-        "rejected_beat_indices": analysis["rejected_beat_indices"],
+    streak_qc_datasets = {
         "streak_trace": analysis["streak_trace"],
         "streak_mask": analysis["streak_mask"],
         "streak_peak_count": analysis["streak_peak_count"],
         "streak_unrepaired_mask": analysis["streak_unrepaired_mask"],
     }
-    for name, values in qc_datasets.items():
+    for name, values in streak_qc_datasets.items():
         singlebeat.create_dataset(name, data=values, track_times=False)
 
     repaired_mask = analysis["streak_mask"] & ~analysis["streak_unrepaired_mask"]
     sample_count = int(analysis["streak_mask"].size)
-    singlebeat.attrs["detected_landmark_count"] = len(
-        analysis["beat_landmark_indices"]
-    )
-    singlebeat.attrs["detected_beat_count"] = len(analysis["beat_periods"])
-    singlebeat.attrs["accepted_beat_count"] = len(
-        analysis["accepted_beat_indices"]
-    )
-    singlebeat.attrs["rejected_beat_count"] = len(
-        analysis["rejected_beat_indices"]
-    )
     singlebeat.attrs["repaired_phase_sample_count"] = int(
         np.count_nonzero(repaired_mask)
     )
@@ -654,15 +722,6 @@ def _write_cardiac_h5(handle, analysis, parameters):
     singlebeat.attrs["unrepaired_phase_sample_count"] = int(
         np.count_nonzero(analysis["streak_unrepaired_mask"])
     )
-    singlebeat.attrs["resolved_peak_prominence"] = analysis[
-        "resolved_peak_prominence"
-    ]
-    singlebeat.attrs["resolved_peak_relative_height"] = analysis[
-        "resolved_peak_relative_height"
-    ]
-    for name, value in parameters.items():
-        if name.startswith("spectral_endpoints_"):
-            singlebeat.attrs[name] = value
 
 
 def _save_cardiac_qc_plots(h5_path, png_dir):
@@ -673,17 +732,22 @@ def _save_cardiac_qc_plots(h5_path, png_dir):
     import matplotlib.pyplot as plt
 
     with h5py.File(h5_path, "r") as handle:
-        longtimes = handle["longtimes"]
-        singlebeat = handle["singlebeat"]
+        root = handle["spectrograms"] if "spectrograms" in handle else handle
+        longtimes = root["longtimes"]
+        singlebeat = root["singlebeat"]
         t = np.asarray(longtimes["t"])
         g = np.asarray(longtimes["g"])
         g_sum = np.asarray(longtimes["g_sum"])
         g_smoothed = np.asarray(longtimes["g_smoothed"])
         derivative = np.asarray(longtimes["dg_dt"])
         landmarks = np.asarray(singlebeat["beat_landmark_indices"], dtype=np.int64)
-        phase = np.asarray(singlebeat["phase"])
-        streak_trace = np.asarray(singlebeat["streak_trace"])
-        streak_mask = np.asarray(singlebeat["streak_mask"], dtype=bool)
+        has_streak_qc = all(
+            name in singlebeat for name in ("phase", "streak_trace", "streak_mask")
+        )
+        if has_streak_qc:
+            phase = np.asarray(singlebeat["phase"])
+            streak_trace = np.asarray(singlebeat["streak_trace"])
+            streak_mask = np.asarray(singlebeat["streak_mask"], dtype=bool)
 
     figure, axes = plt.subplots(2, 1, sharex=True, figsize=(10, 6))
     axes[0].plot(t, g, label="SVD g(t)", linewidth=1.0)
@@ -713,6 +777,9 @@ def _save_cardiac_qc_plots(h5_path, png_dir):
     figure.tight_layout()
     figure.savefig(png_dir / "cardiac_segmentation_qc.png", dpi=150)
     plt.close(figure)
+
+    if not has_streak_qc:
+        return
 
     iio.imwrite(
         png_dir / "singlebeat_streak_mask.png",
@@ -746,11 +813,16 @@ def _save_endpoint_pngs(h5_path, target_dir, parameters):
     png_dir = Path(target_dir) / "png"
     png_dir.mkdir(parents=True, exist_ok=True)
     with h5py.File(h5_path, "r") as handle:
+        root = handle["spectrograms"] if "spectrograms" in handle else handle
         endpoint_maps = {}
         for group_name in ("longtimes", "singlebeat"):
+            if group_name not in root:
+                continue
             for name in ("S", "S0", "L"):
+                if name not in root[group_name]:
+                    continue
                 endpoint_maps[f"{group_name}_{name}"] = np.asarray(
-                    handle[group_name][name], dtype=np.float32
+                    root[group_name][name], dtype=np.float32
                 )
 
     for name, values in endpoint_maps.items():
@@ -762,10 +834,11 @@ def _save_endpoint_pngs(h5_path, target_dir, parameters):
     _save_cardiac_qc_plots(h5_path, png_dir)
 
 
-def process(file_path, parameters, progress_callback=None):
+def process(file_path, parameters, progress_callback=None, warning_callback=None):
     """Compute and stream ``S(t,f)``, ``S0(t,f)``, and ``L(t,f)`` to HDF5."""
     file_reader, parameters, starts = _prepare(file_path, parameters)
     target_dir, h5_path = _output_path(file_reader, parameters)
+    parameters.pop(H5_OUTPUT_PATH_PARAMETER, None)
 
     output_bytes = estimated_endpoint_bytes(len(starts), parameters["f_bins"])
     print(
@@ -777,9 +850,11 @@ def process(file_path, parameters, progress_callback=None):
 
     started = time.time()
     handle = None
+    pulse_detection_error = None
     try:
         (
             handle,
+            spectrograms,
             signal_dataset,
             background_dataset,
             log_ratio_dataset,
@@ -814,18 +889,28 @@ def process(file_path, parameters, progress_callback=None):
         analysis = cardiac_phase_analysis(
             np.asarray(signal_dataset, dtype=np.float32),
             np.asarray(background_dataset, dtype=np.float32),
-            np.asarray(handle["longtimes/t"], dtype=np.float64),
-            np.asarray(handle["longtimes/f"], dtype=np.float64),
+            np.asarray(spectrograms["longtimes/t"], dtype=np.float64),
+            np.asarray(spectrograms["longtimes/f"], dtype=np.float64),
             parameters,
         )
-        _write_cardiac_h5(handle, analysis, parameters)
-        print(
-            "Cardiac aggregation: "
-            f"{len(analysis['beat_landmark_indices'])} landmarks, "
-            f"{len(analysis['accepted_beat_indices'])} accepted beats, "
-            f"{np.count_nonzero(analysis['streak_mask'])} streak samples"
-        )
-        handle.attrs.modify("complete", True)
+        _write_cardiac_h5(spectrograms, analysis, parameters)
+        pulse_detected = bool(analysis.get("pulse_detected", True))
+        spectrograms.attrs["pulse_detected"] = pulse_detected
+        spectrograms.attrs["singlebeat_available"] = pulse_detected
+        if pulse_detected:
+            print(
+                "Cardiac aggregation: "
+                f"{len(analysis['beat_landmark_indices'])} landmarks, "
+                f"{len(analysis['accepted_beat_indices'])} accepted beats, "
+                f"{np.count_nonzero(analysis['streak_mask'])} streak samples"
+            )
+        else:
+            pulse_detection_error = analysis.get(
+                "pulse_detection_error", CARDIAC_PULSE_NOT_DETECTED
+            )
+            spectrograms.attrs["pulse_detection_error"] = pulse_detection_error
+            print(f"Warning: {pulse_detection_error}")
+        spectrograms.attrs.modify("complete", True)
         handle.flush()
     finally:
         if handle is not None:
@@ -838,6 +923,8 @@ def process(file_path, parameters, progress_callback=None):
     _save_metadata(target_dir, file_reader, parameters)
     elapsed = time.time() - started
     print(f"Spectral endpoints completed in {elapsed:.1f} seconds")
+    if pulse_detection_error is not None and warning_callback is not None:
+        warning_callback("cardiac_pulse_not_detected", pulse_detection_error)
     return h5_path
 
 

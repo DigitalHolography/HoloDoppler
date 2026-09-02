@@ -9,6 +9,11 @@ from scipy.ndimage import gaussian_filter1d, median_filter
 from scipy.signal import find_peaks
 
 
+CARDIAC_PULSE_NOT_DETECTED = (
+    "No valid cardiac beats remain after landmark detection and duration QC"
+)
+
+
 def window_starts(
     first_frame: int,
     end_frame: int,
@@ -636,9 +641,20 @@ def cardiac_phase_analysis(signal, background, t, f, parameters):
         max_duration_s=parameters["spectral_endpoints_max_beat_duration_s"],
     )
     if beats["S_beats"].shape[0] == 0:
-        raise ValueError(
-            "No valid cardiac beats remain after landmark detection and duration QC"
-        )
+        return {
+            **beats,
+            **detection,
+            "beat_landmark_indices": landmarks,
+            "beat_landmark_times": np.asarray(t, dtype=np.float64)[landmarks],
+            "resolved_peak_prominence": resolved_prominence,
+            "resolved_peak_relative_height": resolved_relative_height,
+            "cardiac_fc_hz": parameters.get(
+                "spectral_endpoints_cardiac_fc_effective_hz",
+                parameters["spectral_endpoints_cardiac_fc_hz"],
+            ),
+            "pulse_detected": False,
+            "pulse_detection_error": CARDIAC_PULSE_NOT_DETECTED,
+        }
     streak_trace, streak_mask, streak_peak_count = detect_streaks(
         beats["S_beats"],
         prominence_mad=parameters["spectral_endpoints_streak_prominence"],
@@ -674,4 +690,6 @@ def cardiac_phase_analysis(signal, background, t, f, parameters):
         "S": single_signal,
         "S0": single_background,
         "L": single_log_ratio,
+        "pulse_detected": True,
+        "pulse_detection_error": "",
     }

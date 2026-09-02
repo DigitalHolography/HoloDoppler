@@ -15,10 +15,12 @@ _INPUT_STATE_COLORS = {
     "light": {
         "processing": ("#e8f1f8", "#c9e0f2"),
         "completed": ("#e8f4ec", "#cce7d5"),
+        "pulse_not_detected": ("#fde8e8", "#f2b8b8"),
     },
     "dark": {
         "processing": ("#293847", "#365775"),
         "completed": ("#26362d", "#365a44"),
+        "pulse_not_detected": ("#4a2727", "#743838"),
     },
 }
 
@@ -109,8 +111,8 @@ class AdvancedView(ttk.Frame):
     def set_file_progress(self, completed: int, total: int, message: str = "") -> None:
         value = 0 if total <= 0 else max(0, min(100, completed / total * 100))
         self.file_progress.configure(value=value)
-        if message == "File complete":
-            detail = "complete"
+        if message.startswith("File complete"):
+            detail = message.removeprefix("File ").lower()
         elif total > 0:
             detail = f"{completed}/{total} batches"
         else:
@@ -126,6 +128,9 @@ class AdvancedView(ttk.Frame):
 
     def set_file_completed(self, index: int) -> None:
         self._set_input_state(index - 1, "completed")
+
+    def set_file_pulse_not_detected(self, index: int) -> None:
+        self._set_input_state(index - 1, "pulse_not_detected")
 
     def reset_progress(self) -> None:
         self.file_progress.configure(value=0)
@@ -183,7 +188,7 @@ class AdvancedView(ttk.Frame):
         base_colors = plain_widget_colors(self.theme)
         background = base_colors["bg"]
         select_background = base_colors["selectbackground"]
-        if state in {"processing", "completed"}:
+        if state in {"processing", "completed", "pulse_not_detected"}:
             theme_colors = _INPUT_STATE_COLORS["light" if self.theme == "light" else "dark"]
             background, select_background = theme_colors[state]
         self.input_list.itemconfigure(

@@ -239,6 +239,7 @@ class UI(BaseTk):
 
     def _process_worker(self, paths: list[Path], parameters: dict[str, Any]) -> None:
         total_files = len(paths)
+        pulse_not_detected_paths: list[Path] = []
         self.events.put({"kind": "process_started", "total": total_files})
         try:
             for index, path in enumerate(paths, start=1):
@@ -258,15 +259,56 @@ class UI(BaseTk):
                         }
                     )
 
-                results = process(str(path), copy.deepcopy(parameters), progress_callback=on_progress)
+                pulse_not_detected = False
+
+                def on_warning(code: str, _message: str) -> None:
+                    nonlocal pulse_not_detected
+                    if code == "cardiac_pulse_not_detected":
+                        pulse_not_detected = True
+
+                results = process(
+                    str(path),
+                    copy.deepcopy(parameters),
+                    progress_callback=on_progress,
+                    warning_callback=on_warning,
+                )
+                if pulse_not_detected:
+                    pulse_not_detected_paths.append(path)
                 image = self._first_m0_frame(results)
                 del results
                 self.events.put({"kind": "processed_preview", "path": path, "image": image})
-                self.events.put({"kind": "file_progress", "completed": 1, "total": 1, "message": "File complete"})
-                self.events.put({"kind": "batch_progress", "completed": index, "total": total_files})
+                completion_message = (
+                    "File complete (pulse not detected)"
+                    if pulse_not_detected
+                    else "File complete"
+                )
+                self.events.put(
+                    {
+                        "kind": "file_progress",
+                        "completed": 1,
+                        "total": 1,
+                        "message": completion_message,
+                    }
+                )
+                self.events.put(
+                    {
+                        "kind": "batch_progress",
+                        "completed": index,
+                        "total": total_files,
+                        "pulse_not_detected": pulse_not_detected,
+                    }
+                )
 
             else:
-                self.events.put({"kind": "status", "message": "Processing complete"})
+                if pulse_not_detected_paths:
+                    self.events.put(
+                        {
+                            "kind": "pulse_detection_summary",
+                            "paths": pulse_not_detected_paths,
+                        }
+                    )
+                else:
+                    self.events.put({"kind": "status", "message": "Processing complete"})
         except Exception as exc:
             self.events.put({"kind": "error", "message": str(exc), "traceback": traceback.format_exc()})
         finally:
@@ -344,7 +386,10 @@ class UI(BaseTk):
             completed = int(event["completed"])
             total = int(event["total"])
             self.minimal.set_batch_progress(completed, total)
-            self.advanced.set_file_completed(completed)
+            if event.get("pulse_not_detected", False):
+                self.advanced.set_file_pulse_not_detected(completed)
+            else:
+                self.advanced.set_file_completed(completed)
             self.advanced.set_batch_progress(completed, total)
         elif kind == "processed_preview":
             self.advanced.show_processed_preview(event["path"], event.get("image"))
@@ -355,6 +400,19 @@ class UI(BaseTk):
             self.advanced.show_preview(event["path"], event["image"])
         elif kind == "status":
             self._set_status(str(event["message"]))
+        elif kind == "pulse_detection_summary":
+            paths = [Path(path) for path in event.get("paths", [])]
+            self._set_status(
+                f"Processing complete; pulse not detected in {len(paths)} file(s)"
+            )
+            file_list = "\n".join(f"- {path}" for path in paths)
+            messagebox.showwarning(
+                "Cardiac pulse not detected",
+                "No valid cardiac pulse was detected in:\n\n"
+                f"{file_list}\n\n"
+                "All other results, including long-time spectrograms, were saved.",
+                parent=self,
+            )
         elif kind == "error":
             log_path = self._write_error_log(str(event.get("traceback", "")))
             self._set_status("Error")

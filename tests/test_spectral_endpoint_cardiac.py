@@ -6,7 +6,9 @@ from holodoppler.pipelines.main_spectral_cube import (
     _write_cardiac_h5,
 )
 from holodoppler.spectral_cube import (
+    CARDIAC_PULSE_NOT_DETECTED,
     aggregate_single_beat,
+    cardiac_phase_analysis,
     cardiac_detection_signal,
     detect_cardiac_landmarks,
     detect_streaks,
@@ -218,6 +220,63 @@ def test_aggregation_occurs_before_log_and_does_not_modify_s0_beats():
     np.testing.assert_array_equal(background_beats, background_before)
 
 
+def test_missing_cardiac_pulse_keeps_longtimes_and_writes_failure_qc(tmp_path):
+    t = np.arange(30, dtype=np.float64) * 0.1
+    f = np.array([-200.0, 200.0])
+    ramp = np.arange(t.size, dtype=np.float32)
+    signal = np.column_stack((ramp, 2.0 * ramp)).astype(np.float32)
+    background = np.ones_like(signal)
+    parameters = {
+        "sampling_freq": 1_000.0,
+        "spectral_endpoints_cardiac_fc_hz": 100.0,
+        "spectral_endpoints_cardiac_fc_effective_hz": 100.0,
+        "spectral_endpoints_cardiac_median_window_s": 0.0,
+        "spectral_endpoints_cardiac_smoothing_s": 0.0,
+        "spectral_endpoints_peak_min_distance_s": 0.3,
+        "spectral_endpoints_peak_prominence_mad": 1.0,
+        "spectral_endpoints_peak_relative_height": 0.5,
+        "spectral_endpoints_min_beat_duration_s": 10.0,
+        "spectral_endpoints_max_beat_duration_s": 20.0,
+        "spectral_endpoints_phase_bins": 8,
+    }
+
+    analysis = cardiac_phase_analysis(signal, background, t, f, parameters)
+
+    assert analysis["pulse_detected"] is False
+    assert analysis["pulse_detection_error"] == CARDIAC_PULSE_NOT_DETECTED
+    assert analysis["S_beats"].shape == (0, 8, 2)
+
+    path = tmp_path / "no-pulse.h5"
+    with h5py.File(path, "w") as handle:
+        spectrograms = handle.create_group("spectrograms")
+        longtimes = spectrograms.create_group("longtimes")
+        longtimes.create_dataset("S", data=signal)
+        longtimes.create_dataset("S0", data=background)
+        longtimes.create_dataset("L", data=np.zeros_like(signal))
+        longtimes.create_dataset("t", data=t)
+        longtimes.create_dataset("f", data=f)
+        _write_cardiac_h5(spectrograms, analysis, parameters)
+
+        assert "spectrograms/longtimes/g" in handle
+        assert "spectrograms/singlebeat" in handle
+        assert "spectrograms/singlebeat/S" not in handle
+        assert not bool(handle["spectrograms/singlebeat"].attrs["pulse_detected"])
+        assert (
+            handle["spectrograms/singlebeat"].attrs["pulse_detection_error"]
+            == CARDIAC_PULSE_NOT_DETECTED
+        )
+
+    _save_endpoint_pngs(path, tmp_path, {"contrast": False})
+    png_names = {item.name for item in (tmp_path / "png").iterdir()}
+    assert {
+        "longtimes_S.png",
+        "longtimes_S0.png",
+        "longtimes_L.png",
+        "cardiac_segmentation_qc.png",
+    }.issubset(png_names)
+    assert "singlebeat_S.png" not in png_names
+
+
 def test_grouped_hdf5_schema_contains_longtimes_singlebeat_and_qc(tmp_path):
     path = tmp_path / "endpoints.h5"
     t = np.arange(6, dtype=np.float64) * 0.1
@@ -263,14 +322,15 @@ def test_grouped_hdf5_schema_contains_longtimes_singlebeat_and_qc(tmp_path):
     }
 
     with h5py.File(path, "w") as handle:
-        longtimes = handle.create_group("longtimes")
+        spectrograms = handle.create_group("spectrograms")
+        longtimes = spectrograms.create_group("longtimes")
         longtimes.create_dataset("S", data=np.ones((6, 3), dtype=np.float32))
         longtimes.create_dataset("S0", data=np.ones((6, 3), dtype=np.float32))
         longtimes.create_dataset("L", data=np.zeros((6, 3), dtype=np.float32))
         longtimes.create_dataset("t", data=t)
         longtimes.create_dataset("f", data=f)
         longtimes.create_dataset("frame_start", data=np.arange(6))
-        _write_cardiac_h5(handle, analysis, parameters)
+        _write_cardiac_h5(spectrograms, analysis, parameters)
 
         required_longtimes = {
             "S",
@@ -298,19 +358,19 @@ def test_grouped_hdf5_schema_contains_longtimes_singlebeat_and_qc(tmp_path):
             "streak_mask",
             "streak_unrepaired_mask",
         }
-        assert required_longtimes.issubset(handle["longtimes"])
-        assert required_singlebeat.issubset(handle["singlebeat"])
-        assert handle["singlebeat/S"].shape == (4, 3)
-        assert handle["singlebeat/S0"].shape == (4, 3)
-        assert handle["singlebeat/L"].shape == (4, 3)
-        assert handle["singlebeat/phase"].shape == (4,)
-        assert handle["longtimes/g"].shape == handle["longtimes/t"].shape
-        assert handle["longtimes/g_sum"].shape == handle["longtimes/t"].shape
-        assert handle["longtimes/dg_dt"].shape == handle["longtimes/t"].shape
-        assert handle["singlebeat/f"].id == handle["longtimes/f"].id
-        assert handle["longtimes/g"].attrs["fc_hz"] == 40.0
-        assert handle["longtimes/g"].attrs["svd_mode_index"] == 0
-        assert handle["singlebeat"].attrs["resolved_peak_relative_height"] == 1.25
+        assert required_longtimes.issubset(spectrograms["longtimes"])
+        assert required_singlebeat.issubset(spectrograms["singlebeat"])
+        assert spectrograms["singlebeat/S"].shape == (4, 3)
+        assert spectrograms["singlebeat/S0"].shape == (4, 3)
+        assert spectrograms["singlebeat/L"].shape == (4, 3)
+        assert spectrograms["singlebeat/phase"].shape == (4,)
+        assert spectrograms["longtimes/g"].shape == spectrograms["longtimes/t"].shape
+        assert spectrograms["longtimes/g_sum"].shape == spectrograms["longtimes/t"].shape
+        assert spectrograms["longtimes/dg_dt"].shape == spectrograms["longtimes/t"].shape
+        assert spectrograms["singlebeat/f"].id == spectrograms["longtimes/f"].id
+        assert spectrograms["longtimes/g"].attrs["fc_hz"] == 40.0
+        assert spectrograms["longtimes/g"].attrs["svd_mode_index"] == 0
+        assert spectrograms["singlebeat"].attrs["resolved_peak_relative_height"] == 1.25
 
     _save_endpoint_pngs(path, tmp_path, {"contrast": False})
     expected_pngs = {

@@ -1,4 +1,5 @@
 import argparse
+import copy
 import inspect
 import json
 from pathlib import Path
@@ -7,8 +8,74 @@ import sys
 
 from .utils import load_config
 from .pipelines import pipelines
+from .saving import H5_OUTPUT_PATH_PARAMETER
 
 DEFAULT_PARAMETERS_PATH = "parameters/default_parameters_sliding_shack_hart.yaml"
+DEFAULT_SPECTRAL_PARAMETERS_PATH = (
+    Path(__file__).parent / "ui" / "defaults" / "default_parameters_spectral_cube.yaml"
+)
+
+_SPECTRAL_SHARED_PARAMETERS = {
+    "first_frame",
+    "end_frame",
+    "spatial_propagation",
+    "z",
+    "wavelength",
+    "pixel_pitch",
+    "Fresnel_use_ouput_kernel",
+    "filter2d",
+    "filter2d_low",
+    "sampling_freq",
+    "corner_compensation",
+    "contrast",
+    "contrast_low_max_percent",
+    "contrast_gamma",
+    "saving_to_folder",
+    H5_OUTPUT_PATH_PARAMETER,
+}
+
+
+def _spectral_cube_parameters(parameters: dict) -> dict:
+    """Build independent spectral settings with optional per-profile overrides."""
+    spectral_parameters = load_config(DEFAULT_SPECTRAL_PARAMETERS_PATH)
+
+    for name, value in parameters.items():
+        if (
+            name in _SPECTRAL_SHARED_PARAMETERS
+            or name == "f_bins"
+            or name.startswith("spectral_endpoints_")
+            or (
+                name.startswith("spectral_cube_")
+                and name not in {"spectral_cube_enabled", "spectral_cube_settings"}
+            )
+            or name.startswith("shack_hartmann_")
+            or name == "shack_hartmann"
+        ):
+            spectral_parameters[name] = copy.deepcopy(value)
+
+    overrides = parameters.get("spectral_cube_settings", {})
+    if overrides is None:
+        overrides = {}
+    if not isinstance(overrides, dict):
+        raise ValueError("spectral_cube_settings must be an object")
+    spectral_parameters.update(copy.deepcopy(overrides))
+    spectral_parameters["pipeline_name"] = "spectral_cube"
+
+    # The destination comes from the HDF5 actually written by the primary
+    # pipeline and cannot be redirected by a secondary-settings override.
+    if H5_OUTPUT_PATH_PARAMETER in parameters:
+        spectral_parameters[H5_OUTPUT_PATH_PARAMETER] = parameters[
+            H5_OUTPUT_PATH_PARAMETER
+        ]
+    return spectral_parameters
+
+
+def _spectral_cube_is_enabled(parameters: dict) -> bool:
+    value = parameters.get("spectral_cube_enabled", True)
+    if isinstance(value, str):
+        return value.strip().lower() not in {"0", "false", "no", "off"}
+    return bool(value)
+
 
 def preview(file_path, parameters: dict, save_debug: bool = True):
     if not isinstance(parameters, dict):
@@ -36,6 +103,7 @@ def _call_pipeline(
     file_path: str | Path,
     parameters: dict,
     progress_callback: Callable[[int, int, str], None] | None = None,
+    warning_callback: Callable[[str, str], None] | None = None,
     save_debug: bool | None = None,
 ):
     signature = inspect.signature(pipeline_func)
@@ -46,6 +114,7 @@ def _call_pipeline(
     kwargs = {}
     optional_kwargs = {
         "progress_callback": progress_callback,
+        "warning_callback": warning_callback,
         "save_debug": save_debug,
     }
     for name, value in optional_kwargs.items():
@@ -58,6 +127,7 @@ def process(
     file_path,
     parameters: dict,
     progress_callback: Callable[[int, int, str], None] | None = None,
+    warning_callback: Callable[[str, str], None] | None = None,
 ):
     if not isinstance(parameters, dict):
         parameters = load_config(parameters)
@@ -71,12 +141,42 @@ def process(
     if pipeline_func is None:
         raise ValueError(f"Unknown pipeline: {pipeline_name}")
 
-    return _call_pipeline(
-        pipeline_func,
-        file_path,
-        parameters,
-        progress_callback=progress_callback,
-    )
+    # Discard a destination left by a previous call that reused this dict. The
+    # primary saver records the fresh path again once its HDF5 file is closed.
+    parameters.pop(H5_OUTPUT_PATH_PARAMETER, None)
+    try:
+        result = _call_pipeline(
+            pipeline_func,
+            file_path,
+            parameters,
+            progress_callback=progress_callback,
+            warning_callback=warning_callback,
+        )
+
+        if pipeline_name != "spectral_cube" and _spectral_cube_is_enabled(parameters):
+            spectral_pipeline = pipelines.get("spectral_cube")
+            if spectral_pipeline is None:
+                raise ValueError("Unknown pipeline: spectral_cube")
+
+            spectral_parameters = _spectral_cube_parameters(parameters)
+
+            def spectral_progress(completed: int, total: int, message: str = "") -> None:
+                if progress_callback is not None:
+                    detail = f"Spectrograms: {message}" if message else "Spectrograms"
+                    progress_callback(completed, total, detail)
+
+            print("Running the default spectral_cube pipeline")
+            _call_pipeline(
+                spectral_pipeline,
+                file_path,
+                spectral_parameters,
+                progress_callback=spectral_progress,
+                warning_callback=warning_callback,
+            )
+    finally:
+        parameters.pop(H5_OUTPUT_PATH_PARAMETER, None)
+
+    return result
 
 
 def _existing_file(value: str) -> Path:

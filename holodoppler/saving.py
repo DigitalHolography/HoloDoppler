@@ -55,6 +55,7 @@ NON_CONTRAST_OUTPUT_NAMES = {
     "shack_hartmann_zernike_coefs",
     "zernike_coefs_radians",
 }
+H5_OUTPUT_PATH_PARAMETER = "_holodoppler_h5_path"
 
 
 def apply_contrast_adjustment(data, parameters):
@@ -305,6 +306,13 @@ def _get_default_output_path(file_path):
     path = Path(file_path)
     base_name = path.stem
     return path.parent / base_name / f"{base_name}_HD"
+
+
+def _get_h5_output_path(target_dir):
+    """Return the canonical HoloDoppler HDF5 path for an output directory."""
+    target_dir = Path(target_dir)
+    target_dir_name = target_dir.name if target_dir.name else "output"
+    return target_dir / "h5" / f"{target_dir_name}.h5"
 
 
 def _save_bundle(
@@ -1058,7 +1066,15 @@ def _save_metadata(target_dir, file_reader, parameters):
     # JSON params
     json_path = target_dir / "json" / "parameters_holodoppler.json"
     with open(json_path, "w") as f:
-        json.dump(parameters, f, indent=4)
+        json.dump(
+            {
+                name: value
+                for name, value in parameters.items()
+                if name != H5_OUTPUT_PATH_PARAMETER
+            },
+            f,
+            indent=4,
+        )
 
     # Version
     (target_dir / "version_holodoppler.txt").write_text(f"py{get_version()}")
@@ -1091,8 +1107,7 @@ def _save_h5_2(target_dir, save_map, parameters, save_only_list=None):
     """
     start_time = time.time()
 
-    target_dir_name = target_dir.name if target_dir.name else "output"
-    h5_path = target_dir / "h5" / f"{target_dir_name}_output.h5"
+    h5_path = _get_h5_output_path(target_dir)
 
     print(f"Saving H5 to: {h5_path}")
 
@@ -1114,6 +1129,11 @@ def _save_h5_2(target_dir, save_map, parameters, save_only_list=None):
         # Save metadata
         f.create_dataset("HD_parameters", data=json.dumps(parameters))
         f.create_dataset("HD_version", data=f"py{get_version()}")
+
+    # Keep the exact primary output available to auxiliary pipelines. This is
+    # intentionally set after serializing the user parameters so the internal
+    # coordination value is not persisted as a setting.
+    parameters[H5_OUTPUT_PATH_PARAMETER] = str(h5_path)
 
     elapsed = time.time() - start_time
     file_size = h5_path.stat().st_size / (1024**3)
@@ -1142,8 +1162,7 @@ def _save_h5(target_dir, vid, parameters, reg_list, coefs_list):
     """
     start_time = time.time()
 
-    target_dir_name = target_dir.name if target_dir.name else "output"
-    h5_path = target_dir / "h5" / f"{target_dir_name}_output.h5"
+    h5_path = _get_h5_output_path(target_dir)
 
     print(f"Saving H5 to: {h5_path}")
     print(f"   Data shape: {vid.shape}")
@@ -1186,6 +1205,8 @@ def _save_h5(target_dir, vid, parameters, reg_list, coefs_list):
                 compression=compression,
             )
             print(f"   Zernike coefficients: {coefs_data.shape}")
+
+    parameters[H5_OUTPUT_PATH_PARAMETER] = str(h5_path)
 
     elapsed = time.time() - start_time
     file_size = h5_path.stat().st_size / (1024**3)

@@ -77,8 +77,8 @@ class MinimalView(ttk.Frame):
     def set_file_progress(self, completed: int, total: int, message: str = "") -> None:
         percent = 0 if total <= 0 else max(0, min(100, completed / total * 100))
         self.file_progress.configure(value=percent)
-        if message == "File complete":
-            detail = "complete"
+        if message.startswith("File complete"):
+            detail = message.removeprefix("File ").lower()
         elif total > 0:
             detail = f"{completed}/{total} batches"
         else:

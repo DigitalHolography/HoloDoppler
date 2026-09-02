@@ -87,13 +87,17 @@ class SettingsStore:
         return self.selected_parameters_path().name
 
     def load_current_parameters(self) -> dict[str, Any]:
-        return _read_parameter_object(self.loaded_parameters_path)
+        return _with_spectral_cube_defaults(
+            _read_parameter_object(self.loaded_parameters_path)
+        )
 
     def load_selected_parameters(self) -> dict[str, Any]:
-        return _read_parameter_object(self.selected_parameters_path())
+        return _with_spectral_cube_defaults(
+            _read_parameter_object(self.selected_parameters_path())
+        )
 
     def load_parameters(self, path: Path) -> dict[str, Any]:
-        return _read_parameter_object(path)
+        return _with_spectral_cube_defaults(_read_parameter_object(path))
 
     def select_parameters(self, path: Path) -> Path:
         parameter_path = self._copy_into_appdata(path) if not self._is_in_parameters_dir(path) else path
@@ -363,6 +367,14 @@ def _read_parameter_object(path: Path) -> dict[str, Any]:
         raise ValueError(f"Invalid parameter file {path}: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"Parameter file must contain an object: {path}")
+    return data
+
+
+def _with_spectral_cube_defaults(data: dict[str, Any]) -> dict[str, Any]:
+    """Expose the default auxiliary pipeline controls in every main profile."""
+    if data.get("pipeline_name") != "spectral_cube":
+        data.setdefault("spectral_cube_enabled", True)
+        data.setdefault("spectral_cube_settings", {})
     return data
 
 

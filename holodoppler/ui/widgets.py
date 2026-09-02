@@ -42,6 +42,7 @@ class SettingsEditor(ttk.Frame):
         ("Optics", ("wavelength", "pixel_pitch", "spatial_propagation", "zero_padding", "z")),
         ("Registration", ("image_registration", "image_registration_type", "registration_", "apply_registration")),
         ("Shack-Hartmann", ("shack_hartmann",)),
+        ("Spectrograms", ("spectral_cube_enabled", "spectral_cube_settings")),
         (
             "Frequency",
             (

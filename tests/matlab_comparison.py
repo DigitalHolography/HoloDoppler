@@ -27,7 +27,7 @@ test_path = (
     / target_dir_name
     / f"{target_dir_name}_HD"
     / "h5"
-    / f"{target_dir_name}_HD_output.h5"
+    / f"{target_dir_name}_HD.h5"
 )
 
 if test_path.exists() and not OVERWRITE:
