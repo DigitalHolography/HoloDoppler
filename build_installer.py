@@ -665,7 +665,7 @@ def _run_release_smoke_test(
     output_dir = SMOKE_WORK_DIR / sample.stem / f"{sample.stem}_HD"
     expected = [
         SMOKE_WORK_DIR / "debug_outputs" / "debug_M0.png",
-        output_dir / "h5" / f"{output_dir.name}_output.h5",
+        output_dir / "h5" / f"{output_dir.name}.h5",
         output_dir / "json" / "parameters_holodoppler.json",
         output_dir / "png" / "moment_0.png",
     ]
