@@ -22,7 +22,7 @@ filter2d_low: 0.03
 
 # f_bins covers the complete signed FFT range.
 sampling_freq: "use_holovibes"
-f_bins: 128
+f_bins: 256
 
 # Applied before frequency and endpoint averaging when enabled.
 corner_compensation: false
@@ -47,7 +47,7 @@ spectral_endpoints_peak_prominence_mad: 1.0
 spectral_endpoints_peak_relative_height: 0.5
 spectral_endpoints_min_beat_duration_s: 0.35
 spectral_endpoints_max_beat_duration_s: 1.5
-spectral_endpoints_phase_bins: 128
+spectral_endpoints_phase_bins: 256
 
 # Beat-specific broadband streak detection. Threshold and prominence are
 # multipliers of the robust MAD scale of each beat's frequency-mean trace.

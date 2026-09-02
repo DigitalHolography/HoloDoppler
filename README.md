@@ -65,6 +65,9 @@ by the smallest positive `float32` value. SVD filtering always removes exactly
 the two strongest singular components without a separate temporal-DC
 subtraction. Registration is not applied.
 
+The defaults `f_bins=256` and `spectral_endpoints_phase_bins=256` produce
+representative single-beat spectrograms on a `256 phase x 256 frequency` grid.
+
 The HDF5 `longtimes` group contains the uncompressed acquisition-time datasets
 `S(t,f)`, `S0(t,f)`, `L(t,f)`, `t`, `f`, and `frame_start`. Cardiac segmentation
 uses the bins satisfying `abs(f)>fc`, where the resolved cutoff is the minimum
