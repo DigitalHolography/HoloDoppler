@@ -141,6 +141,20 @@ def process(
     if pipeline_func is None:
         raise ValueError(f"Unknown pipeline: {pipeline_name}")
 
+    runs_spectral_cube = (
+        pipeline_name != "spectral_cube" and _spectral_cube_is_enabled(parameters)
+    )
+
+    primary_progress_callback = progress_callback
+    if runs_spectral_cube and progress_callback is not None:
+        def report_primary_progress(
+            completed: int, total: int, message: str = ""
+        ) -> None:
+            detail = f"Primary pipeline: {message}" if message else "Primary pipeline"
+            progress_callback(completed, total, detail)
+
+        primary_progress_callback = report_primary_progress
+
     # Discard a destination left by a previous call that reused this dict. The
     # primary saver records the fresh path again once its HDF5 file is closed.
     parameters.pop(H5_OUTPUT_PATH_PARAMETER, None)
@@ -149,11 +163,11 @@ def process(
             pipeline_func,
             file_path,
             parameters,
-            progress_callback=progress_callback,
+            progress_callback=primary_progress_callback,
             warning_callback=warning_callback,
         )
 
-        if pipeline_name != "spectral_cube" and _spectral_cube_is_enabled(parameters):
+        if runs_spectral_cube:
             spectral_pipeline = pipelines.get("spectral_cube")
             if spectral_pipeline is None:
                 raise ValueError("Unknown pipeline: spectral_cube")
@@ -162,7 +176,7 @@ def process(
 
             def spectral_progress(completed: int, total: int, message: str = "") -> None:
                 if progress_callback is not None:
-                    detail = f"Spectrograms: {message}" if message else "Spectrograms"
+                    detail = f"Spectral cube: {message}" if message else "Spectral cube"
                     progress_callback(completed, total, detail)
 
             print("Running the default spectral_cube pipeline")

@@ -15,6 +15,8 @@ from holodoppler.saving import (
 )
 from holodoppler.ui.settings_store import _with_spectral_cube_defaults
 from holodoppler.ui import app as ui_app
+from holodoppler.ui.advanced import AdvancedView
+from holodoppler.ui.minimal import MinimalView
 from holodoppler.utils import load_config
 
 
@@ -99,11 +101,13 @@ def test_process_runs_spectral_cube_by_default_with_independent_settings(
     monkeypatch, tmp_path
 ):
     calls = []
+    progress = []
     h5_path = tmp_path / "recording_HD.h5"
 
     def primary(file_path, parameters, progress_callback=None):
         calls.append(("primary", file_path, dict(parameters)))
         parameters[H5_OUTPUT_PATH_PARAMETER] = str(h5_path)
+        progress_callback(1, 2, "Batch 1/2")
         return {"M0": np.ones((1, 2, 2))}
 
     def spectral(
@@ -113,6 +117,7 @@ def test_process_runs_spectral_cube_by_default_with_independent_settings(
         warning_callback=None,
     ):
         calls.append(("spectral", file_path, dict(parameters)))
+        progress_callback(1, 2, "Spectral window 1/2")
         warning_callback("cardiac_pulse_not_detected", "No pulse")
         return h5_path
 
@@ -129,6 +134,9 @@ def test_process_runs_spectral_cube_by_default_with_independent_settings(
     result = cli.process(
         "recording.holo",
         parameters,
+        progress_callback=lambda completed, total, message: progress.append(
+            (completed, total, message)
+        ),
         warning_callback=lambda code, message: warnings.append((code, message)),
     )
 
@@ -141,7 +149,37 @@ def test_process_runs_spectral_cube_by_default_with_independent_settings(
     assert spectral_parameters["f_bins"] == 64
     assert spectral_parameters["sampling_freq"] == 50_000.0
     assert spectral_parameters[H5_OUTPUT_PATH_PARAMETER] == str(h5_path)
+    assert progress == [
+        (1, 2, "Primary pipeline: Batch 1/2"),
+        (1, 2, "Spectral cube: Spectral window 1/2"),
+    ]
     assert warnings == [("cardiac_pulse_not_detected", "No pulse")]
+
+
+class _ProgressValue:
+    def __init__(self):
+        self.value = None
+
+    def configure(self, *, value):
+        self.value = value
+
+    def set(self, value):
+        self.value = value
+
+
+def test_ui_file_progress_displays_pipeline_message():
+    for view_type in (MinimalView, AdvancedView):
+        view = view_type.__new__(view_type)
+        view.current_file_name = "recording.holo"
+        view.file_progress = _ProgressValue()
+        view.file_progress_var = _ProgressValue()
+
+        view.set_file_progress(1, 2, "Spectral cube: Spectral window 1/2")
+
+        assert view.file_progress.value == 50
+        assert view.file_progress_var.value == (
+            "recording.holo: Spectral cube: Spectral window 1/2"
+        )
 
 
 def test_process_can_explicitly_disable_default_spectral_cube(monkeypatch):

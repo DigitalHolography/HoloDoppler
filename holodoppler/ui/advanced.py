@@ -113,10 +113,12 @@ class AdvancedView(ttk.Frame):
         self.file_progress.configure(value=value)
         if message.startswith("File complete"):
             detail = message.removeprefix("File ").lower()
+        elif message:
+            detail = message
         elif total > 0:
             detail = f"{completed}/{total} batches"
         else:
-            detail = message or "processing"
+            detail = "processing"
         self.file_progress_var.set(f"{self.current_file_name}: {detail}")
 
     def set_batch_progress(self, completed: int, total: int) -> None:
