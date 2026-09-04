@@ -1,10 +1,9 @@
 """Lazy registry for all bundled HoloDoppler processing pipelines."""
 
-from importlib import import_module
 import inspect
-from pathlib import Path
 import pkgutil
-
+from importlib import import_module
+from pathlib import Path
 
 pipelines = {}
 
