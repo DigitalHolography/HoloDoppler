@@ -3,11 +3,12 @@ Filtering operations: SVD, frequency filtering
 """
 
 from functools import cache
+
 from .utils import elliptical_mask
 
 
 def filter_2d(xp, fft, frames, filter2d_low):
-    nt, ny, nx = frames.shape
+    _, ny, nx = frames.shape
 
     F = fft.fft2(frames)
 
