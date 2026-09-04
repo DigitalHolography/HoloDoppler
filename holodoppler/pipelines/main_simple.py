@@ -162,7 +162,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
 def _process_shack_hartmann(parameters, frames, output_dict=None):
 
     fft = cp.fft
-    nt, ny, nx = frames.shape
+    _, ny, nx = frames.shape
 
     prop_method = parameters["spatial_propagation"]
 
@@ -214,7 +214,7 @@ def _process_shack_hartmann(parameters, frames, output_dict=None):
             ),
         )
     else:  # Use only the shifts to the central sub ap
-        ny_s, nx_s, Ny, Nx = U.shape
+        _, _, _, _ = U.shape
         shifts_y, shifts_x = calculate_displacements(
             cp,
             fft,
@@ -625,7 +625,7 @@ def process(file_path, parameters, progress_callback=None):
         "shack_hartmann_zernike_coefs",
         "registration",
         "spectrum_line",
-    ] + [key for key in output.keys() if "band_" in key]
+    ] + [key for key in output if "band_" in key]
 
     _save_h5_2(target_dir, output, parameters, save_only_list=save_to_h5_list)
     return save_result_map(
