@@ -1,27 +1,29 @@
-from pathlib import Path
 import base64
-import h5py
 import html
-import imageio as iio
-import numpy as np
 import json
+import os
+import re
 import time
-from datetime import datetime
-from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
-import os
+from datetime import datetime
+from io import BytesIO
+from pathlib import Path
 from urllib.parse import quote
 
-from .utils import (
-    resize_slicewise,
-    normalize_to_uint8,
-    unsharp_projection,
-    _pad_to_even,
-    stretchlim,
-    imadjust,
-)
+import h5py
+import imageio as iio
+import numpy as np
+
 from .get_version import get_version
+from .utils import (
+    _pad_to_even,
+    imadjust,
+    normalize_to_uint8,
+    resize_slicewise,
+    stretchlim,
+    unsharp_projection,
+)
 
 H5_DATASET_RENAMES = {
     "M0": "moment0",
@@ -301,10 +303,31 @@ def save_outputs(
     print(f"\nSaving completed in {elapsed:.1f} seconds")
 
 
-def _get_default_output_path(file_path):
-    """Generates the standard Holodoppler directory structure"""
+def _get_default_output_path(file_path, mode=0):
+    """Generates the standard Holodoppler directory structure. 
+    mode - 
+        0 : classical {base_name}/{base_name}_HD, 
+        1 : {base_name}_HD_{max_index+1}, 
+        2 : {base_name}/{base_name}_HD_{max_index+1}
+    """
     path = Path(file_path)
     base_name = path.stem
+    if mode == 1 or mode == 2:
+        indices = []
+        for subdir in path.parent.iterdir():
+            if subdir.is_dir():
+                m = re.search(r"HD_(\d+)$", subdir.name)
+                if m:
+                    indices.append(int(m.group(1)))
+
+        if len(indices)>0:
+            new_index = max(indices) + 1
+        else:
+            new_index = 0
+        if mode == 1:
+            return path.parent / f"{base_name}_HD_{new_index}"
+        if mode == 2:
+            return path.parent / base_name / f"{base_name}_HD_{new_index}"
     return path.parent / base_name / f"{base_name}_HD"
 
 
