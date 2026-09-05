@@ -2,12 +2,11 @@
 Propagation kernels (Fresnel and Angular Spectrum)
 """
 
-
 from functools import cache
 from .utils import pad_array_centrally
 
 
-def hashable_pixel_pitch(pixel_pitch):
+def ensure_xy_pixel_pitch(pixel_pitch):
     if isinstance(pixel_pitch, (int, float)):
         return (float(pixel_pitch), float(pixel_pitch))
     return tuple(pixel_pitch)
@@ -43,14 +42,15 @@ def build_fresnel_kernel_in(
         offset_y_pixels, offset_x_pixels = offset_to_center
         offset_x = offset_x_pixels / (nx * ppx)
         offset_y = offset_y_pixels / (ny * ppy)
-        kernel *= xp.exp(
-            -1j * 2 * xp.pi * (offset_y * Y + offset_x * X)
-        ).astype(xp.complex64)
+        kernel *= xp.exp(-1j * 2 * xp.pi * (offset_y * Y + offset_x * X)).astype(
+            xp.complex64
+        )
 
     if zero_padding:
         kernel = pad_array_centrally(kernel, zero_padding, xp)
 
     return kernel[xp.newaxis, :, :].astype(xp.complex64)
+
 
 @cache
 def build_fresnel_kernel_out(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None):
@@ -78,6 +78,7 @@ def build_fresnel_kernel_out(xp, z, pixel_pitch, wavelength, ny, nx, zero_paddin
         kernel = pad_array_centrally(kernel, zero_padding, xp)
 
     return kernel[xp.newaxis, :, :].astype(xp.complex64)
+
 
 @cache
 def build_angular_kernel(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None):
@@ -109,16 +110,24 @@ def build_angular_kernel(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=No
 
 
 def fresnel_transform(
-    xp, fft, frames, z, pixel_pitch, wavelength, zero_padding=False, use_output_kernel=True
+    xp,
+    fft,
+    frames,
+    z,
+    pixel_pitch,
+    wavelength,
+    zero_padding=False,
+    use_output_kernel=True,
 ):
     """Apply Fresnel transform"""
 
-    pixel_pitch = hashable_pixel_pitch(pixel_pitch)
+    pixel_pitch = ensure_xy_pixel_pitch(pixel_pitch)
     ny, nx = frames.shape[-2:]
-    kernel_in = build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
+    kernel_in = build_fresnel_kernel_in(
+        xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+    )
 
     if zero_padding:
-
 
         frames = pad_array_centrally(frames, zero_padding, xp)
 
@@ -128,7 +137,9 @@ def fresnel_transform(
 
     if use_output_kernel:
         ny, nx = frames.shape[-2:]
-        kernel_out = build_fresnel_kernel_out(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
+        kernel_out = build_fresnel_kernel_out(
+            xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+        )
         result = result * kernel_out
 
     return result
@@ -147,9 +158,11 @@ def fresnel_transform_with_phase(
 ):
     """Apply Fresnel transform with phase correction"""
 
-    pixel_pitch = hashable_pixel_pitch(pixel_pitch)
+    pixel_pitch = ensure_xy_pixel_pitch(pixel_pitch)
     ny, nx = frames.shape[-2:]
-    kernel_in = build_fresnel_kernel_in(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
+    kernel_in = build_fresnel_kernel_in(
+        xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+    )
 
     if zero_padding:
         ny, nx = frames.shape[-2:]
@@ -160,18 +173,24 @@ def fresnel_transform_with_phase(
     )
 
     if use_output_kernel:
-        kernel_out = build_fresnel_kernel_out(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
+        kernel_out = build_fresnel_kernel_out(
+            xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+        )
         result = result * kernel_out
 
     return result
 
 
-def angular_spectrum_transform(xp, fft, frames, z, pixel_pitch, wavelength,  zero_padding=False):
+def angular_spectrum_transform(
+    xp, fft, frames, z, pixel_pitch, wavelength, zero_padding=False
+):
     """Apply Angular Spectrum transform"""
 
-    pixel_pitch = hashable_pixel_pitch(pixel_pitch)
+    pixel_pitch = ensure_xy_pixel_pitch(pixel_pitch)
     ny, nx = frames.shape[-2:]
-    kernel = build_angular_kernel(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
+    kernel = build_angular_kernel(
+        xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+    )
 
     if zero_padding:
 
@@ -188,9 +207,11 @@ def angular_spectrum_transform_with_phase(
 ):
     """Apply Angular Spectrum transform with phase correction"""
 
-    pixel_pitch = hashable_pixel_pitch(pixel_pitch)
+    pixel_pitch = ensure_xy_pixel_pitch(pixel_pitch)
     ny, nx = frames.shape[-2:]
-    kernel = build_angular_kernel(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None)
+    kernel = build_angular_kernel(
+        xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+    )
 
     # print("multiplying frames")
 
@@ -208,5 +229,6 @@ def angular_spectrum_transform_with_phase(
 
     return fft.ifft2(
         fft.fft2(frames, axes=(-1, -2), norm="ortho")
-        * fft.fftshift(kernel, axes=(-1, -2)), norm="ortho"
+        * fft.fftshift(kernel, axes=(-1, -2)),
+        norm="ortho",
     )

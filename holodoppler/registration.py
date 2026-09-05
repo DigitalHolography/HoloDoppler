@@ -43,10 +43,6 @@ def register_laplacian(xp, fft, video, radius=None, gauge="minimal", ref_frame=0
     raise ValueError(f"gauge must be 'minimal' or 'reference', got {gauge!r}")
 
 
-
-
-
-
 def register_images_shifts(
     xp,
     fft,
@@ -93,6 +89,7 @@ def register_images_shifts(
         shift_y, shift_x = intensity_corr_subpixel(xp, fft, fixed_e, moving_e)
 
     return shift_y, shift_x
+
 
 def apply_register_images_shifts(
     xp,
@@ -153,20 +150,6 @@ def _preprocess(xp, img, mask=None, gaussian_sigma=None, gaussian_filter=None):
     mean = xp.sum(out * mask_f) / xp.maximum(xp.sum(mask_f), 1.0)
 
     return (out - mean) * mask_f
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 _EPS = 1e-12
@@ -395,7 +378,7 @@ def fourier_magnitude(xp, fft, img, dc_radius_factor=32):
     r = max(4, min(ny, nx) // dc_radius_factor)
 
     yy, xx = xp.ogrid[:ny, :nx]
-    dc_mask = (yy - cy) ** 2 + (xx - cx) ** 2 <= r ** 2
+    dc_mask = (yy - cy) ** 2 + (xx - cx) ** 2 <= r**2
 
     mag[dc_mask] = 0
     return mag
@@ -576,6 +559,7 @@ def apply_registration(
 
     return out
 
+
 def apply_registration3D(
     xp,
     fft,
@@ -602,6 +586,14 @@ def apply_registration3D(
         raise ValueError("reg must have 2 or 4 elements.")
 
     for i in range(img3D.shape[0]):
-        img3D[i] = apply_registration(xp,fft,ndi,img3D[i],reg,integer_translation=integer_translation,translation_method=translation_method)
+        img3D[i] = apply_registration(
+            xp,
+            fft,
+            ndi,
+            img3D[i],
+            reg,
+            integer_translation=integer_translation,
+            translation_method=translation_method,
+        )
 
     return img3D

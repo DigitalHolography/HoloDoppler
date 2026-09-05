@@ -264,7 +264,9 @@ def calculate_displacements_graph_laplacian(
     U = U_subaps.reshape(B, Ny, Nx)
     if mask is not None:
         mask_f = mask.astype(xp.float32, copy=False)
-        mean = xp.sum(U * mask_f, axis=(-2,-1)) / xp.maximum(xp.sum(mask_f, axis=(-2,-1)), 1.0)
+        mean = xp.sum(U * mask_f, axis=(-2, -1)) / xp.maximum(
+            xp.sum(mask_f, axis=(-2, -1)), 1.0
+        )
         U = (U - mean[:, xp.newaxis, xp.newaxis]) * mask_f
 
     yy, xx = xp.meshgrid(

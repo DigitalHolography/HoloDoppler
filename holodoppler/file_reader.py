@@ -13,9 +13,11 @@ import mmap
 import struct
 import numpy as np
 
+
 @dataclass
 class FileHeader:
     """Parsed binary file header information."""
+
     magic_number: str
     version: int
     bit_depth: int
@@ -35,15 +37,15 @@ class FileHeader:
 
     def get_dtype(self) -> np.dtype:
         """Get numpy dtype based on bit depth and endianness."""
-        byte_order = '<' if self.endianness == 0 else '>'
+        byte_order = "<" if self.endianness == 0 else ">"
         if self.bit_depth == 8:
-            return np.dtype(f'{byte_order}u1')
+            return np.dtype(f"{byte_order}u1")
         elif self.bit_depth == 16:
-            return np.dtype(f'{byte_order}u2')
+            return np.dtype(f"{byte_order}u2")
         elif self.bit_depth == 32:
-            return np.dtype(f'{byte_order}f4')
+            return np.dtype(f"{byte_order}f4")
         elif self.bit_depth == 64:
-            return np.dtype(f'{byte_order}f8')
+            return np.dtype(f"{byte_order}f8")
         else:
             raise ValueError(f"Unsupported bit depth: {self.bit_depth}")
 
@@ -80,10 +82,12 @@ class HoloFileReader:
             header_bytes = f.read(self.HEADER_SIZE)
 
         if len(header_bytes) < self.HEADER_SIZE:
-            raise ValueError(f"File too small to contain {self.HEADER_SIZE}-byte header")
+            raise ValueError(
+                f"File too small to contain {self.HEADER_SIZE}-byte header"
+            )
 
         self.file_header = FileHeader(
-            magic_number=header_bytes[0:4].decode('ascii', errors='replace'),
+            magic_number=header_bytes[0:4].decode("ascii", errors="replace"),
             version=int.from_bytes(header_bytes[4:6], "little"),
             bit_depth=int.from_bytes(header_bytes[6:8], "little"),
             width=int.from_bytes(header_bytes[8:12], "little"),
@@ -100,7 +104,10 @@ class HoloFileReader:
             self._read_header()
 
         # Calculate footer offset using header info
-        data_end = self.HEADER_SIZE + self.file_header.num_frames * self.file_header.frame_size_bytes
+        data_end = (
+            self.HEADER_SIZE
+            + self.file_header.num_frames * self.file_header.frame_size_bytes
+        )
 
         with open(self.file_path, "rb") as f:
             f.seek(data_end)
@@ -136,10 +143,7 @@ class HoloFileReader:
             frame_bytes = f.read(self.header.frame_size_bytes)
             if len(frame_bytes) == self.header.frame_size_bytes:
                 frame = np.frombuffer(frame_bytes, dtype=self.header.get_dtype())
-                return frame.reshape(
-                    (self.header.height, self.header.width),
-                    order="C"
-                )
+                return frame.reshape((self.header.height, self.header.width), order="C")
             return None
         except Exception:
             traceback.print_exc()
@@ -188,9 +192,13 @@ class HoloFileReader:
             raise ValueError("batch_stride must be positive.")
 
         frame_step = skip_every if skip_every is not None and skip_every > 1 else 1
-        stop = self.header.num_frames if end_frame is None else min(
-            end_frame,
-            self.header.num_frames,
+        stop = (
+            self.header.num_frames
+            if end_frame is None
+            else min(
+                end_frame,
+                self.header.num_frames,
+            )
         )
         if num_frames is not None:
             stop = min(stop, first_frame + num_frames)
@@ -213,7 +221,7 @@ class HoloFileReader:
         self,
         first_frame: int = 0,
         batch_size: int = 1,
-        skip_every: Optional[int] = None
+        skip_every: Optional[int] = None,
     ) -> np.ndarray:
         return next(
             self.iter_frames(
@@ -222,7 +230,6 @@ class HoloFileReader:
                 first_frame=first_frame,
             )
         )
-
 
     def read_selected_frames(self, indices: List[int]) -> Iterator[np.ndarray]:
         """
@@ -305,20 +312,22 @@ class HoloFileReader:
             )
         return self._frame_data
 
+
 @njit
 def _unpack_12bitL(data: bytes, width: int, height: int) -> np.ndarray:
-	"""Unpacks a 12-bit L byte array into a 2D numpy array of uint16s."""
-	byte_array = np.frombuffer(data, dtype=np.uint8)
-	image = np.zeros((height, width), dtype=np.uint16)
-	for row in range(height):
-		for col in prange(0, width, 2):
-			idx = (row * width + col) // 2 * 3
-			image[row, col] = (byte_array[idx] << 4) | (byte_array[idx + 1] >> 4)
-			if col + 1 < width:
-				image[row, col + 1] = (
-					(byte_array[idx + 1] & 0b00001111) << 8
-				) | byte_array[idx + 2]
-	return image
+    """Unpacks a 12-bit L byte array into a 2D numpy array of uint16s."""
+    byte_array = np.frombuffer(data, dtype=np.uint8)
+    image = np.zeros((height, width), dtype=np.uint16)
+    for row in range(height):
+        for col in prange(0, width, 2):
+            idx = (row * width + col) // 2 * 3
+            image[row, col] = (byte_array[idx] << 4) | (byte_array[idx + 1] >> 4)
+            if col + 1 < width:
+                image[row, col + 1] = (
+                    (byte_array[idx + 1] & 0b00001111) << 8
+                ) | byte_array[idx + 2]
+    return image
+
 
 def unpack_12bitL_vectorized(data: bytes, width: int, height: int) -> np.ndarray:
     # data length must be (width * height * 3) // 2
@@ -326,16 +335,17 @@ def unpack_12bitL_vectorized(data: bytes, width: int, height: int) -> np.ndarray
     # print(byte_array.shape)
     # print((width * height * 3) // 2)
     # Group into 3‑byte chunks
-    groups = byte_array.reshape(-1, 3)          # shape (N, 3)
+    groups = byte_array.reshape(-1, 3)  # shape (N, 3)
     # First pixel: (byte0 << 4) | (byte1 >> 4)
-    pixel0 = ((groups[:, 0].astype(np.uint16) << 4) | (groups[:, 1] >> 4))
+    pixel0 = (groups[:, 0].astype(np.uint16) << 4) | (groups[:, 1] >> 4)
     # Second pixel: ((byte1 & 0x0F) << 8) | byte2
-    pixel1 = (((groups[:, 1] & 0x0F).astype(np.uint16) << 8) | groups[:, 2])
+    pixel1 = ((groups[:, 1] & 0x0F).astype(np.uint16) << 8) | groups[:, 2]
     # Interleave (pixel0, pixel1, pixel0, pixel1, ...)
     pixels = np.empty(len(groups) * 2, dtype=np.uint16)
     pixels[0::2] = pixel0
     pixels[1::2] = pixel1
     return pixels.reshape(height, width)
+
 
 def unpack_12bitL_batch_to_uint16(
     packed: np.ndarray,
@@ -358,6 +368,7 @@ def unpack_12bitL_batch_to_uint16(
     out[:, 1::2] = ((b1 & 0x0F) << 8) | b2
 
     return out.reshape(nframes, height, width)
+
 
 def unpack_12bitL_batch_to_float32(
     packed: np.ndarray,
@@ -405,6 +416,7 @@ def unpack_12bitL_batch_to_float32(
 
     return out.reshape(nframes, height, width)
 
+
 def unpack_12bitL_batch_to_float32_fast(
     packed: np.ndarray,
     width: int,
@@ -426,6 +438,7 @@ def unpack_12bitL_batch_to_float32_fast(
 
     return out.reshape(nframes, height, width)
 
+
 # def unpack_12bit_to_8bit_vectorized(data: bytes, width: int, height: int) -> np.ndarray:
 #     byte_array = np.frombuffer(data, dtype=np.uint8)
 #     groups = byte_array.reshape(-1, 3)
@@ -439,9 +452,11 @@ def unpack_12bitL_batch_to_float32_fast(
 #     pixels[1::2] = pixel1
 #     return pixels.reshape(height, width)
 
+
 @dataclass
 class CineMetadata:
     """Parsed .cine file metadata."""
+
     biHeight: int
     biWidth: int
     biCompression: int
@@ -455,12 +470,18 @@ class CineMetadata:
     extra: dict = None
 
     @classmethod
-    def from_cinereader_dict(cls, metadata_dict: dict) -> 'CineMetadata':
+    def from_cinereader_dict(cls, metadata_dict: dict) -> "CineMetadata":
         """Create CineMetadata from cinereader's metadata dict."""
         # Extract known fields, store rest in extra
         known_fields = {
-            'biHeight', 'biWidth', 'biCompression', 'biSizeImage',
-            'TotalImageCount', 'OffImageOffsets', 'FirstImageNo', 'RealBPP'
+            "biHeight",
+            "biWidth",
+            "biCompression",
+            "biSizeImage",
+            "TotalImageCount",
+            "OffImageOffsets",
+            "FirstImageNo",
+            "RealBPP",
         }
         kwargs = {k: metadata_dict[k] for k in known_fields if k in metadata_dict}
         extra = {k: v for k, v in metadata_dict.items() if k not in known_fields}
@@ -523,8 +544,13 @@ class CineFileReader:
         return np.frombuffer(offsets_bytes, dtype=np.int64)
 
     def _read_single_frame_mmap(
-        self, mm: mmap.mmap, offset: int, compression: int,
-        frame_image_size: int, w: int, h: int
+        self,
+        mm: mmap.mmap,
+        offset: int,
+        compression: int,
+        frame_image_size: int,
+        w: int,
+        h: int,
     ) -> np.ndarray:
         """Read and unpack a single frame from memory-mapped file."""
         if offset == 0:
@@ -535,7 +561,9 @@ class CineFileReader:
 
         if compression == 1024:  # 12-bit packed (Phantom P12L)
             # Assuming unpack_12bitL_vectorized or similar function exists
-            img = unpack_12bitL_vectorized(mm[data_start:data_start + frame_image_size], w, h)
+            img = unpack_12bitL_vectorized(
+                mm[data_start : data_start + frame_image_size], w, h
+            )
         elif compression == 256:  # 10-bit packed
             raise NotImplementedError("10-bit unpacking not implemented")
         else:
@@ -673,15 +701,17 @@ class CineFileReader:
         self,
         first_frame: int = 0,
         batch_size: int = 1,
-        skip_every: Optional[int] = None
+        skip_every: Optional[int] = None,
     ) -> np.ndarray:
-        return next(self.iter_frames( batch_size= batch_size, skip_every = skip_every, first_frame = first_frame))
+        return next(
+            self.iter_frames(
+                batch_size=batch_size, skip_every=skip_every, first_frame=first_frame
+            )
+        )
 
     # ===== FAST BATCH READING (preserved from original for performance) =====
 
-    def read_frames_batch(
-        self, first_frame: int, frame_batchsize: int
-    ) -> np.ndarray:
+    def read_frames_batch(self, first_frame: int, frame_batchsize: int) -> np.ndarray:
         """
         Fast batch read of consecutive frames (preserved from original API).
 

@@ -1,140 +1,22 @@
-import base64
-import html
-import json
-import os
-import re
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import asdict
-from datetime import datetime
-from io import BytesIO
 from pathlib import Path
-from urllib.parse import quote
-
 import h5py
 import imageio as iio
 import numpy as np
+import json
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import asdict
+import os
 
-from .get_version import get_version
 from .utils import (
+    resize_slicewise,
+    normalize_to_uint8,
+    unsharp_projection,
     _pad_to_even,
     imadjust,
-    normalize_to_uint8,
-    resize_slicewise,
     stretchlim,
-    unsharp_projection,
 )
-
-H5_DATASET_RENAMES = {
-    "M0": "moment0",
-    "M1": "moment1",
-    "M2": "moment2",
-    "M0ff": "moment0ff",
-    "moment_0": "moment0",
-    "moment_1": "moment1",
-    "moment_2": "moment2",
-    "moment_0_ff": "moment0ff",
-}
-H5_FLOAT32_DATASETS = {
-    "M0",
-    "M0ff",
-    "M1",
-    "M2",
-    "moment0",
-    "moment0ff",
-    "moment1",
-    "moment2",
-    "moment_0",
-    "moment_0_ff",
-    "moment_1",
-    "moment_2",
-}
-DEFAULT_VIDEO_FPS = 30.0
-MP4_MAX_FPS = 60.0
-NON_CONTRAST_OUTPUT_NAMES = {
-    "registration",
-    "register_laplacian",
-    "shack_hartmann_zernike_coefs",
-    "zernike_coefs_radians",
-}
-H5_OUTPUT_PATH_PARAMETER = "_holodoppler_h5_path"
-
-
-def apply_contrast_adjustment(data, parameters):
-    """Apply configured display contrast to one image/video array."""
-    settings = _contrast_settings(parameters)
-    if settings is None or not _is_contrast_candidate(data):
-        return data
-
-    arr = np.asarray(data)
-    if np.iscomplexobj(arr):
-        arr = np.abs(arr)
-    low, high = stretchlim(arr, settings["low_percent"], settings["high_percent"])
-    return imadjust(arr, low, high, settings["gamma"])
-
-
-def apply_contrast_adjustments(save_map, parameters, skip_debug=True):
-    """Apply configured display contrast to visual outputs in a save map."""
-    if _contrast_settings(parameters) is None:
-        return dict(save_map)
-
-    adjusted = {}
-    for name, data in save_map.items():
-        if _skip_contrast_for_name(name, skip_debug):
-            adjusted[name] = data
-        else:
-            adjusted[name] = apply_contrast_adjustment(data, parameters)
-    return adjusted
-
-
-def _contrast_settings(parameters):
-    parameters = parameters or {}
-    cfg = parameters.get("contrast_adjustment")
-    if isinstance(cfg, dict) and cfg.get("enabled", False):
-        return {
-            "low_percent": float(cfg.get("low_percent", 1.0)),
-            "high_percent": float(cfg.get("high_percent", 99.0)),
-            "gamma": float(cfg.get("gamma", 1.0)),
-        }
-
-    if not parameters.get("contrast", False):
-        return None
-
-    low_high = parameters.get("contrast_low_max_percent", (1.0, 99.0))
-    if isinstance(low_high, (int, float)):
-        low_percent, high_percent = float(low_high), 100.0 - float(low_high)
-    else:
-        low_percent, high_percent = low_high
-    return {
-        "low_percent": float(low_percent),
-        "high_percent": float(high_percent),
-        "gamma": float(parameters.get("contrast_gamma", 1.0)),
-    }
-
-
-def _is_contrast_candidate(data):
-    arr = np.asarray(data)
-    return arr.size > 0 and arr.ndim in (2, 3, 4) and np.issubdtype(arr.dtype, np.number)
-
-
-def _skip_contrast_for_name(name, skip_debug):
-    name = str(name)
-    return (
-        (skip_debug and name.startswith("debug_"))
-        or name in NON_CONTRAST_OUTPUT_NAMES
-        or name.endswith("_coefs")
-        or "zernike_coefs" in name
-    )
-
-
-def _h5_data(name, data):
-    if name in H5_FLOAT32_DATASETS:
-        return np.asarray(data, dtype=np.float32)
-    return data
-
-
-def _h5_dataset_name(name):
-    return H5_DATASET_RENAMES.get(name, name)
+from .get_version import get_version
 
 
 def save_preview_images(save_dict, save_dir, prefix="debug", square=False):
@@ -142,105 +24,19 @@ def save_preview_images(save_dict, save_dir, prefix="debug", square=False):
     for key, img in save_dict.items():
         if img is None:
             continue
-        img_np = np.asarray(img)
-        if img_np.ndim not in [2, 3]:
+        if (img.ndim not in [2, 3]) or (img.ndim == 3 and img.shape[-1] > 3):
             continue
         if square:
-            if img_np.ndim == 3 and img_np.shape[-1] in (3, 4):
-                axes = (0, 1)
-            else:
-                axes = (-2, -1)
-            size = max(img_np.shape[axis] for axis in axes)
-            img_np = resize_slicewise(img_np, size, size, axes=axes)
-        if img_np.dtype != np.uint8:
-            img_np = normalize_to_uint8(img_np)
+            m = max(img.shape)
+            img = resize_slicewise(img, m, m, axes=(0, 1))
+        if img.dtype != np.uint8:
+            img_min, img_max = np.min(img), np.max(img)
+            if img_max >= img_min:
+                img_np = (img - img_min) / (img_max - img_min + 1e-12)
+            img_np = (img_np * 255).astype(np.uint8)
         filename = os.path.join(save_dir, f"{prefix}_{key}.png")
-        print("Saving : ",filename)
+        print("Saving : ", filename)
         iio.imwrite(filename, img_np)
-
-
-def preview_image_from_results(results):
-    """Return a displayable uint8 preview image from a pipeline result dict."""
-    if not results:
-        return None
-
-    preferred = ("M0ff", "M0", "moment_0_ff", "moment_0", "moment0ff", "moment0")
-    keys = [key for key in preferred if key in results]
-    keys.extend(key for key in results if key not in keys)
-
-    for key in keys:
-        image = _preview_image_candidate(results[key])
-        if image is not None:
-            return normalize_to_uint8(image)
-    return None
-
-
-def save_result_map(
-    target_dir,
-    raw_map,
-    parameters,
-    file_reader,
-    *,
-    num_batch=None,
-    end_frame=None,
-    first_frame=None,
-):
-    """Save a pipeline result map with the release rendering/report behavior."""
-    target_dir = Path(target_dir)
-    _create_directories(target_dir, "FULL")
-    display_map = apply_contrast_adjustments(
-        raw_map,
-        parameters,
-        skip_debug=True,
-    )
-    uint8_map = {
-        name: normalize_to_uint8(data)
-        for name, data in display_map.items()
-        if data is not None
-    }
-    video_fps = _calculate_fps(
-        num_batch,
-        end_frame,
-        first_frame,
-        parameters,
-    )
-    _save_videos(target_dir, uint8_map, video_fps)
-    _save_pngs(target_dir, uint8_map)
-    _save_metadata(target_dir, file_reader, parameters)
-    _save_reports(
-        target_dir,
-        display_map,
-        uint8_map,
-        parameters,
-        file_reader,
-    )
-    return uint8_map
-
-
-def _preview_image_candidate(data):
-    arr = np.asarray(data)
-    if arr.size == 0:
-        return None
-    if np.iscomplexobj(arr):
-        arr = np.abs(arr)
-    arr = np.squeeze(arr)
-
-    if arr.ndim == 2:
-        return arr
-
-    if arr.ndim == 3:
-        if arr.shape[-1] in (3, 4):
-            return arr
-        if arr.shape[0] in (3, 4):
-            return np.moveaxis(arr, 0, -1)
-        return np.mean(arr.astype(np.float32, copy=False), axis=0)
-
-    if arr.ndim > 3:
-        while arr.ndim > 3:
-            arr = np.mean(arr.astype(np.float32, copy=False), axis=0)
-        return _preview_image_candidate(arr)
-
-    return None
 
 
 def save_outputs(
@@ -303,39 +99,11 @@ def save_outputs(
     print(f"\nSaving completed in {elapsed:.1f} seconds")
 
 
-def _get_default_output_path(file_path, mode=0):
-    """Generates the standard Holodoppler directory structure. 
-    mode - 
-        0 : classical {base_name}/{base_name}_HD, 
-        1 : {base_name}_HD_{max_index+1}, 
-        2 : {base_name}/{base_name}_HD_{max_index+1}
-    """
+def _get_default_output_path(file_path):
+    """Generates the standard Holodoppler directory structure"""
     path = Path(file_path)
     base_name = path.stem
-    if mode == 1 or mode == 2:
-        indices = []
-        for subdir in path.parent.iterdir():
-            if subdir.is_dir():
-                m = re.search(r"HD_(\d+)$", subdir.name)
-                if m:
-                    indices.append(int(m.group(1)))
-
-        if len(indices)>0:
-            new_index = max(indices) + 1
-        else:
-            new_index = 0
-        if mode == 1:
-            return path.parent / f"{base_name}_HD_{new_index}"
-        if mode == 2:
-            return path.parent / base_name / f"{base_name}_HD_{new_index}"
     return path.parent / base_name / f"{base_name}_HD"
-
-
-def _get_h5_output_path(target_dir):
-    """Return the canonical HoloDoppler HDF5 path for an output directory."""
-    target_dir = Path(target_dir)
-    target_dir_name = target_dir.name if target_dir.name else "output"
-    return target_dir / "h5" / f"{target_dir_name}.h5"
 
 
 def _save_bundle(
@@ -362,7 +130,8 @@ def _save_bundle(
     # Create subdirectories
     _create_directories(target_dir, mode)
 
-    video_fps = _calculate_fps(num_batch, end_frame, first_frame, parameters)
+    # Calculate FPS with safety check
+    fps = _calculate_fps(num_batch, end_frame, first_frame, parameters)
 
     # Prepare data for saving
     save_map = _build_save_map(vid, parameters, vid_debug, num_batch)
@@ -371,10 +140,18 @@ def _save_bundle(
     _save_projections(target_dir, save_map, parameters, backend)
 
     # Convert all data to uint8 once (memory efficient)
-    uint8_map = {name: normalize_to_uint8(data) for name, data in save_map.items()}
+    # uint8_map = {name: normalize_to_uint8(data) for name, data in save_map.items()}
+    contrast_cfg = parameters.get("contrast_adjustment", {})
+    uint8_map = {}
+    for name, data in save_map.items():
+        if contrast_cfg.get("enabled", False) and not name.startswith("debug_"):
+            # Data already in [0,1] thanks to imadjust
+            uint8_map[name] = (np.clip(data, 0, 1) * 255).astype(np.uint8)
+        else:
+            uint8_map[name] = normalize_to_uint8(data)
 
     # Save videos (sequential to avoid encoding conflicts)
-    _save_videos(target_dir, uint8_map, video_fps)
+    _save_videos(target_dir, uint8_map, fps)
 
     # Save PNGs (parallel)
     _save_pngs(target_dir, uint8_map)
@@ -386,18 +163,13 @@ def _save_bundle(
     if mode == "FULL":
         _save_h5(target_dir, vid, parameters, reg_list, coefs_list)
 
-    report_raw_map = dict(save_map)
-    if reg_list:
-        report_raw_map["registration"] = np.asarray(reg_list, dtype=np.float32)
-    _save_reports(target_dir, report_raw_map, uint8_map, parameters, file_reader)
-
     elapsed = time.time() - start_time
     print(f"_save_bundle completed in {elapsed:.1f} seconds")
 
 
 def _create_directories(target_dir, mode):
     """Create required subdirectories"""
-    subdirs = ["png", "mp4", "avi", "json", "html", "pdf"]
+    subdirs = ["png", "mp4", "avi", "json"]
     if mode == "FULL":
         subdirs.append("h5")
     for sub in subdirs:
@@ -405,78 +177,20 @@ def _create_directories(target_dir, mode):
 
 
 def _calculate_fps(num_batch, end_frame, first_frame, parameters):
-    """Return the real-time cadence of the processed output frames."""
-    parameters = parameters or {}
-    sampling_freq = _positive_float(parameters.get("sampling_freq"))
-
-    pipeline_name = str(parameters.get("pipeline_name", "")).lower()
-    if "sliding" in pipeline_name:
-        stride_keys = ("time_stride", "batch_stride")
+    """Calculate FPS with bounds checking"""
+    if end_frame is None or first_frame is None:
+        fps = 30  # Default fallback
+        print(f"Using default FPS: {fps}")
     else:
-        stride_keys = ("batch_stride", "time_stride")
+        frame_range = end_frame - first_frame
+        if frame_range <= 0:
+            fps = 30
+            print(f"Invalid frame range, using default FPS: {fps}")
+        else:
+            sampling_freq = parameters.get("sampling_freq", 1000)  # Default 1kHz
+            fps = min((num_batch / frame_range * sampling_freq), 65)
 
-    stride = next(
-        (
-            value
-            for key in stride_keys
-            if (value := _positive_float(parameters.get(key))) is not None
-        ),
-        None,
-    )
-    if sampling_freq is not None and stride is not None:
-        fps = sampling_freq / stride
-        print(f"Real-time video FPS: {fps:.6g} ({sampling_freq:.6g} Hz / {stride:.6g} frames)")
-        return fps
-
-    # Compatibility fallback for callers that do not provide a processing stride.
-    frame_range = None
-    if end_frame is not None and first_frame is not None:
-        frame_range = _positive_float(end_frame - first_frame)
-    batch_count = _positive_float(num_batch)
-    if sampling_freq is not None and frame_range is not None and batch_count is not None:
-        fps = batch_count / frame_range * sampling_freq
-        print(f"Estimated real-time video FPS: {fps:.6g}")
-        return fps
-
-    print(f"Video timing unavailable, using default FPS: {DEFAULT_VIDEO_FPS:g}")
-    return DEFAULT_VIDEO_FPS
-
-
-def _positive_float(value):
-    """Convert a finite positive value to float, or return None."""
-    try:
-        value = float(value)
-    except (TypeError, ValueError):
-        return None
-    if not np.isfinite(value) or value <= 0:
-        return None
-    return value
-
-
-def _prepare_mp4_frames(frames, source_fps, max_fps=MP4_MAX_FPS):
-    """Limit MP4 playback FPS while preserving duration as closely as possible."""
-    frames = np.asarray(frames)
-    source_fps = _positive_float(source_fps)
-    max_fps = _positive_float(max_fps)
-    if source_fps is None:
-        source_fps = DEFAULT_VIDEO_FPS
-    if max_fps is None:
-        raise ValueError("max_fps must be a finite positive number")
-
-    frame_count = frames.shape[0]
-    if frame_count <= 1 or source_fps <= max_fps:
-        return frames, min(source_fps, max_fps)
-
-    # Use as many frames as the MP4 limit permits. Adjusting the encoded FPS to
-    # the retained count keeps retained_count / encoded_fps == count / source_fps.
-    retained_count = max(1, int(np.floor(frame_count * max_fps / source_fps)))
-    retained_count = min(retained_count, frame_count)
-    indices = np.floor(
-        np.arange(retained_count, dtype=np.float64) * frame_count / retained_count
-    ).astype(np.intp)
-    mp4_frames = frames[indices]
-    mp4_fps = min(source_fps * retained_count / frame_count, max_fps)
-    return mp4_frames, mp4_fps
+    return fps
 
 
 def _build_save_map(vid, parameters, vid_debug, num_batch):
@@ -501,8 +215,12 @@ def _build_save_map(vid, parameters, vid_debug, num_batch):
 
             # Handle special cases
             if parameters.get("square") and key in [
-                "M0ffnoreg", "M0notfixed", "montage",
-                "montagenormalized", "psd_map_avg", "SVD_M0_inversed_svd_filter"
+                "M0ffnoreg",
+                "M0notfixed",
+                "montage",
+                "montagenormalized",
+                "psd_map_avg",
+                "SVD_M0_inversed_svd_filter",
             ]:
                 m = max(data.shape[-2], data.shape[-1])
                 data = resize_slicewise(data, m, m)
@@ -514,7 +232,20 @@ def _build_save_map(vid, parameters, vid_debug, num_batch):
             if data.ndim == 3 or data.ndim == 4:
                 save_map[f"debug_{key}"] = data
 
-    return apply_contrast_adjustments(save_map, parameters, skip_debug=True)
+    contrast_cfg = parameters.get("contrast_adjustment", {})
+    if contrast_cfg.get("enabled", False):
+        low_pct = contrast_cfg.get("low_percent", 1)
+        high_pct = contrast_cfg.get("high_percent", 99)
+        gamma = contrast_cfg.get("gamma", 1.0)
+        for name, data in save_map.items():
+            # For 4D debug data we might need per-channel – but we'll keep it simple:
+            # compute limits globally across all dimensions.
+            if name.startswith("debug_"):
+                continue
+            low, high = stretchlim(data, low_pct, high_pct)
+            save_map[name] = imadjust(data, low, high, gamma)
+
+    return save_map
 
 
 def _save_projections(target_dir, save_map, parameters, backend):
@@ -522,14 +253,19 @@ def _save_projections(target_dir, save_map, parameters, backend):
     # Initialize backend if needed
     if backend is None:
         from .backend import BackendManager
+
         bm = BackendManager(backend=parameters.get("backend", "cpu"))
     else:
         bm = backend
 
     # Define which keys get projection
     projection_keys = {
-        "moment_0", "moment_1", "moment_2", "moment_0_ff",
-        "montage", "montagenormalized"
+        "moment_0",
+        "moment_1",
+        "moment_2",
+        "moment_0_ff",
+        "montage",
+        "montagenormalized",
     }
 
     # Also include frequency bands
@@ -549,29 +285,23 @@ def _save_projections(target_dir, save_map, parameters, backend):
                 print(f"Failed to save projection for {name}: {e}")
 
 
-def _save_videos(target_dir, uint8_map, source_fps):
-    """Save real-time AVI files and compatibility MP4 previews."""
+def _save_videos(target_dir, np_map, fps):
+    """Save all videos as MP4 and AVI"""
     start_time = time.time()
     completed = 0
-    for name, data in uint8_map.items():
-
-        if data.ndim !=3 and data.ndim !=4 : #check to avoid failure for outputs that are not videos exemple : list of coefficients
+    for name, np_data in np_map.items():
+        if np_data.ndim != 3 and np_data.ndim != 4:
             continue
-        uint8_data = normalize_to_uint8(data)
-        # MP4 previews target broadly supported playback rates. Frames may be
-        # discarded here only; AVI and H5 outputs retain every processed frame.
-        mp4_data, mp4_fps = _prepare_mp4_frames(uint8_data, source_fps)
-        dropped_frames = uint8_data.shape[0] - mp4_data.shape[0]
-        if dropped_frames:
-            print(
-                f"MP4 {name}: {dropped_frames}/{uint8_data.shape[0]} frames dropped, "
-                f"encoded at {mp4_fps:.6g} FPS"
-            )
+
+        # Determine bit depth and convert appropriately
+        uint8_data = _normalize_to_uint8(np_data)
+
+        # MP4
         mp4_path = target_dir / "mp4" / f"{name}.mp4"
         _write_video_fast(
             mp4_path,
-            mp4_data,
-            mp4_fps,
+            uint8_data,
+            fps,
             codec="libx264",
             preset="ultrafast",
             crf=28,
@@ -582,7 +312,7 @@ def _save_videos(target_dir, uint8_map, source_fps):
         _write_video_fast(
             avi_path,
             uint8_data,
-            source_fps,
+            fps,
             codec="mjpeg",
             quality=8,
         )
@@ -593,18 +323,35 @@ def _save_videos(target_dir, uint8_map, source_fps):
     print(f"Videos saved in {elapsed:.1f} seconds ({completed} videos)")
 
 
-def _save_pngs(target_dir, uint8_map):
+def normalize(data):
+    mi = data.min()
+    ma = data.max()
+
+    return (data - mi) / (ma - mi + 1e-24)
+
+
+def _save_pngs(target_dir, np_map):
     """Save mean frames as PNGs in parallel"""
     start_time = time.time()
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         tasks = []
-        for name, data in uint8_map.items():
-            if data.ndim !=3 and data.ndim !=4 : #check to avoid failure for outputs that are not videos exemple : list of coefficients
+        for name, data in np_map.items():
+            if data.ndim != 3 and data.ndim != 4:
                 continue
-            uint8_data = normalize_to_uint8(data)
             png_path = target_dir / "png" / f"{name}.png"
-            mean_frame = np.mean(uint8_data, axis=0).astype(np.uint8)
+            mean_frame = np.mean(data, axis=0)
+
+            # Preserve original dtype for PNG saving
+            if data.dtype == np.uint16:
+                mean_frame = mean_frame.astype(np.uint16)
+            elif data.dtype == np.float32 or data.dtype == np.float64:
+                # For float data, normalize to 16-bit to preserve precision
+                mean_frame = np.clip(normalize(mean_frame), 0, 1)
+                mean_frame = (mean_frame * 65535).astype(np.uint16)
+            else:
+                mean_frame = mean_frame.astype(np.uint8)
+
             tasks.append(executor.submit(iio.imwrite, png_path, mean_frame))
 
         # Wait for all tasks to complete
@@ -620,468 +367,6 @@ def _save_pngs(target_dir, uint8_map):
     print(f"PNGs saved in {elapsed:.1f} seconds ({completed} images)")
 
 
-def _save_reports(target_dir, raw_map, uint8_map, parameters, file_reader):
-    """Save visual result summaries in HTML and PDF formats."""
-    html_dir = target_dir / "html"
-    pdf_dir = target_dir / "pdf"
-    html_dir.mkdir(parents=True, exist_ok=True)
-    pdf_dir.mkdir(parents=True, exist_ok=True)
-
-    try:
-        start_time = time.time()
-        entries = _result_entries(raw_map, uint8_map)
-
-        # Remove old assessment report names from earlier builds.
-        legacy_report_dir = target_dir / "reports"
-        for old_name in (
-            "quality_report.html",
-            "quality_report.pdf",
-            "quality_report_error.txt",
-            "results_report.html",
-            "results_report.pdf",
-            "results_report_error.txt",
-        ):
-            old_path = legacy_report_dir / old_name
-            if old_path.exists():
-                old_path.unlink()
-        if legacy_report_dir.exists():
-            try:
-                legacy_report_dir.rmdir()
-            except OSError:
-                pass
-
-        html_path = html_dir / "results_report.html"
-        pdf_path = pdf_dir / "results_report.pdf"
-
-        html_path.write_text(
-            _render_results_report_html(entries, parameters, file_reader),
-            encoding="utf-8",
-        )
-        _write_results_report_pdf(pdf_path, entries, parameters, file_reader)
-
-        elapsed = time.time() - start_time
-        print(f"Reports saved in {elapsed:.1f} seconds: {html_path.name}, {pdf_path.name}")
-    except Exception as exc:
-        error_path = html_dir / "results_report_error.txt"
-        error_path.write_text(f"Report generation failed:\n{exc}\n", encoding="utf-8")
-        print(f"Report generation failed: {exc}")
-
-
-def _result_entries(raw_map, uint8_map):
-    names = list(dict.fromkeys([*raw_map.keys(), *uint8_map.keys()]))
-    return [
-        _result_entry(name, raw_map.get(name), uint8_map.get(name))
-        for name in names
-    ]
-
-
-def _result_entry(name, raw_data, uint8_data):
-    source = raw_data if raw_data is not None else uint8_data
-    arr = np.asarray(source)
-    previews = _result_previews(raw_data, uint8_data)
-    plot = None
-    if not previews and arr.ndim <= 2:
-        plot = _plot_array_preview(arr, name)
-
-    return {
-        "name": name,
-        "shape": tuple(int(v) for v in getattr(arr, "shape", ())),
-        "dtype": str(getattr(arr, "dtype", "")),
-        "kind": _result_kind(arr, uint8_data),
-        "previews": previews,
-        "plot": plot,
-        "links": _output_links(name, uint8_data),
-    }
-
-
-def _result_kind(arr, uint8_data):
-    if getattr(uint8_data, "ndim", 0) in (3, 4):
-        return "video-like output"
-    if arr.ndim == 2:
-        return "image or matrix"
-    if arr.ndim == 1:
-        return "vector"
-    if arr.ndim == 0:
-        return "scalar"
-    return f"{arr.ndim}D array"
-
-
-def _output_links(name, uint8_data):
-    if getattr(uint8_data, "ndim", 0) not in (3, 4):
-        return []
-    url_name = quote(name, safe="")
-    return [
-        ("PNG", f"../png/{url_name}.png"),
-        ("MP4", f"../mp4/{url_name}.mp4"),
-    ]
-
-
-def _result_previews(raw_data, uint8_data):
-    if getattr(uint8_data, "ndim", 0) in (3, 4):
-        return _video_preview_images(uint8_data)
-
-    if raw_data is None:
-        return []
-
-    arr = np.asarray(raw_data)
-    if arr.ndim == 2:
-        if min(arr.shape) <= 16:
-            return []
-        return [{"label": "image", "image": _normalize_image_for_report(arr)}]
-    if arr.ndim in (3, 4):
-        return _video_preview_images(_normalize_array_for_report(arr))
-    return []
-
-
-def _video_preview_images(data):
-    arr = np.asarray(data)
-    if arr.shape[0] == 0:
-        return []
-
-    previews = []
-    seen = set()
-    for label, index in (
-        ("first", 0),
-        ("middle", arr.shape[0] // 2),
-        ("last", arr.shape[0] - 1),
-    ):
-        if index in seen:
-            continue
-        seen.add(index)
-        previews.append({"label": label, "image": _image_from_array(arr[index])})
-
-    previews.append({"label": "mean", "image": _image_from_array(np.mean(arr.astype(np.float32, copy=False), axis=0))})
-    return previews
-
-
-def _normalize_array_for_report(data):
-    arr = np.asarray(data)
-    if arr.ndim == 2:
-        return _normalize_image_for_report(arr)
-    if arr.ndim == 3:
-        return np.stack([_normalize_image_for_report(frame) for frame in arr], axis=0)
-    if arr.ndim == 4:
-        return np.stack([_image_from_array(frame) for frame in arr], axis=0)
-    return arr
-
-
-def _normalize_image_for_report(data):
-    arr = np.asarray(data)
-    if np.iscomplexobj(arr):
-        arr = np.abs(arr)
-    arr = arr.astype(np.float32, copy=False)
-    finite = np.isfinite(arr)
-    if not np.any(finite):
-        return np.zeros(arr.shape, dtype=np.uint8)
-    finite_values = arr[finite]
-    low, high = np.percentile(finite_values, [1, 99])
-    if high <= low:
-        low = float(np.min(finite_values))
-        high = float(np.max(finite_values))
-    if high <= low:
-        return np.zeros(arr.shape, dtype=np.uint8)
-    arr = np.nan_to_num(arr, nan=low, posinf=high, neginf=low)
-    return np.clip((arr - low) / (high - low) * 255, 0, 255).astype(np.uint8)
-
-
-def _image_from_array(data):
-    arr = np.asarray(data)
-    if arr.ndim == 2:
-        return np.clip(arr, 0, 255).astype(np.uint8)
-    if arr.ndim == 3:
-        if arr.shape[-1] == 1:
-            return np.clip(arr[..., 0], 0, 255).astype(np.uint8)
-        if arr.shape[-1] == 2:
-            arr = np.concatenate([arr, arr[..., :1]], axis=-1)
-        if arr.shape[-1] >= 3:
-            return np.clip(arr[..., :3], 0, 255).astype(np.uint8)
-        return np.clip(np.mean(arr.astype(np.float32, copy=False), axis=0), 0, 255).astype(np.uint8)
-    while arr.ndim > 2:
-        arr = np.mean(arr.astype(np.float32, copy=False), axis=0)
-    return _normalize_image_for_report(arr)
-
-
-def _plot_array_preview(data, title):
-    arr = np.asarray(data)
-    if arr.size == 0:
-        return None
-    if np.iscomplexobj(arr):
-        arr = np.abs(arr)
-    arr = np.squeeze(arr)
-
-    import matplotlib
-
-    matplotlib.use("Agg", force=True)
-    import matplotlib.pyplot as plt
-
-    fig, ax = plt.subplots(figsize=(6.4, 3.6), dpi=120)
-    if arr.ndim == 0:
-        ax.text(0.5, 0.5, f"{float(arr):.4g}", ha="center", va="center", fontsize=16)
-        ax.set_axis_off()
-    elif arr.ndim == 1:
-        ax.plot(arr)
-        ax.set_xlabel("Index")
-        ax.grid(True, alpha=0.3)
-    elif arr.ndim == 2 and arr.shape[1] <= 16 and arr.shape[0] > 1:
-        for col in range(arr.shape[1]):
-            ax.plot(arr[:, col], label=f"col {col}")
-        ax.set_xlabel("Index")
-        ax.grid(True, alpha=0.3)
-        if arr.shape[1] <= 6:
-            ax.legend(fontsize=7)
-    elif arr.ndim == 2:
-        im = ax.imshow(arr, aspect="auto", cmap="viridis")
-        fig.colorbar(im, ax=ax, shrink=0.8)
-    else:
-        ax.plot(arr.reshape(-1))
-        ax.set_xlabel("Flattened index")
-        ax.grid(True, alpha=0.3)
-    ax.set_title(title)
-    fig.tight_layout()
-    image = _fig_to_image(fig)
-    plt.close(fig)
-    return image
-
-
-def _fig_to_image(fig):
-    fig.canvas.draw()
-    rgba = np.asarray(fig.canvas.buffer_rgba())
-    return rgba[..., :3].copy()
-
-
-def _render_results_report_html(entries, parameters, file_reader):
-    cards = "\n".join(_render_result_card(entry) for entry in entries)
-    metadata_rows = _report_metadata_rows(parameters, file_reader)
-    generated = datetime.now().isoformat(timespec="seconds")
-
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>HoloDoppler Results Report</title>
-<style>
-body {{ font-family: Segoe UI, Arial, sans-serif; margin: 28px; color: #17202a; background: #f6f8fb; }}
-h1, h2, h3 {{ margin: 0 0 10px; }}
-.summary, .card, .metadata {{ background: #ffffff; border: 1px solid #d9e0ea; border-radius: 6px; padding: 16px; margin-bottom: 16px; }}
-.grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }}
-.preview-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 10px 0; }}
-.preview img {{ width: 100%; max-height: 260px; object-fit: contain; background: #111; border-radius: 4px; }}
-.preview video {{ width: 100%; max-height: 320px; background: #111; border-radius: 4px; }}
-.preview-label {{ color: #536271; font-size: 0.9em; margin-top: 4px; }}
-table {{ border-collapse: collapse; width: 100%; }}
-td, th {{ text-align: left; padding: 6px 8px; border-bottom: 1px solid #e7ecf3; }}
-.note {{ color: #536271; font-size: 0.92em; }}
-a {{ color: #0b63ce; margin-right: 10px; }}
-</style>
-</head>
-<body>
-<h1>HoloDoppler Results Report</h1>
-<div class="summary">
-  <p class="note">Generated {html.escape(generated)}.</p>
-</div>
-<div class="metadata">
-  <h2>Processing Metadata</h2>
-  <table>{metadata_rows}</table>
-</div>
-<h2>Saved Outputs</h2>
-<div class="grid">
-{cards}
-</div>
-</body>
-</html>
-"""
-
-
-def _render_result_card(entry):
-    rows = [
-        ("Shape", str(entry["shape"])),
-        ("Dtype", entry["dtype"]),
-    ]
-    metrics = "".join(
-        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(value))}</td></tr>"
-        for key, value in rows
-    )
-    if entry["links"]:
-        previews = _render_existing_output_preview(entry)
-    else:
-        previews = "".join(_render_preview(preview) for preview in entry["previews"])
-        if entry["plot"] is not None:
-            previews += _render_preview({"label": "plot", "image": entry["plot"]})
-    if not previews:
-        previews = '<p class="note">No visual preview available for this output shape.</p>'
-    links = "".join(
-        f'<a href="{html.escape(href)}" target="_blank" rel="noopener">{html.escape(label)}</a>'
-        for label, href in entry["links"]
-        if label == "PNG"
-    )
-    links_html = f"<p>{links}</p>" if links else ""
-    return f"""<div class="card">
-<h3>{html.escape(entry["name"])}</h3>
-{links_html}
-<div class="preview-grid">{previews}</div>
-<table>{metrics}</table>
-</div>"""
-
-
-def _render_existing_output_preview(entry):
-    png_href = _entry_link(entry, "PNG")
-    mp4_href = _entry_link(entry, "MP4")
-    if mp4_href is None:
-        return ""
-    poster = f' poster="{html.escape(png_href)}"' if png_href is not None else ""
-    return f"""<div class="preview">
-<video controls preload="auto" playsinline{poster} src="{html.escape(mp4_href)}"></video>
-<div class="preview-label">MP4 preview</div>
-</div>"""
-
-
-def _entry_link(entry, label):
-    return next((href for link_label, href in entry["links"] if link_label == label), None)
-
-
-def _render_preview(preview):
-    return f"""<div class="preview">
-<img src="{_image_data_uri(preview["image"])}" alt="{html.escape(preview["label"])}">
-<div class="preview-label">{html.escape(preview["label"])}</div>
-</div>"""
-
-
-def _report_metadata_rows(parameters, file_reader):
-    file_path = str(getattr(file_reader, "file_path", ""))
-    selected = {
-        "Input": file_path,
-        "Pipeline": parameters.get("pipeline_name", ""),
-        "First frame": parameters.get("first_frame", ""),
-        "End frame": parameters.get("end_frame", ""),
-        "Batch size": parameters.get("batch_size", parameters.get("time_window", "")),
-        "Batch stride": parameters.get("batch_stride", parameters.get("time_stride", "")),
-        "Low frequency": parameters.get("low_freq", ""),
-        "High frequency": parameters.get("high_freq", ""),
-        "SVD threshold": parameters.get("svd_threshold", ""),
-        "Version": f"py{get_version()}",
-    }
-    return "".join(
-        f"<tr><th>{html.escape(str(key))}</th><td>{html.escape(str(value))}</td></tr>"
-        for key, value in selected.items()
-    )
-
-
-def _image_data_uri(image):
-    from PIL import Image
-
-    arr = np.asarray(image)
-    if arr.ndim == 2:
-        pil_image = Image.fromarray(arr, mode="L")
-    else:
-        if arr.shape[-1] == 1:
-            arr = np.repeat(arr, 3, axis=-1)
-        elif arr.shape[-1] == 2:
-            arr = np.concatenate([arr, arr[..., :1]], axis=-1)
-        pil_image = Image.fromarray(arr[..., :3], mode="RGB")
-    pil_image.thumbnail((640, 640))
-    buffer = BytesIO()
-    pil_image.save(buffer, format="PNG")
-    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
-    return f"data:image/png;base64,{encoded}"
-
-
-def _write_results_report_pdf(pdf_path, entries, parameters, file_reader):
-    import matplotlib
-
-    matplotlib.use("Agg", force=True)
-    import matplotlib.pyplot as plt
-    from matplotlib.backends.backend_pdf import PdfPages
-
-    with PdfPages(pdf_path) as pdf:
-        fig = plt.figure(figsize=(8.27, 11.69))
-        fig.patch.set_facecolor("white")
-        ax = fig.add_subplot(111)
-        ax.axis("off")
-
-        lines = [
-            "HoloDoppler Results Report",
-            "",
-            f"Generated: {datetime.now().isoformat(timespec='seconds')}",
-            f"Output count: {len(entries)}",
-            "",
-            "Processing metadata",
-        ]
-        for key, value in _pdf_metadata_items(parameters, file_reader):
-            lines.append(f"{key}: {value}")
-
-        ax.text(0.05, 0.95, "\n".join(lines), va="top", ha="left", fontsize=11, wrap=True)
-        pdf.savefig(fig, bbox_inches="tight")
-        plt.close(fig)
-
-        for entry in entries:
-            images = [preview["image"] for preview in entry["previews"]]
-            labels = [preview["label"] for preview in entry["previews"]]
-            if entry["plot"] is not None:
-                images.append(entry["plot"])
-                labels.append("plot")
-
-            fig, axes = plt.subplots(2, 2, figsize=(8.27, 11.69))
-            axes = axes.reshape(-1)
-            fig.suptitle(entry["name"], fontsize=14)
-
-            metadata_axis = axes[0]
-            metadata_axis.axis("off")
-            metadata_lines = [
-                f"Shape: {entry['shape']}",
-                f"Dtype: {entry['dtype']}",
-            ]
-            metadata_axis.text(
-                0.0,
-                1.0,
-                "\n".join(metadata_lines),
-                va="top",
-                ha="left",
-                fontsize=9,
-                wrap=True,
-            )
-
-            for axis, image, label in zip(axes[1:], images[:3], labels[:3]):
-                if image.ndim == 2:
-                    axis.imshow(image, cmap="gray", vmin=0, vmax=255)
-                else:
-                    axis.imshow(image)
-                axis.set_title(label, fontsize=10)
-                axis.set_axis_off()
-
-            shown = min(3, len(images))
-            if shown == 0:
-                axes[1].axis("off")
-                axes[1].text(0.5, 0.5, "No visual preview", ha="center", va="center")
-                shown = 1
-
-            for axis in axes[1 + shown:]:
-                axis.axis("off")
-
-            fig.tight_layout()
-            pdf.savefig(fig)
-            plt.close(fig)
-
-
-def _pdf_metadata_items(parameters, file_reader):
-    return [
-        ("Input", getattr(file_reader, "file_path", "")),
-        ("Pipeline", parameters.get("pipeline_name", "")),
-        ("First frame", parameters.get("first_frame", "")),
-        ("End frame", parameters.get("end_frame", "")),
-        ("Batch size", parameters.get("batch_size", parameters.get("time_window", ""))),
-        ("Batch stride", parameters.get("batch_stride", parameters.get("time_stride", ""))),
-        ("Low frequency", parameters.get("low_freq", "")),
-        ("High frequency", parameters.get("high_freq", "")),
-        ("SVD threshold", parameters.get("svd_threshold", "")),
-        ("Version", f"py{get_version()}"),
-    ]
-
-
-def _chunks(items, size):
-    for index in range(0, len(items), size):
-        yield items[index:index + size]
-
-
 def _save_metadata(target_dir, file_reader, parameters):
     """Saves all configuration and versioning files"""
     start_time = time.time()
@@ -1089,15 +374,7 @@ def _save_metadata(target_dir, file_reader, parameters):
     # JSON params
     json_path = target_dir / "json" / "parameters_holodoppler.json"
     with open(json_path, "w") as f:
-        json.dump(
-            {
-                name: value
-                for name, value in parameters.items()
-                if name != H5_OUTPUT_PATH_PARAMETER
-            },
-            f,
-            indent=4,
-        )
+        json.dump(parameters, f, indent=4)
 
     # Version
     (target_dir / "version_holodoppler.txt").write_text(f"py{get_version()}")
@@ -1105,17 +382,21 @@ def _save_metadata(target_dir, file_reader, parameters):
     # Git commit (with error handling)
     try:
         import subprocess
-        commit = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
-            stderr=subprocess.DEVNULL
-        ).decode().strip()
+
+        commit = (
+            subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
+            )
+            .decode()
+            .strip()
+        )
         info_text = f"Git commit: {commit}\npy{get_version()}"
     except (subprocess.CalledProcessError, FileNotFoundError):
         info_text = "Git commit: Not Available (not a git repo)"
     (target_dir / "git_version.txt").write_text(info_text)
 
     # Holo-specific metadata
-    if hasattr(file_reader, 'ext') and file_reader.ext == ".holo":
+    if hasattr(file_reader, "ext") and file_reader.ext == ".holo":
         with open(target_dir / "json" / "holovibes_footer.json", "w") as f:
             json.dump(file_reader.file_footer, f, indent=4)
         with open(target_dir / "json" / "holovibes_header.json", "w") as f:
@@ -1124,13 +405,15 @@ def _save_metadata(target_dir, file_reader, parameters):
     elapsed = time.time() - start_time
     print(f"Metadata saved in {elapsed:.2f} seconds")
 
+
 def _save_h5_2(target_dir, save_map, parameters, save_only_list=None):
     """
     Saves raw data to HDF5.
     """
     start_time = time.time()
 
-    h5_path = _get_h5_output_path(target_dir)
+    target_dir_name = target_dir.name if target_dir.name else "output"
+    h5_path = target_dir / "h5" / f"{target_dir_name}_output.h5"
 
     print(f"Saving H5 to: {h5_path}")
 
@@ -1140,12 +423,16 @@ def _save_h5_2(target_dir, save_map, parameters, save_only_list=None):
     with h5py.File(h5_path, "w") as f:
 
         for k, v in save_map.items():
+
             if save_only_list is not None and k not in save_only_list:
                 continue
-            dataset_name = _h5_dataset_name(k)
+
+            v = np.clip(v, -3.4e38, 3.4e38)
+            data = v.astype(np.float32)
+
             f.create_dataset(
-                dataset_name,
-                data=_h5_data(dataset_name, v),
+                k,
+                data=data,
                 compression=compression,
             )
 
@@ -1153,14 +440,10 @@ def _save_h5_2(target_dir, save_map, parameters, save_only_list=None):
         f.create_dataset("HD_parameters", data=json.dumps(parameters))
         f.create_dataset("HD_version", data=f"py{get_version()}")
 
-    # Keep the exact primary output available to auxiliary pipelines. This is
-    # intentionally set after serializing the user parameters so the internal
-    # coordination value is not persisted as a setting.
-    parameters[H5_OUTPUT_PATH_PARAMETER] = str(h5_path)
-
     elapsed = time.time() - start_time
     file_size = h5_path.stat().st_size / (1024**3)
     print(f"H5 saved in {elapsed:.1f} seconds (file size: {file_size:.2f} GB)")
+
 
 def _save_h5(target_dir, vid, parameters, reg_list, coefs_list):
     """
@@ -1185,7 +468,8 @@ def _save_h5(target_dir, vid, parameters, reg_list, coefs_list):
     """
     start_time = time.time()
 
-    h5_path = _get_h5_output_path(target_dir)
+    target_dir_name = target_dir.name if target_dir.name else "output"
+    h5_path = target_dir / "h5" / f"{target_dir_name}_output.h5"
 
     print(f"Saving H5 to: {h5_path}")
     print(f"   Data shape: {vid.shape}")
@@ -1196,10 +480,10 @@ def _save_h5(target_dir, vid, parameters, reg_list, coefs_list):
 
     with h5py.File(h5_path, "w") as f:
         # Save moments
-        f.create_dataset("moment0", data=np.asarray(vid[:, 0, :, :], dtype=np.float32), compression=compression)
-        f.create_dataset("moment1", data=np.asarray(vid[:, 1, :, :], dtype=np.float32), compression=compression)
-        f.create_dataset("moment2", data=np.asarray(vid[:, 2, :, :], dtype=np.float32), compression=compression)
-        f.create_dataset("moment0ff", data=np.asarray(vid[:, 3, :, :], dtype=np.float32), compression=compression)
+        f.create_dataset("moment0", data=vid[:, 0, :, :], compression=compression)
+        f.create_dataset("moment1", data=vid[:, 1, :, :], compression=compression)
+        f.create_dataset("moment2", data=vid[:, 2, :, :], compression=compression)
+        f.create_dataset("moment0ff", data=vid[:, 3, :, :], compression=compression)
 
         # Save frequency bands
         for k, v in enumerate(parameters.get("frequency_bands", [])):
@@ -1229,8 +513,6 @@ def _save_h5(target_dir, vid, parameters, reg_list, coefs_list):
             )
             print(f"   Zernike coefficients: {coefs_data.shape}")
 
-    parameters[H5_OUTPUT_PATH_PARAMETER] = str(h5_path)
-
     elapsed = time.time() - start_time
     file_size = h5_path.stat().st_size / (1024**3)
     print(f"H5 saved in {elapsed:.1f} seconds (file size: {file_size:.2f} GB)")
@@ -1246,9 +528,11 @@ def _write_video_fast(
     quality=None,
     overwrite=True,
     pad_even=True,
+    bit_depth=8,
 ):
     """
     Write video with ffmpeg backend.
+    Supports 8-bit, 10-bit, 12-bit, and 16-bit encoding.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1258,10 +542,46 @@ def _write_video_fast(
 
     frames = np.asarray(frames)
 
-    # Validate and normalize frames
-    if frames.dtype != np.uint8:
-        frames = np.nan_to_num(frames, nan=0, posinf=255, neginf=0)
-        frames = np.clip(frames, 0, 255).astype(np.uint8)
+    # Validate and normalize frames based on bit depth
+    if bit_depth == 8:
+        max_val = 255
+        target_dtype = np.uint8
+    elif bit_depth == 10:
+        max_val = 1023
+        target_dtype = np.uint16
+    elif bit_depth == 12:
+        max_val = 4095
+        target_dtype = np.uint16
+    elif bit_depth == 16:
+        max_val = 65535
+        target_dtype = np.uint16
+    elif bit_depth == 32:
+        max_val = 1.0
+        target_dtype = np.float32
+    else:
+        raise ValueError(f"Unsupported bit depth: {bit_depth}")
+
+    # Normalize frames to target range
+    if frames.dtype != target_dtype or (bit_depth <= 16 and frames.max() > max_val):
+        if frames.dtype == np.float32 or frames.dtype == np.float64:
+            if frames.max() <= 1.0:
+                # Normalize from [0, 1] to [0, max_val]
+                frames = (frames * max_val).astype(target_dtype)
+            else:
+                # Already in range, just clip and convert
+                frames = np.clip(frames, 0, max_val).astype(target_dtype)
+        elif frames.dtype == np.uint8 and bit_depth > 8:
+            # Scale up
+            frames = frames.astype(np.float32) * (max_val / 255.0)
+            frames = frames.astype(target_dtype)
+        elif frames.dtype == np.uint16 and bit_depth == 8:
+            # Scale down
+            frames = (frames.astype(np.float32) * (255.0 / 65535.0)).astype(np.uint8)
+        else:
+            frames = np.clip(frames, 0, max_val).astype(target_dtype)
+
+    # Handle NaN and Inf values
+    frames = np.nan_to_num(frames, nan=0, posinf=max_val, neginf=0)
 
     # Validate shape
     if frames.ndim == 3:
@@ -1289,10 +609,17 @@ def _write_video_fast(
         output_params += ["-preset", str(preset)]
     if crf is not None:
         output_params += ["-crf", str(crf)]
-    if path.suffix.lower() == ".mp4":
-        # Put the MP4 index before the media payload so browsers can start
-        # playback immediately without requiring an initial seek.
-        output_params += ["-movflags", "+faststart"]
+
+    # Add pixel format for higher bit depths
+    if bit_depth > 8:
+        if bit_depth == 10:
+            output_params += ["-pix_fmt", "yuv420p10le"]
+        elif bit_depth == 12:
+            output_params += ["-pix_fmt", "yuv420p12le"]
+        elif bit_depth == 16:
+            output_params += ["-pix_fmt", "yuv420p16le"]
+        elif bit_depth == 32:
+            output_params += ["-pix_fmt", "gbrpf32le"]  # For float32
 
     kwargs = {
         "fps": float(fps),
@@ -1308,3 +635,45 @@ def _write_video_fast(
     with iio.get_writer(str(path), **kwargs) as writer:
         for frame in frames:
             writer.append_data(frame)
+
+def write_video_file(path, frames, fps, fourcc_code="mp4v"):
+    """
+    Writes a video file with cv2.
+    Expects frames as (T, H, W) or (T, H, W, C) in uint8.
+    """
+    if frames.ndim == 3:  # (T, H, W)
+        h, w = frames.shape[1:]
+        is_color = False
+    elif frames.ndim == 4:  # (T, H, W, C)
+        h, w = frames.shape[1:3]
+        is_color = frames.shape[3] == 3
+        if is_color:
+            # Convert RGB to BGR for OpenCV
+            frames = frames[..., ::-1]
+    else:
+        raise ValueError(f"Invalid frame shape: {frames.shape}")
+
+    out = cv2.VideoWriter(
+        path, cv2.VideoWriter_fourcc(*fourcc_code), fps, (w, h), isColor=is_color
+    )
+    for frame in frames:
+        out.write(frame)
+    out.release()
+
+
+def _normalize_to_uint8(data):
+    """Helper function to normalize various data types to uint8"""
+    data = np.asarray(data)
+
+    if data.dtype == np.uint8:
+        return data
+    elif data.dtype == np.uint16:
+        return (data.astype(np.float32) / 65535.0 * 255).astype(np.uint8)
+    else:
+        # For any other type, try to normalize
+        data = np.nan_to_num(data, nan=0)
+        min_val, max_val = data.min(), data.max()
+        if max_val > min_val:
+            return ((data - min_val) / (max_val - min_val) * 255).astype(np.uint8)
+        else:
+            return np.zeros_like(data, dtype=np.uint8)
