@@ -231,13 +231,13 @@ def _prepare(file_path, parameters):
     f_bins = int(parameters.get("f_bins", 128))
     cardiac_parameters = {
         "spectral_endpoints_cardiac_fc_hz": float(
-            parameters.get("spectral_endpoints_cardiac_fc_hz", 15000.0)
+            parameters.get("spectral_endpoints_cardiac_fc_hz", 14000.0)
         ),
         "spectral_endpoints_cardiac_median_window_s": float(
             parameters.get("spectral_endpoints_cardiac_median_window_s", 0.035)
         ),
         "spectral_endpoints_cardiac_smoothing_s": float(
-            parameters.get("spectral_endpoints_cardiac_smoothing_s", 0.0)
+            parameters.get("spectral_endpoints_cardiac_smoothing_s", 0.02)
         ),
         "spectral_endpoints_peak_min_distance_s": float(
             parameters.get("spectral_endpoints_peak_min_distance_s", 0.3)
@@ -246,13 +246,13 @@ def _prepare(file_path, parameters):
             parameters.get("spectral_endpoints_peak_prominence_mad", 1.0)
         ),
         "spectral_endpoints_peak_relative_height": float(
-            parameters.get("spectral_endpoints_peak_relative_height", 0.5)
+            parameters.get("spectral_endpoints_peak_relative_height", 0.3)
         ),
         "spectral_endpoints_min_beat_duration_s": float(
-            parameters.get("spectral_endpoints_min_beat_duration_s", 0.35)
+            parameters.get("spectral_endpoints_min_beat_duration_s", 0.25)
         ),
         "spectral_endpoints_max_beat_duration_s": float(
-            parameters.get("spectral_endpoints_max_beat_duration_s", 1.5)
+            parameters.get("spectral_endpoints_max_beat_duration_s", 2.0)
         ),
         "spectral_endpoints_phase_bins": int(
             parameters.get("spectral_endpoints_phase_bins", 128)

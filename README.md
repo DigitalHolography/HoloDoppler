@@ -84,12 +84,12 @@ The HDF5 `spectrograms/longtimes` group contains the uncompressed
 acquisition-time datasets `S(t,f)`, `S0(t,f)`, `L(t,f)`, `t`, `f`, and
 `frame_start`. Cardiac segmentation
 uses the bins satisfying `abs(f)>fc`, where the resolved cutoff is the minimum
-of the configured cutoff (15 kHz by default) and `0.8 * Nyquist`. Each frequency
+of the configured cutoff (14 kHz by default) and `0.8 * Nyquist`. Each frequency
 trace is temporally median-filtered (35 ms by default) and mean-centered. From
 the resulting matrix SVD, `g(t) = sigma_1 * U[:,0]` is sign-oriented to correlate
 positively with the original high-frequency sum. Positive local maxima of
-`dg/dt`, computed on the actual `t` axis after optional Gaussian smoothing,
-delimit beats. As a final QC step, only maxima strictly above 50% of the
+`dg/dt`, computed on the actual `t` axis after 20 ms Gaussian smoothing by
+default, delimit beats. As a final QC step, only maxima strictly above 30% of the
 strongest selected positive maximum are retained; the fraction is configurable.
 The unfiltered sum is retained as `spectrograms/longtimes/g_sum`. Valid beats are linearly
 resampled onto `[0,1)`. Beat-specific broadband streaks are

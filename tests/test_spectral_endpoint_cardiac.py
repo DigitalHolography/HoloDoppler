@@ -9,6 +9,7 @@ from holodoppler.spectral_cube import (
     CARDIAC_PULSE_NOT_DETECTED,
     aggregate_single_beat,
     cardiac_phase_analysis,
+    cardiac_failure_message,
     cardiac_detection_signal,
     detect_cardiac_landmarks,
     detect_streaks,
@@ -35,12 +36,18 @@ def test_cardiac_landmarks_are_positive_derivative_maxima_of_signed_high_f_power
         100.0,
         smoothing_s=0.0,
     )
-    landmarks, _resolved_prominence, _resolved_relative_height = (
+    (
+        landmarks,
+        _resolved_prominence,
+        _resolved_relative_height,
+        _diagnostics,
+    ) = (
         detect_cardiac_landmarks(
             result["dg_dt"],
             t,
             min_distance_s=0.7,
             prominence_mad=0.5,
+            return_diagnostics=True,
         )
     )
 
@@ -60,17 +67,78 @@ def test_cardiac_landmarks_apply_final_half_maximum_threshold():
     t = np.arange(7, dtype=np.float64)
     derivative = np.array([0.0, 10.0, 0.0, 4.0, 0.0, 5.1, 0.0])
 
-    landmarks, _prominence, resolved_height = detect_cardiac_landmarks(
+    landmarks, _prominence, resolved_height, diagnostics = detect_cardiac_landmarks(
         derivative,
         t,
         min_distance_s=0.5,
         prominence_mad=0.0,
         relative_height=0.5,
+        return_diagnostics=True,
     )
 
     np.testing.assert_array_equal(landmarks, [1, 5])
     assert resolved_height == 5.0
     assert np.all(derivative[landmarks] > 0.5 * np.max(derivative[landmarks]))
+    np.testing.assert_array_equal(
+        diagnostics["relative_height_rejected_indices"], [3]
+    )
+
+
+def test_cardiac_failure_message_reports_measured_common_causes():
+    t = np.arange(5, dtype=np.float64) * 0.1
+    f = np.array([-20_000.0, 0.0, 20_000.0])
+    detection = {
+        "dg_dt": np.array([0.0, 10.0, 0.0, 2.0, 0.0]),
+        "high_frequency_mask": np.array([True, False, True]),
+        "svd_explained_variance_fraction": 0.4,
+    }
+    diagnostics = {
+        "pre_relative_landmark_indices": np.array([1, 3]),
+        "relative_height_rejected_indices": np.array([3]),
+    }
+    parameters = {
+        "spectral_endpoints_cardiac_fc_hz": 14_000.0,
+        "spectral_endpoints_cardiac_fc_effective_hz": 14_000.0,
+        "spectral_endpoints_peak_relative_height": 0.3,
+        "spectral_endpoints_min_beat_duration_s": 0.25,
+        "spectral_endpoints_max_beat_duration_s": 2.0,
+    }
+    no_interval = {
+        "beat_periods": np.empty(0),
+        "beat_accepted": np.empty(0, dtype=bool),
+    }
+
+    message = cardiac_failure_message(
+        detection,
+        diagnostics,
+        np.array([1]),
+        no_interval,
+        t,
+        f,
+        parameters,
+    )
+
+    assert "configured fc=14000 Hz" in message
+    assert "dominant motion-artifact" in message
+    assert "Fewer than two maxima survived" in message
+    assert "Beat-duration QC cannot run" in message
+    assert "too few observable cardiac cycles" in message
+    assert "Insufficient cardiac signal" in message
+
+    invalid_intervals = {
+        "beat_periods": np.array([0.1, 2.5]),
+        "beat_accepted": np.array([False, False]),
+    }
+    message = cardiac_failure_message(
+        detection,
+        diagnostics,
+        np.array([0, 1, 4]),
+        invalid_intervals,
+        t,
+        f,
+        parameters,
+    )
+    assert "Every surviving interval is outside [0.25, 2] s" in message
 
 
 def test_cardiac_cutoff_is_capped_at_eighty_percent_nyquist():
@@ -243,7 +311,10 @@ def test_missing_cardiac_pulse_keeps_longtimes_and_writes_failure_qc(tmp_path):
     analysis = cardiac_phase_analysis(signal, background, t, f, parameters)
 
     assert analysis["pulse_detected"] is False
-    assert analysis["pulse_detection_error"] == CARDIAC_PULSE_NOT_DETECTED
+    assert analysis["pulse_detection_error"].startswith(CARDIAC_PULSE_NOT_DETECTED)
+    assert "Measured cardiac-segmentation diagnostics" in analysis[
+        "pulse_detection_error"
+    ]
     assert analysis["S_beats"].shape == (0, 8, 2)
 
     path = tmp_path / "no-pulse.h5"
@@ -261,9 +332,10 @@ def test_missing_cardiac_pulse_keeps_longtimes_and_writes_failure_qc(tmp_path):
         assert "spectrograms/singlebeat" in handle
         assert "spectrograms/singlebeat/S" not in handle
         assert not bool(handle["spectrograms/singlebeat"].attrs["pulse_detected"])
-        assert (
-            handle["spectrograms/singlebeat"].attrs["pulse_detection_error"]
-            == CARDIAC_PULSE_NOT_DETECTED
+        assert handle["spectrograms/singlebeat"].attrs[
+            "pulse_detection_error"
+        ].startswith(
+            CARDIAC_PULSE_NOT_DETECTED
         )
 
     _save_endpoint_pngs(path, tmp_path, {"contrast": False})
@@ -314,11 +386,11 @@ def test_grouped_hdf5_schema_contains_longtimes_singlebeat_and_qc(tmp_path):
     }
     parameters = {
         "sampling_freq": 100.0,
-        "spectral_endpoints_cardiac_fc_hz": 15_000.0,
+        "spectral_endpoints_cardiac_fc_hz": 14_000.0,
         "spectral_endpoints_cardiac_fc_effective_hz": 40.0,
         "spectral_endpoints_cardiac_median_window_s": 0.035,
-        "spectral_endpoints_cardiac_smoothing_s": 0.0,
-        "spectral_endpoints_peak_relative_height": 0.5,
+        "spectral_endpoints_cardiac_smoothing_s": 0.02,
+        "spectral_endpoints_peak_relative_height": 0.3,
     }
 
     with h5py.File(path, "w") as handle:

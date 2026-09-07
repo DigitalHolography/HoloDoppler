@@ -368,7 +368,8 @@ def detect_cardiac_landmarks(
     *,
     min_distance_s: float,
     prominence_mad: float,
-    relative_height: float = 0.5,
+    relative_height: float = 0.3,
+    return_diagnostics: bool = False,
 ):
     """Select positive dg/dt maxima using prominence, spacing, and height QC."""
     derivative = np.asarray(derivative, dtype=np.float64)
@@ -404,6 +405,7 @@ def detect_cardiac_landmarks(
         if all(abs(t[candidate] - t[other]) >= min_distance_s for other in accepted):
             accepted.append(int(candidate))
     landmarks = np.asarray(sorted(accepted), dtype=np.int64)
+    pre_relative_landmarks = landmarks.copy()
     resolved_relative_height = np.nan
     if landmarks.size:
         resolved_relative_height = relative_height * float(
@@ -412,7 +414,140 @@ def detect_cardiac_landmarks(
         landmarks = landmarks[
             derivative[landmarks] > resolved_relative_height
         ]
-    return landmarks, float(resolved_prominence), resolved_relative_height
+    rejected_by_relative_height = np.setdiff1d(
+        pre_relative_landmarks, landmarks, assume_unique=True
+    )
+    diagnostics = {
+        "positive_candidate_count": int(candidates.size),
+        "pre_relative_landmark_indices": pre_relative_landmarks,
+        "relative_height_rejected_indices": rejected_by_relative_height,
+    }
+    result = (
+        landmarks,
+        float(resolved_prominence),
+        resolved_relative_height,
+    )
+    if return_diagnostics:
+        return (*result, diagnostics)
+    return result
+
+
+def cardiac_failure_message(
+    detection,
+    landmark_diagnostics,
+    landmarks,
+    beats,
+    t,
+    f,
+    parameters,
+):
+    """Explain why landmark detection and beat-duration QC produced no beats."""
+    t = np.asarray(t, dtype=np.float64)
+    f = np.asarray(f, dtype=np.float64)
+    landmarks = np.asarray(landmarks, dtype=np.int64)
+    derivative = np.asarray(detection["dg_dt"], dtype=np.float64)
+    preliminary = np.asarray(
+        landmark_diagnostics["pre_relative_landmark_indices"], dtype=np.int64
+    )
+    rejected = np.asarray(
+        landmark_diagnostics["relative_height_rejected_indices"], dtype=np.int64
+    )
+    periods = np.asarray(beats["beat_periods"], dtype=np.float64)
+    accepted = np.asarray(beats["beat_accepted"], dtype=bool)
+    recording_span = float(t[-1] - t[0])
+    min_duration = float(parameters["spectral_endpoints_min_beat_duration_s"])
+    max_duration = float(parameters["spectral_endpoints_max_beat_duration_s"])
+    relative_fraction = float(
+        parameters.get("spectral_endpoints_peak_relative_height", 0.3)
+    )
+    relative_threshold = (
+        relative_fraction * float(np.max(derivative[preliminary]))
+        if preliminary.size
+        else np.nan
+    )
+    configured_fc = float(parameters["spectral_endpoints_cardiac_fc_hz"])
+    effective_fc = float(
+        parameters.get(
+            "spectral_endpoints_cardiac_fc_effective_hz", configured_fc
+        )
+    )
+    selected_bin_count = int(np.count_nonzero(detection["high_frequency_mask"]))
+    explained = float(detection["svd_explained_variance_fraction"])
+
+    def values_text(values):
+        values = np.asarray(values)
+        if values.size == 0:
+            return "none"
+        return np.array2string(values, precision=4, separator=", ")
+
+    lines = [
+        "No valid cardiac beats remain after landmark detection and duration QC.",
+        "Measured cardiac-segmentation diagnostics:",
+        f"- Recording: {recording_span:.4g} s across {t.size} long-time samples.",
+        (
+            "- High-frequency selection: "
+            f"configured fc={configured_fc:g} Hz, effective fc={effective_fc:g} "
+            f"Hz, selected bins={selected_bin_count}/{f.size}, leading-SVD "
+            f"explained variance={explained:.2%}."
+        ),
+        (
+            "- Derivative maxima after prominence and spacing: "
+            f"{preliminary.size}; heights={values_text(derivative[preliminary])}."
+        ),
+        (
+            f"- Relative-height QC: require > {relative_fraction:.0%} of the "
+            f"strongest maximum (absolute threshold={relative_threshold:.6g}); "
+            f"rejected={rejected.size}, surviving={landmarks.size}; "
+            f"surviving heights={values_text(derivative[landmarks])}."
+        ),
+        (
+            f"- Surviving landmark periods: {values_text(periods)} s; required "
+            f"range=[{min_duration:g}, {max_duration:g}] s; "
+            f"accepted={int(np.count_nonzero(accepted))}/{periods.size}."
+        ),
+        "Common-cause assessment:",
+    ]
+    if rejected.size:
+        lines.append(
+            "- A dominant motion-artifact dg/dt maximum may have caused genuine "
+            "cardiac maxima to fall below the relative-height threshold."
+        )
+    else:
+        lines.append(
+            "- A dominant motion artifact was not demonstrated by relative-height "
+            "rejection, but may still distort the derivative waveform."
+        )
+    if landmarks.size < 2:
+        lines.append(
+            f"- Fewer than two maxima survived ({landmarks.size}); no landmark "
+            "interval can be formed."
+        )
+    else:
+        lines.append(f"- {landmarks.size} maxima survived, enough to form intervals.")
+    if periods.size and not np.any(accepted):
+        lines.append(
+            f"- Every surviving interval is outside [{min_duration:g}, "
+            f"{max_duration:g}] s."
+        )
+    elif periods.size == 0:
+        lines.append("- Beat-duration QC cannot run because no interval was formed.")
+    if recording_span < min_duration:
+        lines.append(
+            "- The recording is shorter than the minimum permitted beat period, "
+            "so it cannot contain two valid cardiac landmarks."
+        )
+    elif landmarks.size < 2:
+        lines.append(
+            "- The recording may contain too few observable cardiac cycles even "
+            "though its total duration exceeds the minimum beat period."
+        )
+    lines.append(
+        "- Insufficient cardiac signal in the configured high-frequency range may "
+        "make the leading SVD mode noisy or unrelated to cardiac modulation; use "
+        "the selected-bin count and explained variance above with the QC waveform "
+        "to assess this possibility."
+    )
+    return "\n".join(lines)
 
 
 def resample_beats(
@@ -622,14 +757,16 @@ def cardiac_phase_analysis(signal, background, t, f, parameters):
         landmarks,
         resolved_prominence,
         resolved_relative_height,
+        landmark_diagnostics,
     ) = detect_cardiac_landmarks(
         detection["dg_dt"],
         t,
         min_distance_s=parameters["spectral_endpoints_peak_min_distance_s"],
         prominence_mad=parameters["spectral_endpoints_peak_prominence_mad"],
         relative_height=parameters.get(
-            "spectral_endpoints_peak_relative_height", 0.5
+            "spectral_endpoints_peak_relative_height", 0.3
         ),
+        return_diagnostics=True,
     )
     beats = resample_beats(
         signal,
@@ -653,7 +790,15 @@ def cardiac_phase_analysis(signal, background, t, f, parameters):
                 parameters["spectral_endpoints_cardiac_fc_hz"],
             ),
             "pulse_detected": False,
-            "pulse_detection_error": CARDIAC_PULSE_NOT_DETECTED,
+            "pulse_detection_error": cardiac_failure_message(
+                detection,
+                landmark_diagnostics,
+                landmarks,
+                beats,
+                t,
+                f,
+                parameters,
+            ),
         }
     streak_trace, streak_mask, streak_peak_count = detect_streaks(
         beats["S_beats"],
