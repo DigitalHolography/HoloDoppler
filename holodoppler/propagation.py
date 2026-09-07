@@ -6,7 +6,7 @@ from functools import cache
 from .utils import pad_array_centrally
 
 
-def ensure_xy_pixel_pitch(pixel_pitch):
+def ensure_yx_pixel_pitch(pixel_pitch):
     if isinstance(pixel_pitch, (int, float)):
         return (float(pixel_pitch), float(pixel_pitch))
     return tuple(pixel_pitch)
@@ -121,7 +121,7 @@ def fresnel_transform(
 ):
     """Apply Fresnel transform"""
 
-    pixel_pitch = ensure_xy_pixel_pitch(pixel_pitch)
+    pixel_pitch = ensure_yx_pixel_pitch(pixel_pitch)
     ny, nx = frames.shape[-2:]
     kernel_in = build_fresnel_kernel_in(
         xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
@@ -158,7 +158,7 @@ def fresnel_transform_with_phase(
 ):
     """Apply Fresnel transform with phase correction"""
 
-    pixel_pitch = ensure_xy_pixel_pitch(pixel_pitch)
+    pixel_pitch = ensure_yx_pixel_pitch(pixel_pitch)
     ny, nx = frames.shape[-2:]
     kernel_in = build_fresnel_kernel_in(
         xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
@@ -186,7 +186,7 @@ def angular_spectrum_transform(
 ):
     """Apply Angular Spectrum transform"""
 
-    pixel_pitch = ensure_xy_pixel_pitch(pixel_pitch)
+    pixel_pitch = ensure_yx_pixel_pitch(pixel_pitch)
     ny, nx = frames.shape[-2:]
     kernel = build_angular_kernel(
         xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
@@ -207,7 +207,7 @@ def angular_spectrum_transform_with_phase(
 ):
     """Apply Angular Spectrum transform with phase correction"""
 
-    pixel_pitch = ensure_xy_pixel_pitch(pixel_pitch)
+    pixel_pitch = ensure_yx_pixel_pitch(pixel_pitch)
     ny, nx = frames.shape[-2:]
     kernel = build_angular_kernel(
         xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None

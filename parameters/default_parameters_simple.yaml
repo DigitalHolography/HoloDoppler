@@ -38,31 +38,6 @@ frequency_bands:
   - [3000, 9000]
   - [9000, 18000]
 
-# Spectrograms are computed after the moments pipeline and appended to the same
-# HDF5 file. These settings are independent from the moments temporal window.
-spectral_cube_settings:
-  batch_size: 256
-  batch_stride: 256
-  f_bins: 128
-  spectral_cube_signal_ellipse_radius_y_factor: 0.8
-  spectral_cube_signal_ellipse_radius_x_factor: 0.8
-  spectral_cube_corner_ellipse_radius_y_factor: 1.2
-  spectral_cube_corner_ellipse_radius_x_factor: 1.2
-  spectral_endpoints_cardiac_fc_hz: 15000
-  spectral_endpoints_cardiac_median_window_s: 0.035
-  spectral_endpoints_cardiac_smoothing_s: 0.0
-  spectral_endpoints_peak_min_distance_s: 0.3
-  spectral_endpoints_peak_prominence_mad: 1.0
-  spectral_endpoints_peak_relative_height: 0.5
-  spectral_endpoints_min_beat_duration_s: 0.35
-  spectral_endpoints_max_beat_duration_s: 1.5
-  spectral_endpoints_phase_bins: 128
-  spectral_endpoints_streak_prominence: 6.0
-  spectral_endpoints_streak_threshold: 6.0
-  spectral_endpoints_streak_min_width: 1.0
-  spectral_endpoints_streak_padding_phase_bins: 0
-  spectral_endpoints_min_clean_beats: 2
-
 # Image registration
 image_registration: true
 registration_ref_first_frame: 0
@@ -78,7 +53,7 @@ corner_compensation: false
 square: true
 
 # Image contrast
-contrast: true
+contrast: false
 contrast_low_max_percent: [0.5, 99.5] # Applied only to rendered avi/png/report outputs, not raw h5.
 contrast_gamma: 1.0
 

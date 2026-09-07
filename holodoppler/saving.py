@@ -1,679 +1,1285 @@
-from pathlib import Path
-import h5py
-import imageio as iio
-import numpy as np
+from __future__ import annotations
+
+import csv
 import json
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import asdict
 import os
-
-from .utils import (
-    resize_slicewise,
-    normalize_to_uint8,
-    unsharp_projection,
-    _pad_to_even,
-    imadjust,
-    stretchlim,
-)
-from .get_version import get_version
-
-
-def save_preview_images(save_dict, save_dir, prefix="debug", square=False):
-    os.makedirs(save_dir, exist_ok=True)
-    for key, img in save_dict.items():
-        if img is None:
-            continue
-        if (img.ndim not in [2, 3]) or (img.ndim == 3 and img.shape[-1] > 3):
-            continue
-        if square:
-            m = max(img.shape)
-            img = resize_slicewise(img, m, m, axes=(0, 1))
-        if img.dtype != np.uint8:
-            img_min, img_max = np.min(img), np.max(img)
-            if img_max >= img_min:
-                img_np = (img - img_min) / (img_max - img_min + 1e-12)
-            img_np = (img_np * 255).astype(np.uint8)
-        filename = os.path.join(save_dir, f"{prefix}_{key}.png")
-        print("Saving : ", filename)
-        iio.imwrite(filename, img_np)
-
-
-def save_outputs(
-    file_reader,
-    video_path=None,
-    holodoppler_path=None,
-    vid=None,
-    vid_debug=None,
-    parameters=None,
-    reg_list=None,
-    coefs_list=None,
-    end_frame=None,
-    first_frame=None,
-    num_batch=None,
-    backend=None,
-):
-    """
-    Main entry point for saving.
-    Priority: holodoppler_path > video_path > default
-    """
-    start_time = time.time()
-
-    # Path resolution
-    default_path = _get_default_output_path(file_reader.file_path)
-
-    if holodoppler_path:
-        if isinstance(holodoppler_path, bool):
-            holodoppler_path = default_path
-        target_dir = Path(holodoppler_path)
-        save_mode = "FULL"
-    elif video_path:
-        if isinstance(video_path, bool):
-            video_path = default_path
-        target_dir = Path(video_path)
-        save_mode = "LITE"
-    else:
-        target_dir = default_path
-        save_mode = "FULL"
-
-    print(f"Output directory: {target_dir}")
-    print(f"Save mode: {save_mode}")
-
-    # Execute save
-    _save_bundle(
-        file_reader,
-        target_dir=target_dir,
-        mode=save_mode,
-        vid=vid,
-        vid_debug=vid_debug,
-        parameters=parameters,
-        reg_list=reg_list,
-        coefs_list=coefs_list,
-        end_frame=end_frame,
-        first_frame=first_frame,
-        num_batch=num_batch,
-        backend=backend,
-    )
-
-    elapsed = time.time() - start_time
-    print(f"\nSaving completed in {elapsed:.1f} seconds")
-
-
-def _get_default_output_path(file_path):
-    """Generates the standard Holodoppler directory structure"""
-    path = Path(file_path)
-    base_name = path.stem
-    return path.parent / base_name / f"{base_name}_HD"
-
-
-def _save_bundle(
-    file_reader,
-    target_dir,
-    mode,
-    vid,
-    vid_debug,
-    parameters,
-    reg_list,
-    coefs_list,
-    end_frame,
-    first_frame,
-    num_batch,
-    backend=None,
-):
-    """
-    Unified saving engine.
-    mode="FULL" -> Saves everything including H5.
-    mode="LITE" -> Saves videos, pngs, json, txt.
-    """
-    start_time = time.time()
-
-    # Create subdirectories
-    _create_directories(target_dir, mode)
-
-    # Calculate FPS with safety check
-    fps = _calculate_fps(num_batch, end_frame, first_frame, parameters)
-
-    # Prepare data for saving
-    save_map = _build_save_map(vid, parameters, vid_debug, num_batch)
-
-    # Process and save projections (unsharp masking)
-    _save_projections(target_dir, save_map, parameters, backend)
-
-    # Convert all data to uint8 once (memory efficient)
-    # uint8_map = {name: normalize_to_uint8(data) for name, data in save_map.items()}
-    contrast_cfg = parameters.get("contrast_adjustment", {})
-    uint8_map = {}
-    for name, data in save_map.items():
-        if contrast_cfg.get("enabled", False) and not name.startswith("debug_"):
-            # Data already in [0,1] thanks to imadjust
-            uint8_map[name] = (np.clip(data, 0, 1) * 255).astype(np.uint8)
-        else:
-            uint8_map[name] = normalize_to_uint8(data)
-
-    # Save videos (sequential to avoid encoding conflicts)
-    _save_videos(target_dir, uint8_map, fps)
-
-    # Save PNGs (parallel)
-    _save_pngs(target_dir, uint8_map)
-
-    # Save metadata (fast)
-    _save_metadata(target_dir, file_reader, parameters)
-
-    # Save H5 if FULL mode
-    if mode == "FULL":
-        _save_h5(target_dir, vid, parameters, reg_list, coefs_list)
-
-    elapsed = time.time() - start_time
-    print(f"_save_bundle completed in {elapsed:.1f} seconds")
-
-
-def _create_directories(target_dir, mode):
-    """Create required subdirectories"""
-    subdirs = ["png", "mp4", "avi", "json"]
-    if mode == "FULL":
-        subdirs.append("h5")
-    for sub in subdirs:
-        (target_dir / sub).mkdir(parents=True, exist_ok=True)
-
-
-def _calculate_fps(num_batch, end_frame, first_frame, parameters):
-    """Calculate FPS with bounds checking"""
-    if end_frame is None or first_frame is None:
-        fps = 30  # Default fallback
-        print(f"Using default FPS: {fps}")
-    else:
-        frame_range = end_frame - first_frame
-        if frame_range <= 0:
-            fps = 30
-            print(f"Invalid frame range, using default FPS: {fps}")
-        else:
-            sampling_freq = parameters.get("sampling_freq", 1000)  # Default 1kHz
-            fps = min((num_batch / frame_range * sampling_freq), 65)
-
-    return fps
-
-
-def _build_save_map(vid, parameters, vid_debug, num_batch):
-    """Build dictionary of all data to save"""
-    save_map = {
-        "moment_0": vid[:, 0, :, :],
-        "moment_1": vid[:, 1, :, :],
-        "moment_2": vid[:, 2, :, :],
-        "moment_0_ff": vid[:, 3, :, :],
-    }
-
-    # Frequency bands
-    for k, v in enumerate(parameters.get("frequency_bands", [])):
-        band_name = f"band_avg_{v[0]}_{v[1]}"
-        save_map[band_name] = vid[:, 4 + k, :, :]
-
-    # Debug videos
-    if vid_debug:
-        for key, data in vid_debug.items():
-            if data.ndim == 3 and data.shape[-1] == num_batch:
-                data = np.moveaxis(data, -1, 0)  # ensure (T, H, W)
-
-            # Handle special cases
-            if parameters.get("square") and key in [
-                "M0ffnoreg",
-                "M0notfixed",
-                "montage",
-                "montagenormalized",
-                "psd_map_avg",
-                "SVD_M0_inversed_svd_filter",
-            ]:
-                m = max(data.shape[-2], data.shape[-1])
-                data = resize_slicewise(data, m, m)
-
-            if key == "psd_map_avg":  # Special normalization
-                for i in range(data.shape[0]):
-                    data[i] = normalize_to_uint8(data[i])
-
-            if data.ndim == 3 or data.ndim == 4:
-                save_map[f"debug_{key}"] = data
-
-    contrast_cfg = parameters.get("contrast_adjustment", {})
-    if contrast_cfg.get("enabled", False):
-        low_pct = contrast_cfg.get("low_percent", 1)
-        high_pct = contrast_cfg.get("high_percent", 99)
-        gamma = contrast_cfg.get("gamma", 1.0)
-        for name, data in save_map.items():
-            # For 4D debug data we might need per-channel – but we'll keep it simple:
-            # compute limits globally across all dimensions.
-            if name.startswith("debug_"):
-                continue
-            low, high = stretchlim(data, low_pct, high_pct)
-            save_map[name] = imadjust(data, low, high, gamma)
-
-    return save_map
-
-
-def _save_projections(target_dir, save_map, parameters, backend):
-    """Save unsharp masked projections as PNGs"""
-    # Initialize backend if needed
-    if backend is None:
-        from .backend import BackendManager
-
-        bm = BackendManager(backend=parameters.get("backend", "cpu"))
-    else:
-        bm = backend
-
-    # Define which keys get projection
-    projection_keys = {
-        "moment_0",
-        "moment_1",
-        "moment_2",
-        "moment_0_ff",
-        "montage",
-        "montagenormalized",
-    }
-
-    # Also include frequency bands
-    projection_keys.update([k for k in save_map.keys() if "frequency_bands" in k])
-
-    for name, data in save_map.items():
-        if name in projection_keys:
-            try:
-                # Create projection
-                im = unsharp_projection(bm, data, (1024, 1024), radius=2.0, amount=2.0)
-                im = normalize_to_uint8(im)
-
-                # Save
-                png_path = target_dir / "png" / f"{name}_unsharped.png"
-                iio.imwrite(png_path, im)
-            except Exception as e:
-                print(f"Failed to save projection for {name}: {e}")
-
-
-def _save_videos(target_dir, np_map, fps):
-    """Save all videos as MP4 and AVI"""
-    start_time = time.time()
-    completed = 0
-    for name, np_data in np_map.items():
-        if np_data.ndim != 3 and np_data.ndim != 4:
-            continue
-
-        # Determine bit depth and convert appropriately
-        uint8_data = _normalize_to_uint8(np_data)
-
-        # MP4
-        mp4_path = target_dir / "mp4" / f"{name}.mp4"
-        _write_video_fast(
-            mp4_path,
-            uint8_data,
-            fps,
-            codec="libx264",
-            preset="ultrafast",
-            crf=28,
-        )
-
-        # AVI
-        avi_path = target_dir / "avi" / f"{name}.avi"
-        _write_video_fast(
-            avi_path,
-            uint8_data,
-            fps,
-            codec="mjpeg",
-            quality=8,
-        )
-
-        completed += 1
-
-    elapsed = time.time() - start_time
-    print(f"Videos saved in {elapsed:.1f} seconds ({completed} videos)")
-
-
-def normalize(data):
-    mi = data.min()
-    ma = data.max()
-
-    return (data - mi) / (ma - mi + 1e-24)
-
-
-def _save_pngs(target_dir, np_map):
-    """Save mean frames as PNGs in parallel"""
-    start_time = time.time()
-
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        tasks = []
-        for name, data in np_map.items():
-            if data.ndim != 3 and data.ndim != 4:
-                continue
-            png_path = target_dir / "png" / f"{name}.png"
-            mean_frame = np.mean(data, axis=0)
-
-            # Preserve original dtype for PNG saving
-            if data.dtype == np.uint16:
-                mean_frame = mean_frame.astype(np.uint16)
-            elif data.dtype == np.float32 or data.dtype == np.float64:
-                # For float data, normalize to 16-bit to preserve precision
-                mean_frame = np.clip(normalize(mean_frame), 0, 1)
-                mean_frame = (mean_frame * 65535).astype(np.uint16)
-            else:
-                mean_frame = mean_frame.astype(np.uint8)
-
-            tasks.append(executor.submit(iio.imwrite, png_path, mean_frame))
-
-        # Wait for all tasks to complete
-        completed = 0
-        for future in as_completed(tasks):
-            try:
-                future.result()
-                completed += 1
-            except Exception as e:
-                print(f"PNG save failed: {e}")
-
-    elapsed = time.time() - start_time
-    print(f"PNGs saved in {elapsed:.1f} seconds ({completed} images)")
-
-
-def _save_metadata(target_dir, file_reader, parameters):
-    """Saves all configuration and versioning files"""
-    start_time = time.time()
-
-    # JSON params
-    json_path = target_dir / "json" / "parameters_holodoppler.json"
-    with open(json_path, "w") as f:
-        json.dump(parameters, f, indent=4)
-
-    # Version
-    (target_dir / "version_holodoppler.txt").write_text(f"py{get_version()}")
-
-    # Git commit (with error handling)
-    try:
-        import subprocess
-
-        commit = (
-            subprocess.check_output(
-                ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
-            )
-            .decode()
-            .strip()
-        )
-        info_text = f"Git commit: {commit}\npy{get_version()}"
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        info_text = "Git commit: Not Available (not a git repo)"
-    (target_dir / "git_version.txt").write_text(info_text)
-
-    # Holo-specific metadata
-    if hasattr(file_reader, "ext") and file_reader.ext == ".holo":
-        with open(target_dir / "json" / "holovibes_footer.json", "w") as f:
-            json.dump(file_reader.file_footer, f, indent=4)
-        with open(target_dir / "json" / "holovibes_header.json", "w") as f:
-            json.dump(asdict(file_reader.file_header), f, indent=4)
-
-    elapsed = time.time() - start_time
-    print(f"Metadata saved in {elapsed:.2f} seconds")
-
-
-def _save_h5_2(target_dir, save_map, parameters, save_only_list=None):
-    """
-    Saves raw data to HDF5.
-    """
-    start_time = time.time()
-
-    target_dir_name = target_dir.name if target_dir.name else "output"
-    h5_path = target_dir / "h5" / f"{target_dir_name}_output.h5"
-
-    print(f"Saving H5 to: {h5_path}")
-
-    # No compression for faster writing and lower memory usage
-    compression = None
-
-    with h5py.File(h5_path, "w") as f:
-
-        for k, v in save_map.items():
-
-            if save_only_list is not None and k not in save_only_list:
-                continue
-
-            v = np.clip(v, -3.4e38, 3.4e38)
-            data = v.astype(np.float32)
-
-            f.create_dataset(
-                k,
-                data=data,
-                compression=compression,
-            )
-
-        # Save metadata
-        f.create_dataset("HD_parameters", data=json.dumps(parameters))
-        f.create_dataset("HD_version", data=f"py{get_version()}")
-
-    elapsed = time.time() - start_time
-    file_size = h5_path.stat().st_size / (1024**3)
-    print(f"H5 saved in {elapsed:.1f} seconds (file size: {file_size:.2f} GB)")
-
-
-def _save_h5(target_dir, vid, parameters, reg_list, coefs_list):
-    """
-    Saves raw data to HDF5.
-
-    MEMORY WARNING:
-    HDF5 writing can use large amounts of RAM because:
-    1. The entire 'vid' array is kept in memory (size = nt * nchannels * h * w * dtype)
-    2. HDF5 may buffer data during compression
-    3. Each dataset copy uses additional memory
-    4. If using compression, more memory is used for the compression buffer
-
-    For a 1000-frame, 4-channel, 512x512 video at float32:
-    - vid memory: 1000 * 4 * 512 * 512 * 4 = ~4GB
-    - Additional buffers: 500MB - 2GB
-    - Total: ~5-6GB RAM required
-
-    To reduce memory:
-    - Disable compression (set to None)
-    - Use chunking
-    - Process in batches
-    """
-    start_time = time.time()
-
-    target_dir_name = target_dir.name if target_dir.name else "output"
-    h5_path = target_dir / "h5" / f"{target_dir_name}_output.h5"
-
-    print(f"Saving H5 to: {h5_path}")
-    print(f"   Data shape: {vid.shape}")
-    print(f"   Data size: {vid.nbytes / (1024**3):.2f} GB")
-
-    # No compression for faster writing and lower memory usage
-    compression = None
-
-    with h5py.File(h5_path, "w") as f:
-        # Save moments
-        f.create_dataset("moment0", data=vid[:, 0, :, :], compression=compression)
-        f.create_dataset("moment1", data=vid[:, 1, :, :], compression=compression)
-        f.create_dataset("moment2", data=vid[:, 2, :, :], compression=compression)
-        f.create_dataset("moment0ff", data=vid[:, 3, :, :], compression=compression)
-
-        # Save frequency bands
-        for k, v in enumerate(parameters.get("frequency_bands", [])):
-            f.create_dataset(
-                f"band_{v[0]}_{v[1]}",
-                data=vid[:, 4 + k, :, :],
-                compression=compression,
-            )
-
-        # Save metadata
-        f.create_dataset("HD_parameters", data=json.dumps(parameters))
-        f.create_dataset("HD_version", data=f"py{get_version()}")
-
-        # Save registration data
-        if parameters.get("image_registration") and reg_list:
-            reg_data = np.array(reg_list, dtype=np.float32)
-            f.create_dataset("registration", data=reg_data, compression=compression)
-            print(f"   Registration data: {reg_data.shape}")
-
-        # Save Zernike coefficients
-        if parameters.get("shack_hartmann") and coefs_list:
-            coefs_data = np.stack(coefs_list).astype(np.float32)
-            f.create_dataset(
-                "zernike_coefs_radians",
-                data=coefs_data,
-                compression=compression,
-            )
-            print(f"   Zernike coefficients: {coefs_data.shape}")
-
-    elapsed = time.time() - start_time
-    file_size = h5_path.stat().st_size / (1024**3)
-    print(f"H5 saved in {elapsed:.1f} seconds (file size: {file_size:.2f} GB)")
-
-
-def _write_video_fast(
-    path,
-    frames,
-    fps,
-    codec="libx264",
-    preset=None,
-    crf=None,
-    quality=None,
-    overwrite=True,
-    pad_even=True,
-    bit_depth=8,
-):
-    """
-    Write video with ffmpeg backend.
-    Supports 8-bit, 10-bit, 12-bit, and 16-bit encoding.
-    """
+import re
+import subprocess
+import time
+from dataclasses import asdict, is_dataclass
+from pathlib import Path
+from typing import Any, Iterable
+
+import h5py
+import numpy as np
+import yaml
+from PIL import Image
+
+from holodoppler.get_version import get_version
+from holodoppler.utils import resize_frames
+
+
+def ensure_directory(path: Path) -> Path:
+    """Create a directory if necessary and return it."""
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
-    if overwrite and path.exists():
-        path.unlink()
 
-    frames = np.asarray(frames)
+def json_default(value: Any) -> Any:
+    """Convert common scientific Python objects into JSON-compatible values."""
+    if isinstance(value, np.ndarray):
+        return value.tolist()
 
-    # Validate and normalize frames based on bit depth
-    if bit_depth == 8:
-        max_val = 255
-        target_dtype = np.uint8
-    elif bit_depth == 10:
-        max_val = 1023
-        target_dtype = np.uint16
-    elif bit_depth == 12:
-        max_val = 4095
-        target_dtype = np.uint16
-    elif bit_depth == 16:
-        max_val = 65535
-        target_dtype = np.uint16
-    elif bit_depth == 32:
-        max_val = 1.0
-        target_dtype = np.float32
-    else:
-        raise ValueError(f"Unsupported bit depth: {bit_depth}")
+    if isinstance(value, np.generic):
+        return value.item()
 
-    # Normalize frames to target range
-    if frames.dtype != target_dtype or (bit_depth <= 16 and frames.max() > max_val):
-        if frames.dtype == np.float32 or frames.dtype == np.float64:
-            if frames.max() <= 1.0:
-                # Normalize from [0, 1] to [0, max_val]
-                frames = (frames * max_val).astype(target_dtype)
-            else:
-                # Already in range, just clip and convert
-                frames = np.clip(frames, 0, max_val).astype(target_dtype)
-        elif frames.dtype == np.uint8 and bit_depth > 8:
-            # Scale up
-            frames = frames.astype(np.float32) * (max_val / 255.0)
-            frames = frames.astype(target_dtype)
-        elif frames.dtype == np.uint16 and bit_depth == 8:
-            # Scale down
-            frames = (frames.astype(np.float32) * (255.0 / 65535.0)).astype(np.uint8)
-        else:
-            frames = np.clip(frames, 0, max_val).astype(target_dtype)
+    if isinstance(value, Path):
+        return str(value)
 
-    # Handle NaN and Inf values
-    frames = np.nan_to_num(frames, nan=0, posinf=max_val, neginf=0)
+    if is_dataclass(value):
+        return asdict(value)
 
-    # Validate shape
-    if frames.ndim == 3:
-        # Grayscale: (T, H, W) - fine
-        pass
-    elif frames.ndim == 4:
-        # Color: (T, H, W, C)
-        if frames.shape[-1] == 4:
-            frames = frames[..., :3]  # RGBA -> RGB
-        elif frames.shape[-1] != 3:
-            raise ValueError(f"Invalid color channels: {frames.shape[-1]}, expected 3")
-    else:
-        raise ValueError(f"Invalid video shape: {frames.shape}, expected 3D or 4D")
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
-    if frames.shape[0] == 0:
-        raise ValueError(f"Zero-frame video: {path}")
 
-    # Pad to even dimensions for codec compatibility
-    if pad_even and codec in ("libx264", "libx265", "h264", "hevc"):
-        frames = _pad_to_even(frames)
+def to_serializable(value: Any) -> Any:
+    """Recursively convert Python/NumPy objects into json/yaml savable objects."""
+    if isinstance(value, dict):
+        return {str(k): to_serializable(v) for k, v in value.items()}
 
-    # Build writer parameters
-    output_params = ["-y"] if overwrite else []
-    if preset is not None:
-        output_params += ["-preset", str(preset)]
-    if crf is not None:
-        output_params += ["-crf", str(crf)]
+    if isinstance(value, (list, tuple)):
+        return [to_serializable(v) for v in value]
 
-    # Add pixel format for higher bit depths
-    if bit_depth > 8:
-        if bit_depth == 10:
-            output_params += ["-pix_fmt", "yuv420p10le"]
-        elif bit_depth == 12:
-            output_params += ["-pix_fmt", "yuv420p12le"]
-        elif bit_depth == 16:
-            output_params += ["-pix_fmt", "yuv420p16le"]
-        elif bit_depth == 32:
-            output_params += ["-pix_fmt", "gbrpf32le"]  # For float32
+    if isinstance(value, np.ndarray):
+        return value.tolist()
 
-    kwargs = {
-        "fps": float(fps),
-        "codec": codec,
-        "macro_block_size": 1,
-    }
-    if output_params:
-        kwargs["output_params"] = output_params
-    if quality is not None:
-        kwargs["quality"] = quality
+    if isinstance(value, np.generic):
+        return value.item()
 
-    # Write video
-    with iio.get_writer(str(path), **kwargs) as writer:
-        for frame in frames:
-            writer.append_data(frame)
+    if isinstance(value, Path):
+        return str(value)
 
-def write_video_file(path, frames, fps, fourcc_code="mp4v"):
+    if is_dataclass(value):
+        return to_serializable(asdict(value))
+
+    return value
+
+
+def normalize_float_array_to_uint8(data: np.ndarray) -> np.ndarray:
     """
-    Writes a video file with cv2.
-    Expects frames as (T, H, W) or (T, H, W, C) in uint8.
+    Normalize arbitrary numerical data to uint8.
+
+    NaN and Inf are handled before normalization.
     """
-    if frames.ndim == 3:  # (T, H, W)
-        h, w = frames.shape[1:]
-        is_color = False
-    elif frames.ndim == 4:  # (T, H, W, C)
-        h, w = frames.shape[1:3]
-        is_color = frames.shape[3] == 3
-        if is_color:
-            # Convert RGB to BGR for OpenCV
-            frames = frames[..., ::-1]
-    else:
-        raise ValueError(f"Invalid frame shape: {frames.shape}")
-
-    out = cv2.VideoWriter(
-        path, cv2.VideoWriter_fourcc(*fourcc_code), fps, (w, h), isColor=is_color
-    )
-    for frame in frames:
-        out.write(frame)
-    out.release()
-
-
-def _normalize_to_uint8(data):
-    """Helper function to normalize various data types to uint8"""
     data = np.asarray(data)
 
     if data.dtype == np.uint8:
         return data
-    elif data.dtype == np.uint16:
-        return (data.astype(np.float32) / 65535.0 * 255).astype(np.uint8)
+
+    if data.dtype == np.uint16:
+        return (data.astype(np.float32) / 65535.0 * 255.0).astype(np.uint8)
+
+    data = np.nan_to_num(
+        data,
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    ).astype(np.float32, copy=False)
+
+    if data.size == 0:
+        return np.zeros_like(data, dtype=np.uint8)
+
+    minimum = float(data.min())
+    maximum = float(data.max())
+
+    if maximum <= minimum:
+        return np.zeros_like(data, dtype=np.uint8)
+
+    normalized = (data - minimum) / (maximum - minimum)
+    return np.clip(normalized * 255.0, 0, 255).astype(np.uint8)
+
+
+def cast_png_data(data: np.ndarray) -> np.ndarray:
+    """
+    Convert image data to a PIL-compatible integer array.
+
+    Important:
+        If the input is floating point, normalization happens before
+        the final uint8 cast.
+    """
+    data = np.asarray(data)
+
+    if data.dtype == np.uint8:
+        return data
+
+    if data.dtype == np.uint16:
+        return data
+
+    if np.issubdtype(data.dtype, np.floating):
+        return normalize_float_array_to_uint8(data)
+
+    if np.issubdtype(data.dtype, np.integer):
+        if data.min() >= 0 and data.max() <= 255:
+            return data.astype(np.uint8)
+
+        if data.min() >= 0 and data.max() <= 65535:
+            return data.astype(np.uint16)
+
+    return normalize_float_array_to_uint8(data)
+
+
+def prepare_png_image(data: np.ndarray) -> Image.Image:
+    """
+    Convert a 2-D grayscale or 3-D RGB/RGBA array into a PIL Image.
+    """
+    data = cast_png_data(data)
+
+    if data.ndim == 2:
+        if data.dtype == np.uint16:
+            return Image.fromarray(data, mode="I;16")
+
+        return Image.fromarray(data, mode="L")
+
+    if data.ndim == 3:
+        channels = data.shape[-1]
+
+        if channels == 3:
+            return Image.fromarray(data, mode="RGB")
+
+        if channels == 4:
+            return Image.fromarray(data, mode="RGBA")
+
+    raise ValueError(
+        f"Unsupported PNG shape {data.shape}. "
+        "Expected (H, W), (H, W, 3), or (H, W, 4)."
+    )
+
+
+def save_png(path: Path, data: np.ndarray) -> None:
+    """Save one image using PIL."""
+    path = Path(path)
+    ensure_directory(path.parent)
+
+    image = prepare_png_image(data)
+    image.save(path)
+
+def is_grayscale_video(data: np.ndarray) -> bool:
+    """Return True for a video represented as (T, H, W)."""
+    return data.ndim == 3
+
+
+def is_color_video(data: np.ndarray) -> bool:
+    """Return True for a video represented as (T, H, W, C)."""
+    return data.ndim == 4 and data.shape[-1] in (3, 4)
+
+
+def is_image(data: np.ndarray) -> bool:
+    """Return True for a 2-D grayscale or 3-D RGB/RGBA image."""
+    if data.ndim == 2:
+        # if data.shape[0] > 4 and data.shape[1] > 4 : # images should be more than 4 by 4 pixels (else they are simply)
+        return True
+
+    return data.ndim == 3 and data.shape[-1] in (3, 4)
+
+
+def is_video(data: np.ndarray) -> bool:
+    """
+    Determine whether an array represents a video.
+
+    Convention:
+        (T, H, W)       -> grayscale video
+        (T, H, W, 3)    -> RGB video
+        (T, H, W, 4)    -> RGBA video
+
+    A 3-D array whose final dimension is 3 or 4 is interpreted as an image.
+    """
+    return is_grayscale_video(data) or is_color_video(data)
+
+
+def validate_video(data: np.ndarray) -> np.ndarray:
+    """
+    Validate and prepare video data.
+
+    Accepted:
+        (T, H, W)
+        (T, H, W, 3)
+        (T, H, W, 4)
+    """
+    data = np.asarray(data)
+
+    if not is_video(data):
+        raise ValueError(
+            f"Invalid video shape {data.shape}. "
+            "Expected (T,H,W), (T,H,W,3), or (T,H,W,4)."
+        )
+
+    if data.shape[0] == 0:
+        raise ValueError("Cannot save a video with zero frames.")
+
+    return data
+
+
+def video_to_uint8(data: np.ndarray) -> np.ndarray:
+    """Convert a complete video to uint8 for FFmpeg."""
+    data = validate_video(data)
+    return normalize_float_array_to_uint8(data)
+
+
+def average_video(data: np.ndarray) -> np.ndarray:
+    """
+    Compute the temporal average of a video.
+
+    For floating-point videos:
+        mean is computed while still floating point,
+        then the result is converted to uint8.
+
+    This intentionally avoids converting every frame to uint8 before
+    calculating the average.
+    """
+    data = validate_video(data)
+
+    average = np.mean(data, axis=0)
+
+    return cast_png_data(average)
+
+
+# ============================================================================
+# 3. FFmpeg / Ut Video writer
+# ============================================================================
+
+
+def find_ffmpeg() -> str:
+    """
+    Find FFmpeg executable.
+
+    Raises:
+        RuntimeError if FFmpeg cannot be found.
+    """
+    executable = "ffmpeg"
+
+    if os.name == "nt":
+        executable = "ffmpeg.exe"
+
+    try:
+        result = subprocess.run(
+            [executable, "-version"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            "FFmpeg was not found. Please install FFmpeg and make sure "
+            "'ffmpeg' is available on PATH."
+        ) from exc
+
+    if result.returncode != 0:
+        raise RuntimeError("FFmpeg executable was found but could not be executed.")
+
+    return executable
+
+
+def make_even_dimensions(frames: np.ndarray) -> np.ndarray:
+    """
+    Pad video dimensions to even values.
+
+    This is useful for codecs/pixel formats requiring even dimensions.
+    """
+    height = frames.shape[1]
+    width = frames.shape[2]
+
+    new_height = height + (height % 2)
+    new_width = width + (width % 2)
+
+    if new_height == height and new_width == width:
+        return frames
+
+    if frames.ndim == 3:
+        padded = np.zeros(
+            (frames.shape[0], new_height, new_width),
+            dtype=frames.dtype,
+        )
     else:
-        # For any other type, try to normalize
-        data = np.nan_to_num(data, nan=0)
-        min_val, max_val = data.min(), data.max()
-        if max_val > min_val:
-            return ((data - min_val) / (max_val - min_val) * 255).astype(np.uint8)
-        else:
-            return np.zeros_like(data, dtype=np.uint8)
+        padded = np.zeros(
+            (frames.shape[0], new_height, new_width, frames.shape[3]),
+            dtype=frames.dtype,
+        )
+
+    padded[:, :height, :width, ...] = frames
+
+    return padded
+
+
+def prepare_ffmpeg_frames(data: np.ndarray) -> tuple[np.ndarray, str, str]:
+    """
+    Prepare video for FFmpeg.
+
+    Returns:
+        frames
+        input pixel format
+        output pixel format
+
+    RGB is kept as RGB and encoded with Ut Video using gbrp.
+    Grayscale is encoded as gray.
+    """
+    frames = video_to_uint8(data)
+    frames = make_even_dimensions(frames)
+
+    if frames.ndim == 3:
+        return frames, "gray", "gray"
+
+    channels = frames.shape[-1]
+
+    if channels == 4:
+        frames = frames[..., :3]
+        channels = 3
+
+    if channels != 3:
+        raise ValueError(
+            f"Unsupported number of video channels: {channels}. "
+            "Expected 3 or 4."
+        )
+
+    return frames, "rgb24", "gbrp"
+
+
+def save_video(
+    path: Path,
+    data: np.ndarray,
+    fps: float,
+    ffmpeg: str | None = None,
+) -> None:
+    """
+    Save a video using FFmpeg + Ut Video.
+
+    The video is streamed through stdin, so FFmpeg does not require
+    an intermediate sequence of PNG files.
+
+    Output:
+        AVI container
+        Ut Video codec
+        lossless encoding
+    """
+    path = Path(path)
+    ensure_directory(path.parent)
+
+    if ffmpeg is None:
+        ffmpeg = find_ffmpeg()
+
+    frames, input_pix_fmt, output_pix_fmt = prepare_ffmpeg_frames(data)
+
+    height = frames.shape[1]
+    width = frames.shape[2]
+
+    command = [
+        ffmpeg,
+        "-y",
+        "-f",
+        "rawvideo",
+        "-vcodec",
+        "rawvideo",
+        "-pix_fmt",
+        input_pix_fmt,
+        "-s",
+        f"{width}x{height}",
+        "-r",
+        str(float(fps)),
+        "-i",
+        "-",
+        "-an",
+        "-c:v",
+        "utvideo",
+        "-pix_fmt",
+        output_pix_fmt,
+        str(path),
+    ]
+
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+
+    try:
+        assert process.stdin is not None
+
+        process.stdin.write(frames.tobytes())
+        process.stdin.close()
+
+        stderr = process.stderr.read().decode(errors="replace")
+        return_code = process.wait()
+
+    except Exception:
+        process.kill()
+        process.wait()
+        raise
+
+    if return_code != 0:
+        raise RuntimeError(
+            f"FFmpeg failed while saving {path}.\n"
+            f"Command: {' '.join(command)}\n"
+            f"FFmpeg output:\n{stderr}"
+        )
+
+
+# ============================================================================
+# 4. PNG saving
+# ============================================================================
+
+
+def save_video_average_png(path: Path, video: np.ndarray) -> None:
+    """
+    Save the temporal average of a video as PNG.
+
+    The average is calculated first in the original numerical representation,
+    then converted to a PNG-compatible integer representation.
+    """
+    average = average_video(video)
+    save_png(path, average)
+
+
+def save_image_png(path: Path, image: np.ndarray) -> None:
+    """Save an image directly as PNG."""
+    if not is_image(image):
+        raise ValueError(f"Invalid image shape: {image.shape}")
+
+    save_png(path, image)
+
+
+def save_pngs(
+    target_dir: Path,
+    data_map: dict[str, Any],
+    png_keys: Iterable[str] | None = None,
+) -> None:
+    """Save images and temporal-average PNGs."""
+    png_dir = ensure_directory(target_dir / "png")
+    selected_keys = None if png_keys is None else set(png_keys)
+
+    for name, data in data_map.items():
+        if data is None or not isinstance(data, np.ndarray):
+            continue
+
+        if selected_keys is not None and name not in selected_keys:
+            continue
+
+        try:
+            path = png_dir / f"{name}.png"
+
+            if is_image(data):
+                save_image_png(path, data)
+
+            elif is_video(data):
+                save_video_average_png(path, data)
+
+            else:
+                continue
+
+            print(f"Saved PNG: {name}")
+
+        except Exception as exc:
+            print(f"Failed to save PNG {name}: {exc}")
+
+
+# ============================================================================
+# 5. Text / CSV / JSON / YAML
+# ============================================================================
+
+
+def save_txt(path: Path, value: Any) -> None:
+    """Save arbitrary text or a string representation."""
+    path = Path(path)
+    ensure_directory(path.parent)
+
+    if isinstance(value, str):
+        text = value
+    else:
+        text = str(value)
+
+    path.write_text(text, encoding="utf-8")
+
+
+def save_csv(path: Path, value: Any) -> None:
+    """
+    Save CSV data.
+
+    Supported inputs:
+        - list of dictionaries
+        - list/tuple of rows
+        - numpy 1-D / 2-D arrays
+        - pandas-like objects exposing to_csv()
+    """
+    path = Path(path)
+    ensure_directory(path.parent)
+
+    if hasattr(value, "to_csv"):
+        value.to_csv(path, index=False)
+        return
+
+    if isinstance(value, np.ndarray):
+        value = np.asarray(value)
+
+        if value.ndim == 1:
+            value = value[:, None]
+
+        if value.ndim != 2:
+            raise ValueError(
+                f"CSV numpy data must be 1-D or 2-D, got {value.shape}"
+            )
+
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.writer(handle)
+            writer.writerows(value.tolist())
+
+        return
+
+    if isinstance(value, (list, tuple)):
+        if not value:
+            path.write_text("", encoding="utf-8")
+            return
+
+        with path.open("w", newline="", encoding="utf-8") as handle:
+
+            if all(isinstance(row, dict) for row in value):
+                fieldnames = []
+                for row in value:
+                    for key in row:
+                        if key not in fieldnames:
+                            fieldnames.append(key)
+
+                writer = csv.DictWriter(
+                    handle,
+                    fieldnames=fieldnames,
+                )
+                writer.writeheader()
+                writer.writerows(value)
+
+            else:
+                writer = csv.writer(handle)
+                writer.writerows(value)
+
+        return
+
+    raise TypeError(
+        f"Unsupported CSV data type: {type(value).__name__}"
+    )
+
+
+def save_json(path: Path, value: Any) -> None:
+    """Save a Python object as JSON."""
+    path = Path(path)
+    ensure_directory(path.parent)
+
+    serializable = to_serializable(value)
+
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(
+            serializable,
+            handle,
+            indent=4,
+            ensure_ascii=False,
+        )
+
+
+def save_yaml(path: Path, value: Any) -> None:
+    """Save a Python object as YAML."""
+    path = Path(path)
+    ensure_directory(path.parent)
+
+    serializable = to_serializable(value)
+
+    with path.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(
+            serializable,
+            handle,
+            sort_keys=False,
+            allow_unicode=True,
+        )
+
+
+# ============================================================================
+# 6. HDF5
+# ============================================================================
+
+
+def save_h5(
+    target_dir: Path,
+    data_map: dict[str, Any],
+    parameters: dict[str, Any] | None = None,
+    save_only_list: Iterable[str] | None = None,
+    reg_list: Any = None,
+    coefs_list: Any = None,
+    h5_file_name = None,
+) -> Path:
+    """
+    Save numerical output data to HDF5.
+    """
+    target_dir = Path(target_dir)
+    h5_dir = ensure_directory(target_dir / "h5")
+
+    if h5_file_name is None:
+        target_name = target_dir.name or "output"
+    else:
+        target_name = h5_file_name
+    h5_path = h5_dir / f"{target_name}_output.h5"
+
+    selected = None if save_only_list is None else set(save_only_list)
+
+    print(f"Saving H5: {h5_path}")
+
+    with h5py.File(h5_path, "w") as h5:
+
+        for name, value in data_map.items():
+
+            if selected is not None and name not in selected:
+                continue
+
+            if value is None:
+                continue
+
+            if not isinstance(value, np.ndarray):
+                continue
+
+            # HDF5 should preserve useful numerical precision.
+            if np.issubdtype(value.dtype, np.floating):
+                value_to_save = np.nan_to_num(
+                    value,
+                    nan=0.0,
+                    posinf=0.0,
+                    neginf=0.0,
+                ).astype(np.float32)
+
+            else:
+                value_to_save = value
+
+            h5.create_dataset(
+                name,
+                data=value_to_save,
+                compression=None,
+            )
+
+        if parameters is not None:
+            h5.create_dataset(
+                "HD_parameters",
+                data=json.dumps(
+                    to_serializable(parameters),
+                    ensure_ascii=False,
+                ),
+            )
+
+        h5.create_dataset(
+            "HD_version",
+            data=f"py{get_version()}",
+        )
+
+        if parameters and parameters.get("image_registration") and reg_list:
+            h5.create_dataset(
+                "registration",
+                data=np.asarray(reg_list, dtype=np.float32),
+                compression=None,
+            )
+
+        if parameters and parameters.get("shack_hartmann") and coefs_list:
+            h5.create_dataset(
+                "zernike_coefs_radians",
+                data=np.asarray(coefs_list, dtype=np.float32),
+                compression=None,
+            )
+
+    size_gb = h5_path.stat().st_size / (1024**3)
+
+    print(
+        f"H5 saved: {h5_path} "
+        f"({size_gb:.2f} GB)"
+    )
+
+    return h5_path
+
+
+# ============================================================================
+# 7. Metadata / versioning
+# ============================================================================
+
+
+def get_git_version() -> str:
+    """Return the current Git commit, or a fallback string."""
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+
+        return commit
+
+    except (
+        subprocess.CalledProcessError,
+        FileNotFoundError,
+        OSError,
+    ):
+        return "Not Available"
+
+
+def save_version_files(target_dir: Path) -> None:
+    """Save version.txt and git_version.txt."""
+    target_dir = Path(target_dir)
+
+    version = f"py{get_version()}"
+    git_commit = get_git_version()
+
+    (target_dir / "version.txt").write_text(
+        version + "\n",
+        encoding="utf-8",
+    )
+
+    (target_dir / "git_version.txt").write_text(
+        f"Git commit: {git_commit}\n"
+        f"Version: {version}\n",
+        encoding="utf-8",
+    )
+
+
+def save_metadata(
+    target_dir: Path,
+    file_reader: Any = None, #type should be HoloFileReader or CineFileReader
+    parameters: dict[str, Any] | None = None,
+) -> None:
+    """
+    Save generic metadata plus HoloVibes-specific metadata when available.
+    """
+    target_dir = Path(target_dir)
+
+    json_dir = ensure_directory(target_dir / "json")
+
+    if parameters is not None:
+        save_json(
+            json_dir / "parameters_holodoppler.json",
+            parameters,
+        )
+
+    if file_reader is not None:
+        if getattr(file_reader, "ext", None) == ".holo":
+
+            footer = getattr(file_reader, "file_footer", None)
+            if footer is not None:
+                save_json(
+                    json_dir / "holovibes_footer.json",
+                    footer,
+                )
+
+            header = getattr(file_reader, "file_header", None)
+            if header is not None:
+                if is_dataclass(header):
+                    header = asdict(header)
+
+                save_json(
+                    json_dir / "holovibes_header.json",
+                    header,
+                )
+
+    save_version_files(target_dir)
+
+
+# ============================================================================
+# Preview and Video bundle
+# ============================================================================
+
+def save_preview_images(
+    save_dict: dict[str, Any],
+    save_dir: Path,
+    prefix: str = "debug",
+    square: bool = False,
+) -> None:
+    """
+    Save already-computed preview images.
+
+    This function is intentionally independent from video saving.
+    """
+    save_dir = ensure_directory(Path(save_dir))
+
+    for key, image in save_dict.items():
+
+        if image is None:
+            continue
+
+        image = np.asarray(image)
+
+        if not is_image(image):
+            continue
+
+        if square:
+            height, width = image.shape[:2]
+            size = max(height, width)
+
+            image = resize_frames(
+                image,
+                size,
+                size
+            )
+
+        path = save_dir / f"{prefix}_{key}.png"
+
+        try:
+            save_png(path, image)
+            print(f"Saved preview: {path}")
+
+        except Exception as exc:
+            print(f"Failed to save preview {key}: {exc}")
+
+
+
+def save_videos(
+    target_dir: Path,
+    data_map: dict[str, Any],
+    fps: float,
+    video_keys: Iterable[str] | None = None,
+) -> None:
+    """
+    Save all requested video arrays as Ut Video AVI files.
+
+    Images are ignored.
+    """
+    avi_dir = ensure_directory(Path(target_dir) / "avi")
+
+    selected = None if video_keys is None else set(video_keys)
+
+    ffmpeg = find_ffmpeg()
+
+    for name, value in data_map.items():
+
+        if value is None or not isinstance(value, np.ndarray):
+            continue
+
+        if not is_video(value):
+            continue
+
+        if selected is not None and name not in selected:
+            continue
+
+        path = avi_dir / f"{name}.avi"
+
+        start = time.time()
+
+        save_video(
+            path,
+            value,
+            fps=fps,
+            ffmpeg=ffmpeg,
+        )
+
+        print(
+            f"Saved video: {path} "
+            f"({time.time() - start:.1f}s)"
+        )
+
+def save_named_data(
+    target_dir: Path,
+    name: str,
+    value: Any,
+    extension: str,
+) -> Path:
+    """
+    Save one explicitly requested piece of data.
+
+    Useful for outputs such as:
+        spectrum_line -> CSV
+        fitting_parameters -> YAML
+        notes -> TXT
+    """
+    target_dir = Path(target_dir)
+    extension = extension.lower().lstrip(".")
+
+    if extension == "txt":
+        path = target_dir / "txt" / f"{name}.txt"
+        save_txt(path, value)
+        return path
+
+    if extension == "csv":
+        path = target_dir / "csv" / f"{name}.csv"
+        save_csv(path, value)
+        return path
+
+    if extension == "json":
+        path = target_dir / "json" / f"{name}.json"
+        save_json(path, value)
+        return path
+
+    if extension in ("yaml", "yml"):
+        path = target_dir / "yaml" / f"{name}.yaml"
+        save_yaml(path, value)
+        return path
+
+    raise ValueError(
+        f"Unsupported output extension: {extension}"
+    )
+
+def create_directories(
+    target_dir: Path,
+    full: bool = True,
+) -> None:
+    """
+    Create the complete Holodoppler saving structure.
+
+    Example:
+        recording/
+            recording_HD/
+                png/
+                avi/
+                json/
+                csv/
+                txt/
+                yaml/
+                h5/
+                version.txt
+                git_version.txt
+    """
+    target_dir = Path(target_dir)
+
+    subdirectories = [
+        "png",
+        "avi",
+        "json",
+        "csv",
+        "txt",
+        "yaml",
+    ]
+
+    if full:
+        subdirectories.append("h5")
+
+    for directory in subdirectories:
+        ensure_directory(target_dir / directory)
+
+
+def get_default_output_path(
+    file_path: str | Path,
+    mode: int = 0,
+) -> Path:
+    """
+    Generate the standard output directory.
+
+    mode 0:
+        {base_name}/{base_name}_HD
+
+    mode 1:
+        {base_name}_HD_{index}
+
+    mode 2:
+        {base_name}/{base_name}_HD_{index}
+    """
+    path = Path(file_path)
+    base_name = path.stem
+
+    if mode not in (0, 1, 2):
+        raise ValueError("mode must be 0, 1, or 2")
+
+    if mode == 0:
+        return path.parent / base_name / f"{base_name}_HD"
+
+    indices = []
+
+    # Search both:
+    #   parent/base_HD_N
+    #   parent/base/base_HD_N
+    search_directories = [
+        path.parent,
+        path.parent / base_name,
+    ]
+
+    for directory in search_directories:
+
+        if not directory.exists():
+            continue
+
+        for subdir in directory.iterdir():
+
+            if not subdir.is_dir():
+                continue
+
+            match = re.search(
+                rf"^{re.escape(base_name)}_HD_(\d+)$",
+                subdir.name,
+            )
+
+            if match:
+                indices.append(int(match.group(1)))
+
+    new_index = max(indices) + 1 if indices else 0
+
+    if mode == 1:
+        return path.parent / f"{base_name}_HD_{new_index}"
+
+    return path.parent / base_name / f"{base_name}_HD_{new_index}"
+
+def calculate_fps(
+    num_batch: int | None,
+    end_frame: int | None,
+    first_frame: int | None,
+    parameters: dict[str, Any] | None,
+    default_fps: float = 30.0,
+    maximum_fps: float = 65.0,
+) -> float:
+    """Calculate output FPS with safe fallbacks."""
+    if (
+        num_batch is None
+        or end_frame is None
+        or first_frame is None
+    ):
+        return default_fps
+
+    frame_range = end_frame - first_frame
+
+    if frame_range <= 0:
+        return default_fps
+
+    parameters = parameters or {}
+
+    sampling_freq = parameters.get(
+        "sampling_freq",
+        1000,
+    )
+
+    fps = num_batch / frame_range * sampling_freq
+
+    return min(float(fps), maximum_fps)
+
+def save_bundle(
+    target_dir: Path,
+    output: dict[str, Any],
+    parameters: dict[str, Any] | None = None,
+    file_reader: Any = None,
+    fps: float = 30.0,
+    save_h5_output: bool = True,
+    save_h5_list: Iterable[str] | None = None,
+    video_keys: Iterable[str] | None = None,
+    png_keys: Iterable[str] | None = None,
+    text_outputs: dict[str, Any] | None = None,
+    csv_outputs: dict[str, Any] | None = None,
+    json_outputs: dict[str, Any] | None = None,
+    yaml_outputs: dict[str, Any] | None = None,
+    reg_list: Any = None,
+    coefs_list: Any = None,
+    backend: Any = None,
+) -> None:
+    """
+    Save a complete Holodoppler output bundle.
+
+    The function deliberately does not assume that every output is a video.
+
+    Supported numerical output forms:
+        image:
+            (H, W)
+            (H, W, 3)
+            (H, W, 4)
+
+        video:
+            (T, H, W)
+            (T, H, W, 3)
+            (T, H, W, 4)
+
+    By default:
+        - all videos -> AVI
+        - all images -> PNG
+        - all videos -> temporal-average PNG
+        - parameters -> JSON
+        - HDF5 -> saved when enabled
+
+    Use png_keys=[] to explicitly disable PNG saving for all numerical outputs.
+    """
+    start_time = time.time()
+
+    target_dir = Path(target_dir)
+
+    create_directories(
+        target_dir,
+        full=save_h5_output,
+    )
+
+    print(f"Saving output bundle to: {target_dir}")
+
+    # ---------------------------------------------------------------------
+    # 1. Videos
+    # ---------------------------------------------------------------------
+    save_videos(
+        target_dir,
+        output,
+        fps=fps,
+        video_keys=video_keys,
+    )
+
+    # ---------------------------------------------------------------------
+    # 2. PNGs
+    # ---------------------------------------------------------------------
+    save_pngs(
+        target_dir,
+        output,
+        png_keys=png_keys,
+    )
+
+    # ---------------------------------------------------------------------
+    # 3. Additional TXT / CSV / JSON / YAML outputs
+    # ---------------------------------------------------------------------
+    if text_outputs:
+        for name, value in text_outputs.items():
+            save_named_data(
+                target_dir,
+                name,
+                value,
+                "txt",
+            )
+
+    if csv_outputs:
+        for name, value in csv_outputs.items():
+            save_named_data(
+                target_dir,
+                name,
+                value,
+                "csv",
+            )
+
+    if json_outputs:
+        for name, value in json_outputs.items():
+            save_named_data(
+                target_dir,
+                name,
+                value,
+                "json",
+            )
+
+    if yaml_outputs:
+        for name, value in yaml_outputs.items():
+            save_named_data(
+                target_dir,
+                name,
+                value,
+                "yaml",
+            )
+
+    # ---------------------------------------------------------------------
+    # 4. Parameters / metadata / version
+    # ---------------------------------------------------------------------
+    save_metadata(
+        target_dir,
+        file_reader=file_reader,
+        parameters=parameters,
+    )
+
+    # ---------------------------------------------------------------------
+    # 6. HDF5
+    # ---------------------------------------------------------------------
+    if save_h5_output:
+        save_h5(
+            target_dir,
+            output,
+            parameters=parameters,
+            save_only_list=save_h5_list,
+            reg_list=reg_list,
+            coefs_list=coefs_list,
+        )
+
+    elapsed = time.time() - start_time
+
+    print(
+        f"Saving completed in {elapsed:.1f} seconds"
+    )
+
+
+# ============================================================================
+# 15. High-level entry point compatible with the existing application
+# ============================================================================
+
+
+def save_outputs(
+    file_reader: Any,
+    output: dict[str, Any],
+    parameters: dict[str, Any] | None = None,
+    holodoppler_path: str | Path | bool | None = None,
+    video_path: str | Path | bool | None = None,
+    reg_list: Any = None,
+    coefs_list: Any = None,
+    end_frame: int | None = None,
+    first_frame: int | None = None,
+    num_batch: int | None = None,
+    backend: Any = None,
+    save_h5_output: bool = True,
+    png_keys: Iterable[str] | None = None,
+    video_keys: Iterable[str] | None = None,
+) -> Path:
+    """
+    Main public entry point.
+
+    Priority:
+        holodoppler_path > video_path > default path
+
+    `video_path` is retained for API compatibility, but the output itself
+    is always organized as a complete *_HD bundle.
+    """
+    parameters = parameters or {}
+
+    default_path = get_default_output_path(
+        file_reader.file_path
+    )
+
+    if holodoppler_path:
+        target_dir = (
+            default_path
+            if isinstance(holodoppler_path, bool)
+            else Path(holodoppler_path)
+        )
+
+        save_mode_full = True
+
+    elif video_path:
+        target_dir = (
+            default_path
+            if isinstance(video_path, bool)
+            else Path(video_path)
+        )
+
+        save_mode_full = save_h5_output
+
+    else:
+        target_dir = default_path
+        save_mode_full = save_h5_output
+
+    fps = calculate_fps(
+        num_batch=num_batch,
+        end_frame=end_frame,
+        first_frame=first_frame,
+        parameters=parameters,
+    )
+
+    save_h5_list = (
+        [
+            "moment0ff",
+            "moment0",
+            "moment1",
+            "moment2",
+            "shack_hartmann_zernike_coefs",
+            "registration",
+            "spectrum_line",
+        ]
+        + [
+            key
+            for key in output
+            if "band_" in key
+        ]
+    )
+
+    save_bundle(
+        target_dir=target_dir,
+        output=output,
+        parameters=parameters,
+        file_reader=file_reader,
+        fps=fps,
+        save_h5_output=save_mode_full,
+        save_h5_list=save_h5_list,
+        video_keys=video_keys,
+        png_keys=png_keys,
+        reg_list=reg_list,
+        coefs_list=coefs_list,
+        backend=backend,
+    )
+
+    return target_dir

@@ -1,59 +1,46 @@
+import numpy as np
 from collections import defaultdict
 from pathlib import Path
 
-import cupy as cp
-import numpy as np
-
-# import numpy as np
-from cupyx.scipy.ndimage import gaussian_filter
-
-# from cupyx.scipy.ndimage import zoom
+import holodoppler.backend as backend
 from tqdm import tqdm
 
-from holodoppler.file_reader import FileReaderFactory
-from holodoppler.filtering import (
-    corner_compensation,
-    filter_2d,
-    fourier_time_transform,
-    frequency_symmetric_filtering,
-    svd_filter,
-)
-from holodoppler.moments import moment
+from holodoppler.saving import save_preview_images, save_outputs, get_default_output_path, save_h5
 from holodoppler.propagation import (
-    angular_spectrum_transform,
-    angular_spectrum_transform_with_phase,
     fresnel_transform,
     fresnel_transform_with_phase,
-)
-from holodoppler.registration import (
-    apply_register_images_shifts,
-    register_images_shifts,
-)
-from holodoppler.saving import (
-    _create_directories,
-    _get_default_output_path,
-    _save_h5_2,
-    preview_image_from_results,
-    save_preview_images,
-    save_result_map,
+    angular_spectrum_transform,
+    angular_spectrum_transform_with_phase,
 )
 from holodoppler.shack_hartmann import (
+    construct_subapertures_fresnel,
+    construct_subapertures_angular,
     calculate_displacements,
     calculate_displacements_graph_laplacian,
-    construct_subapertures_angular,
-    construct_subapertures_fresnel,
 )
-from holodoppler.utils import gaussian_flatfield, square_cupy, update_from_footer
-from holodoppler.zernike import fit_zernike_angular_spectrum, fit_zernike_fresnel
+from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum
+from holodoppler.utils import gaussian_flatfield, update_from_holo_footer, square_cupy
+from holodoppler.filtering import (
+    filter_2d,
+    svd_filter,
+    frequency_symmetric_filtering,
+    fourier_time_transform,
+    corner_compensation,
+)
+from holodoppler.moments import moment
+from holodoppler.registration import (
+    register_images_shifts,
+    apply_register_images_shifts,
+)
+from holodoppler.file_reader import FileReaderFactory
 
 
 def _process_batch(parameters, frames, phase_term=None, output_dict=None):
-    xp = cp
-    fft = cp.fft
+    xp = backend.xp
+    fft = backend.fft
     nt_sub = frames.shape[0]
     prop_method = parameters["spatial_propagation"]
 
-    # Propagation
     if phase_term is not None:
         if prop_method == "Fresnel":
             holograms = fresnel_transform_with_phase(
@@ -76,6 +63,8 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
                 parameters["wavelength"],
                 phase_term,
             )
+        else:
+            raise ValueError(f"Unknown propagation method: {prop_method!r}")
     else:
         if prop_method == "Fresnel":
             holograms = fresnel_transform(
@@ -96,8 +85,9 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
                 parameters["pixel_pitch"],
                 parameters["wavelength"],
             )
+        else:
+            raise ValueError(f"Unknown propagation method: {prop_method!r}")
 
-    # SVD filtering
     holograms_f = svd_filter(
         xp,
         holograms,
@@ -105,20 +95,16 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         filter_mode=parameters["svd_filter_mode"],
         remove_dc=parameters["svd_remove_dc"],
     )
-
-    del holograms  # Free memory early
+    del holograms
 
     if output_dict is None:
         output_dict = {}
 
-    # Temporal transform
     if parameters.get("temporal_transformation") == "FourierTransform":
         spectrum_f = fourier_time_transform(xp, fft, holograms_f)
-        # spectrum_f_angle = fourier_time_transform(xp, fft, xp.angle(holograms_f))
     else:
         spectrum_f = holograms_f
 
-    # Frequency selection
     idxs, freqs = frequency_symmetric_filtering(
         xp,
         fft,
@@ -127,48 +113,42 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         parameters["low_freq"],
         parameters.get("high_freq"),
     )
-    psd = xp.abs(spectrum_f) ** 2
 
-    # psd_angle = xp.abs(spectrum_f_angle) ** 2
+    psd = xp.abs(spectrum_f) ** 2
 
     if parameters.get("corner_compensation", False):
         psd = corner_compensation(xp, psd)
 
-    # Moments
     output_dict["M0"] = moment(xp, psd[idxs], freqs, 0)
     output_dict["M1"] = moment(xp, psd[idxs], freqs, 1)
     output_dict["M2"] = moment(xp, psd[idxs], freqs, 2)
-    # output_dict["M3"] = moment(xp, psd[idxs], freqs, 3)
-    # output_dict["M4"] = moment(xp, psd[idxs], freqs, 4)
-    # output_dict["M5"] = moment(xp, psd[idxs], freqs, 5)
-    # output_dict["M6"] = moment(xp, psd[idxs], freqs, 6)
+
     output_dict["M0ff"] = gaussian_flatfield(
         output_dict["M0"],
         parameters.get("registration_flatfield_gw", 1.0),
-        gaussian_filter,
+        backend.gaussian_filter,
     )
 
     output_dict["spectrum_line"] = xp.mean(psd, axis=(-2, -1))
 
-    # Frequency bands
     for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
         idxs_band, _ = frequency_symmetric_filtering(
             xp, fft, nt_sub, parameters["sampling_freq"], f1, f2
         )
-        band = xp.mean(psd[idxs_band], axis=0)
-        output_dict[f"band_{k}_{f1}_{f2}"] = band
+        output_dict[f"band_{k}_{f1}_{f2}"] = xp.mean(psd[idxs_band], axis=0)
+
+    return output_dict
 
 
 def _process_shack_hartmann(parameters, frames, output_dict=None):
-
-    fft = cp.fft
-    _, ny, nx = frames.shape
-
+    xp = backend.xp
+    fft = backend.fft
+    nt, ny, nx = frames.shape
     prop_method = parameters["spatial_propagation"]
 
     if prop_method == "Fresnel":
         U = construct_subapertures_fresnel(
-            cp,
+            xp,
             fft,
             frames,
             parameters["wavelength"],
@@ -184,7 +164,7 @@ def _process_shack_hartmann(parameters, frames, output_dict=None):
         )
     elif prop_method == "AngularSpectrum":
         U = construct_subapertures_angular(
-            cp,
+            xp,
             fft,
             frames,
             parameters["wavelength"],
@@ -198,11 +178,12 @@ def _process_shack_hartmann(parameters, frames, output_dict=None):
             parameters["shack_hartmann_ny_subap"],
             parameters["shack_hartmann_svd_threshold"],
         )
+    else:
+        raise ValueError(f"Unknown propagation method: {prop_method!r}")
 
-    # Displacement estimation
-    if parameters.get("shack_hartmann_graph_laplacian", False):  # Use all the sub aps
+    if parameters.get("shack_hartmann_graph_laplacian", False):
         shifts_y, shifts_x = calculate_displacements_graph_laplacian(
-            cp,
+            xp,
             fft,
             U,
             pupil_threshold=parameters.get("shack_hartmann_pupil_threshold", 1.0),
@@ -213,10 +194,9 @@ def _process_shack_hartmann(parameters, frames, output_dict=None):
                 "shack_hartmann_shifts_pixel_range_threshold", 20.0
             ),
         )
-    else:  # Use only the shifts to the central sub ap
-        _, _, _, _ = U.shape
+    else:
         shifts_y, shifts_x = calculate_displacements(
-            cp,
+            xp,
             fft,
             U,
             pupil_threshold=parameters.get("shack_hartmann_pupil_threshold", 1.0),
@@ -229,19 +209,19 @@ def _process_shack_hartmann(parameters, frames, output_dict=None):
         )
 
     if output_dict is not None:
-
         sy, sx, numy, numx = U.shape
-        U = cp.transpose(U, axes=(0, 2, 1, 3))
-        output_dict["shack_hartmann_sub_images"] = cp.reshape(U, (numy * sy, numx * sx))
+        U = xp.transpose(U, axes=(0, 2, 1, 3))
+        output_dict["shack_hartmann_sub_images"] = xp.reshape(U, (numy * sy, numx * sx))
 
-    del U, frames  # Memory footprint reduction
+    del U, frames
 
-    # Phase reconstruction
     phase = None
+    coefs = None
+
     if parameters.get("shack_hartmann_zernike_fit", True):
         if prop_method == "Fresnel":
             coefs, phase = fit_zernike_fresnel(
-                cp,
+                xp,
                 ny,
                 nx,
                 parameters["pixel_pitch"][0],
@@ -251,9 +231,9 @@ def _process_shack_hartmann(parameters, frames, output_dict=None):
                 shifts_x,
                 parameters.get("shack_hartmann_zernike_fit_modes"),
             )
-        elif prop_method == "AngularSpectrum":
+        else:
             coefs, phase = fit_zernike_angular_spectrum(
-                cp,
+                xp,
                 ny,
                 nx,
                 parameters["pixel_pitch"][0],
@@ -265,116 +245,158 @@ def _process_shack_hartmann(parameters, frames, output_dict=None):
                 parameters.get("shack_hartmann_zernike_fit_modes"),
             )
 
-    # Phase reconstruction
-    phase = None
-    if parameters.get("shack_hartmann_zernike_fit", True):
-        if prop_method == "Fresnel":
-            coefs, phase = fit_zernike_fresnel(
-                cp,
-                ny,
-                nx,
-                parameters["pixel_pitch"][0],
-                parameters["pixel_pitch"][1],
-                parameters["wavelength"],
-                shifts_y,
-                shifts_x,
-                parameters.get("shack_hartmann_zernike_fit_modes"),
-            )
-        elif prop_method == "AngularSpectrum":
-            coefs, phase = fit_zernike_angular_spectrum(
-                cp,
-                ny,
-                nx,
-                parameters["pixel_pitch"][0],
-                parameters["pixel_pitch"][1],
-                parameters["wavelength"],
-                parameters["z"],
-                shifts_y,
-                shifts_x,
-                parameters.get("shack_hartmann_zernike_fit_modes"),
-            )
-        # elif parameters.get("shack_hartmann_southwell_phase_integration", False):
-        #     phase = southwell_phase_integration(
-        #         bm, ny, nx, parameters["pixel_pitch"][0], parameters["pixel_pitch"][1],
-        #         parameters["wavelength"], shifts_y, shifts_x
-        #     )
         if output_dict is not None:
             output_dict["shack_hartmann_zernike_coefs"] = coefs
             output_dict["shack_hartmann_wavefront_phase"] = phase
-    else:
-        phase = None
 
-    # Phase correction term
-    phase_term = None
-    if phase is not None:
-        phase_term = cp.exp(-1j * phase)
-        phase_term = cp.nan_to_num(phase_term, nan=0.0)
+    if phase is None:
+        return None
 
-    return phase_term
+    phase_term = xp.exp(-1j * phase)
+    return xp.nan_to_num(phase_term, nan=0.0)
 
 
-def preview(file_path, parameters, save_debug=True):
-    file_reader = FileReaderFactory.create(file_path)
-
-    if file_reader.ext == ".holo":
-        print("file header :", file_reader.file_header)
-        parameters = update_from_footer(parameters, file_reader.file_footer)
-
-    if file_reader.ext == ".cine":
-        print("file header :", file_reader.metadata)
-    print("parameters : ", parameters)
-
-    batch_size = parameters["batch_size"]
-    first_frame = parameters["first_frame"]
-    frames = file_reader.read_frames(first_frame=first_frame, batch_size=batch_size)
-
-    # transfer to gpu
-    frames = cp.array(frames, dtype=cp.float32)
-
-    # 2D filtering
+def _process_one_batch(parameters, frames, M0_reg=None):
+    """Process one batch on the active backend."""
     if parameters.get("filter2d", False):
-        frames = filter_2d(cp, cp.fft, frames, parameters["filter2d_low"])
+        frames = filter_2d(
+            backend.xp,
+            backend.fft,
+            frames,
+            parameters["filter2d_low"],
+        )
 
     res = {}
-
     phase_term = None
+
+    if parameters.get("shack_hartmann", False):
+        phase_term = _process_shack_hartmann(
+            parameters,
+            frames,
+            output_dict=res,
+        )
+
+    _process_batch(
+        parameters,
+        frames,
+        phase_term=phase_term,
+        output_dict=res,
+    )
+
+    if M0_reg is None and parameters.get("image_registration", False):
+        M0_reg = res["M0ff"]
+
+    if M0_reg is not None:
+        shift_y, shift_x = register_images_shifts(
+            backend.xp,
+            backend.fft,
+            M0_reg,
+            res["M0ff"],
+            radius=parameters["registration_radius"],
+            sub_pixel=parameters["registration_sub_pixel"],
+        )
+
+        for key, value in list(res.items()):
+            if key in {"M0ff", "M0", "M1", "M2"} or "band_" in key:
+                res[key] = apply_register_images_shifts(
+                    backend.xp,
+                    backend.fft,
+                    value,
+                    shift_y,
+                    shift_x,
+                )
+
+        res["registration"] = backend.xp.stack(
+            [
+                backend.xp.asarray(shift_y),
+                backend.xp.asarray(shift_x),
+            ]
+        )
+
+    return res, M0_reg
+
+
+def _append_numpy_results(output, res):
+    for key, value in res.items():
+        output[key].append(backend.to_numpy(value))
+
+
+def preview(file_path, parameters):
+    file_reader = FileReaderFactory.create(file_path)
+
+    print("previewing file :", file_path)
+
+    if file_reader.extension == ".holo":
+        print("file header :", file_reader.header)
+        parameters = update_from_holo_footer(parameters, file_reader.footer)
+
+    if file_reader.extension == ".cine":
+        print("file header :", file_reader.metadata)
+
+    print("parameters : ", parameters)
+
+    frames = file_reader.read_frames(
+        first_frame=parameters["first_frame"],
+        batch_size=parameters["batch_size"],
+    )
+    frames = backend.to_backend(frames).astype(backend.xp.float32, copy=False)
+
+    if parameters.get("filter2d", False):
+        frames = filter_2d(
+            backend.xp,
+            backend.fft,
+            frames,
+            parameters["filter2d_low"],
+        )
+
+    res = {}
+    phase_term = None
+
     if parameters.get("shack_hartmann", False):
         phase_term = _process_shack_hartmann(parameters, frames, output_dict=res)
 
-    # calc on gpu
-    _process_batch(parameters, frames=frames, phase_term=phase_term, output_dict=res)
+    _process_batch(
+        parameters,
+        frames,
+        phase_term=phase_term,
+        output_dict=res,
+    )
 
     if parameters.get("square", False):
-        res = {
-            k: cp.squeeze(square_cupy(v[cp.newaxis, ...])) if v.ndim == 2 else v
-            for k, v in res.items()
-        }
+        if backend.is_gpu:
+            res = {
+                k: (
+                    backend.xp.squeeze(square_cupy(v[backend.xp.newaxis, ...]))
+                    if v.ndim == 2
+                    else v
+                )
+                for k, v in res.items()
+            }
+        else:
+            # square_cupy is CuPy-specific; preserve the existing result shape
+            # on CPU rather than importing CuPy just for this optional operation.
+            res = {k: np.squeeze(v) if v.ndim == 2 else v for k, v in res.items()}
 
-    # transfer to cpu
-    res_np = {k: cp.asnumpy(v) for k, v in res.items()}
+    res_np = {k: backend.to_numpy(v) for k, v in res.items()}
 
-    # free gpu ram
     del res
-    cp.get_default_memory_pool().free_all_blocks()
+    backend.clear_gpu_memory()
 
-    preview_path = _get_default_output_path(file_reader.file_path) / "preview"
+    save_dir = get_default_output_path(file_reader.file_path) / "preview"
+    save_preview_images(res_np, save_dir, square=True)
+    save_h5(save_dir, res_np, parameters)
 
-    if save_debug:
-        save_preview_images(res_np, preview_path)
-        (preview_path / "h5").mkdir(parents=True, exist_ok=True)
-        _save_h5_2(preview_path, res_np, parameters)
-
-    return preview_image_from_results(res_np)
+    return res_np
 
 
-def process(file_path, parameters, progress_callback=None):
+def process(file_path, parameters):
     file_reader = FileReaderFactory.create(file_path)
 
-    if file_reader.ext == ".holo":
-        print("file header :", file_reader.file_header)
-        parameters = update_from_footer(parameters, file_reader.file_footer)
+    if file_reader.extension == ".holo":
+        print("file header :", file_reader.header)
+        parameters = update_from_holo_footer(parameters, file_reader.footer)
 
-    if file_reader.ext == ".cine":
+    if file_reader.extension == ".cine":
         print("file header :", file_reader.metadata)
 
     print("parameters : ", parameters)
@@ -382,258 +404,170 @@ def process(file_path, parameters, progress_callback=None):
     batch_size = parameters["batch_size"]
     batch_stride = parameters["batch_stride"]
     first_frame = parameters["first_frame"]
+
     end_frame = parameters.get("end_frame", 0)
     if end_frame <= 0:
         end_frame = (
-            file_reader.file_header.num_frames
-            if file_reader.ext == ".holo"
-            else file_reader.TotalImageCount
+            file_reader.total_frames
         )
 
     if batch_stride >= (end_frame - first_frame):
         num_batch = 1 if batch_size <= (end_frame - first_frame) else 0
     else:
         num_batch = int((end_frame - first_frame) / batch_stride)
+
     if num_batch <= 0:
-        return None
+        return
 
     output = defaultdict(list)
-
-    # creating the registration reference image
     M0_reg = None
+
+    # Build the registration reference once, using the active backend.
     if parameters.get("image_registration", False) and (
-        parameters.get("registration_ref_first_frame", 0) != 0
-        or parameters.get("registration_ref_batch_size", batch_size) != batch_size
+        parameters["registration_ref_first_frame"] != 0
+        or parameters["registration_ref_batch_size"] != parameters["batch_size"]
     ):
-        frames = file_reader.read_frames(
-            first_frame=parameters.get("registration_ref_first_frame", 0),
-            batch_size=parameters.get("registration_ref_batch_size", batch_size),
+        ref_frames = file_reader.read_frames(
+            first_frame=parameters["registration_ref_first_frame"],
+            batch_size=parameters["registration_ref_batch_size"],
         )
-        frames = cp.array(frames)
-        # 2D filtering
-        if parameters.get("filter2d", False):
-            frames = filter_2d(cp, cp.fft, frames, parameters["filter2d_low"])
-        phase_term = None
-        if parameters.get("shack_hartmann", False):
-            phase_term = _process_shack_hartmann(parameters, frames)
-        res = {}
-        _process_batch(parameters, frames, phase_term=phase_term, output_dict=res)
-        M0_reg = res["M0ff"].copy()
-        print(res.keys())
-        del frames, phase_term  # Memory footprint reduction
-        res.clear()
-        del res
+        ref_frames = backend.to_backend(ref_frames)
 
-    h2d_stream = cp.cuda.Stream(non_blocking=True)
-    # d2h_stream = cp.cuda.Stream(non_blocking=True)
-    compute_stream = cp.cuda.Stream(non_blocking=True)
+        ref_res, _ = _process_one_batch(
+            parameters,
+            ref_frames,
+            M0_reg=None,
+        )
+        M0_reg = ref_res["M0ff"].copy()
 
-    processed_batches = 0
+        del ref_frames, ref_res
+        backend.clear_gpu_memory()
 
-    PREFETCH_DEPTH = 4  # Number of batches to prefetch ahead (set to 3 or 4)
+    # NumPy/CPU path: no CUDA streams or events are created.
+    if not backend.is_gpu:
+        for i in tqdm(range(num_batch)):
+            frames = file_reader.read_frames(
+                first_frame=first_frame + i * batch_stride,
+                batch_size=batch_size,
+            )
+            frames = backend.to_backend(frames)
 
-    # prefetch buffers
-    d_buffers = [None] * PREFETCH_DEPTH
-    h2d_events = [None] * PREFETCH_DEPTH
-    compute_events = [None] * PREFETCH_DEPTH
-    buffer_ready = [False] * PREFETCH_DEPTH
+            res, M0_reg = _process_one_batch(
+                parameters,
+                frames,
+                M0_reg=M0_reg,
+            )
+            _append_numpy_results(output, res)
 
-    current_idx = 0
-    processed_batches = 0
+            del frames, res
 
-    for i in tqdm(range(num_batch + PREFETCH_DEPTH)):
+    else:
+        # CuPy path: retain asynchronous host-to-device prefetching.
+        h2d_stream = backend.xp.cuda.Stream(non_blocking=True)
+        compute_stream = backend.xp.cuda.Stream(non_blocking=True)
 
-        prefetch_idx = i % PREFETCH_DEPTH
+        PREFETCH_DEPTH = 4
+        d_buffers = [None] * PREFETCH_DEPTH
+        h2d_events = [None] * PREFETCH_DEPTH
+        compute_events = [None] * PREFETCH_DEPTH
+        buffer_ready = [False] * PREFETCH_DEPTH
+        current_idx = 0
+        processed_batches = 0
 
-        if i < num_batch:
-            with h2d_stream:
-                frames = file_reader.read_frames(
-                    first_frame=first_frame + i * batch_stride, batch_size=batch_size
-                )
-                d_buffers[prefetch_idx] = cp.asarray(frames)
+        for i in tqdm(range(num_batch + PREFETCH_DEPTH)):
+            prefetch_idx = i % PREFETCH_DEPTH
 
-                h2d_events[prefetch_idx] = cp.cuda.Event()
-                h2d_events[prefetch_idx].record(h2d_stream)
-                buffer_ready[prefetch_idx] = True
+            if i < num_batch:
+                with h2d_stream:
+                    frames = file_reader.read_frames(
+                        first_frame=first_frame + i * batch_stride,
+                        batch_size=batch_size,
+                    )
+                    d_buffers[prefetch_idx] = backend.xp.asarray(frames)
+                    h2d_events[prefetch_idx] = backend.xp.cuda.Event()
+                    h2d_events[prefetch_idx].record(h2d_stream)
+                    buffer_ready[prefetch_idx] = True
 
-        while buffer_ready[current_idx] and current_idx != prefetch_idx:
+            while buffer_ready[current_idx] and current_idx != prefetch_idx:
+                h2d_events[current_idx].synchronize()
 
+                with compute_stream:
+                    d_current = d_buffers[current_idx]
+                    res, M0_reg = _process_one_batch(
+                        parameters,
+                        d_current,
+                        M0_reg=M0_reg,
+                    )
+                    compute_events[current_idx] = backend.xp.cuda.Event()
+                    compute_events[current_idx].record(compute_stream)
+
+                compute_events[current_idx].synchronize()
+                _append_numpy_results(output, res)
+
+                processed_batches += 1
+                buffer_ready[current_idx] = False
+                d_buffers[current_idx] = None
+                current_idx = (current_idx + 1) % PREFETCH_DEPTH
+
+                if processed_batches >= num_batch:
+                    break
+
+            if processed_batches >= num_batch:
+                break
+
+        while buffer_ready[current_idx]:
             h2d_events[current_idx].synchronize()
 
             with compute_stream:
                 d_current = d_buffers[current_idx]
-
-                # 2D filtering
-                if parameters.get("filter2d", False):
-                    d_current = filter_2d(cp, cp.fft, d_current, parameters["filter2d_low"])
-
-                res = {}
-
-                phase_term = None
-                if parameters.get("shack_hartmann", False):
-                    phase_term = _process_shack_hartmann(
-                        parameters, d_current, output_dict=res
-                    )
-
-                _process_batch(
-                    parameters, d_current, phase_term=phase_term, output_dict=res
+                res, M0_reg = _process_one_batch(
+                    parameters,
+                    d_current,
+                    M0_reg=M0_reg,
                 )
-
-                if (
-                    M0_reg is None
-                    and parameters.get("image_registration", False)
-                ):  # first batch is used for fixed batch
-                    M0_reg = res["M0ff"]
-
-                if M0_reg is not None:
-                    shift_y, shift_x = register_images_shifts(
-                        cp,
-                        cp.fft,
-                        M0_reg,
-                        res["M0ff"],
-                        radius=parameters.get("registration_radius", 0.8),
-                        sub_pixel=parameters.get("registration_sub_pixel", False),
-                    )
-
-                    for k, v in res.items():
-                        if k in ["M0ff", "M0", "M1", "M2"] or "band_" in k:
-                            res[k] = apply_register_images_shifts(
-                                cp, cp.fft, v, shift_y, shift_x
-                            )
-
-                    res["registration"] = cp.stack([cp.array(shift_y), cp.array(shift_x)])
-
-                compute_events[current_idx] = cp.cuda.Event()
+                compute_events[current_idx] = backend.xp.cuda.Event()
                 compute_events[current_idx].record(compute_stream)
 
             compute_events[current_idx].synchronize()
-
-            if res:
-                for k, v in res.items():
-                    output[k].append(v.get()) # transfer to cpu
+            _append_numpy_results(output, res)
 
             processed_batches += 1
-            if progress_callback is not None:
-                progress_callback(
-                    processed_batches,
-                    num_batch,
-                    f"Batch {processed_batches}/{num_batch}",
-                )
-
             buffer_ready[current_idx] = False
-            d_buffers[current_idx] = None  # Free memory
+            d_buffers[current_idx] = None
             current_idx = (current_idx + 1) % PREFETCH_DEPTH
 
             if processed_batches >= num_batch:
                 break
 
-    while buffer_ready[current_idx]:
-
-        h2d_events[current_idx].synchronize()
-
-        with compute_stream:
-            d_current = d_buffers[current_idx]
-
-            # 2D filtering
-            if parameters.get("filter2d", False):
-                d_current = filter_2d(cp, cp.fft, d_current, parameters["filter2d_low"])
-
-            res = {}
-
-            phase_term = None
-            if parameters.get("shack_hartmann", False):
-                phase_term = _process_shack_hartmann(
-                    parameters, d_current, output_dict=res
-                )
-
-            _process_batch(
-                parameters, d_current, phase_term=phase_term, output_dict=res
-            )
-
-            if M0_reg is None and parameters.get("image_registration", False):
-                M0_reg = res["M0ff"]
-
-            if M0_reg is not None:
-                shift_y, shift_x = register_images_shifts(
-                    cp,
-                    cp.fft,
-                    M0_reg,
-                    res["M0ff"],
-                    radius=parameters.get("registration_radius", 0.8),
-                    sub_pixel=parameters.get("registration_sub_pixel", False),
-                )
-
-                for k, v in res.items():
-                    if k in ["M0ff", "M0", "M1", "M2"] or "band_" in k:
-                        res[k] = apply_register_images_shifts(
-                            cp, cp.fft, v, shift_y, shift_x
-                        )
-
-                res["registration"] = cp.stack(
-                    [cp.array(shift_y), cp.array(shift_x)]
-                )
-
-            compute_events[current_idx] = cp.cuda.Event()
-            compute_events[current_idx].record(compute_stream)
-
-        compute_events[current_idx].synchronize()
-
-        if res:
-            for k, v in res.items():
-                output[k].append(v.get()) # transfer to cpu
-
-        processed_batches += 1
-        if progress_callback is not None:
-            progress_callback(
-                processed_batches,
-                num_batch,
-                f"Batch {processed_batches}/{num_batch}",
-            )
-
-        buffer_ready[current_idx] = False
-        d_buffers[current_idx] = None
-        current_idx = (current_idx + 1) % PREFETCH_DEPTH
-
-        if processed_batches >= num_batch:
-            break
-
-    output = {k: np.stack(v, axis=0) for k, v in output.items()}
+    output = {key: np.stack(values, axis=0) for key, values in output.items()}
 
     if parameters.get("square", False):
-        output = {k: square_cupy(cp.array(v)).get() if v.ndim == 3 else v for k, v in output.items()}
+        if backend.is_gpu:
+            output = {
+                key: (
+                    backend.to_numpy(square_cupy(backend.xp.asarray(value)))
+                    if value.ndim == 3
+                    else value
+                )
+                for key, value in output.items()
+            }
+        else:
+            # Keep the CPU fallback independent of CuPy.
+            output = {
+                key: np.squeeze(value) if value.ndim == 3 else value
+                for key, value in output.items()
+            }
 
-    cp.get_default_memory_pool().free_all_blocks()
+    backend.clear_gpu_memory()
 
-    target_dir = _get_default_output_path(file_reader.file_path)
-
-    if "saving_to_folder" in parameters:
-        target_dir = Path(parameters["saving_to_folder"])
-
-    _create_directories(target_dir, "FULL")
-
-    # renaming for compatibility with Doppler View
+    # Renaming for compatibility with Doppler View.
     output["moment0"] = output.pop("M0")
     output["moment0ff"] = output.pop("M0ff")
     output["moment1"] = output.pop("M1")
     output["moment2"] = output.pop("M2")
 
-    save_to_h5_list = [
-        "moment0ff",
-        "moment0",
-        "moment1",
-        "moment2",
-        "shack_hartmann_zernike_coefs",
-        "registration",
-        "spectrum_line",
-    ] + [key for key in output if "band_" in key]
-
-    _save_h5_2(target_dir, output, parameters, save_only_list=save_to_h5_list)
-    return save_result_map(
-        target_dir,
-        output,
-        parameters,
-        file_reader,
-        num_batch=num_batch,
-        end_frame=end_frame,
-        first_frame=first_frame,
+    save_outputs(
+        file_reader=file_reader,
+        output=output,
+        parameters=parameters,
     )
