@@ -724,7 +724,7 @@ def _write_cardiac_h5(handle, analysis, parameters):
     )
 
 
-def _save_cardiac_qc_plots(h5_path, png_dir):
+def _save_cardiac_qc_plots(h5_path, png_dir, source_prefix):
     """Save time-domain landmark QC and one beat-specific streak trace."""
     import matplotlib
 
@@ -775,14 +775,17 @@ def _save_cardiac_qc_plots(h5_path, png_dir):
     axes[1].set_ylabel("dg/dt")
     axes[1].legend(loc="best")
     figure.tight_layout()
-    figure.savefig(png_dir / "cardiac_segmentation_qc.png", dpi=150)
+    figure.savefig(
+        png_dir / f"{source_prefix}_cardiac_segmentation_qc.png",
+        dpi=150,
+    )
     plt.close(figure)
 
     if not has_streak_qc:
         return
 
     iio.imwrite(
-        png_dir / "singlebeat_streak_mask.png",
+        png_dir / f"{source_prefix}_singlebeat_streak_mask.png",
         (streak_mask.astype(np.uint8) * 255),
     )
     detected = np.flatnonzero(np.any(streak_mask, axis=1))
@@ -804,7 +807,10 @@ def _save_cardiac_qc_plots(h5_path, png_dir):
         axis.set_title(f"Broadband streak QC, accepted beat {beat_index}")
         axis.legend(loc="best")
         figure.tight_layout()
-        figure.savefig(png_dir / f"streak_qc_beat_{beat_index:04d}.png", dpi=150)
+        figure.savefig(
+            png_dir / f"{source_prefix}_streak_qc_beat_{beat_index:04d}.png",
+            dpi=150,
+        )
         plt.close(figure)
 
 
@@ -814,6 +820,14 @@ def _save_endpoint_pngs(h5_path, target_dir, parameters):
     png_dir.mkdir(parents=True, exist_ok=True)
     with h5py.File(h5_path, "r") as handle:
         root = handle["spectrograms"] if "spectrograms" in handle else handle
+        source_file = root.attrs.get(
+            "source_file", handle.attrs.get("source_file", "")
+        )
+        if isinstance(source_file, bytes):
+            source_file = source_file.decode("utf-8")
+        source_prefix = Path(str(source_file)).stem
+        if not source_prefix:
+            source_prefix = Path(h5_path).stem.removesuffix("_spectral_endpoints")
         endpoint_maps = {}
         for group_name in ("longtimes", "singlebeat"):
             if group_name not in root:
@@ -828,10 +842,10 @@ def _save_endpoint_pngs(h5_path, target_dir, parameters):
     for name, values in endpoint_maps.items():
         # HDF5 is (time-or-phase,f); transposition makes f vertical.
         display = apply_contrast_adjustment(values.T, parameters)
-        path = png_dir / f"{name}.png"
+        path = png_dir / f"{source_prefix}_{name}.png"
         iio.imwrite(path, normalize_to_uint8(display))
         print(f"Saving: {path}")
-    _save_cardiac_qc_plots(h5_path, png_dir)
+    _save_cardiac_qc_plots(h5_path, png_dir, source_prefix)
 
 
 def process(file_path, parameters, progress_callback=None, warning_callback=None):

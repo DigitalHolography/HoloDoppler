@@ -320,6 +320,9 @@ def test_missing_cardiac_pulse_keeps_longtimes_and_writes_failure_qc(tmp_path):
     path = tmp_path / "no-pulse.h5"
     with h5py.File(path, "w") as handle:
         spectrograms = handle.create_group("spectrograms")
+        spectrograms.attrs["source_file"] = str(
+            tmp_path / "no_pulse_recording.holo"
+        )
         longtimes = spectrograms.create_group("longtimes")
         longtimes.create_dataset("S", data=signal)
         longtimes.create_dataset("S0", data=background)
@@ -341,12 +344,12 @@ def test_missing_cardiac_pulse_keeps_longtimes_and_writes_failure_qc(tmp_path):
     _save_endpoint_pngs(path, tmp_path, {"contrast": False})
     png_names = {item.name for item in (tmp_path / "png").iterdir()}
     assert {
-        "longtimes_S.png",
-        "longtimes_S0.png",
-        "longtimes_L.png",
-        "cardiac_segmentation_qc.png",
+        "no_pulse_recording_longtimes_S.png",
+        "no_pulse_recording_longtimes_S0.png",
+        "no_pulse_recording_longtimes_L.png",
+        "no_pulse_recording_cardiac_segmentation_qc.png",
     }.issubset(png_names)
-    assert "singlebeat_S.png" not in png_names
+    assert "no_pulse_recording_singlebeat_S.png" not in png_names
 
 
 def test_grouped_hdf5_schema_contains_longtimes_singlebeat_and_qc(tmp_path):
@@ -395,6 +398,9 @@ def test_grouped_hdf5_schema_contains_longtimes_singlebeat_and_qc(tmp_path):
 
     with h5py.File(path, "w") as handle:
         spectrograms = handle.create_group("spectrograms")
+        spectrograms.attrs["source_file"] = str(
+            tmp_path / "retina_sample.holo"
+        )
         longtimes = spectrograms.create_group("longtimes")
         longtimes.create_dataset("S", data=np.ones((6, 3), dtype=np.float32))
         longtimes.create_dataset("S0", data=np.ones((6, 3), dtype=np.float32))
@@ -446,15 +452,15 @@ def test_grouped_hdf5_schema_contains_longtimes_singlebeat_and_qc(tmp_path):
 
     _save_endpoint_pngs(path, tmp_path, {"contrast": False})
     expected_pngs = {
-        "longtimes_S.png",
-        "longtimes_S0.png",
-        "longtimes_L.png",
-        "singlebeat_S.png",
-        "singlebeat_S0.png",
-        "singlebeat_L.png",
-        "cardiac_segmentation_qc.png",
-        "singlebeat_streak_mask.png",
-        "streak_qc_beat_0000.png",
+        "retina_sample_longtimes_S.png",
+        "retina_sample_longtimes_S0.png",
+        "retina_sample_longtimes_L.png",
+        "retina_sample_singlebeat_S.png",
+        "retina_sample_singlebeat_S0.png",
+        "retina_sample_singlebeat_L.png",
+        "retina_sample_cardiac_segmentation_qc.png",
+        "retina_sample_singlebeat_streak_mask.png",
+        "retina_sample_streak_qc_beat_0000.png",
     }
     assert expected_pngs.issubset(
         {item.name for item in (tmp_path / "png").iterdir()}
