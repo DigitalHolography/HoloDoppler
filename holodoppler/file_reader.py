@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
-import cinereader
+from .cinereader_copy import read_metadata
 import numpy as np
 
 

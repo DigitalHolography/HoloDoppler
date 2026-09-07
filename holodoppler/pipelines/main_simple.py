@@ -19,7 +19,7 @@ from holodoppler.shack_hartmann import (
     calculate_displacements_graph_laplacian,
 )
 from holodoppler.zernike import fit_zernike_fresnel, fit_zernike_angular_spectrum
-from holodoppler.utils import gaussian_flatfield, update_from_holo_footer, square_cupy
+from holodoppler.utils import gaussian_flatfield, update_from_holo_footer, resize_frames
 from holodoppler.filtering import (
     filter_2d,
     svd_filter,
@@ -363,19 +363,7 @@ def preview(file_path, parameters):
     )
 
     if parameters.get("square", False):
-        if backend.is_gpu:
-            res = {
-                k: (
-                    backend.xp.squeeze(square_cupy(v[backend.xp.newaxis, ...]))
-                    if v.ndim == 2
-                    else v
-                )
-                for k, v in res.items()
-            }
-        else:
-            # square_cupy is CuPy-specific; preserve the existing result shape
-            # on CPU rather than importing CuPy just for this optional operation.
-            res = {k: np.squeeze(v) if v.ndim == 2 else v for k, v in res.items()}
+        res = {k: resize_frames(v, max(v.shape[-2:]), max(v.shape[-2:])) if v.ndim==2 else v for k, v in res.items()}
 
     res_np = {k: backend.to_numpy(v) for k, v in res.items()}
 
@@ -542,21 +530,10 @@ def process(file_path, parameters):
     output = {key: np.stack(values, axis=0) for key, values in output.items()}
 
     if parameters.get("square", False):
-        if backend.is_gpu:
-            output = {
-                key: (
-                    backend.to_numpy(square_cupy(backend.xp.asarray(value)))
-                    if value.ndim == 3
-                    else value
-                )
-                for key, value in output.items()
-            }
-        else:
-            # Keep the CPU fallback independent of CuPy.
-            output = {
-                key: np.squeeze(value) if value.ndim == 3 else value
-                for key, value in output.items()
-            }
+        output = {
+            key: resize_frames(value,max(value.shape[-2:]),max(value.shape[-2:])) if value.ndim == 3 else value
+            for key, value in output.items()
+        }
 
     backend.clear_gpu_memory()
 
