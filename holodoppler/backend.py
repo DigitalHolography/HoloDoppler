@@ -11,6 +11,7 @@ import scipy.fft as np_fft
 import scipy.ndimage as np_ndi
 from scipy.ndimage import gaussian_filter as np_gaussian_filter
 from scipy.ndimage import zoom as scipy_zoom
+import scipy.linalg as np_linalg
 
 
 # ---------------------------------------------------------------------------
@@ -23,7 +24,7 @@ try:
     import cupyx.scipy.ndimage as cp_ndi
     from cupyx.scipy.ndimage import gaussian_filter as cp_gaussian_filter
     from cupyx.scipy.ndimage import zoom as cupy_zoom
-
+    import cupyx.scipy.linalg as cp_linalg
     _cupy_imported = True
 
 except Exception:
@@ -32,6 +33,7 @@ except Exception:
     cp_ndi = None
     cp_gaussian_filter = None
     cupy_zoom = None
+    cp_linalg = None
     _cupy_imported = False
 
 
@@ -122,6 +124,7 @@ class BackendManager:
         self.gaussian_filter = None
         self.ndi = None
         self.zoom = None
+        self.linalg = None
 
         self._init_backend()
 
@@ -143,6 +146,7 @@ class BackendManager:
             self.gaussian_filter = np_gaussian_filter
             self.ndi = np_ndi
             self.zoom = scipy_zoom
+            self.linalg = np_linalg
 
             return
 
@@ -160,6 +164,7 @@ class BackendManager:
                 self.gaussian_filter = cp_gaussian_filter
                 self.ndi = cp_ndi
                 self.zoom = cupy_zoom
+                self.linalg = cp_linalg
 
                 return
 
@@ -171,6 +176,7 @@ class BackendManager:
             self.gaussian_filter = np_gaussian_filter
             self.ndi = np_ndi
             self.zoom = scipy_zoom
+            self.linalg = np_linalg
 
             return
 
@@ -303,6 +309,7 @@ def set_backend(name: str = "auto") -> BackendManager:
     global gaussian_filter
     global ndi
     global zoom
+    global linalg
     global is_gpu
     global cupy_available
 
@@ -315,7 +322,9 @@ def set_backend(name: str = "auto") -> BackendManager:
     gaussian_filter = _backend.gaussian_filter
     ndi = _backend.ndi
     zoom = _backend.zoom
+    linalg = _backend.linalg
     is_gpu = _backend.is_gpu
+
 
     cupy_available = _cupy_available
 
@@ -333,6 +342,7 @@ fft = _backend.fft
 gaussian_filter = _backend.gaussian_filter
 ndi = _backend.ndi
 zoom = _backend.zoom
+linalg = _backend.linalg
 is_gpu = _backend.is_gpu
 
 cupy_available = _cupy_available

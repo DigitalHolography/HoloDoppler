@@ -89,7 +89,6 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             raise ValueError(f"Unknown propagation method: {prop_method!r}")
 
     holograms_f = svd_filter(
-        xp,
         holograms,
         parameters["svd_threshold"],
         filter_mode=parameters["svd_filter_mode"],
