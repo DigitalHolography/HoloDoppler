@@ -128,6 +128,9 @@ def resize_frames(
         2D, otherwise a frame stack with shape
         ``(n_frames, height, width)``.
     """
+
+    video_frames = backend.to_backend(video_frames)
+
     was_2d = video_frames.ndim == 2
 
     if was_2d:
@@ -153,6 +156,8 @@ def resize_frames(
         zoom_factors,
         order=order,
     )
+
+    resized = backend.to_numpy(resized)
 
     if was_2d:
         return resized[0]

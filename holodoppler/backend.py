@@ -24,7 +24,7 @@ try:
     import cupyx.scipy.ndimage as cp_ndi
     from cupyx.scipy.ndimage import gaussian_filter as cp_gaussian_filter
     from cupyx.scipy.ndimage import zoom as cupy_zoom
-    import cupyx.scipy.linalg as cp_linalg
+    import cupy.linalg as cp_linalg
     _cupy_imported = True
 
 except Exception:

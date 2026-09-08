@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+import shutil
 import csv
 import json
 import os
@@ -14,6 +16,7 @@ import h5py
 import numpy as np
 import yaml
 from PIL import Image
+import ffmpeg_downloader as ffdl
 
 from holodoppler.get_version import get_version
 from holodoppler.utils import resize_frames
@@ -249,37 +252,6 @@ def average_video(data: np.ndarray) -> np.ndarray:
 # ============================================================================
 
 
-def find_ffmpeg() -> str:
-    """
-    Find FFmpeg executable.
-
-    Raises:
-        RuntimeError if FFmpeg cannot be found.
-    """
-    executable = "ffmpeg"
-
-    if os.name == "nt":
-        executable = "ffmpeg.exe"
-
-    try:
-        result = subprocess.run(
-            [executable, "-version"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
-    except FileNotFoundError as exc:
-        raise RuntimeError(
-            "FFmpeg was not found. Please install FFmpeg and make sure "
-            "'ffmpeg' is available on PATH."
-        ) from exc
-
-    if result.returncode != 0:
-        raise RuntimeError("FFmpeg executable was found but could not be executed.")
-
-    return executable
-
-
 def make_even_dimensions(frames: np.ndarray) -> np.ndarray:
     """
     Pad video dimensions to even values.
@@ -311,23 +283,17 @@ def make_even_dimensions(frames: np.ndarray) -> np.ndarray:
     return padded
 
 
-def prepare_ffmpeg_frames(data: np.ndarray) -> tuple[np.ndarray, str, str]:
+def prepare_ffmpeg_frames(
+    data: np.ndarray,
+) -> tuple[np.ndarray, str, str]:
     """
     Prepare video for FFmpeg.
-
-    Returns:
-        frames
-        input pixel format
-        output pixel format
-
-    RGB is kept as RGB and encoded with Ut Video using gbrp.
-    Grayscale is encoded as gray.
     """
     frames = video_to_uint8(data)
     frames = make_even_dimensions(frames)
 
     if frames.ndim == 3:
-        return frames, "gray", "gray"
+        return np.ascontiguousarray(frames), "gray", "gray"
 
     channels = frames.shape[-1]
 
@@ -341,7 +307,96 @@ def prepare_ffmpeg_frames(data: np.ndarray) -> tuple[np.ndarray, str, str]:
             "Expected 3 or 4."
         )
 
-    return frames, "rgb24", "gbrp"
+    return np.ascontiguousarray(frames), "rgb24", "gbrp"
+
+def find_ffmpeg() -> str:
+    """
+    Find FFmpeg, downloading it with ffmpeg-downloader if necessary.
+
+    Search order:
+        1. FFmpeg already available on PATH.
+        2. FFmpeg already installed by ffmpeg-downloader.
+        3. Download FFmpeg using ffmpeg-downloader.
+
+    Returns:
+        Absolute path to ffmpeg executable.
+    """
+    # ---------------------------------------------------------
+    # 1. Check normal PATH first
+    # ---------------------------------------------------------
+    executable = shutil.which("ffmpeg")
+
+    if executable is not None:
+        path = Path(executable).resolve()
+
+        if path.is_file():
+            return str(path)
+
+    # ---------------------------------------------------------
+    # 2. Check ffmpeg-downloader installation
+    # ---------------------------------------------------------
+    try:
+        import ffmpeg_downloader as ffdl
+    except ImportError as exc:
+        raise RuntimeError(
+            "FFmpeg was not found and ffmpeg-downloader is not installed.\n"
+            "Install it with:\n"
+            "    pip install ffmpeg-downloader"
+        ) from exc
+
+    ffmpeg_path = getattr(ffdl, "ffmpeg_path", None)
+
+    if ffmpeg_path:
+        path = Path(ffmpeg_path)
+
+        if path.is_file():
+            return str(path.resolve())
+
+    # ---------------------------------------------------------
+    # 3. Download FFmpeg
+    # ---------------------------------------------------------
+    print("FFmpeg not found. Downloading FFmpeg...")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "ffmpeg_downloader",
+            "install",
+        ],
+        check=False,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            "ffmpeg-downloader failed to install FFmpeg "
+            f"(exit code {result.returncode})."
+        )
+
+    # ---------------------------------------------------------
+    # 4. Read the path provided by ffmpeg-downloader
+    # ---------------------------------------------------------
+    import importlib
+
+    ffdl = importlib.reload(ffdl)
+
+    ffmpeg_path = getattr(ffdl, "ffmpeg_path", None)
+
+    if not ffmpeg_path:
+        raise RuntimeError(
+            "FFmpeg was installed, but ffmpeg-downloader did not "
+            "provide an ffmpeg_path."
+        )
+
+    path = Path(ffmpeg_path).resolve()
+
+    if not path.is_file():
+        raise RuntimeError(
+            f"FFmpeg was installed but the executable does not exist:\n"
+            f"{path}"
+        )
+
+    return str(path)
 
 
 def save_video(
@@ -353,8 +408,8 @@ def save_video(
     """
     Save a video using FFmpeg + Ut Video.
 
-    The video is streamed through stdin, so FFmpeg does not require
-    an intermediate sequence of PNG files.
+    The NumPy frames are streamed directly to FFmpeg stdin.
+    No intermediate PNG files are created.
 
     Output:
         AVI container
@@ -375,6 +430,8 @@ def save_video(
     command = [
         ffmpeg,
         "-y",
+
+        # Raw frames coming from NumPy
         "-f",
         "rawvideo",
         "-vcodec",
@@ -387,11 +444,17 @@ def save_video(
         str(float(fps)),
         "-i",
         "-",
+
+        # No audio
         "-an",
+
+        # Ut Video
         "-c:v",
         "utvideo",
         "-pix_fmt",
         output_pix_fmt,
+
+        # Output
         str(path),
     ]
 
@@ -405,10 +468,16 @@ def save_video(
     try:
         assert process.stdin is not None
 
+        # Make sure NumPy memory is contiguous before sending it.
+        frames = np.ascontiguousarray(frames)
+
         process.stdin.write(frames.tobytes())
         process.stdin.close()
 
-        stderr = process.stderr.read().decode(errors="replace")
+        stderr = process.stderr.read().decode(
+            errors="replace"
+        )
+
         return_code = process.wait()
 
     except Exception:
@@ -827,8 +896,6 @@ def save_preview_images(
         except Exception as exc:
             print(f"Failed to save preview {key}: {exc}")
 
-
-
 def save_videos(
     target_dir: Path,
     data_map: dict[str, Any],
@@ -839,12 +906,17 @@ def save_videos(
     Save all requested video arrays as Ut Video AVI files.
 
     Images are ignored.
+
+    FFmpeg is located/downloaded once and reused for all videos.
     """
     avi_dir = ensure_directory(Path(target_dir) / "avi")
 
     selected = None if video_keys is None else set(video_keys)
 
+    # Find existing FFmpeg or download it.
     ffmpeg = find_ffmpeg()
+
+    print(f"Using FFmpeg: {ffmpeg}")
 
     for name, value in data_map.items():
 
