@@ -1,16 +1,19 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 
 # ============================================================
 # File
 # ============================================================
 
-video_path = "M0ff.avi"
+video_path = Path(r"D:\za\260717_AUZ\260717_AUZ_HD\avi\moment0ff.avi")
+
+parent_folder = video_path.parent
 
 # Optional: save the registered video
-registered_video_path = "M0ff_registered_affine.avi"
+registered_video_path = parent_folder/"M0ff_registered_affine.avi"
 
 
 # ============================================================
@@ -453,7 +456,7 @@ header = (
 )
 
 np.savetxt(
-    "M0ff_registration_parameters.csv",
+    parent_folder / "M0ff_registration_parameters.csv",
     results,
     delimiter=",",
     header=header,
