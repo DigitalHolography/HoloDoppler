@@ -8,7 +8,7 @@ from pathlib import Path
 # File
 # ============================================================
 
-video_path = Path(r"D:\za\260717_AUZ\260717_AUZ_HD\avi\moment0ff.avi")
+video_path = Path(r"D:\za\260716_AUZ_1\260716_AUZ_1_HD\avi\moment0ff.avi")
 
 parent_folder = video_path.parent
 

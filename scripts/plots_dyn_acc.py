@@ -14,6 +14,7 @@ input_folder/
     └── parameters_holodoppler.json
 
 HDF5 datasets:
+
     /band_0_15000_18300
         shape: (nt, ny, nx)
 
@@ -21,6 +22,7 @@ HDF5 datasets:
         shape: (nt, 3)
 
 CSV columns:
+
     time_s
     translation_x_px
     translation_y_px
@@ -35,6 +37,7 @@ CSV columns:
     ECC
 
 JSON:
+
     {
         "time_stride": ...,
         "sampling_freq": ...
@@ -43,12 +46,12 @@ JSON:
 Time is calculated from the JSON parameters:
 
     dt = time_stride / sampling_freq
-
     time[i] = i * dt
 
 The CSV time_s column is NOT used.
 
 Plots:
+
     Fig 1: Scale
     Fig 2: Rotation
     Fig 3: Translation
@@ -56,9 +59,11 @@ Plots:
     Fig 5: Z4, Z5, Z6
 
 Output:
+
     EPS + PNG for every figure.
 
 Features:
+
     - grayscale only
     - scatter for all signals except Doppler
     - line for Doppler
@@ -66,6 +71,7 @@ Features:
     - alternating gray/white background
     - configurable font size
     - configurable switch delay
+    - optional fixed Y limits for every figure
 """
 
 import argparse
@@ -82,14 +88,37 @@ import matplotlib.pyplot as plt
 # Configuration
 # ============================================================
 
-FONT_SIZE = 12
+FONT_SIZE = 14
 
-# Golden-ratio aspect ratio
-GOLDEN_RATIO = 1.68
+# aspect ratio
+GOLDEN_RATIO = 2.9
 
 # All figures have exactly the same dimensions.
 FIGURE_WIDTH = 6.72
 FIGURE_HEIGHT = FIGURE_WIDTH / GOLDEN_RATIO
+
+
+# ============================================================
+# Y-axis limits
+# ============================================================
+
+# Set to (YMIN, YMAX) to use fixed limits.
+# Set to None to let Matplotlib determine the limits automatically.
+
+YLIM_SCALE = None
+YLIM_ROTATION = None
+YLIM_TRANSLATION = None
+YLIM_DOPPLER = None
+YLIM_ZERNIKE = None
+
+# Examples:
+#
+YLIM_SCALE = (0.99, 1.050)
+YLIM_ROTATION = (-1.0, 1.0)
+YLIM_TRANSLATION = (-18.0, 16.0)
+# YLIM_DOPPLER = (0.8, 1.4)
+# YLIM_ZERNIKE = (-0.9, 0.3)
+
 
 # ============================================================
 # Alternating background
@@ -104,21 +133,23 @@ FIGURE_HEIGHT = FIGURE_WIDTH / GOLDEN_RATIO
 #   2 - 3 s : white
 #   3 - 4 s : gray
 #   ...
-#
+
 SWITCH_DELAY = 2.0
 
 # Grayscale intensity:
-# 0 = black
-# 1 = white
-BACKGROUND_GRAY = 0.92
+#   0 = black
+#   1 = white
 
+BACKGROUND_GRAY = 0.92
 BACKGROUND_ALPHA = 1.0
+
 
 # ============================================================
 # Doppler disk
 # ============================================================
 
 DISK_RADIUS_FRACTION = 0.90
+
 
 # ============================================================
 # Grayscale colors
@@ -128,13 +159,13 @@ COLOR_BLACK = "0.0"
 COLOR_MEDIUM = "0.50"
 COLOR_LIGHT = "0.70"
 
+
 # ============================================================
 # Plot appearance
 # ============================================================
 
 SCATTER_SIZE = 10
 SCATTER_ALPHA = 0.75
-
 LINE_WIDTH = 1.5
 
 
@@ -147,24 +178,17 @@ def configure_matplotlib(font_size):
 
     plt.rcParams.update({
         "font.size": font_size,
-
         "axes.labelsize": font_size,
-
         "xtick.labelsize": font_size * 0.9,
         "ytick.labelsize": font_size * 0.9,
-
         "legend.fontsize": font_size * 0.85,
-
         "axes.linewidth": 0.8,
         "xtick.major.width": 0.8,
         "ytick.major.width": 0.8,
-
         "xtick.direction": "in",
         "ytick.direction": "in",
-
         "xtick.top": True,
         "ytick.right": True,
-
         "figure.dpi": 150,
         "savefig.dpi": 300,
 
@@ -295,7 +319,6 @@ def load_registration_csv(csv_path):
     print(f"Reading CSV: {csv_path}")
 
     with open(csv_path, "r", newline="") as f:
-
         reader = csv.DictReader(f)
 
         if reader.fieldnames is None:
@@ -328,9 +351,7 @@ def load_registration_csv(csv_path):
         }
 
         for row in reader:
-
             for column in reader.fieldnames:
-
                 value = row[column]
 
                 if value == "":
@@ -549,7 +570,6 @@ def add_switch_background(
 
         # State 1 = gray
         if state == 1:
-
             ax.axvspan(
                 max(left, t_min),
                 min(right, t_max),
@@ -570,6 +590,7 @@ def configure_axes(
     ax,
     time,
     switch_delay,
+    ylim=None,
 ):
     """Apply common axis formatting."""
 
@@ -589,6 +610,24 @@ def configure_axes(
     )
 
     ax.margins(x=0.02)
+
+    # Apply optional Y-axis limits.
+    if ylim is not None:
+        if len(ylim) != 2:
+            raise ValueError(
+                "ylim must contain exactly "
+                "two values: (ymin, ymax)."
+            )
+
+        ymin, ymax = ylim
+
+        if ymin >= ymax:
+            raise ValueError(
+                f"Invalid ylim={ylim}. "
+                "ymin must be smaller than ymax."
+            )
+
+        ax.set_ylim(ymin, ymax)
 
     # Make sure data is above background.
     for collection in ax.collections:
@@ -712,7 +751,15 @@ def generate_plots(
         ".csv",
     )
 
-    json_path = json_folder /"parameters_holodoppler.json"
+    json_path = (
+        json_folder
+        / "parameters_holodoppler.json"
+    )
+
+    if not json_path.exists():
+        raise FileNotFoundError(
+            f"JSON file not found: {json_path}"
+        )
 
     # --------------------------------------------------------
     # Load JSON timing parameters
@@ -730,8 +777,11 @@ def generate_plots(
     # Load HDF5
     # --------------------------------------------------------
 
-    band_0_15000_18300, zernike = (
-        load_hdf5_data(h5_path)
+    (
+        band_0_15000_18300,
+        zernike,
+    ) = load_hdf5_data(
+        h5_path
     )
 
     # --------------------------------------------------------
@@ -763,7 +813,9 @@ def generate_plots(
             "have shape (nt, 3)."
         )
 
-    n_moment0 = band_0_15000_18300.shape[0]
+    n_moment0 = (
+        band_0_15000_18300.shape[0]
+    )
 
     n_zernike = zernike.shape[0]
 
@@ -774,15 +826,19 @@ def generate_plots(
     )
 
     print()
+
     print("Signal lengths:")
+
     print(
-        f"  band_0_15000_18300      : {n_moment0}"
+        f"  band_0_15000_18300 : {n_moment0}"
     )
+
     print(
-        f"  Zernike      : {n_zernike}"
+        f"  Zernike            : {n_zernike}"
     )
+
     print(
-        f"  translation  : {n_csv}"
+        f"  translation         : {n_csv}"
     )
 
     # --------------------------------------------------------
@@ -796,9 +852,9 @@ def generate_plots(
     ):
         raise ValueError(
             "\nSignal lengths do not match:\n"
-            f"  band_0_15000_18300      = {n_moment0}\n"
-            f"  Zernike      = {n_zernike}\n"
-            f"  CSV          = {n_csv}\n"
+            f"  band_0_15000_18300 = {n_moment0}\n"
+            f"  Zernike            = {n_zernike}\n"
+            f"  CSV                = {n_csv}\n"
             "\n"
             "All signals are expected to have "
             "the same number of samples."
@@ -901,6 +957,7 @@ def generate_plots(
         ax,
         time,
         switch_delay,
+        ylim=YLIM_SCALE,
     )
 
     fig.tight_layout()
@@ -933,6 +990,7 @@ def generate_plots(
         ax,
         time,
         switch_delay,
+        ylim=YLIM_ROTATION,
     )
 
     fig.tight_layout()
@@ -980,6 +1038,7 @@ def generate_plots(
         ax,
         time,
         switch_delay,
+        ylim=YLIM_TRANSLATION,
     )
 
     fig.tight_layout()
@@ -1005,13 +1064,14 @@ def generate_plots(
 
     ax.set_xlabel("Time (s)")
     ax.set_ylabel(
-        "Doppler signal (a.u.)"
+        "Doppler sig (a.u.)"
     )
 
     configure_axes(
         ax,
         time,
         switch_delay,
+        ylim=YLIM_DOPPLER,
     )
 
     fig.tight_layout()
@@ -1035,7 +1095,7 @@ def generate_plots(
         color=COLOR_BLACK,
         alpha=SCATTER_ALPHA,
         edgecolors="none",
-        label=r"$Z_4$",
+        label=r"$a_4$",
     )
 
     ax.scatter(
@@ -1045,7 +1105,7 @@ def generate_plots(
         color=COLOR_MEDIUM,
         alpha=SCATTER_ALPHA,
         edgecolors="none",
-        label=r"$Z_5$",
+        label=r"$a_5$",
     )
 
     ax.scatter(
@@ -1055,15 +1115,16 @@ def generate_plots(
         color=COLOR_LIGHT,
         alpha=SCATTER_ALPHA,
         edgecolors="none",
-        label=r"$Z_6$",
+        label=r"$a_6$",
     )
 
     ax.set_xlabel("Time (s)")
     ax.set_ylabel(
-        "Zernike coefficient (rad)"
+        "Zernike coeff (rad)"
     )
 
     ax.legend(
+        loc="center left",
         frameon=False
     )
 
@@ -1071,6 +1132,7 @@ def generate_plots(
         ax,
         time,
         switch_delay,
+        ylim=YLIM_ZERNIKE,
     )
 
     fig.tight_layout()
@@ -1142,14 +1204,11 @@ def main():
     args = parser.parse_args()
 
     if args.output_dir is None:
-
         output_folder = (
             args.input_folder
             / "plots"
         )
-
     else:
-
         output_folder = (
             args.output_dir
         )
