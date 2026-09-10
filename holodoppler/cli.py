@@ -577,6 +577,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     dynamic_options, _ = _parse_dynamic_options(remaining_args, KNOWN_CLI_OPTIONS)
     args.dynamic_options = dynamic_options
 
+    # In batch mode there is no input filepath positional.
+    # Therefore, if argparse assigned the only positional argument
+    # to `filepath`, reinterpret it as the config path.
+    if args.batch is not None and args.config is None and args.filepath is not None:
+        args.config = args.filepath
+        args.filepath = None
+
     try:
         # Resolve config path
         config_path = _resolve_config_path(args.config)
