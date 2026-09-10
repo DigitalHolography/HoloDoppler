@@ -1329,6 +1329,7 @@ def save_outputs(
             "moment1",
             "moment2",
             "shack_hartmann_zernike_coefs",
+            "shack_hartmann_autofocus_zernike_coefs",
             "registration",
             "spectrum_line",
         ]
