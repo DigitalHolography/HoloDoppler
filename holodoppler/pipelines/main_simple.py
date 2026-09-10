@@ -7,10 +7,7 @@ import holodoppler.backend as backend
 from tqdm import tqdm
 
 from holodoppler.saving import (
-    save_preview_images,
     save_outputs,
-    get_default_output_path,
-    save_h5,
 )
 
 from holodoppler.propagation import (
@@ -619,10 +616,7 @@ def preview(file_path, parameters):
         parameters,
         file_reader,
     )
-
-    
-
-    print(auto_coefs)
+    auto_coefs = backend.to_numpy(auto_coefs)
 
     # ------------------------------------------------------------
     # Preview frames
@@ -677,21 +671,12 @@ def preview(file_path, parameters):
 
     backend.clear_gpu_memory()
 
-    save_dir = (
-        get_default_output_path(file_reader.file_path)
-        / "preview"
-    )
-
-    save_preview_images(
-        res_np,
-        save_dir,
+    save_outputs(
+        file_reader=file_reader,
+        output=res_np,
+        parameters=parameters,
+        custom_relative_path="preview",
         square=True,
-    )
-
-    save_h5(
-        save_dir,
-        res_np,
-        parameters,
     )
 
     return res_np
@@ -806,6 +791,7 @@ def process(file_path, parameters):
         parameters,
         file_reader,
     )
+    auto_coefs = backend.to_numpy(auto_coefs)
 
     # ------------------------------------------------------------
     # NumPy / CPU path

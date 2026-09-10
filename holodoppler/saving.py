@@ -680,6 +680,7 @@ def save_h5(
     reg_list: Any = None,
     coefs_list: Any = None,
     h5_file_name = None,
+    git_commit: str | None = None,
 ) -> Path:
     """
     Save numerical output data to HDF5.
@@ -742,19 +743,13 @@ def save_h5(
             data=f"py{get_version()}",
         )
 
-        if parameters and parameters.get("image_registration") and reg_list:
-            h5.create_dataset(
-                "registration",
-                data=np.asarray(reg_list, dtype=np.float32),
-                compression=None,
-            )
+        h5.create_dataset(
+            "git_commit",
+            data=f"{git_commit or get_git_version()}",
+        )
 
-        if parameters and parameters.get("shack_hartmann") and coefs_list:
-            h5.create_dataset(
-                "zernike_coefs_radians",
-                data=np.asarray(coefs_list, dtype=np.float32),
-                compression=None,
-            )
+        h5.attrs["git_commit"] = git_commit or get_git_version()
+        h5.attrs["version"] = f"py{get_version()}"
 
     size_gb = h5_path.stat().st_size / (1024**3)
 
@@ -765,23 +760,18 @@ def save_h5(
 
     return h5_path
 
-
 # ============================================================================
 # 7. Metadata / versioning
 # ============================================================================
 
-
 def get_git_version() -> str:
     """Return the current Git commit, or a fallback string."""
     try:
-        commit = subprocess.check_output(
+        return subprocess.check_output(
             ["git", "rev-parse", "HEAD"],
             stderr=subprocess.DEVNULL,
             text=True,
         ).strip()
-
-        return commit
-
     except (
         subprocess.CalledProcessError,
         FileNotFoundError,
@@ -793,7 +783,6 @@ def get_git_version() -> str:
 def save_version_files(target_dir: Path) -> None:
     """Save version.txt and git_version.txt."""
     target_dir = Path(target_dir)
-
     version = f"py{get_version()}"
     git_commit = get_git_version()
 
@@ -801,7 +790,6 @@ def save_version_files(target_dir: Path) -> None:
         version + "\n",
         encoding="utf-8",
     )
-
     (target_dir / "git_version.txt").write_text(
         f"Git commit: {git_commit}\n"
         f"Version: {version}\n",
@@ -811,14 +799,11 @@ def save_version_files(target_dir: Path) -> None:
 
 def save_metadata(
     target_dir: Path,
-    file_reader: Any = None, #type should be HoloFileReader or CineFileReader
+    file_reader: Any = None,
     parameters: dict[str, Any] | None = None,
 ) -> None:
-    """
-    Save generic metadata plus HoloVibes-specific metadata when available.
-    """
+    """Save generic and HoloVibes-specific metadata."""
     target_dir = Path(target_dir)
-
     json_dir = ensure_directory(target_dir / "json")
 
     if parameters is not None:
@@ -829,7 +814,6 @@ def save_metadata(
 
     if file_reader is not None:
         if getattr(file_reader, "ext", None) == ".holo":
-
             footer = getattr(file_reader, "file_footer", None)
             if footer is not None:
                 save_json(
@@ -841,7 +825,6 @@ def save_metadata(
             if header is not None:
                 if is_dataclass(header):
                     header = asdict(header)
-
                 save_json(
                     json_dir / "holovibes_header.json",
                     header,
@@ -851,50 +834,63 @@ def save_metadata(
 
 
 # ============================================================================
-# Preview and Video bundle
+# Output helpers
 # ============================================================================
 
-def save_preview_images(
-    save_dict: dict[str, Any],
-    save_dir: Path,
-    prefix: str = "debug",
-    square: bool = False,
-) -> None:
+def is_csv_h5_output(name: str) -> bool:
+    """Return True if an output must be saved to both CSV and HDF5."""
+    name = name.lower()
+    return "coefs" in name or "registration" in name
+
+
+def save_csv_outputs(
+    target_dir: Path,
+    output: dict[str, Any],
+) -> list[str]:
     """
-    Save already-computed preview images.
+    Save coefs/registration outputs to CSV.
 
-    This function is intentionally independent from video saving.
+    Returns the output names that should also be stored in HDF5.
     """
-    save_dir = ensure_directory(Path(save_dir))
+    csv_dir = ensure_directory(Path(target_dir) / "csv")
+    h5_names = []
 
-    for key, image in save_dict.items():
-
-        if image is None:
+    for name, value in output.items():
+        if value is None or not is_csv_h5_output(name):
             continue
 
-        image = np.asarray(image)
-
-        if not is_image(image):
-            continue
-
-        if square:
-            height, width = image.shape[:2]
-            size = max(height, width)
-
-            image = resize_frames(
-                image,
-                size,
-                size
-            )
-
-        path = save_dir / f"{prefix}_{key}.png"
+        h5_names.append(name)
 
         try:
-            save_png(path, image)
-            print(f"Saved preview: {path}")
-
+            path = csv_dir / f"{name}.csv"
+            save_csv(path, value)
+            print(f"Saved CSV: {path}")
         except Exception as exc:
-            print(f"Failed to save preview {key}: {exc}")
+            print(f"Failed to save CSV {name}: {exc}")
+
+    return h5_names
+
+
+def create_directories(
+    target_dir: Path,
+    full: bool = True,
+) -> None:
+    """Create the output directory structure."""
+    target_dir = Path(target_dir)
+
+    subdirectories = [
+        "png",
+        "avi",
+        "json",
+        "csv",
+        "yaml",
+    ]
+
+    if full:
+        subdirectories.append("h5")
+
+    for directory in subdirectories:
+        ensure_directory(target_dir / directory)
 
 def save_videos(
     target_dir: Path,
@@ -945,84 +941,10 @@ def save_videos(
             f"({time.time() - start:.1f}s)"
         )
 
-def save_named_data(
-    target_dir: Path,
-    name: str,
-    value: Any,
-    extension: str,
-) -> Path:
-    """
-    Save one explicitly requested piece of data.
 
-    Useful for outputs such as:
-        spectrum_line -> CSV
-        fitting_parameters -> YAML
-        notes -> TXT
-    """
-    target_dir = Path(target_dir)
-    extension = extension.lower().lstrip(".")
-
-    if extension == "txt":
-        path = target_dir / "txt" / f"{name}.txt"
-        save_txt(path, value)
-        return path
-
-    if extension == "csv":
-        path = target_dir / "csv" / f"{name}.csv"
-        save_csv(path, value)
-        return path
-
-    if extension == "json":
-        path = target_dir / "json" / f"{name}.json"
-        save_json(path, value)
-        return path
-
-    if extension in ("yaml", "yml"):
-        path = target_dir / "yaml" / f"{name}.yaml"
-        save_yaml(path, value)
-        return path
-
-    raise ValueError(
-        f"Unsupported output extension: {extension}"
-    )
-
-def create_directories(
-    target_dir: Path,
-    full: bool = True,
-) -> None:
-    """
-    Create the complete Holodoppler saving structure.
-
-    Example:
-        recording/
-            recording_HD/
-                png/
-                avi/
-                json/
-                csv/
-                txt/
-                yaml/
-                h5/
-                version.txt
-                git_version.txt
-    """
-    target_dir = Path(target_dir)
-
-    subdirectories = [
-        "png",
-        "avi",
-        "json",
-        "csv",
-        "txt",
-        "yaml",
-    ]
-
-    if full:
-        subdirectories.append("h5")
-
-    for directory in subdirectories:
-        ensure_directory(target_dir / directory)
-
+# ============================================================================
+# Default output path
+# ============================================================================
 
 def get_default_output_path(
     file_path: str | Path,
@@ -1050,22 +972,16 @@ def get_default_output_path(
         return path.parent / base_name / f"{base_name}_HD"
 
     indices = []
-
-    # Search both:
-    #   parent/base_HD_N
-    #   parent/base/base_HD_N
     search_directories = [
         path.parent,
         path.parent / base_name,
     ]
 
     for directory in search_directories:
-
         if not directory.exists():
             continue
 
         for subdir in directory.iterdir():
-
             if not subdir.is_dir():
                 continue
 
@@ -1073,7 +989,6 @@ def get_default_output_path(
                 rf"^{re.escape(base_name)}_HD_(\d+)$",
                 subdir.name,
             )
-
             if match:
                 indices.append(int(match.group(1)))
 
@@ -1083,6 +998,11 @@ def get_default_output_path(
         return path.parent / f"{base_name}_HD_{new_index}"
 
     return path.parent / base_name / f"{base_name}_HD_{new_index}"
+
+
+# ============================================================================
+# FPS
+# ============================================================================
 
 def calculate_fps(
     num_batch: int | None,
@@ -1106,15 +1026,16 @@ def calculate_fps(
         return default_fps
 
     parameters = parameters or {}
-
-    sampling_freq = parameters.get(
-        "sampling_freq",
-        1000,
-    )
+    sampling_freq = parameters.get("sampling_freq", 1000)
 
     fps = num_batch / frame_range * sampling_freq
 
     return min(float(fps), maximum_fps)
+
+
+# ============================================================================
+# Bundle saving
+# ============================================================================
 
 def save_bundle(
     target_dir: Path,
@@ -1126,41 +1047,15 @@ def save_bundle(
     save_h5_list: Iterable[str] | None = None,
     video_keys: Iterable[str] | None = None,
     png_keys: Iterable[str] | None = None,
-    text_outputs: dict[str, Any] | None = None,
-    csv_outputs: dict[str, Any] | None = None,
     json_outputs: dict[str, Any] | None = None,
     yaml_outputs: dict[str, Any] | None = None,
     reg_list: Any = None,
     coefs_list: Any = None,
     backend: Any = None,
+    square: bool = False,
 ) -> None:
-    """
-    Save a complete Holodoppler output bundle.
-
-    The function deliberately does not assume that every output is a video.
-
-    Supported numerical output forms:
-        image:
-            (H, W)
-            (H, W, 3)
-            (H, W, 4)
-
-        video:
-            (T, H, W)
-            (T, H, W, 3)
-            (T, H, W, 4)
-
-    By default:
-        - all videos -> AVI
-        - all images -> PNG
-        - all videos -> temporal-average PNG
-        - parameters -> JSON
-        - HDF5 -> saved when enabled
-
-    Use png_keys=[] to explicitly disable PNG saving for all numerical outputs.
-    """
+    """Save a complete Holodoppler output bundle."""
     start_time = time.time()
-
     target_dir = Path(target_dir)
 
     create_directories(
@@ -1170,9 +1065,10 @@ def save_bundle(
 
     print(f"Saving output bundle to: {target_dir}")
 
-    # ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
     # 1. Videos
-    # ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
+
     save_videos(
         target_dir,
         output,
@@ -1180,87 +1076,84 @@ def save_bundle(
         video_keys=video_keys,
     )
 
-    # ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
     # 2. PNGs
-    # ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
+
     save_pngs(
         target_dir,
         output,
         png_keys=png_keys,
     )
 
-    # ---------------------------------------------------------------------
-    # 3. Additional TXT / CSV / JSON / YAML outputs
-    # ---------------------------------------------------------------------
-    if text_outputs:
-        for name, value in text_outputs.items():
-            save_named_data(
-                target_dir,
-                name,
-                value,
-                "txt",
-            )
+    # ------------------------------------------------------------------
+    # 3. Automatic CSV outputs
+    #
+    # Any output containing "coefs" or "registration" is saved as CSV
+    # and included in HDF5.
+    # ------------------------------------------------------------------
 
-    if csv_outputs:
-        for name, value in csv_outputs.items():
-            save_named_data(
-                target_dir,
-                name,
-                value,
-                "csv",
-            )
+    csv_h5_names = save_csv_outputs(
+        target_dir,
+        output,
+    )
+
+    # ------------------------------------------------------------------
+    # 4. JSON / YAML
+    # ------------------------------------------------------------------
 
     if json_outputs:
         for name, value in json_outputs.items():
-            save_named_data(
-                target_dir,
-                name,
+            save_json(
+                target_dir / "json" / f"{name}.json",
                 value,
-                "json",
             )
 
     if yaml_outputs:
         for name, value in yaml_outputs.items():
-            save_named_data(
-                target_dir,
-                name,
+            save_yaml(
+                target_dir / "yaml" / f"{name}.yaml",
                 value,
-                "yaml",
             )
 
-    # ---------------------------------------------------------------------
-    # 4. Parameters / metadata / version
-    # ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # 5. Metadata
+    # ------------------------------------------------------------------
+
     save_metadata(
         target_dir,
         file_reader=file_reader,
         parameters=parameters,
     )
 
-    # ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
     # 6. HDF5
-    # ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
+
     if save_h5_output:
+        h5_names = list(save_h5_list or [])
+
+        for name in csv_h5_names:
+            if name not in h5_names:
+                h5_names.append(name)
+
         save_h5(
             target_dir,
             output,
             parameters=parameters,
-            save_only_list=save_h5_list,
+            save_only_list=h5_names,
             reg_list=reg_list,
             coefs_list=coefs_list,
+            git_commit=get_git_version(),
         )
 
     elapsed = time.time() - start_time
-
-    print(
-        f"Saving completed in {elapsed:.1f} seconds"
-    )
+    print(f"Saving completed in {elapsed:.1f} seconds")
 
 
 # ============================================================================
-# 15. High-level entry point compatible with the existing application
+# Main public entry point
 # ============================================================================
-
 
 def save_outputs(
     file_reader: Any,
@@ -1268,6 +1161,8 @@ def save_outputs(
     parameters: dict[str, Any] | None = None,
     holodoppler_path: str | Path | bool | None = None,
     video_path: str | Path | bool | None = None,
+    custom_path: str | Path | None = None,
+    custom_relative_path: str | Path | None = None,
     reg_list: Any = None,
     coefs_list: Any = None,
     end_frame: int | None = None,
@@ -1277,15 +1172,20 @@ def save_outputs(
     save_h5_output: bool = True,
     png_keys: Iterable[str] | None = None,
     video_keys: Iterable[str] | None = None,
+    square: bool = False,
 ) -> Path:
     """
-    Main public entry point.
+    Main public saving entry point.
 
-    Priority:
-        holodoppler_path > video_path > default path
+    custom_path:
+        Absolute path used directly as the output directory.
 
-    `video_path` is retained for API compatibility, but the output itself
-    is always organized as a complete *_HD bundle.
+    custom_relative_path:
+        Path relative to the default *_HD output directory.
+
+    Example:
+        custom_relative_path="preview"
+        -> <default_output_path>/preview
     """
     parameters = parameters or {}
 
@@ -1293,14 +1193,40 @@ def save_outputs(
         file_reader.file_path
     )
 
-    if holodoppler_path:
+    # ------------------------------------------------------------------
+    # Resolve target path
+    # ------------------------------------------------------------------
+
+    if custom_path is not None and custom_relative_path is not None:
+        raise ValueError(
+            "custom_path and custom_relative_path "
+            "cannot be used together"
+        )
+
+    if custom_path is not None:
+        target_dir = Path(custom_path).expanduser()
+
+        if not target_dir.is_absolute():
+            raise ValueError(
+                "custom_path must be an absolute path"
+            )
+
+    elif custom_relative_path is not None:
+        relative_path = Path(custom_relative_path)
+
+        if relative_path.is_absolute():
+            raise ValueError(
+                "custom_relative_path must be relative"
+            )
+
+        target_dir = default_path / relative_path
+
+    elif holodoppler_path:
         target_dir = (
             default_path
             if isinstance(holodoppler_path, bool)
             else Path(holodoppler_path)
         )
-
-        save_mode_full = True
 
     elif video_path:
         target_dir = (
@@ -1309,11 +1235,12 @@ def save_outputs(
             else Path(video_path)
         )
 
-        save_mode_full = save_h5_output
-
     else:
         target_dir = default_path
-        save_mode_full = save_h5_output
+
+    # ------------------------------------------------------------------
+    # FPS
+    # ------------------------------------------------------------------
 
     fps = calculate_fps(
         num_batch=num_batch,
@@ -1322,23 +1249,33 @@ def save_outputs(
         parameters=parameters,
     )
 
-    save_h5_list = (
-        [
-            "moment0ff",
-            "moment0",
-            "moment1",
-            "moment2",
-            "shack_hartmann_zernike_coefs",
-            "shack_hartmann_autofocus_zernike_coefs",
-            "registration",
-            "spectrum_line",
-        ]
-        + [
-            key
-            for key in output
-            if "band_" in key
-        ]
+    # ------------------------------------------------------------------
+    # HDF5 outputs
+    #
+    # Fixed outputs + all "band_*" + automatic coefs/registration.
+    # ------------------------------------------------------------------
+
+    save_h5_list = [
+        "moment0ff",
+        "moment0",
+        "moment1",
+        "moment2",
+        "spectrum_line",
+    ]
+
+    save_h5_list.extend(
+        key
+        for key in output
+        if (
+            "band_" in key
+            or "coefs" in key.lower()
+            or "registration" in key.lower()
+        )
     )
+
+    # ------------------------------------------------------------------
+    # Save
+    # ------------------------------------------------------------------
 
     save_bundle(
         target_dir=target_dir,
@@ -1346,13 +1283,14 @@ def save_outputs(
         parameters=parameters,
         file_reader=file_reader,
         fps=fps,
-        save_h5_output=save_mode_full,
+        save_h5_output=save_h5_output,
         save_h5_list=save_h5_list,
         video_keys=video_keys,
         png_keys=png_keys,
         reg_list=reg_list,
         coefs_list=coefs_list,
         backend=backend,
+        square=square,
     )
 
     return target_dir
