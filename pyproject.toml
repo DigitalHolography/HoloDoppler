@@ -8,6 +8,7 @@ version = "0.7.1"
 description = "HoloDoppler processing and preview tools."
 readme = "README.md"
 requires-python = ">=3.12"
+
 dependencies = [
   "numpy>=2.3.4",
   "scipy>=1.17.0",
@@ -15,14 +16,13 @@ dependencies = [
   "tqdm>=4.67.1",
   "h5py",
   "opencv-python",
-  "cupy-cuda13x[ctk]>=14.0.1",
-  "imageio>=2.37.3",
-  "imageio[ffmpeg]",
+  "cupy-cuda13x>=14.0.1",
+  "imageio[ffmpeg]>=2.37.3",
   "tkinterdnd2",
   "pyyaml",
   "sv-ttk>=2.6.1",
   "pillow>=11.0",
-  "ffmpeg-downloader"
+  "ffmpeg-downloader",
 ]
 
 [project.optional-dependencies]
@@ -35,7 +35,10 @@ where = ["."]
 include = ["holodoppler*"]
 
 [tool.setuptools.package-data]
-holodoppler = ["ui/assets/*", "ui/defaults/*"]
+holodoppler = [
+  "ui/assets/*",
+  "ui/defaults/*",
+]
 
 [project.scripts]
 holodoppler = "holodoppler.__main__:main"
