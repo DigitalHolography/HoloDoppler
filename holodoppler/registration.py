@@ -1,6 +1,11 @@
 """
 Image registration using phase correlation for Translation, Rotation, and Scale (TRS).
 """
+import os
+import cv2
+import numpy as np
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor
 
 from .utils import elliptical_mask
 from .utils import signed_peak, subpixel_parabola
@@ -599,57 +604,110 @@ def apply_registration3D(
     return img3D
 
 
-import cv2
-import numpy as np
+def _ecc_worker(args):
+    """Register one frame against the reference."""
+    i, frame, ref, mask, criteria = args
+
+    warp = np.eye(2, 3, dtype=np.float32)
+
+    try:
+        ecc, warp = cv2.findTransformECC(
+            ref, frame, warp, cv2.MOTION_AFFINE,
+            criteria, mask, gaussFiltSize=5
+        )
+
+        a, b, tx = warp[0]
+        c, d, ty = warp[1]
+
+        theta = np.arctan2(c - b, a + d)
+        scale = np.sqrt(max(a * d - b * c, 0))
+
+        shear_x = b + scale * np.sin(theta)
+        shear_y = c - scale * np.sin(theta)
+
+        return i, [
+            i, tx, ty, np.degrees(theta), scale,
+            a, b, c, d, shear_x, shear_y, ecc
+        ]
+
+    except cv2.error:
+        return i, [i] + [np.nan] * 11
 
 
-def register_with_ecc(video, radius=0.9, iterations=300, eps=1e-6):
+def register_with_ecc(
+    video,
+    radius=0.9,
+    iterations=300,
+    eps=1e-6,
+    n_workers=8
+):
     """
-    video: float32 numpy array, shape (N, H, W), values ideally in [0, 1]
+    video : float32 ndarray, shape (N, H, W)
 
-    Returns:
-        reg: (N, 12) array:
-        [time, tx, ty, rotation_deg, scale, a, b, c, d, shear_x, shear_y, ecc]
+    Returns
+    -------
+    reg : ndarray, shape (N, 12)
+        [frame, tx, ty, rotation_deg, scale,
+         a, b, c, d, shear_x, shear_y, ecc]
+
+    n_workers is capped at half the available CPU cores.
     """
+
     N, H, W = video.shape
+
+    # --------------------------------------------------------
+    # Safe worker count
+    # --------------------------------------------------------
+    max_workers = max(1, (os.cpu_count() or 1) // 2)
+    n_workers = min(n_workers, max_workers)
+
+    # --------------------------------------------------------
+    # Reference + mask
+    # --------------------------------------------------------
     ref = video[0]
 
     Y, X = np.indices((H, W), dtype=np.float32)
+
     cx, cy = (W - 1) / 2, (H - 1) / 2
     R = radius * min(H, W) / 2
-    mask = (((X - cx)**2 + (Y - cy)**2) <= R**2).astype(np.uint8) * 255
 
-    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
-                iterations, eps)
+    mask = (
+        ((X - cx)**2 + (Y - cy)**2) <= R**2
+    ).astype(np.uint8) * 255
 
+    criteria = (
+        cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
+        iterations,
+        eps
+    )
+
+    # --------------------------------------------------------
+    # Frame 0
+    # --------------------------------------------------------
     reg = np.full((N, 12), np.nan, dtype=np.float32)
-    reg[0] = [0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1]
 
-    for i in range(1, N):
-        warp = np.eye(2, 3, dtype=np.float32)
+    reg[0] = [
+        0, 0, 0, 0, 1,
+        1, 0, 0, 1,
+        0, 0, 1
+    ]
 
-        try:
-            ecc, warp = cv2.findTransformECC(
-                ref, video[i], warp, cv2.MOTION_AFFINE,
-                criteria, mask, gaussFiltSize=5
-            )
+    # --------------------------------------------------------
+    # Parallel registration
+    # --------------------------------------------------------
+    jobs = (
+        (i, video[i], ref, mask, criteria)
+        for i in range(1, N)
+    )
 
-            a, b, tx = warp[0]
-            c, d, ty = warp[1]
+    with ProcessPoolExecutor(max_workers=n_workers) as executor:
 
-            theta = np.arctan2(c - b, a + d)
-            scale = np.sqrt(max(a * d - b * c, 0))
-
-            shear_x = b + scale * np.sin(theta)
-            shear_y = c - scale * np.sin(theta)
-
-            reg[i] = [
-                i, tx, ty, np.degrees(theta), scale,
-                a, b, c, d, shear_x, shear_y, ecc
-            ]
-
-        except cv2.error:
-            pass
+        for i, result in tqdm(
+            executor.map(_ecc_worker, jobs),
+            total=N - 1,
+            desc="ECC registration"
+        ):
+            reg[i] = result
 
     return reg
 

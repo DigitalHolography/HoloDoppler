@@ -1038,6 +1038,9 @@ def process(file_path, parameters):
     # ------------------------------------------------------------
 
     if parameters.get("image_registration_with_ecc", False):
+        print(
+            "Running Registration ECC algo:"
+        )
         registration_ecc = register_with_ecc(output["M0ff"],radius=parameters.get("registration_ecc_radius",0.8),iterations=300,eps=1e-6)
 
 
@@ -1046,6 +1049,9 @@ def process(file_path, parameters):
                 output[key] = apply_ecc_registration(output[key], registration_ecc, background="mean")
 
         output["registration_ecc"] = registration_ecc
+        print(
+            "Registration calculated."
+        )
 
 
     # ------------------------------------------------------------
