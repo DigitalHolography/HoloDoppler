@@ -813,15 +813,15 @@ def save_metadata(
         )
 
     if file_reader is not None:
-        if getattr(file_reader, "ext", None) == ".holo":
-            footer = getattr(file_reader, "file_footer", None)
+        if getattr(file_reader, "extension", None) == ".holo":
+            footer = getattr(file_reader, "footer", None)
             if footer is not None:
                 save_json(
                     json_dir / "holovibes_footer.json",
                     footer,
                 )
 
-            header = getattr(file_reader, "file_header", None)
+            header = getattr(file_reader, "header", None)
             if header is not None:
                 if is_dataclass(header):
                     header = asdict(header)
