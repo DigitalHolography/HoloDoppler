@@ -36,12 +36,18 @@ frequency_bands:
   - [9000, 18000]
 
 # Image registration
-image_registration: true
+registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
+
+# Image registration Live 
+image_registration: false
 registration_ref_first_frame: 0
 registration_ref_batch_size: 512
 registration_radius: 0.8
 registration_sub_pixel: true
-registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
+
+# Advanced Image registration
+image_registration_with_ecc: true #uses the first computed frame as reference
+registration_ecc_radius: 0.8
 
 # Corner compensation
 corner_compensation: false

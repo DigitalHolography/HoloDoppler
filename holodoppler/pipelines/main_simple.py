@@ -48,6 +48,8 @@ from holodoppler.moments import moment
 from holodoppler.registration import (
     register_images_shifts,
     apply_register_images_shifts,
+    register_with_ecc,
+    apply_ecc_registration
 )
 
 from holodoppler.file_reader import FileReaderFactory
@@ -1030,6 +1032,21 @@ def process(file_path, parameters):
     }
 
     output["shack_hartmann_autofocus_zernike_coefs"] = auto_coefs
+
+    # ------------------------------------------------------------
+    # ECC Image Registration at the end
+    # ------------------------------------------------------------
+
+    if parameters.get("image_registration_with_ecc", False):
+        registration_ecc = register_with_ecc(output["M0ff"],radius=parameters.get("registration_ecc_radius",0.8),iterations=300,eps=1e-6)
+
+
+        for key in output :
+            if key in {"M0ff", "M0", "M1", "M2"} or "band_" in key :
+                output[key] = apply_ecc_registration(output[key], registration_ecc, background="mean")
+
+        output["registration_ecc"] = registration_ecc
+
 
     # ------------------------------------------------------------
     # Square spatial outputs

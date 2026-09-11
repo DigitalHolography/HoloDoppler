@@ -597,3 +597,92 @@ def apply_registration3D(
         )
 
     return img3D
+
+
+import cv2
+import numpy as np
+
+
+def register_with_ecc(video, radius=0.9, iterations=300, eps=1e-6):
+    """
+    video: float32 numpy array, shape (N, H, W), values ideally in [0, 1]
+
+    Returns:
+        reg: (N, 12) array:
+        [time, tx, ty, rotation_deg, scale, a, b, c, d, shear_x, shear_y, ecc]
+    """
+    N, H, W = video.shape
+    ref = video[0]
+
+    Y, X = np.indices((H, W), dtype=np.float32)
+    cx, cy = (W - 1) / 2, (H - 1) / 2
+    R = radius * min(H, W) / 2
+    mask = (((X - cx)**2 + (Y - cy)**2) <= R**2).astype(np.uint8) * 255
+
+    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
+                iterations, eps)
+
+    reg = np.full((N, 12), np.nan, dtype=np.float32)
+    reg[0] = [0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1]
+
+    for i in range(1, N):
+        warp = np.eye(2, 3, dtype=np.float32)
+
+        try:
+            ecc, warp = cv2.findTransformECC(
+                ref, video[i], warp, cv2.MOTION_AFFINE,
+                criteria, mask, gaussFiltSize=5
+            )
+
+            a, b, tx = warp[0]
+            c, d, ty = warp[1]
+
+            theta = np.arctan2(c - b, a + d)
+            scale = np.sqrt(max(a * d - b * c, 0))
+
+            shear_x = b + scale * np.sin(theta)
+            shear_y = c - scale * np.sin(theta)
+
+            reg[i] = [
+                i, tx, ty, np.degrees(theta), scale,
+                a, b, c, d, shear_x, shear_y, ecc
+            ]
+
+        except cv2.error:
+            pass
+
+    return reg
+
+
+def apply_ecc_registration(video, registration, background="zero"):
+    """
+    video: float32 numpy array, shape (N, H, W)
+    registration: output from register_with_ecc()
+
+    background:
+        "zero" -> zero outside image
+        "mean" -> mean of initial/reference image
+    """
+    N, H, W = video.shape
+    output = np.empty_like(video)
+
+    fill = 0 if background == "zero" else video[0].mean()
+
+    for i in range(N):
+        _, _, _, _, _, a, b, c, d, _, _, _ = registration[i]
+        tx, ty = registration[i, 1:3]
+
+        if np.any(np.isnan([a, b, c, d, tx, ty])):
+            output[i] = video[i]
+            continue
+
+        warp = np.array([[a, b, tx], [c, d, ty]], dtype=np.float32)
+
+        output[i] = cv2.warpAffine(
+            video[i], warp, (W, H),
+            flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=float(fill)
+        )
+
+    return output
