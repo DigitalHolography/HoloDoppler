@@ -1151,7 +1151,7 @@ def preview(file_path, parameters):
         square=True,
     )
 
-    return res_np
+    return res_np["M0ff"]
 
 
 def process(file_path, parameters):

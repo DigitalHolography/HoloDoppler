@@ -1,7 +1,7 @@
 import sys
 
 from holodoppler.cli import main as cli_main
-from holodoppler.ui import UI
+from holodoppler.ui_simplest import UI
 
 
 def main() -> int:
