@@ -1,5 +1,9 @@
 pipeline_name: "simple"
 
+# optional backend management
+no_cupy: true # prevents using cupy and falls back on numpy only calculations
+numpy_num_workers: 8 # in numpy mode, the number of parallel workers to be used
+
 # Core parameters
 batch_size: 256
 first_frame: 0

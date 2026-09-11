@@ -1,3 +1,5 @@
+import os
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 
 from collections import defaultdict
@@ -592,6 +594,474 @@ def _append_numpy_results(output, res):
             backend.to_numpy(value)
         )
 
+def _process_numpy(
+    parameters,
+    file_reader,
+    first_frame,
+    num_batch,
+    batch_stride,
+    batch_size,
+    output,
+    M0_reg=None,
+    autofocus_phase_term=None,
+):
+    """
+    Sequential NumPy/CPU processing.
+
+    This is the direct CPU equivalent of the original NumPy path.
+
+    Parameters
+    ----------
+    parameters : dict
+        Processing parameters.
+
+    file_reader :
+        Frame reader.
+
+    first_frame : int
+        Index of the first frame.
+
+    num_batch : int
+        Number of batches.
+
+    batch_stride : int
+        Frame stride between batches.
+
+    batch_size : int
+        Number of frames per batch.
+
+    output : defaultdict(list)
+        Output accumulator.
+
+    M0_reg : numpy.ndarray or None
+        Registration reference.
+
+    autofocus_phase_term :
+        Optional autofocus phase term passed to
+        _process_one_batch().
+    """
+
+    for i in tqdm(
+        range(num_batch),
+        desc="Processing (NumPy)",
+    ):
+        frames = file_reader.read_frames(
+            first_frame=(
+                first_frame
+                + i * batch_stride
+            ),
+            batch_size=batch_size,
+        )
+
+        # Keep the CPU path explicitly float32.
+        frames = backend.to_backend(frames).astype(
+            backend.xp.float32,
+            copy=False,
+        )
+
+        res, M0_reg = _process_one_batch(
+            parameters,
+            frames,
+            M0_reg=M0_reg,
+            phase_term=autofocus_phase_term,
+        )
+
+        _append_numpy_results(
+            output,
+            res,
+        )
+
+        del frames
+        del res
+
+    return output, M0_reg
+
+
+# ============================================================================
+# NumPy / CPU parallel
+# ============================================================================
+
+def _get_numpy_workers(n_workers=None):
+    """
+    Return a safe number of NumPy workers.
+
+    Default:
+        8 workers
+
+    Safety limit:
+        half of the available CPU cores.
+
+    Examples
+    --------
+    4 cores:
+        max 2 workers
+
+    8 cores:
+        max 4 workers
+
+    16 cores:
+        max 8 workers
+
+    32 cores:
+        max 8 workers
+    """
+
+    cpu_count = os.cpu_count() or 1
+
+    # Fail-safe: never use more than half the CPU cores.
+    safe_cpu_limit = max(
+        1,
+        cpu_count // 2,
+    )
+
+    # Requested default.
+    if n_workers is None:
+        n_workers = 8
+
+    n_workers = max(
+        1,
+        int(n_workers),
+    )
+
+    return min(
+        n_workers,
+        safe_cpu_limit,
+    )
+
+
+def _process_numpy_parallel(
+    parameters,
+    file_reader,
+    first_frame,
+    num_batch,
+    batch_stride,
+    batch_size,
+    output,
+    M0_reg=None,
+    autofocus_phase_term=None,
+    n_workers=None,
+):
+    """
+    Parallel NumPy/CPU processing.
+
+    NumPy batches are processed concurrently using a
+    ThreadPoolExecutor.
+
+    The default number of workers is 8, capped at half
+    of the available CPU cores.
+
+    IMPORTANT
+    ---------
+    Image registration introduces a dependency between batches
+    through M0_reg.
+
+    Therefore, when image_registration=True, this function
+    safely falls back to the sequential NumPy implementation.
+
+    This keeps the behavior of _process_one_batch() unchanged.
+    """
+
+    # ------------------------------------------------------------------
+    # Registration is stateful:
+    #
+    # batch 0 -> establishes M0_reg
+    # batch 1 -> uses M0_reg
+    # batch 2 -> uses M0_reg
+    # ...
+    #
+    # Therefore batches cannot safely be processed independently.
+    # ------------------------------------------------------------------
+    if parameters.get(
+        "image_registration",
+        False,
+    ):
+        return _process_numpy(
+            parameters=parameters,
+            file_reader=file_reader,
+            first_frame=first_frame,
+            num_batch=num_batch,
+            batch_stride=batch_stride,
+            batch_size=batch_size,
+            output=output,
+            M0_reg=M0_reg,
+            autofocus_phase_term=autofocus_phase_term,
+        )
+
+    n_workers = _get_numpy_workers(
+        n_workers,
+    )
+
+    def process_batch(i):
+        """
+        Read and process one independent batch.
+
+        Since image registration is disabled here, M0_reg does
+        not need to be shared between workers.
+        """
+
+        frames = file_reader.read_frames(
+            first_frame=(
+                first_frame
+                + i * batch_stride
+            ),
+            batch_size=batch_size,
+        )
+
+        # Match the normal NumPy path.
+        frames = backend.to_backend(frames).astype(
+            backend.xp.float32,
+            copy=False,
+        )
+
+        res, _ = _process_one_batch(
+            parameters,
+            frames,
+            M0_reg=None,
+            phase_term=autofocus_phase_term,
+        )
+
+        del frames
+
+        return res
+
+    # ------------------------------------------------------------------
+    # ThreadPoolExecutor is appropriate here when the expensive work
+    # is performed by NumPy/SciPy operations that release the GIL.
+    #
+    # executor.map() preserves the input order, so results are appended
+    # in exactly the same batch order as the sequential implementation.
+    # ------------------------------------------------------------------
+    with ThreadPoolExecutor(
+        max_workers=n_workers,
+    ) as executor:
+
+        results = executor.map(
+            process_batch,
+            range(num_batch),
+        )
+
+        for res in tqdm(
+            results,
+            total=num_batch,
+            desc=(
+                f"Processing "
+                f"(NumPy, {n_workers} workers)"
+            ),
+        ):
+            _append_numpy_results(
+                output,
+                res,
+            )
+
+            del res
+
+    return output, M0_reg
+
+
+# ============================================================================
+# CuPy / GPU
+# ============================================================================
+
+def _process_cupy(
+    parameters,
+    file_reader,
+    first_frame,
+    num_batch,
+    batch_stride,
+    batch_size,
+    output,
+    M0_reg=None,
+    autofocus_phase_term=None,
+):
+    h2d_stream = backend.xp.cuda.Stream(
+        non_blocking=True
+    )
+
+    compute_stream = backend.xp.cuda.Stream(
+        non_blocking=True
+    )
+
+    PREFETCH_DEPTH = 4
+
+    d_buffers = [None] * PREFETCH_DEPTH
+    h2d_events = [None] * PREFETCH_DEPTH
+    compute_events = [None] * PREFETCH_DEPTH
+    buffer_ready = [False] * PREFETCH_DEPTH
+
+    current_idx = 0
+    processed_batches = 0
+
+    for i in tqdm(
+        range(
+            num_batch + PREFETCH_DEPTH
+        )
+    ):
+        prefetch_idx = (
+            i % PREFETCH_DEPTH
+        )
+
+        # ------------------------------------------------------------
+        # Prefetch next batch to GPU
+        # ------------------------------------------------------------
+
+        if i < num_batch:
+
+            with h2d_stream:
+
+                frames = file_reader.read_frames(
+                    first_frame=(
+                        first_frame
+                        + i * batch_stride
+                    ),
+                    batch_size=batch_size,
+                )
+
+                # KEEP THIS EXACTLY AS IN THE ORIGINAL CODE.
+                d_buffers[
+                    prefetch_idx
+                ] = backend.xp.asarray(
+                    frames
+                )
+
+                h2d_events[
+                    prefetch_idx
+                ] = backend.xp.cuda.Event()
+
+                h2d_events[
+                    prefetch_idx
+                ].record(
+                    h2d_stream
+                )
+
+                buffer_ready[
+                    prefetch_idx
+                ] = True
+
+        # ------------------------------------------------------------
+        # Process ready batches
+        # ------------------------------------------------------------
+
+        while (
+            buffer_ready[current_idx]
+            and current_idx != prefetch_idx
+        ):
+
+            h2d_events[
+                current_idx
+            ].synchronize()
+
+            with compute_stream:
+
+                d_current = d_buffers[
+                    current_idx
+                ]
+
+                res, M0_reg = _process_one_batch(
+                    parameters,
+                    d_current,
+                    M0_reg=M0_reg,
+                    phase_term=autofocus_phase_term,
+                )
+
+                compute_events[
+                    current_idx
+                ] = backend.xp.cuda.Event()
+
+                compute_events[
+                    current_idx
+                ].record(
+                    compute_stream
+                )
+
+            compute_events[
+                current_idx
+            ].synchronize()
+
+            _append_numpy_results(
+                output,
+                res,
+            )
+
+            processed_batches += 1
+
+            buffer_ready[
+                current_idx
+            ] = False
+
+            d_buffers[
+                current_idx
+            ] = None
+
+            current_idx = (
+                current_idx + 1
+            ) % PREFETCH_DEPTH
+
+            if processed_batches >= num_batch:
+                break
+
+        if processed_batches >= num_batch:
+            break
+
+    # ------------------------------------------------------------
+    # Flush remaining prefetched batches
+    # ------------------------------------------------------------
+
+    while buffer_ready[current_idx]:
+
+        h2d_events[
+            current_idx
+        ].synchronize()
+
+        with compute_stream:
+
+            d_current = d_buffers[
+                current_idx
+            ]
+
+            res, M0_reg = _process_one_batch(
+                parameters,
+                d_current,
+                M0_reg=M0_reg,
+                phase_term=autofocus_phase_term,
+            )
+
+            compute_events[
+                current_idx
+            ] = backend.xp.cuda.Event()
+
+            compute_events[
+                current_idx
+            ].record(
+                compute_stream
+            )
+
+        compute_events[
+            current_idx
+        ].synchronize()
+
+        _append_numpy_results(
+            output,
+            res,
+        )
+
+        processed_batches += 1
+
+        buffer_ready[
+            current_idx
+        ] = False
+
+        d_buffers[
+            current_idx
+        ] = None
+
+        current_idx = (
+            current_idx + 1
+        ) % PREFETCH_DEPTH
+
+        if processed_batches >= num_batch:
+            break
+
+    return output, M0_reg
 
 def preview(file_path, parameters):
     file_reader = FileReaderFactory.create(file_path)
@@ -782,7 +1252,6 @@ def process(file_path, parameters):
         backend.clear_gpu_memory()
 
     # ------------------------------------------------------------
-    # NEW:
     # Build one Shack-Hartmann autofocus correction from the
     # configured reference batch.
     #
@@ -798,227 +1267,51 @@ def process(file_path, parameters):
     # ------------------------------------------------------------
     # NumPy / CPU path
     # ------------------------------------------------------------
-    if not backend.is_gpu:
+    if not backend.is_gpu or parameters.get("no_cupy",False):
 
-        for i in tqdm(range(num_batch)):
+        n_workers = parameters.get("numpy_num_workers",8)
 
-            frames = file_reader.read_frames(
-                first_frame=(
-                    first_frame
-                    + i * batch_stride
-                ),
+        if n_workers > 0:
+
+            output, M0_reg = _process_numpy_parallel(
+                parameters=parameters,
+                file_reader=file_reader,
+                first_frame=first_frame,
+                num_batch=num_batch,
+                batch_stride=batch_stride,
                 batch_size=batch_size,
-            )
-
-            frames = backend.to_backend(frames).astype(
-                backend.xp.float32,
-                copy=False,
-            )
-
-            res, M0_reg = _process_one_batch(
-                parameters,
-                frames,
+                output=output,
                 M0_reg=M0_reg,
-                phase_term=autofocus_phase_term,
+                autofocus_phase_term=autofocus_phase_term,
+                n_workers=n_workers,
             )
 
-            _append_numpy_results(
-                output,
-                res,
+        else:
+
+            output, M0_reg = _process_numpy(
+                parameters=parameters,
+                file_reader=file_reader,
+                first_frame=first_frame,
+                num_batch=num_batch,
+                batch_stride=batch_stride,
+                batch_size=batch_size,
+                output=output,
+                M0_reg=M0_reg,
+                autofocus_phase_term=autofocus_phase_term,
             )
-
-            del frames
-            del res
-
-    # ------------------------------------------------------------
-    # CuPy / GPU path
-    # ------------------------------------------------------------
     else:
 
-        h2d_stream = backend.xp.cuda.Stream(
-            non_blocking=True
+        output, M0_reg = _process_cupy(
+            parameters=parameters,
+            file_reader=file_reader,
+            first_frame=first_frame,
+            num_batch=num_batch,
+            batch_stride=batch_stride,
+            batch_size=batch_size,
+            output=output,
+            M0_reg=M0_reg,
+            autofocus_phase_term=autofocus_phase_term,
         )
-
-        compute_stream = backend.xp.cuda.Stream(
-            non_blocking=True
-        )
-
-        PREFETCH_DEPTH = 4
-
-        d_buffers = [None] * PREFETCH_DEPTH
-        h2d_events = [None] * PREFETCH_DEPTH
-        compute_events = [None] * PREFETCH_DEPTH
-        buffer_ready = [False] * PREFETCH_DEPTH
-
-        current_idx = 0
-        processed_batches = 0
-
-        for i in tqdm(
-            range(
-                num_batch + PREFETCH_DEPTH
-            )
-        ):
-
-            prefetch_idx = (
-                i % PREFETCH_DEPTH
-            )
-
-            # ----------------------------------------------------
-            # Prefetch next batch to GPU
-            # ----------------------------------------------------
-            if i < num_batch:
-
-                with h2d_stream:
-
-                    frames = file_reader.read_frames(
-                        first_frame=(
-                            first_frame
-                            + i * batch_stride
-                        ),
-                        batch_size=batch_size,
-                    )
-
-                    d_buffers[
-                        prefetch_idx
-                    ] = backend.xp.asarray(
-                        frames
-                    )
-
-                    h2d_events[
-                        prefetch_idx
-                    ] = backend.xp.cuda.Event()
-
-                    h2d_events[
-                        prefetch_idx
-                    ].record(
-                        h2d_stream
-                    )
-
-                    buffer_ready[
-                        prefetch_idx
-                    ] = True
-
-            # ----------------------------------------------------
-            # Process ready batches
-            # ----------------------------------------------------
-            while (
-                buffer_ready[current_idx]
-                and current_idx != prefetch_idx
-            ):
-
-                h2d_events[
-                    current_idx
-                ].synchronize()
-
-                with compute_stream:
-
-                    d_current = d_buffers[
-                        current_idx
-                    ]
-
-                    res, M0_reg = _process_one_batch(
-                        parameters,
-                        d_current,
-                        M0_reg=M0_reg,
-                        phase_term=autofocus_phase_term,
-                    )
-
-                    compute_events[
-                        current_idx
-                    ] = backend.xp.cuda.Event()
-
-                    compute_events[
-                        current_idx
-                    ].record(
-                        compute_stream
-                    )
-
-                compute_events[
-                    current_idx
-                ].synchronize()
-
-                _append_numpy_results(
-                    output,
-                    res,
-                )
-
-                processed_batches += 1
-
-                buffer_ready[
-                    current_idx
-                ] = False
-
-                d_buffers[
-                    current_idx
-                ] = None
-
-                current_idx = (
-                    current_idx + 1
-                ) % PREFETCH_DEPTH
-
-                if processed_batches >= num_batch:
-                    break
-
-            if processed_batches >= num_batch:
-                break
-
-        # --------------------------------------------------------
-        # Flush remaining prefetched batches
-        # --------------------------------------------------------
-        while buffer_ready[current_idx]:
-
-            h2d_events[
-                current_idx
-            ].synchronize()
-
-            with compute_stream:
-
-                d_current = d_buffers[
-                    current_idx
-                ]
-
-                res, M0_reg = _process_one_batch(
-                    parameters,
-                    d_current,
-                    M0_reg=M0_reg,
-                    phase_term=autofocus_phase_term,
-                )
-
-                compute_events[
-                    current_idx
-                ] = backend.xp.cuda.Event()
-
-                compute_events[
-                    current_idx
-                ].record(
-                    compute_stream
-                )
-
-            compute_events[
-                current_idx
-            ].synchronize()
-
-            _append_numpy_results(
-                output,
-                res,
-            )
-
-            processed_batches += 1
-
-            buffer_ready[
-                current_idx
-            ] = False
-
-            d_buffers[
-                current_idx
-            ] = None
-
-            current_idx = (
-                current_idx + 1
-            ) % PREFETCH_DEPTH
-
-            if processed_batches >= num_batch:
-                break
 
     # ------------------------------------------------------------
     # Stack outputs
