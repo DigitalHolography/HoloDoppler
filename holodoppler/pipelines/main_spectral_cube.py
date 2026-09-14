@@ -198,16 +198,16 @@ def _endpoint_spectra_window(parameters, frames):
 
 
 def _total_frames(file_reader) -> int:
-    if file_reader.ext == ".holo":
-        return int(file_reader.file_header.num_frames)
+    if file_reader.extension == ".holo":
+        return int(file_reader.header.num_frames)
     return int(file_reader.TotalImageCount)
 
 
 def _prepare(file_path, parameters):
     file_reader = FileReaderFactory.create(file_path)
     parameters = dict(parameters)
-    if file_reader.ext == ".holo":
-        parameters = update_from_footer(parameters, file_reader.file_footer)
+    if file_reader.extension == ".holo":
+        parameters = update_from_footer(parameters, file_reader.footer)
 
     total_frames = _total_frames(file_reader)
     first_frame = int(parameters.get("first_frame", 0))

@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 import time
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
@@ -20,6 +21,9 @@ import ffmpeg_downloader as ffdl
 
 from holodoppler.get_version import get_version
 from holodoppler.utils import resize_frames
+
+
+H5_OUTPUT_PATH_PARAMETER = "_holodoppler_h5_path"
 
 
 def ensure_directory(path: Path) -> Path:
@@ -248,7 +252,7 @@ def average_video(data: np.ndarray) -> np.ndarray:
 
 
 # ============================================================================
-# 3. FFmpeg / Ut Video writer
+# 3. FFmpeg / AVI writer
 # ============================================================================
 
 
@@ -293,7 +297,7 @@ def prepare_ffmpeg_frames(
     frames = make_even_dimensions(frames)
 
     if frames.ndim == 3:
-        return np.ascontiguousarray(frames), "gray", "gray"
+        return np.ascontiguousarray(frames), "gray", "yuvj420p"
 
     channels = frames.shape[-1]
 
@@ -307,7 +311,7 @@ def prepare_ffmpeg_frames(
             "Expected 3 or 4."
         )
 
-    return np.ascontiguousarray(frames), "rgb24", "gbrp"
+    return np.ascontiguousarray(frames), "rgb24", "yuvj420p"
 
 def find_ffmpeg() -> str:
     """
@@ -406,15 +410,14 @@ def save_video(
     ffmpeg: str | None = None,
 ) -> None:
     """
-    Save a video using FFmpeg + Ut Video.
+    Save a video using FFmpeg and MJPEG for broad AVI player compatibility.
 
     The NumPy frames are streamed directly to FFmpeg stdin.
     No intermediate PNG files are created.
 
     Output:
         AVI container
-        Ut Video codec
-        lossless encoding
+        MJPEG codec (numerical results are saved separately to HDF5)
     """
     path = Path(path)
     ensure_directory(path.parent)
@@ -430,6 +433,9 @@ def save_video(
     command = [
         ffmpeg,
         "-y",
+        "-loglevel",
+        "error",
+        "-nostats",
 
         # Raw frames coming from NumPy
         "-f",
@@ -448,9 +454,11 @@ def save_video(
         # No audio
         "-an",
 
-        # Ut Video
+        # Common AVI players support MJPEG without a separate codec install.
         "-c:v",
-        "utvideo",
+        "mjpeg",
+        "-q:v",
+        "2",
         "-pix_fmt",
         output_pix_fmt,
 
@@ -458,32 +466,29 @@ def save_video(
         str(path),
     ]
 
-    process = subprocess.Popen(
-        command,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-
-    try:
-        assert process.stdin is not None
-
-        # Make sure NumPy memory is contiguous before sending it.
-        frames = np.ascontiguousarray(frames)
-
-        process.stdin.write(frames.tobytes())
-        process.stdin.close()
-
-        stderr = process.stderr.read().decode(
-            errors="replace"
+    # FFmpeg stderr must be drained for long encodes, and streaming frames
+    # avoids allocating another full copy of a large video.
+    with tempfile.TemporaryFile() as error_output:
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=error_output,
         )
 
-        return_code = process.wait()
+        try:
+            assert process.stdin is not None
+            for frame in frames:
+                process.stdin.write(frame.tobytes())
+            process.stdin.close()
+            return_code = process.wait()
+        except Exception:
+            process.kill()
+            process.wait()
+            raise
 
-    except Exception:
-        process.kill()
-        process.wait()
-        raise
+        error_output.seek(0)
+        stderr = error_output.read().decode(errors="replace")
 
     if return_code != 0:
         raise RuntimeError(
@@ -692,7 +697,11 @@ def save_h5(
         target_name = target_dir.name or "output"
     else:
         target_name = h5_file_name
-    h5_path = h5_dir / f"{target_name}_output.h5"
+    h5_path = h5_dir / (
+        str(target_name)
+        if str(target_name).endswith(".h5")
+        else f"{target_name}_output.h5"
+    )
 
     selected = None if save_only_list is None else set(save_only_list)
 
@@ -733,7 +742,10 @@ def save_h5(
             h5.create_dataset(
                 "HD_parameters",
                 data=json.dumps(
-                    to_serializable(parameters),
+                    to_serializable({
+                        key: value for key, value in parameters.items()
+                        if key != H5_OUTPUT_PATH_PARAMETER
+                    }),
                     ensure_ascii=False,
                 ),
             )
@@ -758,6 +770,8 @@ def save_h5(
         f"({size_gb:.2f} GB)"
     )
 
+    if parameters is not None:
+        parameters[H5_OUTPUT_PATH_PARAMETER] = str(h5_path)
     return h5_path
 
 # ============================================================================
@@ -809,7 +823,10 @@ def save_metadata(
     if parameters is not None:
         save_json(
             json_dir / "parameters_holodoppler.json",
-            parameters,
+            {
+                key: value for key, value in parameters.items()
+                if key != H5_OUTPUT_PATH_PARAMETER
+            },
         )
 
     if file_reader is not None:
@@ -899,7 +916,7 @@ def save_videos(
     video_keys: Iterable[str] | None = None,
 ) -> None:
     """
-    Save all requested video arrays as Ut Video AVI files.
+    Save all requested video arrays as MJPEG AVI files.
 
     Images are ignored.
 
@@ -1025,7 +1042,7 @@ def calculate_fps(
     if frame_range <= 0:
         return default_fps
 
-    parameters = parameters or {}
+    parameters = {} if parameters is None else parameters
     sampling_freq = parameters.get("sampling_freq", 1000)
 
     fps = num_batch / frame_range * sampling_freq
@@ -1187,7 +1204,7 @@ def save_outputs(
         custom_relative_path="preview"
         -> <default_output_path>/preview
     """
-    parameters = parameters or {}
+    parameters = {} if parameters is None else parameters
 
     default_path = get_default_output_path(
         file_reader.file_path
@@ -1294,3 +1311,152 @@ def save_outputs(
     )
 
     return target_dir
+
+
+# Compatibility entry points used by the bundled processing pipelines.
+# Keep their older call signatures while sharing the current saving functions.
+
+def _create_directories(target_dir, mode="FULL"):
+    create_directories(target_dir, full=mode == "FULL")
+
+
+_get_default_output_path = get_default_output_path
+_save_metadata = save_metadata
+_save_pngs = save_pngs
+_save_videos = save_videos
+normalize_to_uint8 = normalize_float_array_to_uint8
+
+
+def _get_h5_output_path(target_dir):
+    target_dir = Path(target_dir)
+    return target_dir / "h5" / f"{target_dir.name or 'output'}.h5"
+
+
+def _save_h5_2(target_dir, save_map, parameters, save_only_list=None):
+    """Save older pipeline result names using the current HDF5 writer."""
+    renames = {
+        "M0": "moment0", "M1": "moment1", "M2": "moment2", "M0ff": "moment0ff",
+        "moment_0": "moment0", "moment_1": "moment1", "moment_2": "moment2",
+        "moment_0_ff": "moment0ff",
+    }
+    selected = None if save_only_list is None else set(save_only_list)
+    output = {
+        renames.get(name, name): value
+        for name, value in save_map.items()
+        if selected is None or name in selected
+    }
+    return save_h5(
+        target_dir,
+        output,
+        parameters=parameters,
+        h5_file_name=_get_h5_output_path(target_dir).name,
+    )
+
+
+def _preview_image_candidate(value):
+    if value is None:
+        return None
+    image = np.asarray(value)
+    if image.size == 0 or not np.issubdtype(image.dtype, np.number):
+        return None
+    if np.iscomplexobj(image):
+        image = np.abs(image)
+    while image.ndim > 3:
+        image = image.mean(axis=0)
+    if image.ndim == 3 and image.shape[-1] not in (3, 4):
+        image = image.mean(axis=0)
+    return image if is_image(image) else None
+
+
+def preview_image_from_results(results):
+    """Return a normalized image for the UI without writing preview files."""
+    if not results:
+        return None
+    preferred = (
+        "M0ff", "M0", "moment_0_ff", "moment_0", "moment0ff", "moment0",
+        "Projectionff", "Projection",
+    )
+    keys = [name for name in preferred if name in results]
+    keys.extend(name for name in results if name not in keys)
+    for name in keys:
+        image = _preview_image_candidate(results[name])
+        if image is not None:
+            return normalize_to_uint8(image)
+    return None
+
+
+def save_preview_images(save_dict, save_dir, prefix="debug", square=False):
+    """Save computed preview images without invoking video encoding."""
+    save_dir = ensure_directory(Path(save_dir))
+    for name, value in save_dict.items():
+        image = _preview_image_candidate(value)
+        if image is None:
+            continue
+        image = normalize_to_uint8(image)
+        if square:
+            size = max(image.shape[:2])
+            image = np.asarray(
+                Image.fromarray(image).resize((size, size), Image.Resampling.BICUBIC)
+            )
+        save_png(save_dir / f"{prefix}_{name}.png", image)
+
+
+def apply_contrast_adjustment(data, parameters):
+    """Apply the configured percentile stretch to a visual output."""
+    parameters = parameters or {}
+    settings = parameters.get("contrast_adjustment")
+    if isinstance(settings, dict) and settings.get("enabled", False):
+        low_percent = settings.get("low_percent", 1.0)
+        high_percent = settings.get("high_percent", 99.0)
+        gamma = settings.get("gamma", 1.0)
+    elif parameters.get("contrast", False):
+        limits = parameters.get("contrast_low_max_percent", (1.0, 99.0))
+        if isinstance(limits, (int, float)):
+            low_percent, high_percent = limits, 100.0 - limits
+        else:
+            low_percent, high_percent = limits
+        gamma = parameters.get("contrast_gamma", 1.0)
+    else:
+        return data
+
+    image = np.asarray(data)
+    if image.size == 0 or image.ndim not in (2, 3, 4):
+        return data
+    if np.iscomplexobj(image):
+        image = np.abs(image)
+    image = np.nan_to_num(image, nan=0.0, posinf=0.0, neginf=0.0)
+    low, high = np.percentile(image, [float(low_percent), float(high_percent)])
+    if high <= low:
+        return np.zeros_like(image, dtype=np.float32)
+    return np.clip((image - low) / (high - low), 0.0, 1.0) ** float(gamma)
+
+
+def save_result_map(
+    target_dir,
+    raw_map,
+    parameters,
+    file_reader,
+    *,
+    num_batch=None,
+    end_frame=None,
+    first_frame=None,
+):
+    """Finish saving a pipeline whose raw HDF5 output was already written."""
+    display_map = {
+        name: (
+            value
+            if name.startswith("debug_") or is_csv_h5_output(name)
+            else apply_contrast_adjustment(value, parameters)
+        )
+        for name, value in raw_map.items()
+        if value is not None
+    }
+    save_bundle(
+        target_dir,
+        display_map,
+        parameters=parameters,
+        file_reader=file_reader,
+        fps=calculate_fps(num_batch, end_frame, first_frame, parameters),
+        save_h5_output=False,
+    )
+    return raw_map

@@ -1,7 +1,7 @@
 pipeline_name: "simple"
 
-# Run spectral_cube after this pipeline and append its results to the same HDF5.
-spectral_cube_enabled: true
+# Optionally append spectral_cube results to the same HDF5 after processing.
+spectral_cube_enabled: false
 
 # Core parameters
 batch_size: 256

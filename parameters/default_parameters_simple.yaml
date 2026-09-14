@@ -1,5 +1,8 @@
 pipeline_name: "simple"
 
+# Optionally append spectral_cube results to the same HDF5 after processing.
+spectral_cube_enabled: false
+
 # optional backend management
 no_cupy: true # prevents using cupy and falls back on numpy only calculations
 numpy_num_workers: 8 # in numpy mode, the number of parallel workers to be used

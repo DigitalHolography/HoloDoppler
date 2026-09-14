@@ -1,6 +1,8 @@
 """HoloDoppler command-line interface module."""
 
 import argparse
+import copy
+import inspect
 import json
 import sys
 from enum import Enum
@@ -14,6 +16,9 @@ from .pipelines import pipelines
 # CONSTANTS
 # ============================================================================
 DEFAULT_PARAMETERS_PATH: Path = Path("parameters/default_parameters_simple.yaml")
+DEFAULT_SPECTRAL_PARAMETERS_PATH = (
+    Path(__file__).parent / "ui" / "defaults" / "default_parameters_spectral_cube.yaml"
+)
 DEBUG_CONFIG_FILENAME: str = ".debug_paths.json"
 GUI_COMMAND: str = "gui"
 PREVIEW_PREFIX: str = "preview_"
@@ -53,7 +58,13 @@ class PipelineMode(str, Enum):
 # CORE PIPELINE EXECUTION
 # ============================================================================
 def _run_pipeline(
-    file_path: Path, parameters: Union[dict, Path, str], mode: PipelineMode
+    file_path: Path,
+    parameters: Union[dict, Path, str],
+    mode: PipelineMode,
+    *,
+    progress_callback=None,
+    warning_callback=None,
+    save_debug=None,
 ) -> Any:
     """
     Execute a pipeline with the given parameters.
@@ -114,35 +125,148 @@ def _run_pipeline(
         raise ValueError(error_msg)
 
     # Execute pipeline
-    return pipeline_func(file_path, parameters)
+    return _call_pipeline(
+        pipeline_func,
+        file_path,
+        parameters,
+        progress_callback=progress_callback,
+        warning_callback=warning_callback,
+        save_debug=save_debug,
+    )
 
 
-def preview(file_path: Path, parameters: Union[dict, Path, str]) -> Any:
+def _call_pipeline(pipeline_func, file_path, parameters, **options):
+    """Pass UI options supported by the selected pipeline, including older ones."""
+    signature = inspect.signature(pipeline_func)
+    accepts_kwargs = any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    )
+    kwargs = {
+        name: value
+        for name, value in options.items()
+        if value is not None and (accepts_kwargs or name in signature.parameters)
+    }
+    return pipeline_func(file_path, parameters, **kwargs)
+
+
+def preview(
+    file_path: Path,
+    parameters: Union[dict, Path, str],
+    save_debug: bool = True,
+) -> Any:
     """
     Run in preview mode.
 
     Args:
         file_path: Path to the input file
         parameters: Either a parameters dict or a path to a config file
+        save_debug: Save preview outputs to disk when True
 
     Returns:
         The result from the preview pipeline
     """
-    return _run_pipeline(file_path, parameters, PipelineMode.PREVIEW)
+    return _run_pipeline(
+        file_path, parameters, PipelineMode.PREVIEW, save_debug=save_debug
+    )
 
 
-def process(file_path: Path, parameters: Union[dict, Path, str]) -> Any:
+def _spectral_cube_parameters(parameters: dict) -> dict:
+    """Keep spectral temporal settings independent from the primary pipeline."""
+    from .saving import H5_OUTPUT_PATH_PARAMETER
+
+    shared = {
+        "first_frame", "end_frame", "spatial_propagation", "z", "wavelength",
+        "pixel_pitch", "Fresnel_use_ouput_kernel", "filter2d", "filter2d_low",
+        "sampling_freq", "corner_compensation", "contrast",
+        "contrast_low_max_percent", "contrast_gamma", "saving_to_folder",
+        "f_bins", H5_OUTPUT_PATH_PARAMETER,
+    }
+    spectral_parameters = load_config(DEFAULT_SPECTRAL_PARAMETERS_PATH)
+    for name, value in parameters.items():
+        if (
+            name in shared
+            or name.startswith("spectral_endpoints_")
+            or name.startswith("shack_hartmann")
+            or (
+                name.startswith("spectral_cube_")
+                and name not in {"spectral_cube_enabled", "spectral_cube_settings"}
+            )
+        ):
+            spectral_parameters[name] = copy.deepcopy(value)
+
+    overrides = parameters.get("spectral_cube_settings")
+    if overrides is None:
+        overrides = {}
+    if not isinstance(overrides, dict):
+        raise ValueError("spectral_cube_settings must be an object")
+    spectral_parameters.update(copy.deepcopy(overrides))
+    spectral_parameters["pipeline_name"] = "spectral_cube"
+    # Append to the HDF5 actually saved by the primary pipeline.
+    if H5_OUTPUT_PATH_PARAMETER in parameters:
+        spectral_parameters[H5_OUTPUT_PATH_PARAMETER] = parameters[H5_OUTPUT_PATH_PARAMETER]
+    return spectral_parameters
+
+
+def process(
+    file_path: Path,
+    parameters: Union[dict, Path, str],
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+    warning_callback: Optional[Callable[[str, str], None]] = None,
+) -> Any:
     """
     Run in process mode.
 
     Args:
         file_path: Path to the input file
         parameters: Either a parameters dict or a path to a config file
+        progress_callback: Receive completed count, total count, and progress text
+        warning_callback: Receive a warning code and message without stopping processing
 
     Returns:
         The result from the process pipeline
     """
-    return _run_pipeline(file_path, parameters, PipelineMode.PROCESS)
+    from .saving import H5_OUTPUT_PATH_PARAMETER
+
+    if not isinstance(parameters, dict):
+        parameters = load_config(parameters)
+
+    enabled = parameters.get("spectral_cube_enabled", True)
+    if isinstance(enabled, str):
+        enabled = enabled.strip().lower() not in {"0", "false", "no", "off"}
+    runs_spectral_cube = parameters.get("pipeline_name") != "spectral_cube" and bool(enabled)
+
+    def stage_progress(stage):
+        if progress_callback is None:
+            return None
+
+        def report(completed, total, message=""):
+            progress_callback(completed, total, f"{stage}: {message}" if message else stage)
+
+        return report
+
+    parameters.pop(H5_OUTPUT_PATH_PARAMETER, None)
+    try:
+        result = _run_pipeline(
+            file_path,
+            parameters,
+            PipelineMode.PROCESS,
+            progress_callback=(
+                stage_progress("Primary pipeline") if runs_spectral_cube else progress_callback
+            ),
+            warning_callback=warning_callback,
+        )
+        if runs_spectral_cube:
+            _run_pipeline(
+                file_path,
+                _spectral_cube_parameters(parameters),
+                PipelineMode.PROCESS,
+                progress_callback=stage_progress("Spectral cube"),
+                warning_callback=warning_callback,
+            )
+        return result
+    finally:
+        parameters.pop(H5_OUTPUT_PATH_PARAMETER, None)
 
 
 # ============================================================================

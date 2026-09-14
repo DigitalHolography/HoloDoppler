@@ -912,6 +912,24 @@ def update_from_holo_footer(
     return parameters
 
 
+# Compatibility names used by the bundled pipelines.
+update_from_footer = update_from_holo_footer
+
+
+def normalize_to_uint8(data):
+    from holodoppler.saving import normalize_float_array_to_uint8
+
+    return normalize_float_array_to_uint8(data)
+
+
+def temporal_gaussian(arr, sigma):
+    if sigma == 0:
+        return arr
+    from scipy.ndimage import gaussian_filter1d
+
+    return gaussian_filter1d(np.asarray(arr, dtype=np.float32), sigma=sigma, axis=2)
+
+
 # ============================================================================
 # Registration
 # ============================================================================

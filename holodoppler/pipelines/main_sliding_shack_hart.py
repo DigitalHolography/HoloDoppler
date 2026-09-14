@@ -6,6 +6,7 @@ import holodoppler.backend as backend
 from tqdm import tqdm
 
 from holodoppler.saving import (
+    preview_image_from_results,
     save_preview_images,
     save_outputs,
     get_default_output_path,
@@ -648,13 +649,8 @@ def _process_one_batch(
                 nan=0.0,
             )
 
-        # The current U can be released when it is not retained by the
-        # sliding buffer.
-        if U_buffer is None:
-            del U
-
-        if U_tot is not U:
-            del U_tot
+        # The sliding buffer retains its own references when needed.
+        del U_tot, U
 
     # ------------------------------------------------------------------
     # Main Doppler processing
@@ -725,12 +721,13 @@ def _append_numpy_results(output, res):
         )
 
 
-def preview(file_path, parameters):
+def preview(file_path, parameters, save_debug=True):
     """
-    Process a single preview batch.
+    Process a single preview batch and return a 2D NumPy image.
 
     The preview uses the same backend abstraction as process(), so it
     works with either NumPy or CuPy.
+    Set save_debug=False for an in-memory UI preview without file writes.
     """
 
     file_reader = FileReaderFactory.create(file_path)
@@ -758,7 +755,7 @@ def preview(file_path, parameters):
     # ------------------------------------------------------------------
     frames = file_reader.read_frames(
         first_frame=parameters["first_frame"],
-        batch_size=parameters["batch_size"],
+        batch_size=parameters.get("batch_size", parameters.get("time_window")),
     )
 
     frames = backend.to_backend(frames)
@@ -815,31 +812,34 @@ def preview(file_path, parameters):
     # ------------------------------------------------------------------
     # Save preview
     # ------------------------------------------------------------------
-    save_dir = (
-        get_default_output_path(
-            file_reader.file_path
+    if save_debug:
+        save_dir = (
+            get_default_output_path(
+                file_reader.file_path
+            )
+            / "preview"
         )
-        / "preview"
-    )
 
-    save_preview_images(
-        res_np,
-        save_dir,
-        square=True,
-    )
+        save_preview_images(
+            res_np,
+            save_dir,
+            square=True,
+        )
 
-    save_h5(
-        save_dir,
-        res_np,
-        parameters,
-    )
+        save_h5(
+            save_dir,
+            res_np,
+            parameters,
+        )
 
-    return res_np
+    return preview_image_from_results(res_np)
 
 
-def process(file_path, parameters):
+def process(file_path, parameters, progress_callback=None):
     """
     Process a complete holographic file.
+
+    progress_callback(completed, total, message) is called after each batch.
 
     Supports:
         - CPU/NumPy execution
@@ -1064,6 +1064,9 @@ def process(file_path, parameters):
                 res,
             )
 
+            if progress_callback is not None:
+                progress_callback(i + 1, num_batch, f"Batch {i + 1}/{num_batch}")
+
             del frames
             del res
 
@@ -1195,6 +1198,13 @@ def process(file_path, parameters):
 
                 processed_batches += 1
 
+                if progress_callback is not None:
+                    progress_callback(
+                        processed_batches,
+                        num_batch,
+                        f"Batch {processed_batches}/{num_batch}",
+                    )
+
                 # ------------------------------------------------------
                 # Release buffer
                 # ------------------------------------------------------
@@ -1274,6 +1284,13 @@ def process(file_path, parameters):
             )
 
             processed_batches += 1
+
+            if progress_callback is not None:
+                progress_callback(
+                    processed_batches,
+                    num_batch,
+                    f"Batch {processed_batches}/{num_batch}",
+                )
 
             buffer_ready[
                 current_idx

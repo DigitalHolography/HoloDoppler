@@ -9,6 +9,7 @@ import holodoppler.backend as backend
 from tqdm import tqdm
 
 from holodoppler.saving import (
+    preview_image_from_results,
     save_outputs,
 )
 
@@ -412,12 +413,13 @@ def _get_autofocus_phase_term(parameters, file_reader):
 
     Returns
     -------
-    phase_term : backend array or None
-        Fixed phase correction to use for all processed batches.
+    phase_term, coefs : tuple
+        Fixed phase correction and fitted coefficients, or (None, None)
+        when autofocus is disabled.
     """
 
     if not parameters.get("shack_hartmann_autofocus", False):
-        return None
+        return None, None
 
     print(
         "Running Shack-Hartmann autofocus from reference batch:",
@@ -464,7 +466,7 @@ def _get_autofocus_phase_term(parameters, file_reader):
         output_dict=autofocus_result,
     )
 
-    coefs = autofocus_result["shack_hartmann_zernike_coefs"]
+    coefs = autofocus_result.get("shack_hartmann_zernike_coefs")
 
     del ref_frames
     del autofocus_result
@@ -604,6 +606,7 @@ def _process_numpy(
     output,
     M0_reg=None,
     autofocus_phase_term=None,
+    progress_callback=None,
 ):
     """
     Sequential NumPy/CPU processing.
@@ -670,6 +673,9 @@ def _process_numpy(
             output,
             res,
         )
+
+        if progress_callback is not None:
+            progress_callback(i + 1, num_batch, f"Batch {i + 1}/{num_batch}")
 
         del frames
         del res
@@ -740,6 +746,7 @@ def _process_numpy_parallel(
     M0_reg=None,
     autofocus_phase_term=None,
     n_workers=None,
+    progress_callback=None,
 ):
     """
     Parallel NumPy/CPU processing.
@@ -785,6 +792,7 @@ def _process_numpy_parallel(
             output=output,
             M0_reg=M0_reg,
             autofocus_phase_term=autofocus_phase_term,
+            progress_callback=progress_callback,
         )
 
     n_workers = _get_numpy_workers(
@@ -840,18 +848,28 @@ def _process_numpy_parallel(
             range(num_batch),
         )
 
-        for res in tqdm(
-            results,
-            total=num_batch,
-            desc=(
-                f"Processing "
-                f"(NumPy, {n_workers} workers)"
+        for completed, res in enumerate(
+            tqdm(
+                results,
+                total=num_batch,
+                desc=(
+                    f"Processing "
+                    f"(NumPy, {n_workers} workers)"
+                ),
             ),
+            start=1,
         ):
             _append_numpy_results(
                 output,
                 res,
             )
+
+            if progress_callback is not None:
+                progress_callback(
+                    completed,
+                    num_batch,
+                    f"Batch {completed}/{num_batch}",
+                )
 
             del res
 
@@ -872,6 +890,7 @@ def _process_cupy(
     output,
     M0_reg=None,
     autofocus_phase_term=None,
+    progress_callback=None,
 ):
     h2d_stream = backend.xp.cuda.Stream(
         non_blocking=True
@@ -983,6 +1002,12 @@ def _process_cupy(
             )
 
             processed_batches += 1
+            if progress_callback is not None:
+                progress_callback(
+                    processed_batches,
+                    num_batch,
+                    f"Batch {processed_batches}/{num_batch}",
+                )
 
             buffer_ready[
                 current_idx
@@ -1045,6 +1070,12 @@ def _process_cupy(
         )
 
         processed_batches += 1
+        if progress_callback is not None:
+            progress_callback(
+                processed_batches,
+                num_batch,
+                f"Batch {processed_batches}/{num_batch}",
+            )
 
         buffer_ready[
             current_idx
@@ -1063,7 +1094,7 @@ def _process_cupy(
 
     return output, M0_reg
 
-def preview(file_path, parameters):
+def preview(file_path, parameters, save_debug=True):
     file_reader = FileReaderFactory.create(file_path)
 
     print("previewing file :", file_path)
@@ -1088,7 +1119,6 @@ def preview(file_path, parameters):
         parameters,
         file_reader,
     )
-    auto_coefs = backend.to_numpy(auto_coefs)
 
     # ------------------------------------------------------------
     # Preview frames
@@ -1114,7 +1144,8 @@ def preview(file_path, parameters):
         phase_term=autofocus_phase_term,
     )
 
-    res["shack_hartmann_autofocus_zernike_coefs"] = auto_coefs
+    if auto_coefs is not None:
+        res["shack_hartmann_autofocus_zernike_coefs"] = auto_coefs
 
     # ------------------------------------------------------------
     # Square output
@@ -1143,18 +1174,19 @@ def preview(file_path, parameters):
 
     backend.clear_gpu_memory()
 
-    save_outputs(
-        file_reader=file_reader,
-        output=res_np,
-        parameters=parameters,
-        custom_relative_path="preview",
-        square=True,
-    )
+    if save_debug:
+        save_outputs(
+            file_reader=file_reader,
+            output=res_np,
+            parameters=parameters,
+            custom_relative_path="preview",
+            square=True,
+        )
 
-    return res_np["M0ff"]
+    return preview_image_from_results(res_np)
 
 
-def process(file_path, parameters):
+def process(file_path, parameters, progress_callback=None):
     file_reader = FileReaderFactory.create(file_path)
 
     if file_reader.extension == ".holo":
@@ -1262,7 +1294,6 @@ def process(file_path, parameters):
         parameters,
         file_reader,
     )
-    auto_coefs = backend.to_numpy(auto_coefs)
 
     # ------------------------------------------------------------
     # NumPy / CPU path
@@ -1284,6 +1315,7 @@ def process(file_path, parameters):
                 M0_reg=M0_reg,
                 autofocus_phase_term=autofocus_phase_term,
                 n_workers=n_workers,
+                progress_callback=progress_callback,
             )
 
         else:
@@ -1298,6 +1330,7 @@ def process(file_path, parameters):
                 output=output,
                 M0_reg=M0_reg,
                 autofocus_phase_term=autofocus_phase_term,
+                progress_callback=progress_callback,
             )
     else:
 
@@ -1311,6 +1344,7 @@ def process(file_path, parameters):
             output=output,
             M0_reg=M0_reg,
             autofocus_phase_term=autofocus_phase_term,
+            progress_callback=progress_callback,
         )
 
     # ------------------------------------------------------------
@@ -1324,7 +1358,8 @@ def process(file_path, parameters):
         for key, values in output.items()
     }
 
-    output["shack_hartmann_autofocus_zernike_coefs"] = auto_coefs
+    if auto_coefs is not None:
+        output["shack_hartmann_autofocus_zernike_coefs"] = backend.to_numpy(auto_coefs)
 
     # ------------------------------------------------------------
     # ECC Image Registration at the end
@@ -1334,12 +1369,38 @@ def process(file_path, parameters):
         print(
             "Running Registration ECC algo:"
         )
-        registration_ecc = register_with_ecc(output["M0ff"],radius=parameters.get("registration_ecc_radius",0.8),iterations=300,eps=1e-6)
+        registration_keys = [
+            key for key in output
+            if key in {"M0ff", "M0", "M1", "M2"} or "band_" in key
+        ]
+        frame_count = len(output["M0ff"])
+        total_steps = frame_count + len(registration_keys)
 
+        if progress_callback is not None:
+            progress_callback(0, total_steps, "ECC registration: starting")
 
-        for key in output :
-            if key in {"M0ff", "M0", "M1", "M2"} or "band_" in key :
-                output[key] = apply_ecc_registration(output[key], registration_ecc, background="mean")
+        def on_ecc_progress(completed, _total, message):
+            if progress_callback is not None:
+                progress_callback(completed, total_steps, f"ECC registration: {message}")
+
+        registration_ecc = register_with_ecc(
+            output["M0ff"],
+            radius=parameters.get("registration_ecc_radius", 0.8),
+            iterations=300,
+            eps=1e-6,
+            progress_callback=on_ecc_progress if progress_callback is not None else None,
+        )
+
+        for index, key in enumerate(registration_keys, start=1):
+            output[key] = apply_ecc_registration(
+                output[key], registration_ecc, background="mean"
+            )
+            if progress_callback is not None:
+                progress_callback(
+                    frame_count + index,
+                    total_steps,
+                    f"ECC registration: applied {key} ({index}/{len(registration_keys)})",
+                )
 
         output["registration_ecc"] = registration_ecc
         print(
@@ -1383,3 +1444,5 @@ def process(file_path, parameters):
         output=output,
         parameters=parameters,
     )
+
+    return output

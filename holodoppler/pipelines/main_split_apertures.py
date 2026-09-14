@@ -637,11 +637,11 @@ def _process_shack_hartmann(parameters, frames, output_dict=None):
 def preview(file_path, parameters, save_debug=True):
     file_reader = FileReaderFactory.create(file_path)
 
-    if file_reader.ext == ".holo":
-        print("file header :", file_reader.file_header)
-        parameters = update_from_footer(parameters, file_reader.file_footer)
+    if file_reader.extension == ".holo":
+        print("file header :", file_reader.header)
+        parameters = update_from_footer(parameters, file_reader.footer)
 
-    if file_reader.ext == ".cine":
+    if file_reader.extension == ".cine":
         print("file header :", file_reader.metadata)
     print("parameters : ", parameters)
 
@@ -696,11 +696,11 @@ def process(file_path, parameters, progress_callback=None):
 
     file_reader = FileReaderFactory.create(file_path)
 
-    if file_reader.ext == ".holo":
-        print("file header :", file_reader.file_header)
-        parameters = update_from_footer(parameters, file_reader.file_footer)
+    if file_reader.extension == ".holo":
+        print("file header :", file_reader.header)
+        parameters = update_from_footer(parameters, file_reader.footer)
 
-    if file_reader.ext == ".cine":
+    if file_reader.extension == ".cine":
         print("file header :", file_reader.metadata)
 
     # print("parameters : ", parameters)
@@ -711,8 +711,8 @@ def process(file_path, parameters, progress_callback=None):
     end_frame = parameters.get("end_frame", 0)
     if end_frame <= 0:
         end_frame = (
-            file_reader.file_header.num_frames
-            if file_reader.ext == ".holo"
+            file_reader.header.num_frames
+            if file_reader.extension == ".holo"
             else file_reader.TotalImageCount
         )
 

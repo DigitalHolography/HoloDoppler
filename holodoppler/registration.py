@@ -639,7 +639,8 @@ def register_with_ecc(
     radius=0.9,
     iterations=300,
     eps=1e-6,
-    n_workers=8
+    n_workers=8,
+    progress_callback=None,
 ):
     """
     video : float32 ndarray, shape (N, H, W)
@@ -651,6 +652,7 @@ def register_with_ecc(
          a, b, c, d, shear_x, shear_y, ecc]
 
     n_workers is capped at half the available CPU cores.
+    progress_callback(completed, total, message) reports registered frames.
     """
 
     N, H, W = video.shape
@@ -691,6 +693,8 @@ def register_with_ecc(
         1, 0, 0, 1,
         0, 0, 1
     ]
+    if progress_callback is not None:
+        progress_callback(1, N, f"Frame 1/{N}")
 
     # --------------------------------------------------------
     # Parallel registration
@@ -708,6 +712,8 @@ def register_with_ecc(
             desc="ECC registration"
         ):
             reg[i] = result
+            if progress_callback is not None:
+                progress_callback(i + 1, N, f"Frame {i + 1}/{N}")
 
     return reg
 

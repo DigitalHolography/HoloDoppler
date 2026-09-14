@@ -316,12 +316,12 @@ def accumulate_on_frames(
 def preview(file_path, parameters, save_debug=True):
     file_reader = FileReaderFactory.create(file_path)
 
-    if file_reader.ext == ".holo":
-        print("file header :", file_reader.file_header)
-        ny, nx = file_reader.file_header.height, file_reader.file_header.width
-        parameters = update_from_footer(parameters, file_reader.file_footer)
+    if file_reader.extension == ".holo":
+        print("file header :", file_reader.header)
+        ny, nx = file_reader.header.height, file_reader.header.width
+        parameters = update_from_footer(parameters, file_reader.footer)
 
-    if file_reader.ext == ".cine":
+    if file_reader.extension == ".cine":
         print("file header :", file_reader.metadata)
     print("parameters : ", parameters)
 
@@ -381,12 +381,12 @@ def preview(file_path, parameters, save_debug=True):
 def process(file_path, parameters, progress_callback=None):
     file_reader = FileReaderFactory.create(file_path)
 
-    if file_reader.ext == ".holo":
-        print("file header :", file_reader.file_header)
-        parameters = update_from_footer(parameters, file_reader.file_footer)
-        ny, nx = file_reader.file_header.height, file_reader.file_header.width
+    if file_reader.extension == ".holo":
+        print("file header :", file_reader.header)
+        parameters = update_from_footer(parameters, file_reader.footer)
+        ny, nx = file_reader.header.height, file_reader.header.width
 
-    if file_reader.ext == ".cine":
+    if file_reader.extension == ".cine":
         print("file header :", file_reader.metadata)
 
     print("parameters : ", parameters)
@@ -399,8 +399,8 @@ def process(file_path, parameters, progress_callback=None):
 
     if end_frame <= 0:
         end_frame = (
-            file_reader.file_header.num_frames
-            if file_reader.ext == ".holo"
+            file_reader.header.num_frames
+            if file_reader.extension == ".holo"
             else file_reader.TotalImageCount
         )
 

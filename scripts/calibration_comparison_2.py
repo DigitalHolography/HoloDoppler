@@ -82,7 +82,7 @@ def get_frames(file_path, size=None):
     file_reader = FileReaderFactory.create(file_path)
     file_reader.open()
     if size is None:
-        frames = file_reader.read_frames(0, file_reader.file_header["num_frames"])
+        frames = file_reader.read_frames(0, file_reader.header["num_frames"])
     else:
         frames = file_reader.read_frames(0, size)
     file_reader.close()
