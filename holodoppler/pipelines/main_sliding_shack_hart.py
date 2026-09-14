@@ -1,3 +1,5 @@
+import os
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 from collections import defaultdict
 from pathlib import Path
@@ -6,10 +8,7 @@ import holodoppler.backend as backend
 from tqdm import tqdm
 
 from holodoppler.saving import (
-    save_preview_images,
     save_outputs,
-    get_default_output_path,
-    save_h5,
 )
 
 from holodoppler.propagation import (
@@ -442,6 +441,7 @@ def _process_one_batch(
     frames,
     M0_reg=None,
     U_buffer=None,
+    phase_term=None,
 ):
     """
     Process one batch on the active backend.
@@ -464,12 +464,10 @@ def _process_one_batch(
 
     res = {}
 
-    phase_term = None
-
     # ------------------------------------------------------------------
-    # Shack-Hartmann
+    # Shack-Hartmann / fixed autofocus wavefront correction
     # ------------------------------------------------------------------
-    if parameters.get("shack_hartmann", False):
+    if phase_term is None and parameters.get("shack_hartmann", False):
 
         # If sliding accumulation is requested, construct U separately
         # so that the last N U arrays can be accumulated.
@@ -576,23 +574,19 @@ def _process_one_batch(
             )
 
         # --------------------------------------------------------------
-        # Optional sub-aperture output
+        # Sub-aperture montage output
         # --------------------------------------------------------------
-        if parameters.get(
-            "save_shack_hartmann_sub_images",
-            False,
-        ):
-            sy, sx, numy, numx = U_tot.shape
+        sy, sx, numy, numx = U_tot.shape
 
-            U_display = xp.transpose(
-                U_tot,
-                axes=(0, 2, 1, 3),
-            )
+        U_display = xp.transpose(
+            U_tot,
+            axes=(0, 2, 1, 3),
+        )
 
-            res["shack_hartmann_sub_images"] = xp.reshape(
-                U_display,
-                (numy * sy, numx * sx),
-            )
+        res["shack_hartmann_sub_images"] = xp.reshape(
+            U_display,
+            (numy * sy, numx * sx),
+        )
 
         # --------------------------------------------------------------
         # Zernike fit
@@ -725,6 +719,377 @@ def _append_numpy_results(output, res):
         )
 
 
+
+def _get_autofocus_phase_term(parameters, file_reader):
+    """
+    Compute one Shack-Hartmann autofocus correction from the configured
+    reference batch and reuse it for all following batches.
+    """
+    if not parameters.get("shack_hartmann_autofocus", False):
+        return None, None
+
+    ref_first_frame = parameters.get(
+        "registration_ref_first_frame",
+        parameters["first_frame"],
+    )
+    ref_batch_size = parameters.get(
+        "registration_ref_batch_size",
+        parameters["batch_size"],
+    )
+
+    print(
+        "Running Shack-Hartmann autofocus from reference batch:",
+        f"first_frame={ref_first_frame},",
+        f"batch_size={ref_batch_size}",
+    )
+
+    ref_frames = file_reader.read_frames(
+        first_frame=ref_first_frame,
+        batch_size=ref_batch_size,
+    )
+
+    if ref_frames.shape[0] == 0:
+        raise ValueError(
+            "Shack-Hartmann autofocus reference batch is empty."
+        )
+
+    ref_frames = backend.to_backend(ref_frames).astype(
+        backend.xp.float32,
+        copy=False,
+    )
+
+    if parameters.get("filter2d", False):
+        ref_frames = filter_2d(
+            backend.xp,
+            backend.fft,
+            ref_frames,
+            parameters["filter2d_low"],
+        )
+
+    autofocus_result = {}
+    phase_term = _process_shack_hartmann(
+        parameters,
+        ref_frames,
+        output_dict=autofocus_result,
+    )
+    coefs = autofocus_result.get(
+        "shack_hartmann_zernike_coefs"
+    )
+
+    del ref_frames
+    del autofocus_result
+    backend.clear_gpu_memory()
+
+    if phase_term is None:
+        raise RuntimeError(
+            "Shack-Hartmann autofocus was enabled, but no phase "
+            "correction was produced."
+        )
+
+    print("Shack-Hartmann autofocus phase correction computed.")
+    return phase_term, coefs
+
+
+def _process_numpy(
+    parameters,
+    file_reader,
+    first_frame,
+    num_batch,
+    batch_stride,
+    batch_size,
+    output,
+    M0_reg=None,
+    autofocus_phase_term=None,
+    sh_time_accumulation=1,
+    progress_callback=None,
+):
+    """Sequential NumPy/CPU processing, including sliding SH accumulation."""
+
+    U_buffer = []
+
+    for i in tqdm(
+        range(num_batch),
+        desc="Processing (NumPy)",
+    ):
+        frames = file_reader.read_frames(
+            first_frame=first_frame + i * batch_stride,
+            batch_size=batch_size,
+        )
+        frames = backend.to_backend(frames).astype(
+            backend.xp.float32,
+            copy=False,
+        )
+
+        res, M0_reg = _process_one_batch(
+            parameters,
+            frames,
+            M0_reg=M0_reg,
+            U_buffer=(
+                U_buffer
+                if parameters.get("shack_hartmann", False)
+                else None
+            ),
+            phase_term=autofocus_phase_term,
+        )
+
+        if len(U_buffer) > sh_time_accumulation:
+            del U_buffer[:len(U_buffer) - sh_time_accumulation]
+
+        _append_numpy_results(output, res)
+
+        if progress_callback is not None:
+            progress_callback(
+                i + 1,
+                num_batch,
+                f"Batch {i + 1}/{num_batch}",
+            )
+
+        del frames
+        del res
+
+    return output, M0_reg
+
+
+def _get_numpy_workers(n_workers=None):
+    """Return a safe number of NumPy workers."""
+    cpu_count = os.cpu_count() or 1
+    safe_cpu_limit = max(1, cpu_count // 2)
+
+    if n_workers is None:
+        n_workers = 8
+
+    n_workers = max(1, int(n_workers))
+    return min(n_workers, safe_cpu_limit)
+
+
+def _process_numpy_parallel(
+    parameters,
+    file_reader,
+    first_frame,
+    num_batch,
+    batch_stride,
+    batch_size,
+    output,
+    M0_reg=None,
+    autofocus_phase_term=None,
+    n_workers=None,
+    sh_time_accumulation=1,
+    progress_callback=None,
+):
+    """
+    Parallel NumPy processing when batches are independent.
+
+    Sliding Shack-Hartmann accumulation and stateful image registration
+    are dependency chains, so they fall back to sequential processing.
+    """
+    if (
+        parameters.get("image_registration", False)
+        or (
+            parameters.get("shack_hartmann", False)
+            and sh_time_accumulation > 1
+        )
+    ):
+        return _process_numpy(
+            parameters=parameters,
+            file_reader=file_reader,
+            first_frame=first_frame,
+            num_batch=num_batch,
+            batch_stride=batch_stride,
+            batch_size=batch_size,
+            output=output,
+            M0_reg=M0_reg,
+            autofocus_phase_term=autofocus_phase_term,
+            sh_time_accumulation=sh_time_accumulation,
+            progress_callback=progress_callback,
+        )
+
+    n_workers = _get_numpy_workers(n_workers)
+
+    def process_batch(i):
+        frames = file_reader.read_frames(
+            first_frame=first_frame + i * batch_stride,
+            batch_size=batch_size,
+        )
+        frames = backend.to_backend(frames).astype(
+            backend.xp.float32,
+            copy=False,
+        )
+        res, _ = _process_one_batch(
+            parameters,
+            frames,
+            M0_reg=None,
+            U_buffer=None,
+            phase_term=autofocus_phase_term,
+        )
+        del frames
+        return res
+
+    with ThreadPoolExecutor(max_workers=n_workers) as executor:
+        results = executor.map(process_batch, range(num_batch))
+
+        for completed, res in enumerate(
+            tqdm(
+                results,
+                total=num_batch,
+                desc=f"Processing (NumPy, {n_workers} workers)",
+            ),
+            start=1,
+        ):
+            _append_numpy_results(output, res)
+
+            if progress_callback is not None:
+                progress_callback(
+                    completed,
+                    num_batch,
+                    f"Batch {completed}/{num_batch}",
+                )
+
+            del res
+
+    return output, M0_reg
+
+
+def _process_cupy(
+    parameters,
+    file_reader,
+    first_frame,
+    num_batch,
+    batch_stride,
+    batch_size,
+    output,
+    M0_reg=None,
+    autofocus_phase_term=None,
+    sh_time_accumulation=1,
+    progress_callback=None,
+):
+    """GPU/CuPy processing with asynchronous prefetch and sliding SH."""
+
+    U_buffer = []
+    h2d_stream = backend.xp.cuda.Stream(non_blocking=True)
+    compute_stream = backend.xp.cuda.Stream(non_blocking=True)
+
+    PREFETCH_DEPTH = 4
+    d_buffers = [None] * PREFETCH_DEPTH
+    h2d_events = [None] * PREFETCH_DEPTH
+    compute_events = [None] * PREFETCH_DEPTH
+    buffer_ready = [False] * PREFETCH_DEPTH
+
+    current_idx = 0
+    processed_batches = 0
+
+    for i in tqdm(
+        range(num_batch + PREFETCH_DEPTH),
+        desc="Processing (CuPy)",
+    ):
+        prefetch_idx = i % PREFETCH_DEPTH
+
+        if i < num_batch:
+            current_first_frame = first_frame + i * batch_stride
+
+            with h2d_stream:
+                frames = file_reader.read_frames(
+                    first_frame=current_first_frame,
+                    batch_size=batch_size,
+                )
+                d_buffers[prefetch_idx] = backend.xp.asarray(frames)
+                h2d_events[prefetch_idx] = backend.xp.cuda.Event()
+                h2d_events[prefetch_idx].record(h2d_stream)
+                buffer_ready[prefetch_idx] = True
+
+        while (
+            buffer_ready[current_idx]
+            and current_idx != prefetch_idx
+        ):
+            h2d_events[current_idx].synchronize()
+
+            with compute_stream:
+                d_current = d_buffers[current_idx]
+                res, M0_reg = _process_one_batch(
+                    parameters,
+                    d_current,
+                    M0_reg=M0_reg,
+                    U_buffer=(
+                        U_buffer
+                        if parameters.get("shack_hartmann", False)
+                        else None
+                    ),
+                    phase_term=autofocus_phase_term,
+                )
+
+                compute_events[current_idx] = backend.xp.cuda.Event()
+                compute_events[current_idx].record(compute_stream)
+
+            compute_events[current_idx].synchronize()
+
+            _append_numpy_results(output, res)
+            processed_batches += 1
+
+            if progress_callback is not None:
+                progress_callback(
+                    processed_batches,
+                    num_batch,
+                    f"Batch {processed_batches}/{num_batch}",
+                )
+
+            buffer_ready[current_idx] = False
+            d_buffers[current_idx] = None
+
+            if len(U_buffer) > sh_time_accumulation:
+                del U_buffer[:len(U_buffer) - sh_time_accumulation]
+
+            current_idx = (current_idx + 1) % PREFETCH_DEPTH
+
+            if processed_batches >= num_batch:
+                break
+
+        if processed_batches >= num_batch:
+            break
+
+    while buffer_ready[current_idx]:
+        h2d_events[current_idx].synchronize()
+
+        with compute_stream:
+            d_current = d_buffers[current_idx]
+            res, M0_reg = _process_one_batch(
+                parameters,
+                d_current,
+                M0_reg=M0_reg,
+                U_buffer=(
+                    U_buffer
+                    if parameters.get("shack_hartmann", False)
+                    else None
+                ),
+                phase_term=autofocus_phase_term,
+            )
+            compute_events[current_idx] = backend.xp.cuda.Event()
+            compute_events[current_idx].record(compute_stream)
+
+        compute_events[current_idx].synchronize()
+
+        _append_numpy_results(output, res)
+        processed_batches += 1
+
+        if progress_callback is not None:
+            progress_callback(
+                processed_batches,
+                num_batch,
+                f"Batch {processed_batches}/{num_batch}",
+            )
+
+        buffer_ready[current_idx] = False
+        d_buffers[current_idx] = None
+
+        if len(U_buffer) > sh_time_accumulation:
+            del U_buffer[:len(U_buffer) - sh_time_accumulation]
+
+        current_idx = (current_idx + 1) % PREFETCH_DEPTH
+
+        if processed_batches >= num_batch:
+            break
+
+    return output, M0_reg
+
+
 def preview(file_path, parameters):
     """
     Process a single preview batch.
@@ -815,53 +1180,26 @@ def preview(file_path, parameters):
     # ------------------------------------------------------------------
     # Save preview
     # ------------------------------------------------------------------
-    save_dir = (
-        get_default_output_path(
-            file_reader.file_path
-        )
-        / "preview"
-    )
-
-    save_preview_images(
-        res_np,
-        save_dir,
+    save_outputs(
+        file_reader=file_reader,
+        output=res_np,
+        parameters=parameters,
+        custom_relative_path="preview",
         square=True,
     )
 
-    save_h5(
-        save_dir,
-        res_np,
-        parameters,
-    )
-
-    return res_np
+    return res_np["M0ff"]
 
 
-def process(file_path, parameters):
+def process(file_path, parameters, progress_callback=None):
     """
-    Process a complete holographic file.
-
-    Supports:
-        - CPU/NumPy execution
-        - GPU/CuPy execution
-        - asynchronous GPU prefetching
-        - sliding Shack-Hartmann accumulation
-        - image registration
-        - Laplacian registration
-        - frequency bands
-        - optional output squaring
+    Process a complete holographic file using the same public calling
+    convention as main_simple.py, while retaining sliding SH accumulation.
     """
-
     file_reader = FileReaderFactory.create(file_path)
 
-    print("processing file :", file_path)
-
-    # ------------------------------------------------------------------
-    # File metadata
-    # ------------------------------------------------------------------
     if file_reader.extension == ".holo":
         print("file header :", file_reader.header)
-
         parameters = update_from_holo_footer(
             parameters,
             file_reader.footer,
@@ -872,588 +1210,180 @@ def process(file_path, parameters):
 
     print("parameters : ", parameters)
 
-    # ------------------------------------------------------------------
-    # Processing parameters
-    #
-    # The second implementation uses batch_size/batch_stride.
-    # The first implementation used time_window/time_stride.
-    #
-    # Prefer the second API, but retain compatibility with parameters
-    # from the first implementation where possible.
-    # ------------------------------------------------------------------
-    batch_size = parameters.get(
-        "batch_size",
-        parameters.get("time_window"),
-    )
-
-    batch_stride = parameters.get(
-        "batch_stride",
-        parameters.get("time_stride"),
-    )
-
+    batch_size = parameters["batch_size"]
+    batch_stride = parameters["batch_stride"]
     first_frame = parameters["first_frame"]
 
-    end_frame = parameters.get(
-        "end_frame",
-        0,
-    )
-
-    if batch_size is None:
-        raise KeyError(
-            "Missing 'batch_size' parameter"
-        )
-
-    if batch_stride is None:
-        raise KeyError(
-            "Missing 'batch_stride' parameter"
-        )
-
-    # ------------------------------------------------------------------
-    # Determine total frame count
-    # ------------------------------------------------------------------
+    end_frame = parameters.get("end_frame", 0)
     if end_frame <= 0:
         if hasattr(file_reader, "total_frames"):
             end_frame = file_reader.total_frames
-
         elif hasattr(file_reader, "TotalImageCount"):
             end_frame = file_reader.TotalImageCount
-
         elif hasattr(file_reader, "header"):
             end_frame = file_reader.header.num_frames
-
         else:
             raise AttributeError(
-                "Unable to determine the total number of frames "
-                "from the file reader."
+                "Unable to determine the total number of frames."
             )
 
-    # ------------------------------------------------------------------
-    # Number of batches
-    # ------------------------------------------------------------------
-    available_frames = end_frame - first_frame
+    span = end_frame - first_frame
+    if span <= 0:
+        return None
 
-    if batch_stride >= available_frames:
-        num_batch = (
-            1
-            if batch_size <= available_frames
-            else 0
-        )
+    if batch_stride >= span:
+        num_batch = 1 if batch_size <= span else 0
     else:
-        num_batch = int(
-            available_frames / batch_stride
-        )
+        num_batch = int(span / batch_stride)
 
     if num_batch <= 0:
         return None
 
-    # ------------------------------------------------------------------
-    # Output storage
-    # ------------------------------------------------------------------
     output = defaultdict(list)
-
     M0_reg = None
 
-    # ------------------------------------------------------------------
-    # Sliding Shack-Hartmann configuration
-    #
-    # Use a normal list rather than deque so that the import list remains
-    # identical to the requested second file.
-    # ------------------------------------------------------------------
-    sh_time_accumulation = parameters.get(
-        "sh_time_accumulation",
+    sh_time_accumulation = max(
         1,
+        int(parameters.get("sh_time_accumulation", 1)),
     )
 
-    if sh_time_accumulation <= 0:
-        sh_time_accumulation = 1
-
-    U_buffer = []
-
-    # ------------------------------------------------------------------
-    # Registration reference
-    # ------------------------------------------------------------------
-    if parameters.get(
-        "image_registration",
-        False,
+    # ------------------------------------------------------------
+    # Build the registration reference once
+    # ------------------------------------------------------------
+    if (
+        parameters.get("image_registration", False)
+        and (
+            parameters.get("registration_ref_first_frame", 0) != 0
+            or parameters.get("registration_ref_batch_size", batch_size)
+            != batch_size
+        )
     ):
-        registration_ref_first_frame = parameters.get(
-            "registration_ref_first_frame",
-            0,
+        ref_frames = file_reader.read_frames(
+            first_frame=parameters.get(
+                "registration_ref_first_frame",
+                0,
+            ),
+            batch_size=parameters.get(
+                "registration_ref_batch_size",
+                batch_size,
+            ),
+        )
+        ref_frames = backend.to_backend(ref_frames).astype(
+            backend.xp.float32,
+            copy=False,
         )
 
-        registration_ref_batch_size = parameters.get(
-            "registration_ref_batch_size",
-            batch_size,
+        ref_res, _ = _process_one_batch(
+            parameters,
+            ref_frames,
+            M0_reg=None,
+            U_buffer=None,
+            phase_term=None,
         )
+        M0_reg = ref_res["M0ff"].copy()
 
-        if (
-            registration_ref_first_frame != 0
-            or registration_ref_batch_size != batch_size
-        ):
-            ref_frames = file_reader.read_frames(
-                first_frame=registration_ref_first_frame,
-                batch_size=registration_ref_batch_size,
-            )
+        del ref_frames
+        del ref_res
+        backend.clear_gpu_memory()
 
-            ref_frames = backend.to_backend(
-                ref_frames
-            )
+    autofocus_phase_term, auto_coefs = _get_autofocus_phase_term(
+        parameters,
+        file_reader,
+    )
 
-            ref_res, _ = _process_one_batch(
-                parameters,
-                ref_frames,
-                M0_reg=None,
-                U_buffer=None,
-            )
+    # ------------------------------------------------------------
+    # NumPy / CPU path
+    # ------------------------------------------------------------
+    if not backend.is_gpu or parameters.get("no_cupy", False):
+        n_workers = parameters.get("numpy_num_workers", 8)
 
-            M0_reg = ref_res["M0ff"].copy()
-
-            del ref_frames
-            del ref_res
-
-            backend.clear_gpu_memory()
-
-    # ==================================================================
-    # CPU / NumPy path
-    # ==================================================================
-    if not backend.is_gpu:
-
-        for i in tqdm(range(num_batch)):
-
-            current_first_frame = (
-                first_frame
-                + i * batch_stride
-            )
-
-            frames = file_reader.read_frames(
-                first_frame=current_first_frame,
+        if n_workers > 0:
+            output, M0_reg = _process_numpy_parallel(
+                parameters=parameters,
+                file_reader=file_reader,
+                first_frame=first_frame,
+                num_batch=num_batch,
+                batch_stride=batch_stride,
                 batch_size=batch_size,
-            )
-
-            frames = backend.to_backend(
-                frames
-            )
-
-            # ----------------------------------------------------------
-            # Process one batch
-            # ----------------------------------------------------------
-            res, M0_reg = _process_one_batch(
-                parameters,
-                frames,
+                output=output,
                 M0_reg=M0_reg,
-                U_buffer=(
-                    U_buffer
-                    if parameters.get(
-                        "shack_hartmann",
-                        False,
-                    )
-                    else None
-                ),
+                autofocus_phase_term=autofocus_phase_term,
+                n_workers=n_workers,
+                sh_time_accumulation=sh_time_accumulation,
+                progress_callback=progress_callback,
             )
-
-            # ----------------------------------------------------------
-            # Keep U buffer bounded
-            # ----------------------------------------------------------
-            if len(U_buffer) > sh_time_accumulation:
-                del U_buffer[
-                    :len(U_buffer) - sh_time_accumulation
-                ]
-
-            _append_numpy_results(
-                output,
-                res,
+        else:
+            output, M0_reg = _process_numpy(
+                parameters=parameters,
+                file_reader=file_reader,
+                first_frame=first_frame,
+                num_batch=num_batch,
+                batch_stride=batch_stride,
+                batch_size=batch_size,
+                output=output,
+                M0_reg=M0_reg,
+                autofocus_phase_term=autofocus_phase_term,
+                sh_time_accumulation=sh_time_accumulation,
+                progress_callback=progress_callback,
             )
-
-            del frames
-            del res
-
-    # ==================================================================
-    # GPU / CuPy path
-    # ==================================================================
     else:
-
-        # --------------------------------------------------------------
-        # CUDA streams
-        # --------------------------------------------------------------
-        h2d_stream = backend.xp.cuda.Stream(
-            non_blocking=True
+        output, M0_reg = _process_cupy(
+            parameters=parameters,
+            file_reader=file_reader,
+            first_frame=first_frame,
+            num_batch=num_batch,
+            batch_stride=batch_stride,
+            batch_size=batch_size,
+            output=output,
+            M0_reg=M0_reg,
+            autofocus_phase_term=autofocus_phase_term,
+            sh_time_accumulation=sh_time_accumulation,
+            progress_callback=progress_callback,
         )
 
-        compute_stream = backend.xp.cuda.Stream(
-            non_blocking=True
-        )
-
-        # --------------------------------------------------------------
-        # Prefetch buffers
-        # --------------------------------------------------------------
-        PREFETCH_DEPTH = 4
-
-        d_buffers = [None] * PREFETCH_DEPTH
-        h2d_events = [None] * PREFETCH_DEPTH
-        compute_events = [None] * PREFETCH_DEPTH
-
-        buffer_ready = [False] * PREFETCH_DEPTH
-
-        current_idx = 0
-        processed_batches = 0
-
-        # --------------------------------------------------------------
-        # Prefetch + processing loop
-        # --------------------------------------------------------------
-        for i in tqdm(
-            range(num_batch + PREFETCH_DEPTH)
-        ):
-
-            prefetch_idx = (
-                i % PREFETCH_DEPTH
-            )
-
-            # ----------------------------------------------------------
-            # Prefetch next batch
-            # ----------------------------------------------------------
-            if i < num_batch:
-
-                current_first_frame = (
-                    first_frame
-                    + i * batch_stride
-                )
-
-                with h2d_stream:
-
-                    frames = file_reader.read_frames(
-                        first_frame=current_first_frame,
-                        batch_size=batch_size,
-                    )
-
-                    d_buffers[prefetch_idx] = (
-                        backend.xp.asarray(frames)
-                    )
-
-                    h2d_events[prefetch_idx] = (
-                        backend.xp.cuda.Event()
-                    )
-
-                    h2d_events[prefetch_idx].record(
-                        h2d_stream
-                    )
-
-                    buffer_ready[prefetch_idx] = True
-
-            # ----------------------------------------------------------
-            # Process ready buffers in order
-            # ----------------------------------------------------------
-            while (
-                buffer_ready[current_idx]
-                and current_idx != prefetch_idx
-            ):
-
-                h2d_events[
-                    current_idx
-                ].synchronize()
-
-                with compute_stream:
-
-                    d_current = d_buffers[
-                        current_idx
-                    ]
-
-                    res, M0_reg = _process_one_batch(
-                        parameters,
-                        d_current,
-                        M0_reg=M0_reg,
-                        U_buffer=(
-                            U_buffer
-                            if parameters.get(
-                                "shack_hartmann",
-                                False,
-                            )
-                            else None
-                        ),
-                    )
-
-                    compute_events[
-                        current_idx
-                    ] = backend.xp.cuda.Event()
-
-                    compute_events[
-                        current_idx
-                    ].record(
-                        compute_stream
-                    )
-
-                compute_events[
-                    current_idx
-                ].synchronize()
-
-                # ------------------------------------------------------
-                # Store result on CPU
-                # ------------------------------------------------------
-                _append_numpy_results(
-                    output,
-                    res,
-                )
-
-                processed_batches += 1
-
-                # ------------------------------------------------------
-                # Release buffer
-                # ------------------------------------------------------
-                buffer_ready[
-                    current_idx
-                ] = False
-
-                d_buffers[
-                    current_idx
-                ] = None
-
-                # ------------------------------------------------------
-                # Limit sliding SH buffer
-                # ------------------------------------------------------
-                if len(U_buffer) > sh_time_accumulation:
-                    del U_buffer[
-                        :len(U_buffer)
-                        - sh_time_accumulation
-                    ]
-
-                current_idx = (
-                    current_idx + 1
-                ) % PREFETCH_DEPTH
-
-                if processed_batches >= num_batch:
-                    break
-
-            if processed_batches >= num_batch:
-                break
-
-        # --------------------------------------------------------------
-        # Drain remaining buffers
-        # --------------------------------------------------------------
-        while buffer_ready[current_idx]:
-
-            h2d_events[
-                current_idx
-            ].synchronize()
-
-            with compute_stream:
-
-                d_current = d_buffers[
-                    current_idx
-                ]
-
-                res, M0_reg = _process_one_batch(
-                    parameters,
-                    d_current,
-                    M0_reg=M0_reg,
-                    U_buffer=(
-                        U_buffer
-                        if parameters.get(
-                            "shack_hartmann",
-                            False,
-                        )
-                        else None
-                    ),
-                )
-
-                compute_events[
-                    current_idx
-                ] = backend.xp.cuda.Event()
-
-                compute_events[
-                    current_idx
-                ].record(
-                    compute_stream
-                )
-
-            compute_events[
-                current_idx
-            ].synchronize()
-
-            _append_numpy_results(
-                output,
-                res,
-            )
-
-            processed_batches += 1
-
-            buffer_ready[
-                current_idx
-            ] = False
-
-            d_buffers[
-                current_idx
-            ] = None
-
-            if len(U_buffer) > sh_time_accumulation:
-                del U_buffer[
-                    :len(U_buffer)
-                    - sh_time_accumulation
-                ]
-
-            current_idx = (
-                current_idx + 1
-            ) % PREFETCH_DEPTH
-
-            if processed_batches >= num_batch:
-                break
-
-    # ------------------------------------------------------------------
-    # Stack batch results
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------
+    # Stack outputs
+    # ------------------------------------------------------------
     output = {
-        key: np.stack(
-            values,
-            axis=0,
-        )
+        key: np.stack(values, axis=0)
         for key, values in output.items()
     }
 
-    # ------------------------------------------------------------------
-    # Laplacian registration
-    # ------------------------------------------------------------------
-    if parameters.get(
-        "registration_laplacian",
-        False,
-    ):
-
-        # register_laplacian is intentionally not imported here because
-        # the requested import list matches the second file. Therefore
-        # this feature is implemented only when supplied by the backend
-        # registration module through its existing public API.
-        #
-        # Import locally to preserve the requested top-level imports.
-        from holodoppler.registration import (
-            register_laplacian,
+    if auto_coefs is not None:
+        output["shack_hartmann_autofocus_zernike_coefs"] = (
+            backend.to_numpy(auto_coefs)
         )
 
-        shifts_y, shifts_x = register_laplacian(
-            backend.xp,
-            backend.fft,
-            backend.to_backend(
-                output["M0ff"]
-            ),
-            radius=parameters.get(
-                "registration_laplacian_radius",
-                0.7,
-            ),
-        )
-
-        shifts_y = shifts_y - shifts_y[0]
-        shifts_x = shifts_x - shifts_x[0]
-
-        output["register_laplacian"] = (
-            backend.to_numpy(
-                backend.xp.stack(
-                    [
-                        shifts_y,
-                        shifts_x,
-                    ]
+    # ------------------------------------------------------------
+    # Square spatial outputs LAST.
+    # ------------------------------------------------------------
+    if parameters.get("square", False):
+        output = {
+            key: (
+                resize_frames(
+                    value,
+                    max(value.shape[-2:]),
+                    max(value.shape[-2:]),
                 )
+                if value.ndim == 3
+                else value
             )
-        )
+            for key, value in output.items()
+        }
 
-        shifts_y = np.rint(
-            backend.to_numpy(shifts_y)
-        ).astype(np.int64)
+    del autofocus_phase_term
+    backend.clear_gpu_memory()
 
-        shifts_x = np.rint(
-            backend.to_numpy(shifts_x)
-        ).astype(np.int64)
-
-        for key, value in output.items():
-
-            if (
-                key in {
-                    "M0ff",
-                    "M0",
-                    "M1",
-                    "M2",
-                }
-                or "band_" in key
-            ):
-
-                for m in range(value.shape[0]):
-
-                    value_backend = (
-                        backend.to_backend(
-                            value[m]
-                        )
-                    )
-
-                    value_backend = (
-                        apply_register_images_shifts(
-                            backend.xp,
-                            backend.fft,
-                            value_backend,
-                            int(shifts_y[m]),
-                            int(shifts_x[m]),
-                        )
-                    )
-
-                    output[key][m] = (
-                        backend.to_numpy(
-                            value_backend
-                        )
-                    )
-
-    # ------------------------------------------------------------------
-    # Square output images
-    # ------------------------------------------------------------------
-    if parameters.get(
-        "square",
-        False,
-    ):
-
-        squared_output = {}
-
-        for key, value in output.items():
-
-            if value.ndim >= 3:
-
-                max_size = max(
-                    value.shape[-2:]
-                )
-
-                if value.ndim == 3:
-                    squared_output[key] = (
-                        resize_frames(
-                            value,
-                            max_size,
-                            max_size,
-                        )
-                    )
-                else:
-                    # Apply frame-by-frame for outputs with additional
-                    # dimensions.
-                    squared_output[key] = value
-
-            else:
-                squared_output[key] = value
-
-        output = squared_output
-
-    # ------------------------------------------------------------------
-    # Compatibility names
-    # ------------------------------------------------------------------
-    #
-    # Keep the second implementation's Doppler View naming convention.
-    #
+    # ------------------------------------------------------------
+    # Renaming for compatibility with Doppler View
+    # ------------------------------------------------------------
     output["moment0"] = output.pop("M0")
     output["moment0ff"] = output.pop("M0ff")
     output["moment1"] = output.pop("M1")
     output["moment2"] = output.pop("M2")
 
-    # ------------------------------------------------------------------
-    # GPU cleanup
-    # ------------------------------------------------------------------
-    backend.clear_gpu_memory()
-
-    # ------------------------------------------------------------------
-    # Save outputs
-    # ------------------------------------------------------------------
     save_outputs(
         file_reader=file_reader,
         output=output,
         parameters=parameters,
     )
-
-    return output
