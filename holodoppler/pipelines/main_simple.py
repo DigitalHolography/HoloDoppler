@@ -170,7 +170,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     # ------------------------------------------------------------
     # Moments
     # ------------------------------------------------------------
-    output_dict["M0"], output_dict["M0"], output_dict["M0"] = moments(
+    output_dict["M0"], output_dict["M1"], output_dict["M2"] = moments(
         xp,
         psd[idxs],
         freqs,
