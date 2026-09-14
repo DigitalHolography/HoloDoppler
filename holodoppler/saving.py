@@ -4,6 +4,7 @@ import sys
 import shutil
 import csv
 import json
+import logging
 import os
 import re
 import subprocess
@@ -24,6 +25,7 @@ from holodoppler.utils import resize_frames
 
 
 H5_OUTPUT_PATH_PARAMETER = "_holodoppler_h5_path"
+logger = logging.getLogger(__name__)
 
 
 def ensure_directory(path: Path) -> Path:
@@ -359,7 +361,7 @@ def find_ffmpeg() -> str:
     # ---------------------------------------------------------
     # 3. Download FFmpeg
     # ---------------------------------------------------------
-    print("FFmpeg not found. Downloading FFmpeg...")
+    logger.info("FFmpeg not found. Downloading FFmpeg...")
 
     result = subprocess.run(
         [
@@ -550,10 +552,10 @@ def save_pngs(
             else:
                 continue
 
-            print(f"Saved PNG: {name}")
+            logger.info("Saved PNG: %s", name)
 
         except Exception as exc:
-            print(f"Failed to save PNG {name}: {exc}")
+            logger.warning("Failed to save PNG %s: %s", name, exc)
 
 
 # ============================================================================
@@ -705,7 +707,7 @@ def save_h5(
 
     selected = None if save_only_list is None else set(save_only_list)
 
-    print(f"Saving H5: {h5_path}")
+    logger.info("Saving H5: %s", h5_path)
 
     with h5py.File(h5_path, "w") as h5:
 
@@ -765,10 +767,7 @@ def save_h5(
 
     size_gb = h5_path.stat().st_size / (1024**3)
 
-    print(
-        f"H5 saved: {h5_path} "
-        f"({size_gb:.2f} GB)"
-    )
+    logger.info("H5 saved: %s (%.2f GB)", h5_path, size_gb)
 
     if parameters is not None:
         parameters[H5_OUTPUT_PATH_PARAMETER] = str(h5_path)
@@ -881,9 +880,9 @@ def save_csv_outputs(
         try:
             path = csv_dir / f"{name}.csv"
             save_csv(path, value)
-            print(f"Saved CSV: {path}")
+            logger.info("Saved CSV: %s", path)
         except Exception as exc:
-            print(f"Failed to save CSV {name}: {exc}")
+            logger.warning("Failed to save CSV %s: %s", name, exc)
 
     return h5_names
 
@@ -929,7 +928,7 @@ def save_videos(
     # Find existing FFmpeg or download it.
     ffmpeg = find_ffmpeg()
 
-    print(f"Using FFmpeg: {ffmpeg}")
+    logger.info("Using FFmpeg: %s", ffmpeg)
 
     for name, value in data_map.items():
 
@@ -953,10 +952,7 @@ def save_videos(
             ffmpeg=ffmpeg,
         )
 
-        print(
-            f"Saved video: {path} "
-            f"({time.time() - start:.1f}s)"
-        )
+        logger.info("Saved video: %s (%.1fs)", path, time.time() - start)
 
 
 # ============================================================================
@@ -1080,7 +1076,7 @@ def save_bundle(
         full=save_h5_output,
     )
 
-    print(f"Saving output bundle to: {target_dir}")
+    logger.info("Saving output bundle to: %s", target_dir)
 
     # ------------------------------------------------------------------
     # 1. Videos
@@ -1165,7 +1161,7 @@ def save_bundle(
         )
 
     elapsed = time.time() - start_time
-    print(f"Saving completed in {elapsed:.1f} seconds")
+    logger.info("Saving completed in %.1f seconds", elapsed)
 
 
 # ============================================================================

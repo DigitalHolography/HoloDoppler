@@ -1,3 +1,5 @@
+import logging
+
 from holodoppler.saving import (
     save_preview_images,
     preview_image_from_results,
@@ -57,13 +59,15 @@ import cupy as cp
 from cupyx.scipy.ndimage import gaussian_filter
 
 # from cupyx.scipy.ndimage import zoom
-from tqdm import tqdm
+from holodoppler.progress import tqdm
 
 from pathlib import Path
 
 
 from collections import defaultdict
 from functools import cache
+
+logger = logging.getLogger(__name__)
 
 
 # ----------------------------------------------------------------------
@@ -635,15 +639,16 @@ def _process_shack_hartmann(parameters, frames, output_dict=None):
 
 
 def preview(file_path, parameters, save_debug=True):
+    logger.info("Previewing file: %s", file_path)
     file_reader = FileReaderFactory.create(file_path)
 
     if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
         parameters = update_from_footer(parameters, file_reader.footer)
 
     if file_reader.extension == ".cine":
-        print("file header :", file_reader.metadata)
-    print("parameters : ", parameters)
+        logger.debug("File header: %s", file_reader.metadata)
+    logger.debug("Parameters: %s", parameters)
 
     batch_size = parameters["batch_size"]
     first_frame = parameters["first_frame"]
@@ -692,18 +697,19 @@ def preview(file_path, parameters, save_debug=True):
 
 
 def process(file_path, parameters, progress_callback=None):
+    logger.info("Processing file: %s", file_path)
     import numpy as np
 
     file_reader = FileReaderFactory.create(file_path)
 
     if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
         parameters = update_from_footer(parameters, file_reader.footer)
 
     if file_reader.extension == ".cine":
-        print("file header :", file_reader.metadata)
+        logger.debug("File header: %s", file_reader.metadata)
 
-    # print("parameters : ", parameters)
+    logger.debug("Parameters: %s", parameters)
 
     batch_size = parameters["batch_size"]
     batch_stride = parameters["batch_stride"]
@@ -747,7 +753,7 @@ def process(file_path, parameters, progress_callback=None):
         res = {}
         _process_batch(parameters, frames, phase_term=phase_term, output_dict=res)
         M0_reg = res["M0ff"].copy()
-        print(res.keys())
+        logger.debug("Reference outputs: %s", list(res))
         del frames, phase_term  # Memory footprint reduction
         res.clear()
         del res

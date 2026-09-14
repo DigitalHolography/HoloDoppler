@@ -116,6 +116,9 @@ class MinimalView(ttk.Frame):
         self.load_button.grid(row=0, column=0, padx=(0, 8))
         self.clear_button = ttk.Button(input_buttons, text="Clear", command=self.controller.clear_inputs)
         self.clear_button.grid(row=0, column=1)
+        ttk.Button(input_buttons, text="Logs", command=self.controller.show_logs).grid(
+            row=0, column=2, padx=(8, 0)
+        )
 
         self.drop_frame = ttk.Frame(self, style="Drop.TFrame", padding=16)
         self.drop_frame.grid(row=2, column=0, sticky="ew", padx=56, pady=(0, 16))

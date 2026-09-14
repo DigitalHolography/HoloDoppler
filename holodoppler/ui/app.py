@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import copy
+import logging
 import queue
 import threading
-import traceback
-from datetime import datetime
+from collections import deque
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -33,6 +34,18 @@ from .theme import apply_theme
 
 
 BaseTk = TkinterDnD.Tk if DND_AVAILABLE else tk.Tk
+logger = logging.getLogger(__name__)
+
+
+class _UIQueueHandler(logging.Handler):
+    """Hand log lines to Tk's existing main-thread event queue."""
+
+    def __init__(self, events: queue.Queue) -> None:
+        super().__init__()
+        self.events = events
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.events.put({"kind": "log", "line": self.format(record)})
 
 
 class UI(BaseTk):
@@ -54,6 +67,10 @@ class UI(BaseTk):
 
         self.input_paths: list[Path] = []
         self.events: queue.Queue[dict[str, Any]] = queue.Queue()
+        self.log_lines: deque[str] = deque(maxlen=500)
+        self.log_window: tk.Toplevel | None = None
+        self._configure_logging()
+        logger.info("HoloDoppler started")
         self.stop_event = threading.Event()
         self.worker: threading.Thread | None = None
         self.worker_kind: str | None = None
@@ -65,6 +82,60 @@ class UI(BaseTk):
         self._register_drop_targets()
         self._sync_views()
         self.poll_after_id = self.after(60, self._poll_events)
+
+    def _configure_logging(self) -> None:
+        app_logger = logging.getLogger("holodoppler")
+        app_logger.setLevel(logging.DEBUG)
+        app_logger.propagate = False
+        self._log_handlers: list[logging.Handler] = []
+        formatter = logging.Formatter(
+            "%(asctime)s %(levelname)s %(message)s", "%Y-%m-%d %H:%M:%S"
+        )
+
+        queue_handler = _UIQueueHandler(self.events)
+        queue_handler.setLevel(logging.INFO)
+        queue_handler.setFormatter(formatter)
+        self._log_handlers.append(queue_handler)
+
+        self.log_path = self.store.base_dir / "logs" / "app.log"
+        file_error = None
+        try:
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+            file_handler = RotatingFileHandler(
+                self.log_path, maxBytes=2_000_000, backupCount=3, encoding="utf-8"
+            )
+            file_handler.setFormatter(formatter)
+            self._log_handlers.append(file_handler)
+        except OSError as exc:
+            self.log_path = None
+            file_error = exc
+
+        for handler in self._log_handlers:
+            app_logger.addHandler(handler)
+        if file_error is not None:
+            logger.warning("Log file unavailable: %s", file_error)
+
+    def show_logs(self) -> None:
+        if self.log_window is not None and self.log_window.winfo_exists():
+            self.log_window.lift()
+            return
+        self.log_window = tk.Toplevel(self)
+        self.log_window.title("HoloDoppler logs")
+        self.log_window.geometry("850x420")
+        if self.log_path is not None:
+            ttk.Label(self.log_window, text=f"Saved to: {self.log_path}").pack(
+                fill="x", padx=8, pady=8
+            )
+        self.log_text = scrolledtext.ScrolledText(self.log_window, wrap="word", state="disabled")
+        self.log_text.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self._show_log_lines()
+
+    def _show_log_lines(self) -> None:
+        self.log_text.configure(state="normal")
+        self.log_text.delete("1.0", "end")
+        self.log_text.insert("end", "\n".join(self.log_lines))
+        self.log_text.see("end")
+        self.log_text.configure(state="disabled")
 
     def open_inputs_dialog(self) -> None:
         selected = filedialog.askopenfilenames(
@@ -263,6 +334,7 @@ class UI(BaseTk):
 
                 def on_warning(code: str, _message: str) -> None:
                     nonlocal pulse_not_detected
+                    logger.warning("%s: %s", path.name, _message)
                     if code == "cardiac_pulse_not_detected":
                         pulse_not_detected = True
 
@@ -277,6 +349,7 @@ class UI(BaseTk):
                 image = self._first_m0_frame(results)
                 del results
                 self.events.put({"kind": "processed_preview", "path": path, "image": image})
+                logger.info("Processed file: %s", path)
                 completion_message = (
                     "File complete (pulse not detected)"
                     if pulse_not_detected
@@ -310,7 +383,8 @@ class UI(BaseTk):
                 else:
                     self.events.put({"kind": "status", "message": "Processing complete"})
         except Exception as exc:
-            self.events.put({"kind": "error", "message": str(exc), "traceback": traceback.format_exc()})
+            logger.exception("Processing failed")
+            self.events.put({"kind": "error", "message": str(exc)})
         finally:
             self.events.put({"kind": "worker_done"})
 
@@ -349,8 +423,10 @@ class UI(BaseTk):
         try:
             image = preview(str(path), parameters, save_debug=False)
             self.events.put({"kind": "preview_result", "path": path, "image": image})
+            logger.info("Preview ready: %s", path)
         except Exception as exc:
-            self.events.put({"kind": "error", "message": str(exc), "traceback": traceback.format_exc()})
+            logger.exception("Preview failed: %s", path)
+            self.events.put({"kind": "error", "message": str(exc)})
         finally:
             self.events.put({"kind": "worker_done"})
 
@@ -400,6 +476,10 @@ class UI(BaseTk):
             self.advanced.show_preview(event["path"], event["image"])
         elif kind == "status":
             self._set_status(str(event["message"]))
+        elif kind == "log":
+            self.log_lines.append(str(event["line"]))
+            if self.log_window is not None and self.log_window.winfo_exists():
+                self._show_log_lines()
         elif kind == "pulse_detection_summary":
             paths = [Path(path) for path in event.get("paths", [])]
             self._set_status(
@@ -414,30 +494,15 @@ class UI(BaseTk):
                 parent=self,
             )
         elif kind == "error":
-            log_path = self._write_error_log(str(event.get("traceback", "")))
             self._set_status("Error")
             message = str(event.get("message", "Unknown error"))
-            if log_path is not None:
-                message = f"{message}\n\nLog: {log_path}"
+            if self.log_path is not None:
+                message = f"{message}\n\nLog: {self.log_path}"
             messagebox.showerror("HoloDoppler", message, parent=self)
         elif kind == "worker_done":
             self.worker = None
             self.worker_kind = None
             self._sync_views()
-
-    def _write_error_log(self, details: str) -> Path | None:
-        if not details:
-            return None
-        try:
-            log_dir = self.store.base_dir / "logs"
-            log_dir.mkdir(parents=True, exist_ok=True)
-            log_path = log_dir / "ui-errors.log"
-            timestamp = datetime.now().isoformat(timespec="seconds")
-            with log_path.open("a", encoding="utf-8") as file:
-                file.write(f"\n[{timestamp}]\n{details}\n")
-            return log_path
-        except OSError:
-            return None
 
     def _sync_views(self) -> None:
         busy = self._busy()
@@ -451,6 +516,7 @@ class UI(BaseTk):
     def _set_status(self, message: str) -> None:
         self.minimal.set_status(message)
         self.advanced.set_status(message)
+        logger.info(message)
 
     def _busy(self) -> bool:
         return self.worker is not None and self.worker.is_alive()
@@ -475,6 +541,10 @@ class UI(BaseTk):
 
     def _on_close(self) -> None:
         self.store.save_window_state(self.active_tab_name, self.geometry())
+        app_logger = logging.getLogger("holodoppler")
+        for handler in self._log_handlers:
+            app_logger.removeHandler(handler)
+            handler.close()
         if self.poll_after_id is not None:
             try:
                 self.after_cancel(self.poll_after_id)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 import time
 
@@ -10,7 +11,7 @@ import cupy as cp
 import h5py
 import imageio as iio
 import numpy as np
-from tqdm import tqdm
+from holodoppler.progress import tqdm
 
 from holodoppler.file_reader import FileReaderFactory
 from holodoppler.filtering import (
@@ -48,6 +49,8 @@ from holodoppler.spectral_cube import (
     window_starts,
 )
 from holodoppler.utils import update_from_footer
+
+logger = logging.getLogger(__name__)
 
 
 _SPECTRAL_CUBE_SHARED_PARAMETER_NAMES = {
@@ -830,7 +833,7 @@ def _save_endpoint_pngs(h5_path, target_dir, parameters):
         display = apply_contrast_adjustment(values.T, parameters)
         path = png_dir / f"{name}.png"
         iio.imwrite(path, normalize_to_uint8(display))
-        print(f"Saving: {path}")
+        logger.info("Saving: %s", path)
     _save_cardiac_qc_plots(h5_path, png_dir)
 
 
@@ -841,12 +844,11 @@ def process(file_path, parameters, progress_callback=None, warning_callback=None
     parameters.pop(H5_OUTPUT_PATH_PARAMETER, None)
 
     output_bytes = estimated_endpoint_bytes(len(starts), parameters["f_bins"])
-    print(
-        "Spectral endpoints: "
-        f"S, S0, and L shapes=({len(starts)}, {parameters['f_bins']}) (t,f), "
-        f"payload={output_bytes / 1024**2:.2f} MiB"
+    logger.info(
+        "Spectral endpoints: S, S0, and L shapes=(%s, %s) (t,f), payload=%.2f MiB",
+        len(starts), parameters["f_bins"], output_bytes / 1024**2,
     )
-    print(f"Saving spectral endpoints to: {h5_path}")
+    logger.info("Saving spectral endpoints to: %s", h5_path)
 
     started = time.time()
     handle = None
@@ -885,7 +887,7 @@ def process(file_path, parameters, progress_callback=None, warning_callback=None
                     f"Spectral window {index + 1}/{len(starts)}",
                 )
 
-        print("Detecting and aggregating cardiac beats")
+        logger.info("Detecting and aggregating cardiac beats")
         analysis = cardiac_phase_analysis(
             np.asarray(signal_dataset, dtype=np.float32),
             np.asarray(background_dataset, dtype=np.float32),
@@ -898,18 +900,18 @@ def process(file_path, parameters, progress_callback=None, warning_callback=None
         spectrograms.attrs["pulse_detected"] = pulse_detected
         spectrograms.attrs["singlebeat_available"] = pulse_detected
         if pulse_detected:
-            print(
-                "Cardiac aggregation: "
-                f"{len(analysis['beat_landmark_indices'])} landmarks, "
-                f"{len(analysis['accepted_beat_indices'])} accepted beats, "
-                f"{np.count_nonzero(analysis['streak_mask'])} streak samples"
+            logger.info(
+                "Cardiac aggregation: %s landmarks, %s accepted beats, %s streak samples",
+                len(analysis["beat_landmark_indices"]),
+                len(analysis["accepted_beat_indices"]),
+                np.count_nonzero(analysis["streak_mask"]),
             )
         else:
             pulse_detection_error = analysis.get(
                 "pulse_detection_error", CARDIAC_PULSE_NOT_DETECTED
             )
             spectrograms.attrs["pulse_detection_error"] = pulse_detection_error
-            print(f"Warning: {pulse_detection_error}")
+            logger.warning("%s", pulse_detection_error)
         spectrograms.attrs.modify("complete", True)
         handle.flush()
     finally:
@@ -922,7 +924,7 @@ def process(file_path, parameters, progress_callback=None, warning_callback=None
     _save_endpoint_pngs(h5_path, target_dir, parameters)
     _save_metadata(target_dir, file_reader, parameters)
     elapsed = time.time() - started
-    print(f"Spectral endpoints completed in {elapsed:.1f} seconds")
+    logger.info("Spectral endpoints completed in %.1f seconds", elapsed)
     if pulse_detection_error is not None and warning_callback is not None:
         warning_callback("cardiac_pulse_not_detected", pulse_detection_error)
     return h5_path

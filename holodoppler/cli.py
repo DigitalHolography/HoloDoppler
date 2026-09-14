@@ -4,6 +4,7 @@ import argparse
 import copy
 import inspect
 import json
+import logging
 import sys
 from enum import Enum
 from pathlib import Path
@@ -690,6 +691,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         UI().mainloop()
         return EXIT_SUCCESS
+
+    app_logger = logging.getLogger("holodoppler")
+    app_logger.setLevel(logging.INFO)
+    app_logger.propagate = False
+    if not app_logger.handlers:
+        app_logger.addHandler(logging.StreamHandler(sys.stdout))
 
     # Build parser
     parser = _build_main_parser()

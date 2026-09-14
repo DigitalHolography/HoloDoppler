@@ -1,9 +1,10 @@
 import numpy as np
+import logging
 from collections import defaultdict
 from pathlib import Path
 
 import holodoppler.backend as backend
-from tqdm import tqdm
+from holodoppler.progress import tqdm
 
 from holodoppler.saving import (
     preview_image_from_results,
@@ -54,6 +55,8 @@ from holodoppler.registration import (
 )
 
 from holodoppler.file_reader import FileReaderFactory
+
+logger = logging.getLogger(__name__)
 
 
 def _process_batch(
@@ -732,13 +735,13 @@ def preview(file_path, parameters, save_debug=True):
 
     file_reader = FileReaderFactory.create(file_path)
 
-    print("previewing file :", file_path)
+    logger.info("Previewing file: %s", file_path)
 
     # ------------------------------------------------------------------
     # File metadata
     # ------------------------------------------------------------------
     if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
 
         parameters = update_from_holo_footer(
             parameters,
@@ -746,9 +749,9 @@ def preview(file_path, parameters, save_debug=True):
         )
 
     if file_reader.extension == ".cine":
-        print("file header :", file_reader.metadata)
+        logger.debug("File header: %s", file_reader.metadata)
 
-    print("parameters : ", parameters)
+    logger.debug("Parameters: %s", parameters)
 
     # ------------------------------------------------------------------
     # Read preview frames
@@ -854,13 +857,13 @@ def process(file_path, parameters, progress_callback=None):
 
     file_reader = FileReaderFactory.create(file_path)
 
-    print("processing file :", file_path)
+    logger.info("Processing file: %s", file_path)
 
     # ------------------------------------------------------------------
     # File metadata
     # ------------------------------------------------------------------
     if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
 
         parameters = update_from_holo_footer(
             parameters,
@@ -868,9 +871,9 @@ def process(file_path, parameters, progress_callback=None):
         )
 
     if file_reader.extension == ".cine":
-        print("file header :", file_reader.metadata)
+        logger.debug("File header: %s", file_reader.metadata)
 
-    print("parameters : ", parameters)
+    logger.debug("Parameters: %s", parameters)
 
     # ------------------------------------------------------------------
     # Processing parameters

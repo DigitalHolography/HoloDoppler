@@ -1,4 +1,5 @@
 import os
+import logging
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 
@@ -6,7 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import holodoppler.backend as backend
-from tqdm import tqdm
+from holodoppler.progress import tqdm
 
 from holodoppler.saving import (
     preview_image_from_results,
@@ -56,6 +57,8 @@ from holodoppler.registration import (
 )
 
 from holodoppler.file_reader import FileReaderFactory
+
+logger = logging.getLogger(__name__)
 
 
 def _process_batch(parameters, frames, phase_term=None, output_dict=None):
@@ -421,10 +424,9 @@ def _get_autofocus_phase_term(parameters, file_reader):
     if not parameters.get("shack_hartmann_autofocus", False):
         return None, None
 
-    print(
-        "Running Shack-Hartmann autofocus from reference batch:",
-        f"first_frame={parameters['registration_ref_first_frame']},",
-        f"batch_size={parameters['batch_size']}",
+    logger.info(
+        "Running Shack-Hartmann autofocus from reference batch: first_frame=%s, batch_size=%s",
+        parameters["registration_ref_first_frame"], parameters["batch_size"],
     )
 
     ref_first_frame = parameters["registration_ref_first_frame"]
@@ -477,7 +479,7 @@ def _get_autofocus_phase_term(parameters, file_reader):
             "correction was produced."
         )
 
-    print("Shack-Hartmann autofocus phase correction computed.")
+    logger.info("Shack-Hartmann autofocus phase correction computed")
 
     return phase_term, coefs
 
@@ -1097,10 +1099,10 @@ def _process_cupy(
 def preview(file_path, parameters, save_debug=True):
     file_reader = FileReaderFactory.create(file_path)
 
-    print("previewing file :", file_path)
+    logger.info("Previewing file: %s", file_path)
 
     if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
 
         parameters = update_from_holo_footer(
             parameters,
@@ -1108,9 +1110,9 @@ def preview(file_path, parameters, save_debug=True):
         )
 
     if file_reader.extension == ".cine":
-        print("file header :", file_reader.metadata)
+        logger.debug("File header: %s", file_reader.metadata)
 
-    print("parameters : ", parameters)
+    logger.debug("Parameters: %s", parameters)
 
     # ------------------------------------------------------------
     # Build autofocus phase once from the configured reference batch
@@ -1187,10 +1189,11 @@ def preview(file_path, parameters, save_debug=True):
 
 
 def process(file_path, parameters, progress_callback=None):
+    logger.info("Processing file: %s", file_path)
     file_reader = FileReaderFactory.create(file_path)
 
     if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
 
         parameters = update_from_holo_footer(
             parameters,
@@ -1198,9 +1201,9 @@ def process(file_path, parameters, progress_callback=None):
         )
 
     if file_reader.extension == ".cine":
-        print("file header :", file_reader.metadata)
+        logger.debug("File header: %s", file_reader.metadata)
 
-    print("parameters : ", parameters)
+    logger.debug("Parameters: %s", parameters)
 
     batch_size = parameters["batch_size"]
     batch_stride = parameters["batch_stride"]
@@ -1366,9 +1369,7 @@ def process(file_path, parameters, progress_callback=None):
     # ------------------------------------------------------------
 
     if parameters.get("image_registration_with_ecc", False):
-        print(
-            "Running Registration ECC algo:"
-        )
+        logger.info("Running ECC registration")
         registration_keys = [
             key for key in output
             if key in {"M0ff", "M0", "M1", "M2"} or "band_" in key
@@ -1403,9 +1404,7 @@ def process(file_path, parameters, progress_callback=None):
                 )
 
         output["registration_ecc"] = registration_ecc
-        print(
-            "Registration calculated."
-        )
+        logger.info("ECC registration calculated")
 
 
     # ------------------------------------------------------------

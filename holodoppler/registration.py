@@ -4,7 +4,7 @@ Image registration using phase correlation for Translation, Rotation, and Scale 
 import os
 import cv2
 import numpy as np
-from tqdm import tqdm
+from holodoppler.progress import tqdm
 from concurrent.futures import ProcessPoolExecutor
 
 from .utils import elliptical_mask

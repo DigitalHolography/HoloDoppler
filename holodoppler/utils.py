@@ -18,6 +18,7 @@ This module should therefore not import or use CuPy directly.
 from __future__ import annotations
 
 import json
+import logging
 from functools import cache
 from pathlib import Path
 from typing import Any, Mapping
@@ -26,6 +27,8 @@ import numpy as np
 import yaml
 
 import holodoppler.backend as backend
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -837,11 +840,9 @@ def update_from_holo_footer(
                 ] = "AngularSpectrum"
 
             else:
-                print(
-                    "Couldn't parse spatial transform name "
-                    "in HoloVibes footer "
-                    f"({holovibes_transform!r}); "
-                    "using Fresnel."
+                logger.warning(
+                    "Couldn't parse spatial transform name in HoloVibes footer %r; using Fresnel",
+                    holovibes_transform,
                 )
 
                 parameters[
@@ -905,9 +906,7 @@ def update_from_holo_footer(
         TypeError,
         ValueError,
     ) as exc:
-        print(
-            f"Issue from HoloVibes footer: {exc}"
-        )
+        logger.warning("Issue from HoloVibes footer: %s", exc)
 
     return parameters
 
