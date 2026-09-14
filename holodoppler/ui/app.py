@@ -90,16 +90,16 @@ class UI(BaseTk):
 
     def set_input_paths(self, paths: list[Path]) -> None:
         selection = expand_input_paths(paths)
-        self.input_paths = selection.paths
+        self.input_paths = list(dict.fromkeys([*self.input_paths, *selection.paths]))
         if self.input_paths:
-            self.store.set_last_input_dir(self.input_paths[0].parent)
+            self.store.set_last_input_dir(self.input_paths[-1].parent)
             self.store.remember_inputs(self.input_paths)
         self._sync_views()
 
         if selection.paths and selection.rejected:
-            self._set_status(f"Loaded {len(selection.paths)} input file(s); ignored {len(selection.rejected)} unsupported or missing path(s).")
+            self._set_status(f"Loaded {len(self.input_paths)} input file(s); ignored {len(selection.rejected)} unsupported or missing path(s).")
         elif selection.paths:
-            self._set_status(f"Loaded {len(selection.paths)} input file(s)")
+            self._set_status(f"Loaded {len(self.input_paths)} input file(s)")
         else:
             self._set_status("No supported input files found")
 

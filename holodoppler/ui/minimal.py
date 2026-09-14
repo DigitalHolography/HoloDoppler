@@ -41,6 +41,7 @@ class MinimalView(ttk.Frame):
 
     def set_busy(self, busy: bool, can_run: bool) -> None:
         self.load_button.configure(state="disabled" if busy else "normal")
+        self.clear_button.configure(state="disabled" if busy else "normal")
         is_processing = busy and getattr(self.controller, "worker_kind", None) == "process"
 
         if is_processing:
@@ -109,8 +110,12 @@ class MinimalView(ttk.Frame):
         if logo is not None:
             ttk.Label(header, image=logo, anchor="center").grid(row=1, column=0, sticky="ew", pady=(10, 0))
 
-        self.load_button = ttk.Button(self, text="Load input", command=self.controller.open_inputs_dialog)
-        self.load_button.grid(row=1, column=0, pady=(0, 12))
+        input_buttons = ttk.Frame(self)
+        input_buttons.grid(row=1, column=0, pady=(0, 12))
+        self.load_button = ttk.Button(input_buttons, text="Load input", command=self.controller.open_inputs_dialog)
+        self.load_button.grid(row=0, column=0, padx=(0, 8))
+        self.clear_button = ttk.Button(input_buttons, text="Clear", command=self.controller.clear_inputs)
+        self.clear_button.grid(row=0, column=1)
 
         self.drop_frame = ttk.Frame(self, style="Drop.TFrame", padding=16)
         self.drop_frame.grid(row=2, column=0, sticky="ew", padx=56, pady=(0, 16))
