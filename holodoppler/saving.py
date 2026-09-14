@@ -285,6 +285,7 @@ def make_even_dimensions(frames: np.ndarray) -> np.ndarray:
 
 def prepare_ffmpeg_frames(
     data: np.ndarray,
+    codec: str = "mjpeg",
 ) -> tuple[np.ndarray, str, str]:
     """
     Prepare video for FFmpeg.
@@ -307,7 +308,14 @@ def prepare_ffmpeg_frames(
             "Expected 3 or 4."
         )
 
-    return np.ascontiguousarray(frames), "rgb24", "gbrp"
+    if codec.lower() == "mjpeg":
+        output_pix_fmt = "yuvj422p"
+    elif codec.lower() == "utvideo":
+        output_pix_fmt = "gbrp"
+    else:
+        output_pix_fmt = "yuv444p"
+
+    return np.ascontiguousarray(frames), "rgb24", output_pix_fmt
 
 def find_ffmpeg() -> str:
     """
@@ -404,17 +412,18 @@ def save_video(
     data: np.ndarray,
     fps: float,
     ffmpeg: str | None = None,
+    codec: str = "mjpeg",
 ) -> None:
     """
-    Save a video using FFmpeg + Ut Video.
+    Save a video using FFmpeg.
 
-    The NumPy frames are streamed directly to FFmpeg stdin.
-    No intermediate PNG files are created.
+    MJPEG:
+        codec="mjpeg"
+        q:v=1 gives very high quality but is still lossy.
 
-    Output:
-        AVI container
-        Ut Video codec
-        lossless encoding
+    Ut Video:
+        codec="utvideo"
+        lossless.
     """
     path = Path(path)
     ensure_directory(path.parent)
@@ -431,7 +440,6 @@ def save_video(
         ffmpeg,
         "-y",
 
-        # Raw frames coming from NumPy
         "-f",
         "rawvideo",
         "-vcodec",
@@ -445,16 +453,22 @@ def save_video(
         "-i",
         "-",
 
-        # No audio
         "-an",
 
-        # Ut Video
         "-c:v",
-        "utvideo",
+        codec,
+    ]
+
+    # MJPEG quality.
+    if codec.lower() == "mjpeg":
+        command += [
+            "-q:v",
+            "1",
+        ]
+
+    command += [
         "-pix_fmt",
         output_pix_fmt,
-
-        # Output
         str(path),
     ]
 
@@ -467,12 +481,19 @@ def save_video(
 
     try:
         assert process.stdin is not None
+        assert process.stderr is not None
 
-        # Make sure NumPy memory is contiguous before sending it.
         frames = np.ascontiguousarray(frames)
 
-        process.stdin.write(frames.tobytes())
-        process.stdin.close()
+        try:
+            process.stdin.write(frames.tobytes())
+            process.stdin.close()
+        except BrokenPipeError:
+            # FFmpeg exited early. Continue so we can read its actual error.
+            try:
+                process.stdin.close()
+            except Exception:
+                pass
 
         stderr = process.stderr.read().decode(
             errors="replace"
