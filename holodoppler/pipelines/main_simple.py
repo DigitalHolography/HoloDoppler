@@ -45,7 +45,7 @@ from holodoppler.filtering import (
     corner_compensation,
 )
 
-from holodoppler.moments import moment
+from holodoppler.moments import moment, moments
 
 from holodoppler.registration import (
     register_images_shifts,
@@ -170,26 +170,32 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     # ------------------------------------------------------------
     # Moments
     # ------------------------------------------------------------
-    output_dict["M0"] = moment(
+    output_dict["M0"], output_dict["M0"], output_dict["M0"] = moments(
         xp,
         psd[idxs],
         freqs,
-        0,
+        [0,1,2],
     )
+    # output_dict["M0"] = moment(
+    #     xp,
+    #     psd[idxs],
+    #     freqs,
+    #     0,
+    # )
 
-    output_dict["M1"] = moment(
-        xp,
-        psd[idxs],
-        freqs,
-        1,
-    )
+    # output_dict["M1"] = moment(
+    #     xp,
+    #     psd[idxs],
+    #     freqs,
+    #     1,
+    # )
 
-    output_dict["M2"] = moment(
-        xp,
-        psd[idxs],
-        freqs,
-        2,
-    )
+    # output_dict["M2"] = moment(
+    #     xp,
+    #     psd[idxs],
+    #     freqs,
+    #     2,
+    # )
 
     output_dict["M0ff"] = gaussian_flatfield(
         output_dict["M0"],
