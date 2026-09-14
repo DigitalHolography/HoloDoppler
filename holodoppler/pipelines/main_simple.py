@@ -418,12 +418,13 @@ def _get_autofocus_phase_term(parameters, file_reader):
 
     Returns
     -------
-    phase_term : backend array or None
-        Fixed phase correction to use for all processed batches.
+    phase_term, coefs : tuple
+        Fixed phase correction and fitted coefficients, or (None, None)
+        when autofocus is disabled.
     """
 
     if not parameters.get("shack_hartmann_autofocus", False):
-        return None
+        return None, None
 
     print(
         "Running Shack-Hartmann autofocus from reference batch:",
@@ -470,7 +471,7 @@ def _get_autofocus_phase_term(parameters, file_reader):
         output_dict=autofocus_result,
     )
 
-    coefs = autofocus_result["shack_hartmann_zernike_coefs"]
+    coefs = autofocus_result.get("shack_hartmann_zernike_coefs")
 
     del ref_frames
     del autofocus_result
@@ -610,6 +611,7 @@ def _process_numpy(
     output,
     M0_reg=None,
     autofocus_phase_term=None,
+    progress_callback=None,
 ):
     """
     Sequential NumPy/CPU processing.
@@ -676,6 +678,9 @@ def _process_numpy(
             output,
             res,
         )
+
+        if progress_callback is not None:
+            progress_callback(i + 1, num_batch, f"Batch {i + 1}/{num_batch}")
 
         del frames
         del res
@@ -746,6 +751,7 @@ def _process_numpy_parallel(
     M0_reg=None,
     autofocus_phase_term=None,
     n_workers=None,
+    progress_callback=None,
 ):
     """
     Parallel NumPy/CPU processing.
@@ -781,6 +787,8 @@ def _process_numpy_parallel(
         "image_registration",
         False,
     ):
+        # The parallel processing could be done processing M0_reg from the ref batch then using parallel process
+        # but for now fall back on single cpu 
         return _process_numpy(
             parameters=parameters,
             file_reader=file_reader,
@@ -791,6 +799,7 @@ def _process_numpy_parallel(
             output=output,
             M0_reg=M0_reg,
             autofocus_phase_term=autofocus_phase_term,
+            progress_callback=progress_callback,
         )
 
     n_workers = _get_numpy_workers(
@@ -846,18 +855,28 @@ def _process_numpy_parallel(
             range(num_batch),
         )
 
-        for res in tqdm(
-            results,
-            total=num_batch,
-            desc=(
-                f"Processing "
-                f"(NumPy, {n_workers} workers)"
+        for completed, res in enumerate(
+            tqdm(
+                results,
+                total=num_batch,
+                desc=(
+                    f"Processing "
+                    f"(NumPy, {n_workers} workers)"
+                ),
             ),
+            start=1,
         ):
             _append_numpy_results(
                 output,
                 res,
             )
+
+            if progress_callback is not None:
+                progress_callback(
+                    completed,
+                    num_batch,
+                    f"Batch {completed}/{num_batch}",
+                )
 
             del res
 
@@ -878,6 +897,7 @@ def _process_cupy(
     output,
     M0_reg=None,
     autofocus_phase_term=None,
+    progress_callback=None,
 ):
     h2d_stream = backend.xp.cuda.Stream(
         non_blocking=True
@@ -989,6 +1009,12 @@ def _process_cupy(
             )
 
             processed_batches += 1
+            if progress_callback is not None:
+                progress_callback(
+                    processed_batches,
+                    num_batch,
+                    f"Batch {processed_batches}/{num_batch}",
+                )
 
             buffer_ready[
                 current_idx
@@ -1051,6 +1077,12 @@ def _process_cupy(
         )
 
         processed_batches += 1
+        if progress_callback is not None:
+            progress_callback(
+                processed_batches,
+                num_batch,
+                f"Batch {processed_batches}/{num_batch}",
+            )
 
         buffer_ready[
             current_idx
@@ -1094,7 +1126,6 @@ def preview(file_path, parameters):
         parameters,
         file_reader,
     )
-    auto_coefs = backend.to_numpy(auto_coefs)
 
     # ------------------------------------------------------------
     # Preview frames
@@ -1120,7 +1151,8 @@ def preview(file_path, parameters):
         phase_term=autofocus_phase_term,
     )
 
-    res["shack_hartmann_autofocus_zernike_coefs"] = auto_coefs
+    if auto_coefs is not None:
+        res["shack_hartmann_autofocus_zernike_coefs"] = backend.to_numpy(auto_coefs)
 
     # ------------------------------------------------------------
     # Square output
@@ -1160,7 +1192,7 @@ def preview(file_path, parameters):
     return res_np["M0ff"]
 
 
-def process(file_path, parameters):
+def process(file_path, parameters, progress_callback=None):
     file_reader = FileReaderFactory.create(file_path)
 
     if file_reader.extension == ".holo":
@@ -1268,7 +1300,6 @@ def process(file_path, parameters):
         parameters,
         file_reader,
     )
-    auto_coefs = backend.to_numpy(auto_coefs)
 
     # ------------------------------------------------------------
     # NumPy / CPU path
@@ -1290,6 +1321,7 @@ def process(file_path, parameters):
                 M0_reg=M0_reg,
                 autofocus_phase_term=autofocus_phase_term,
                 n_workers=n_workers,
+                progress_callback=progress_callback,
             )
 
         else:
@@ -1304,6 +1336,7 @@ def process(file_path, parameters):
                 output=output,
                 M0_reg=M0_reg,
                 autofocus_phase_term=autofocus_phase_term,
+                progress_callback=progress_callback,
             )
     else:
 
@@ -1317,6 +1350,7 @@ def process(file_path, parameters):
             output=output,
             M0_reg=M0_reg,
             autofocus_phase_term=autofocus_phase_term,
+            progress_callback=progress_callback,
         )
 
     # ------------------------------------------------------------
@@ -1330,7 +1364,8 @@ def process(file_path, parameters):
         for key, values in output.items()
     }
 
-    output["shack_hartmann_autofocus_zernike_coefs"] = auto_coefs
+    if auto_coefs is not None:
+        output["shack_hartmann_autofocus_zernike_coefs"] = backend.to_numpy(auto_coefs)
 
     # ------------------------------------------------------------
     # ECC Image Registration at the end
@@ -1340,7 +1375,7 @@ def process(file_path, parameters):
         print(
             "Running Registration ECC algo:"
         )
-        registration_ecc = register_with_ecc(output["M0ff"],radius=parameters.get("registration_ecc_radius",0.8),iterations=300,eps=1e-6)
+        registration_ecc = register_with_ecc(output["M0ff"],radius=parameters.get("registration_ecc_radius",0.8),iterations=300,eps=1e-6, progress_callback=progress_callback)
 
 
         for key in output :
