@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext, ttk
+from tkinter import filedialog, messagebox, ttk
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -126,8 +126,16 @@ class UI(BaseTk):
             ttk.Label(self.log_window, text=f"Saved to: {self.log_path}").pack(
                 fill="x", padx=8, pady=8
             )
-        self.log_text = scrolledtext.ScrolledText(self.log_window, wrap="word", state="disabled")
-        self.log_text.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        log_frame = ttk.Frame(self.log_window)
+        log_frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
+
+        self.log_text = tk.Text(log_frame, wrap="word", state="disabled")
+        self.log_text.grid(row=0, column=0, sticky="nsew")
+        log_scrollbar = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
+        log_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.log_text.configure(yscrollcommand=log_scrollbar.set)
         self._show_log_lines()
 
     def _show_log_lines(self) -> None:
