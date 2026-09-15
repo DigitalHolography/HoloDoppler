@@ -644,11 +644,14 @@ def _process_one_batch(
 
         # The current U can be released when it is not retained by the
         # sliding buffer.
-        if U_buffer is None:
-            del U
 
         if U_tot is not U:
             del U_tot
+
+        if U_buffer is None:
+            del U
+
+        
 
     # ------------------------------------------------------------------
     # Main Doppler processing
@@ -1151,6 +1154,9 @@ def preview(file_path, parameters):
         squared_res = {}
 
         for key, value in res.items():
+            # if key == "shack_hartmann_sub_images":
+            #     squared_res[key] = value
+            #     continue
             if value.ndim == 2:
                 max_size = max(value.shape[-2:])
 
