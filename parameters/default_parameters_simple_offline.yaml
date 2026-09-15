@@ -1,6 +1,7 @@
 pipeline_name: "simple"
 
 # optional backend management
+force_numpy: true # forces the use of numpy
 use_parallel: true # use parallel workers cores or not (cupy or numpy)
 numpy_num_workers: 8 # in numpy mode, the number of parallel workers to be used
 

@@ -1103,6 +1103,8 @@ def _process_cupy(
     return output, M0_reg
 
 def preview(file_path, parameters):
+    if parameters.get("force_numpy",False):
+        backend.set_backend("numpy")
     file_reader = FileReaderFactory.create(file_path)
 
     print("previewing file :", file_path)
@@ -1199,6 +1201,8 @@ def preview(file_path, parameters):
 
 
 def process(file_path, parameters, progress_callback=None):
+    if parameters.get("force_numpy",False):
+        backend.set_backend("numpy")
     file_reader = FileReaderFactory.create(file_path)
 
     if file_reader.extension == ".holo":
