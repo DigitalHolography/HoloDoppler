@@ -861,7 +861,7 @@ def _process_numpy_parallel(
                 total=num_batch,
                 desc=(
                     f"Processing "
-                    f"(NumPy, {n_workers} workers)"
+                    f"({backend.get_backend_name()}, {n_workers} workers)"
                 ),
             ),
             start=1,
@@ -1304,7 +1304,7 @@ def process(file_path, parameters, progress_callback=None):
     # ------------------------------------------------------------
     # NumPy / CPU path
     # ------------------------------------------------------------
-    if not backend.is_gpu or parameters.get("no_cupy",False):
+    if not backend.is_gpu or parameters.get("use_parallel",False):
 
         n_workers = parameters.get("numpy_num_workers",8)
 

@@ -1300,7 +1300,7 @@ def process(file_path, parameters, progress_callback=None):
     # ------------------------------------------------------------
     # NumPy / CPU path
     # ------------------------------------------------------------
-    if not backend.is_gpu or parameters.get("no_cupy", False):
+    if not backend.is_gpu or parameters.get("use_parallel", False):
         n_workers = parameters.get("numpy_num_workers", 8)
 
         if n_workers > 0:

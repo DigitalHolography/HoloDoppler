@@ -371,6 +371,8 @@ def print_gpu_used_memory():
     """Print GPU memory usage when CuPy is active."""
     return _backend.print_gpu_used_memory()
 
+def get_backend_name():
+    return _backend.backend_name
 
 def synchronize():
     """Synchronize GPU when CuPy is active."""
