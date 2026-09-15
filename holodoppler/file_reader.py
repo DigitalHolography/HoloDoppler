@@ -389,7 +389,7 @@ class CineFileReader(FileReader):
     @property
     def header(self) -> CineMetadata:
         if self._metadata is None:
-            raw_metadata = dict(cinereader.read_metadata(str(self.file_path)).__dict__)
+            raw_metadata = dict(read_metadata(str(self.file_path)).__dict__)
             self._metadata = CineMetadata.from_cinereader_dict(raw_metadata)
         return self._metadata
 

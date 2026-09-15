@@ -911,6 +911,49 @@ def update_from_holo_footer(
 
     return parameters
 
+def update_from_cine_metadata(
+        parameters,
+        metadata
+    ):
+
+    # ------------------------------------------------------------------
+    # Pixel pitch
+    # ------------------------------------------------------------------
+
+    if parameters.get(
+        "pixel_pitch"
+    ) == "use_metadata":
+
+        parameters["pixel_pitch"] = (
+            1/metadata.extra["biYPelsPerMeter"],
+            1/metadata.extra["biXPelsPerMeter"],
+        )
+
+    # ------------------------------------------------------------------
+    # Sampling frequency
+    # ------------------------------------------------------------------
+
+    if parameters.get(
+        "sampling_freq"
+    ) == "use_metadata":
+
+        parameters[
+            "sampling_freq"
+        ] = metadata.extra["FrameRate"]
+    # ------------------------------------------------------------------
+    # High frequency
+    # ------------------------------------------------------------------
+
+    if parameters.get(
+        "high_freq"
+    ) == "use_metadata":
+
+        parameters[
+            "high_freq"
+        ] = metadata.extra["FrameRate"] / 2
+    
+    return parameters
+    
 
 # ============================================================================
 # Registration

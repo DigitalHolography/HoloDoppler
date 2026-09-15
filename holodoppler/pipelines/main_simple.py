@@ -34,6 +34,7 @@ from holodoppler.zernike import (
 from holodoppler.utils import (
     gaussian_flatfield,
     update_from_holo_footer,
+    update_from_cine_metadata,
     resize_frames,
 )
 
@@ -1115,7 +1116,12 @@ def preview(file_path, parameters):
         )
 
     if file_reader.extension == ".cine":
-        print("file header :", file_reader.metadata)
+        print("file header :", file_reader.header)
+
+        parameters = update_from_cine_metadata(
+            parameters,
+            file_reader.header
+        )
 
     print("parameters : ", parameters)
 
@@ -1204,7 +1210,12 @@ def process(file_path, parameters, progress_callback=None):
         )
 
     if file_reader.extension == ".cine":
-        print("file header :", file_reader.metadata)
+        print("file header :", file_reader.header)
+
+        parameters = update_from_cine_metadata(
+            parameters,
+            file_reader.header
+        )
 
     print("parameters : ", parameters)
 

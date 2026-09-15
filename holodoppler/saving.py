@@ -850,6 +850,15 @@ def save_metadata(
                     json_dir / "holovibes_header.json",
                     header,
                 )
+        if getattr(file_reader, "extension", None) == ".cine":
+            header = getattr(file_reader, "header", None)
+            if header is not None:
+                if is_dataclass(header):
+                    header = asdict(header)
+                save_json(
+                    json_dir / "cine_metadata.json",
+                    header,
+                )
 
     save_version_files(target_dir)
 
