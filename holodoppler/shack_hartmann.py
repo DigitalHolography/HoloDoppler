@@ -5,7 +5,7 @@ Shack-Hartmann wavefront sensing
 from .propagation import (
     build_fresnel_kernel_in,
     build_angular_kernel,
-    hashable_pixel_pitch,
+    ensure_yx_pixel_pitch,
 )
 from .filtering import (
     svd_filter_batched,
@@ -41,7 +41,7 @@ def construct_subapertures_fresnel(
     )
 
     # Fresnel kernel
-    pixel_pitch = hashable_pixel_pitch(pixel_pitch)
+    pixel_pitch = ensure_yx_pixel_pitch(pixel_pitch)
     kernel_in = build_fresnel_kernel_in(
         xp, z_prop, pixel_pitch, wavelength, Ny, Nx, zero_padding=None
     )  # TODO accept a shack hartman zero_padding option
@@ -97,7 +97,7 @@ def construct_subapertures_angular(
     Nz, Ny, Nx = U0.shape
     sub_ny, sub_nx = Ny // ny_subabs, Nx // nx_subabs
 
-    pixel_pitch = hashable_pixel_pitch(pixel_pitch)
+    pixel_pitch = ensure_yx_pixel_pitch(pixel_pitch)
     kernel = build_angular_kernel(
         xp, z_prop, pixel_pitch, wavelength, Ny, Nx, zero_padding=None
     )  # TODO accept a shack hartman zero_padding option
@@ -264,7 +264,9 @@ def calculate_displacements_graph_laplacian(
     U = U_subaps.reshape(B, Ny, Nx)
     if mask is not None:
         mask_f = mask.astype(xp.float32, copy=False)
-        mean = xp.sum(U * mask_f, axis=(-2,-1)) / xp.maximum(xp.sum(mask_f, axis=(-2,-1)), 1.0)
+        mean = xp.sum(U * mask_f, axis=(-2, -1)) / xp.maximum(
+            xp.sum(mask_f, axis=(-2, -1)), 1.0
+        )
         U = (U - mean[:, xp.newaxis, xp.newaxis]) * mask_f
 
     yy, xx = xp.meshgrid(

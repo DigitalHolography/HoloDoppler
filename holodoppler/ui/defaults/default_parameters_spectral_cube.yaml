@@ -1,0 +1,75 @@
+pipeline_name: "spectral_cube"
+
+# Temporal windows. Each window produces one t sample in S(t,f), S0(t,f), and L(t,f).
+batch_size: 256
+first_frame: 0
+batch_stride: 256
+end_frame: -1  # -1 processes every complete window
+
+# Propagation parameters
+spatial_propagation: "Fresnel"  # "Fresnel" or "AngularSpectrum"
+z: "use_holovibes"
+wavelength: 852.0e-9
+pixel_pitch: "use_holovibes"
+Fresnel_use_ouput_kernel: false
+
+# Optional input-plane filtering
+filter2d: false
+filter2d_low: 0.03
+
+# SVD filtering always removes exactly the two strongest components without a
+# separate temporal-DC subtraction.
+
+# f_bins covers the complete signed FFT range.
+sampling_freq: "use_holovibes"
+f_bins: 128
+
+# Applied before frequency and endpoint averaging when enabled.
+corner_compensation: false
+
+# S is measured from non-registered data inside this centered ellipse.
+spectral_cube_signal_ellipse_radius_y_factor: 0.8
+spectral_cube_signal_ellipse_radius_x_factor: 0.8
+
+# S0 is measured from non-registered data outside this centered ellipse.
+spectral_cube_corner_ellipse_radius_y_factor: 1.2
+spectral_cube_corner_ellipse_radius_x_factor: 1.2
+
+# Cardiac segmentation from the leading temporal SVD mode of median-filtered,
+# time-centered S[:, abs(f)>fc]. The effective cutoff is
+# min(configured fc, 0.8 * Nyquist). Other defaults are configurable QC starting
+# points, not physiological constants.
+spectral_endpoints_cardiac_fc_hz: 15000
+spectral_endpoints_cardiac_median_window_s: 0.035
+spectral_endpoints_cardiac_smoothing_s: 0.0
+spectral_endpoints_peak_min_distance_s: 0.3
+spectral_endpoints_peak_prominence_mad: 1.0
+spectral_endpoints_peak_relative_height: 0.5
+spectral_endpoints_min_beat_duration_s: 0.35
+spectral_endpoints_max_beat_duration_s: 1.5
+spectral_endpoints_phase_bins: 128
+
+# Beat-specific broadband streak detection. Threshold and prominence are
+# multipliers of the robust MAD scale of each beat's frequency-mean trace.
+spectral_endpoints_streak_prominence: 6.0
+spectral_endpoints_streak_threshold: 6.0
+spectral_endpoints_streak_min_width: 1.0
+spectral_endpoints_streak_padding_phase_bins: 0
+spectral_endpoints_min_clean_beats: 2
+
+# Percentile display adjustment for the S.png, S0.png, and L.png maps.
+contrast: true
+contrast_low_max_percent: [0.5, 99.5]
+contrast_gamma: 1.0
+
+# Optional Shack-Hartmann wavefront correction
+shack_hartmann: false
+shack_hartmann_nx_subap: 5
+shack_hartmann_ny_subap: 5
+shack_hartmann_svd_threshold: 10
+shack_hartmann_pupil_threshold: 1.5
+shack_hartmann_deviation_threshold: 10.0
+shack_hartmann_shifts_pixel_range_threshold: 1000.0
+shack_hartmann_graph_laplacian: true
+shack_hartmann_zernike_fit: true
+shack_hartmann_zernike_fit_modes: [4, 5, 6]

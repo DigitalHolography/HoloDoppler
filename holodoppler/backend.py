@@ -1,96 +1,379 @@
-"""
-Backend management for numpy/cupy switching
+"""Backend management for NumPy/CuPy switching.
+
+CuPy is preferred when available. If CuPy is installed but the CUDA runtime
+is not actually usable, the backend automatically falls back to NumPy.
 """
 
+from __future__ import annotations
+
 import numpy as np
+import scipy.fft as np_fft
+import scipy.ndimage as np_ndi
+from scipy.ndimage import gaussian_filter as np_gaussian_filter
+from scipy.ndimage import zoom as scipy_zoom
+import scipy.linalg as np_linalg
+
+
+# ---------------------------------------------------------------------------
+# Optional CuPy import
+# ---------------------------------------------------------------------------
 
 try:
     import cupy as cp
     import cupyx.scipy.fft as cp_fft
+    import cupyx.scipy.ndimage as cp_ndi
     from cupyx.scipy.ndimage import gaussian_filter as cp_gaussian_filter
     from cupyx.scipy.ndimage import zoom as cupy_zoom
-    import cupyx.scipy.ndimage as cp_ndi
+    import cupy.linalg as cp_linalg
+    _cupy_imported = True
 
-    _cupy_available = True
-except ImportError:
+except Exception:
     cp = None
     cp_fft = None
-    cp_gaussian_filter = None
     cp_ndi = None
-    _cupy_available = False
-
-import scipy.fft as np_fft
-from scipy.ndimage import gaussian_filter as np_gaussian_filter
-import scipy.ndimage as np_ndi
-from scipy.ndimage import zoom as scipy_zoom
+    cp_gaussian_filter = None
+    cupy_zoom = None
+    cp_linalg = None
+    _cupy_imported = False
 
 
-def to_numpy(arr):
-    if isinstance(arr, cp.ndarray):
-        return arr.get()
-    return arr
+# ---------------------------------------------------------------------------
+# CUDA usability test
+# ---------------------------------------------------------------------------
 
+def _cupy_usable() -> bool:
+    """Return True only when CuPy can actually execute CUDA operations.
+
+    Importing CuPy alone is not enough. This test detects cases such as:
+
+        cudaErrorInsufficientDriver
+
+    where CuPy is installed but the NVIDIA driver is missing, incompatible,
+    or otherwise unable to execute the CUDA runtime.
+
+    The test performs:
+      1. A CUDA device query.
+      2. A tiny GPU allocation.
+      3. A tiny GPU operation.
+      4. A synchronization.
+      5. A transfer back to the CPU.
+
+    Returns
+    -------
+    bool
+        True if CuPy is actually usable, False otherwise.
+    """
+    if not _cupy_imported or cp is None:
+        return False
+
+    try:
+        # Make sure at least one CUDA device is visible.
+        if cp.cuda.runtime.getDeviceCount() < 1:
+            return False
+
+        # Actually allocate something on the GPU.
+        x = cp.zeros(1, dtype=cp.float32)
+
+        # Perform a real GPU operation.
+        x += 1
+
+        # Force CUDA to execute the operation now.
+        cp.cuda.runtime.deviceSynchronize()
+
+        # Force a device -> host transfer as a final sanity check.
+        return float(x.get()[0]) == 1.0
+
+    except Exception as exc:
+        print(
+            "CuPy detected but CUDA is not usable; "
+            f"falling back to NumPy: {exc}"
+        )
+        return False
+
+
+# Test CuPy once when this module is imported.
+_cupy_available = _cupy_usable()
+
+
+# ---------------------------------------------------------------------------
+# Backend manager
+# ---------------------------------------------------------------------------
 
 class BackendManager:
-    """Manages numpy/cupy backend switching"""  # TODO add JAX
+    """Manage NumPy/CuPy backend selection.
 
-    def __init__(self, backend="numpy"):
-        self.backend_name = backend
+    Parameters
+    ----------
+    backend:
+        Accepted values:
+
+        - ``"auto"``  : use CuPy if actually usable, otherwise NumPy.
+        - ``"numpy"`` : force NumPy.
+        - ``"np"``    : alias for NumPy.
+        - ``"cpu"``   : alias for NumPy.
+        - ``"cupy"``  : request CuPy; falls back to NumPy if unusable.
+        - ``"cp"``    : alias for CuPy.
+        - ``"gpu"``   : alias for CuPy.
+    """
+
+    def __init__(self, backend: str = "auto"):
+        self.backend_name = backend.lower()
+
         self.xp = None
         self.fft = None
         self.gaussian_filter = None
         self.ndi = None
         self.zoom = None
+        self.linalg = None
+
         self._init_backend()
 
-    def _init_backend(self):
-        if "cupy" in self.backend_name:
-            if not _cupy_available:
-                raise RuntimeError("CuPy backend requested but CuPy is not available.")
-            self.xp = cp
-            self.fft = cp_fft
-            self.gaussian_filter = cp_gaussian_filter
-            self.ndi = cp_ndi
-            self.zoom = cupy_zoom
+    # ------------------------------------------------------------------
+    # Backend initialization
+    # ------------------------------------------------------------------
 
-        else:
+    def _init_backend(self) -> None:
+
+        # --------------------------------------------------------------
+        # Explicit NumPy
+        # --------------------------------------------------------------
+
+        if self.backend_name in {"numpy", "np", "cpu"}:
+            self.backend_name = "numpy"
+
             self.xp = np
             self.fft = np_fft
             self.gaussian_filter = np_gaussian_filter
             self.ndi = np_ndi
             self.zoom = scipy_zoom
+            self.linalg = np_linalg
+
+            return
+
+        # --------------------------------------------------------------
+        # CuPy / auto
+        # --------------------------------------------------------------
+
+        if self.backend_name in {"cupy", "cp", "gpu", "auto"}:
+
+            if _cupy_available:
+                self.backend_name = "cupy"
+
+                self.xp = cp
+                self.fft = cp_fft
+                self.gaussian_filter = cp_gaussian_filter
+                self.ndi = cp_ndi
+                self.zoom = cupy_zoom
+                self.linalg = cp_linalg
+
+                return
+
+            # CuPy is not usable -> NumPy fallback
+            self.backend_name = "numpy"
+
+            self.xp = np
+            self.fft = np_fft
+            self.gaussian_filter = np_gaussian_filter
+            self.ndi = np_ndi
+            self.zoom = scipy_zoom
+            self.linalg = np_linalg
+
+            return
+
+        # --------------------------------------------------------------
+        # Unknown backend
+        # --------------------------------------------------------------
+
+        raise ValueError(
+            f"Unknown backend {self.backend_name!r}. "
+            "Use 'auto', 'numpy' or 'cupy'."
+        )
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
+
+    @property
+    def is_gpu(self) -> bool:
+        """True when CuPy is the active backend."""
+        return self.backend_name == "cupy" and self.xp is cp
+
+    @property
+    def is_numpy(self) -> bool:
+        """True when NumPy is the active backend."""
+        return self.backend_name == "numpy"
+
+    # ------------------------------------------------------------------
+    # Array conversion
+    # ------------------------------------------------------------------
 
     def to_backend(self, arr):
-        if "cupy" in self.backend_name and self.xp is cp:
+        """Convert/move an array to the active backend."""
+        if self.is_gpu:
             return cp.asarray(arr)
-        return arr
+
+        return np.asarray(arr)
 
     def to_numpy(self, arr):
-        if "cupy" in self.backend_name and isinstance(arr, cp.ndarray):
-            return arr.get()
-        return arr
+        """Convert an array to NumPy."""
+        if self.is_gpu and isinstance(arr, cp.ndarray):
+            return cp.asnumpy(arr)
 
-    def clear_gpu_memory(self, synchronize=True):
-        """Clear GPU memory pools if using CuPy backend."""
+        return np.asarray(arr)
 
-        if self.xp is not cp:
+    # ------------------------------------------------------------------
+    # GPU utilities
+    # ------------------------------------------------------------------
+
+    def clear_gpu_memory(self, synchronize: bool = True) -> None:
+        """Clear CuPy memory pools.
+
+        This is a no-op when NumPy is active.
+        """
+        if not self.is_gpu:
             return
 
         if synchronize:
-            self.xp.cuda.Device().synchronize()
+            cp.cuda.Device().synchronize()
 
-        self.xp.get_default_memory_pool().free_all_blocks()
-        self.xp.get_default_pinned_memory_pool().free_all_blocks()
+        cp.get_default_memory_pool().free_all_blocks()
+        cp.get_default_pinned_memory_pool().free_all_blocks()
 
-    def print_gpu_used_memory(self):
-        if self.xp is not cp:
+    def print_gpu_used_memory(self) -> None:
+        """Print current GPU memory usage.
+
+        This is a no-op when NumPy is active.
+        """
+        if not self.is_gpu:
             return
-        used_in_bytes = (
-            cp.cuda.runtime.memGetInfo()[1] - cp.cuda.runtime.memGetInfo()[0]
-        )
 
-        print(f"Used GPU memory : {used_in_bytes/1e6} MB ")
+        free_bytes, total_bytes = cp.cuda.runtime.memGetInfo()
+        used_bytes = total_bytes - free_bytes
 
-    @property
-    def is_gpu(self):
-        return "cupy" in self.backend_name and _cupy_available
+        print(f"Used GPU memory: {used_bytes / 1e6:.1f} MB")
+
+    def synchronize(self) -> None:
+        """Synchronize the GPU.
+
+        This is a no-op for NumPy.
+        """
+        if self.is_gpu:
+            cp.cuda.Device().synchronize()
+
+
+# ---------------------------------------------------------------------------
+# Process-wide default backend
+# ---------------------------------------------------------------------------
+
+# Automatically select CuPy when CUDA is really usable,
+# otherwise use NumPy.
+backend = BackendManager("auto")
+
+
+# ---------------------------------------------------------------------------
+# Backend selection
+# ---------------------------------------------------------------------------
+
+def set_backend(name: str = "auto") -> BackendManager:
+    """Select the process-wide backend.
+
+    Parameters
+    ----------
+    name:
+        ``"auto"``, ``"numpy"`` or ``"cupy"``.
+
+    Returns
+    -------
+    BackendManager
+        The newly selected backend manager.
+
+    Examples
+    --------
+    Force CPU:
+
+    >>> import holodoppler.backend as backend
+    >>> backend.set_backend("numpy")
+
+    Request GPU:
+
+    >>> backend.set_backend("cupy")
+
+    Automatic selection:
+
+    >>> backend.set_backend("auto")
+    """
+    global _backend
+    global backend
+    global xp
+    global fft
+    global gaussian_filter
+    global ndi
+    global zoom
+    global linalg
+    global is_gpu
+    global cupy_available
+
+    backend = BackendManager(name)
+
+    _backend = backend
+
+    xp = _backend.xp
+    fft = _backend.fft
+    gaussian_filter = _backend.gaussian_filter
+    ndi = _backend.ndi
+    zoom = _backend.zoom
+    linalg = _backend.linalg
+    is_gpu = _backend.is_gpu
+
+
+    cupy_available = _cupy_available
+
+    return _backend
+
+
+# ---------------------------------------------------------------------------
+# Module-level aliases
+# ---------------------------------------------------------------------------
+
+_backend = backend
+
+xp = _backend.xp
+fft = _backend.fft
+gaussian_filter = _backend.gaussian_filter
+ndi = _backend.ndi
+zoom = _backend.zoom
+linalg = _backend.linalg
+is_gpu = _backend.is_gpu
+
+cupy_available = _cupy_available
+
+
+# ---------------------------------------------------------------------------
+# Convenience functions
+# ---------------------------------------------------------------------------
+
+def to_backend(arr):
+    """Convert an array to the currently selected backend."""
+    return _backend.to_backend(arr)
+
+
+def to_numpy(arr):
+    """Convert an array to NumPy."""
+    return _backend.to_numpy(arr)
+
+
+def clear_gpu_memory(synchronize: bool = True):
+    """Clear GPU memory when CuPy is active."""
+    return _backend.clear_gpu_memory(synchronize=synchronize)
+
+
+def print_gpu_used_memory():
+    """Print GPU memory usage when CuPy is active."""
+    return _backend.print_gpu_used_memory()
+
+def get_backend_name():
+    return _backend.backend_name
+
+def synchronize():
+    """Synchronize GPU when CuPy is active."""
+    return _backend.synchronize()

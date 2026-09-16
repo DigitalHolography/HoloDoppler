@@ -1,6 +1,8 @@
 pipeline_name: "simple"
 
-
+# optional backend management
+use_parallel: true # use parallel workers cores or not (cupy or numpy)
+numpy_num_workers: 8 # in numpy mode, the number of parallel workers to be used
 
 # Core parameters
 batch_size: 256
@@ -38,12 +40,19 @@ frequency_bands:
   - [9000, 18000]
 
 # Image registration
-image_registration: true
+registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
+
+# Image registration Live 
+image_registration: false
 registration_ref_first_frame: 0
 registration_ref_batch_size: 512
 registration_radius: 0.8
 registration_sub_pixel: true
-registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
+
+# Advanced Image registration
+image_registration_with_ecc: true #uses the first computed frame as reference
+registration_ecc_radius: 0.8
+registration_ecc_min_threshold: 0.7
 
 # Corner compensation
 corner_compensation: false
@@ -52,12 +61,13 @@ corner_compensation: false
 square: true
 
 # Image contrast
-contrast: true
+contrast: false
 contrast_low_max_percent: [0.5, 99.5] # Applied only to rendered avi/png/report outputs, not raw h5.
 contrast_gamma: 1.0
 
 # Shack-Hartmann wavefront sensing
-shack_hartmann: false  # Enable Shack-Hartmann processing
+shack_hartmann_autofocus: true  # Enable Shack-Hartmann processing only on the batch defined by registration_ref_first_frame and batch_size and use it for the correction of following batch
+shack_hartmann: false  # Enable Live (every batch) Shack-Hartmann processing
 shack_hartmann_nx_subap: 5  # Number of subapertures in X
 shack_hartmann_ny_subap: 5  # Number of subapertures in Y
 shack_hartmann_svd_threshold: 10

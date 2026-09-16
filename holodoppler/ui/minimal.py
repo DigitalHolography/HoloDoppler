@@ -13,11 +13,11 @@ class MinimalView(ttk.Frame):
         super().__init__(master, padding=22)
         self.controller = controller
         self.file_count_var = tk.StringVar(value="No input selected")
-        self.file_detail_var = tk.StringVar(value="Drop a .holo, .cine, or .txt list here.")
+        self.file_detail_var = tk.StringVar(value="Drop a folder, .holo, .cine, or .txt list here.")
         self.status_var = tk.StringVar(value="Ready")
-        self.current_file_var = tk.StringVar(value="")
-        self.file_progress_var = tk.StringVar(value="Batch progress")
-        self.batch_progress_var = tk.StringVar(value="Input progress")
+        self.current_file_name = ""
+        self.file_progress_var = tk.StringVar(value="Current file progress")
+        self.batch_progress_var = tk.StringVar(value="Overall progress")
         self._build()
 
     @property
@@ -27,8 +27,8 @@ class MinimalView(ttk.Frame):
     def refresh_inputs(self, paths: list[Path]) -> None:
         if not paths:
             self.file_count_var.set("No input selected")
-            self.file_detail_var.set("Drop a .holo, .cine, or .txt list here.")
-            self.current_file_var.set("")
+            self.file_detail_var.set("Drop a folder, .holo, .cine, or .txt list here.")
+            self.current_file_name = ""
             self._set_batch_visible(False)
             return
 
@@ -41,6 +41,7 @@ class MinimalView(ttk.Frame):
 
     def set_busy(self, busy: bool, can_run: bool) -> None:
         self.load_button.configure(state="disabled" if busy else "normal")
+        self.clear_button.configure(state="disabled" if busy else "normal")
         is_processing = busy and getattr(self.controller, "worker_kind", None) == "process"
 
         if is_processing:
@@ -65,23 +66,34 @@ class MinimalView(ttk.Frame):
     def reset_progress(self) -> None:
         self.file_progress.configure(value=0)
         self.batch_progress.configure(value=0)
-        self.file_progress_var.set("Batch progress")
-        self.batch_progress_var.set("Input progress")
+        self.current_file_name = ""
+        self.file_progress_var.set("Current file progress")
+        self.batch_progress_var.set("Overall progress")
 
     def set_current_file(self, index: int, total: int, path: Path) -> None:
-        self.current_file_var.set(f"{index}/{total}: {path.name}")
-        self.file_progress_var.set("Batch progress")
+        self.current_file_name = path.name
+        self.file_progress_var.set(f"{path.name}: starting...")
         self.file_progress.configure(value=0)
 
-    def set_file_progress(self, completed: int, total: int) -> None:
+    def set_file_progress(self, completed: int, total: int, message: str = "") -> None:
         percent = 0 if total <= 0 else max(0, min(100, completed / total * 100))
         self.file_progress.configure(value=percent)
-        self.file_progress_var.set(f"Batch progress: {completed}/{total}" if total > 0 else "Batch progress")
+        if message.startswith("File complete"):
+            detail = message.removeprefix("File ").lower()
+        elif message:
+            detail = message
+        elif total > 0:
+            detail = f"{completed}/{total} batches"
+        else:
+            detail = "processing"
+        self.file_progress_var.set(f"{self.current_file_name}: {detail}")
 
     def set_batch_progress(self, completed: int, total: int) -> None:
         percent = 0 if total <= 0 else max(0, min(100, completed / total * 100))
         self.batch_progress.configure(value=percent)
-        self.batch_progress_var.set(f"Input progress: {completed}/{total}" if total > 1 else "Input progress")
+        self.batch_progress_var.set(
+            f"Overall progress: {completed}/{total} files completed" if total > 1 else "Overall progress"
+        )
 
     def _build(self) -> None:
         self.columnconfigure(0, weight=1)
@@ -98,8 +110,12 @@ class MinimalView(ttk.Frame):
         if logo is not None:
             ttk.Label(header, image=logo, anchor="center").grid(row=1, column=0, sticky="ew", pady=(10, 0))
 
-        self.load_button = ttk.Button(self, text="Load input", command=self.controller.open_inputs_dialog)
-        self.load_button.grid(row=1, column=0, pady=(0, 12))
+        input_buttons = ttk.Frame(self)
+        input_buttons.grid(row=1, column=0, pady=(0, 12))
+        self.load_button = ttk.Button(input_buttons, text="Load input", command=self.controller.open_inputs_dialog)
+        self.load_button.grid(row=0, column=0, padx=(0, 8))
+        self.clear_button = ttk.Button(input_buttons, text="Clear", command=self.controller.clear_inputs)
+        self.clear_button.grid(row=0, column=1)
 
         self.drop_frame = ttk.Frame(self, style="Drop.TFrame", padding=16)
         self.drop_frame.grid(row=2, column=0, sticky="ew", padx=56, pady=(0, 16))
@@ -119,15 +135,12 @@ class MinimalView(ttk.Frame):
         progress.grid(row=4, column=0, sticky="ew", padx=56)
         progress.columnconfigure(0, weight=1)
 
-        ttk.Label(progress, textvariable=self.current_file_var, style="Muted.TLabel").grid(
-            row=0, column=0, sticky="w", pady=(0, 4)
-        )
-        ttk.Label(progress, textvariable=self.file_progress_var).grid(row=1, column=0, sticky="w")
+        ttk.Label(progress, textvariable=self.file_progress_var).grid(row=0, column=0, sticky="w")
         self.file_progress = ttk.Progressbar(progress, maximum=100, mode="determinate")
-        self.file_progress.grid(row=2, column=0, sticky="ew", pady=(4, 10))
+        self.file_progress.grid(row=1, column=0, sticky="ew", pady=(4, 10))
 
         self.batch_frame = ttk.Frame(progress)
-        self.batch_frame.grid(row=3, column=0, sticky="ew")
+        self.batch_frame.grid(row=2, column=0, sticky="ew")
         self.batch_frame.columnconfigure(0, weight=1)
         ttk.Label(self.batch_frame, textvariable=self.batch_progress_var).grid(row=0, column=0, sticky="w")
         self.batch_progress = ttk.Progressbar(self.batch_frame, maximum=100, mode="determinate")

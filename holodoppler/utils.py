@@ -1,671 +1,350 @@
+"""Utility functions for array operations.
+
+Numerical array operations are delegated to the project's backend module,
+which transparently selects NumPy or CuPy.
+
+The active backend is available through:
+
+    backend.xp
+    backend.fft
+    backend.gaussian_filter
+    backend.zoom
+    backend.to_backend()
+    backend.to_numpy()
+
+This module should therefore not import or use CuPy directly.
 """
-Utility functions for array operations
-"""
 
-import numpy as np
+from __future__ import annotations
 
-from scipy.ndimage import gaussian_filter as np_gaussian_filter
-from scipy.ndimage import gaussian_filter1d
-import numpy as np
-from scipy.ndimage import zoom as zoom_cpu
-import cupy as cp
-from cupyx.scipy.ndimage import zoom as zoom_gpu
-
-# in utils.py
-import cv2
-
-from pathlib import Path
-import yaml
 import json
-
 from functools import cache
+from pathlib import Path
+from typing import Any, Mapping
 
-# # Assuming video_frames is a GPU array of shape (n_frames, height, width, channels)
-# def resize_cupy(video_frames, scale_factor):
-#     # zoom works on spatial dimensions only
-#     return zoom(video_frames, (1, scale_factor, scale_factor, 1), order=1)
+import numpy as np
+import yaml
 
-# For exact dimensions instead of scale
-def square_cupy(video_frames, newy=None, newx=None):
-    h, w = video_frames.shape[1], video_frames.shape[2]
-    if newy is None or newx is None:
-        target_height = target_width = max(h, w)
-    else:
-        target_height, target_width = newy, newx
-    scale_h = target_height / h
-    scale_w = target_width / w
-    return zoom_gpu(video_frames, (1, scale_h, scale_w), order=3)
-
-def normalize_to_uint8(data):
-    """
-    Normalizes any float array to 0-255 uint8.
-    Handles (T, H, W) or (T, H, W, C).
-    """
-
-    data = np.asanyarray(data)
-
-    if data.dtype == np.uint8:
-        return data
-    # Calculate global min/max across all dimensions except the first (Time)
-    # Or global overall for consistency across the video
-    vmin = data.min()
-    vmax = data.max()
-
-    # vectorized normalization
-    normalized = 255 * (data - vmin) / (vmax - vmin + 1e-12)
-    return np.clip(normalized, 0, 255).astype(np.uint8)
+import holodoppler.backend as backend
 
 
-def stretchlim(data, low_percent=1, high_percent=99):
-    """
-    Compute lower and upper intensity limits for contrast stretching.
-
-    For 4D arrays, limits are computed per channel on the last axis.
-    """
-    data = np.asarray(data)
-    if data.ndim == 4:
-        flat = data.reshape(-1, data.shape[-1])
-        low = np.nanpercentile(flat, low_percent, axis=0)
-        high = np.nanpercentile(flat, high_percent, axis=0)
-    else:
-        flat = data.ravel()
-        low = np.nanpercentile(flat, low_percent)
-        high = np.nanpercentile(flat, high_percent)
-    return low, high
+# ============================================================================
+# Array / backend helpers
+# ============================================================================
 
 
-def imadjust(data, low, high, gamma=1.0):
-    """Apply linear percentile stretch and optional gamma correction."""
-    data = np.asarray(data)
-    adjusted = (np.clip(data, low, high) - low) / (high - low + 1e-12)
-    if gamma != 1.0:
-        adjusted = np.power(adjusted, gamma)
-    return adjusted
+def to_backend(data):
+    """Convert data to the currently selected numerical backend."""
+    return backend.to_backend(data)
 
 
-def stretchlimcp(data, low_percent=1, high_percent=99):
-    flat = data.ravel()
-    return cp.percentile(flat, low_percent), cp.percentile(flat, high_percent)
+def to_numpy(data):
+    """Convert data to a NumPy array."""
+    return backend.to_numpy(data)
 
 
-def imadjustcp(data, low, high, gamma=1.0):
-    adjusted = (cp.clip(data, low, high) - low) / (high - low + 1e-12)
-    if gamma != 1.0:
-        adjusted = cp.power(adjusted, gamma)
-    return adjusted
+# ============================================================================
+# Resizing
+# ============================================================================
 
 
-def scaling(data, low, high):
-    return (data - low) / (high - low + 1e-12)
+def square_cupy(
+    video_frames,
+    newy=None,
+    newx=None,
+):
+    """Resize a stack of images to a square or requested size.
 
-def write_video_file(path, frames, fps, fourcc_code="mp4v"):
-    """
-    Writes a video file.
-    Expects frames as (T, H, W) or (T, H, W, C) in uint8.
-    """
-    if frames.ndim == 3:  # (T, H, W)
-        h, w = frames.shape[1:]
-        is_color = False
-    elif frames.ndim == 4:  # (T, H, W, C)
-        h, w = frames.shape[1:3]
-        is_color = frames.shape[3] == 3
-        if is_color:
-            # Convert RGB to BGR for OpenCV
-            frames = frames[..., ::-1]
-    else:
-        raise ValueError(f"Invalid frame shape: {frames.shape}")
-
-    out = cv2.VideoWriter(
-        path, cv2.VideoWriter_fourcc(*fourcc_code), fps, (w, h), isColor=is_color
-    )
-    for frame in frames:
-        out.write(frame)
-    out.release()
-
-def resize_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
-    """
-    Resize using FFT. Vectorized across all non-target axes. Keeping comparable values.
+    Despite the historical function name, this function now uses the
+    currently selected backend and therefore works with either NumPy or CuPy.
 
     Parameters
     ----------
-    img : ndarray
-        Input image array. The dimensions specified by `axes` will be resized.
-    new_h, new_w : int
-        Target height and width for the resize operation.
-    axes : tuple, optional
-        Axes to resize (height, width). Default is (-2, -1) for last two dimensions.
-    xp : module, optional
-        Array module (numpy or cupy). Default is numpy.
-    fft : module, optional
-        FFT module (numpy.fft or cupyx.scipy.fft). Default is numpy.fft.
+    video_frames:
+        Array with shape ``(n_frames, height, width)``.
+    newy, newx:
+        Target height and width. If either is ``None``, both dimensions are
+        set to the maximum input dimension.
 
     Returns
     -------
-    resized : ndarray
-        Resized image with same number of dimensions, but target size on specified axes.
+    array
+        Resized array on the active backend.
     """
-
-    # Get the target axes positions (convert negative indices)
-    axes = tuple(axes)
-    h_axis, w_axis = axes
-    ndim = img.ndim
-
-    # Convert negative axes to positive indices
-    if h_axis < 0:
-        h_axis = ndim + h_axis
-    if w_axis < 0:
-        w_axis = ndim + w_axis
-
-    # Get original shape and ensure axes are valid
-    orig_shape = img.shape
-    orig_h = orig_shape[h_axis]
-    orig_w = orig_shape[w_axis]
-
-    # Create slices for indexing
-    slice_before_h = [slice(None)] * ndim
-    slice_before_w = [slice(None)] * ndim
-    slice_before_h[h_axis] = slice(0, new_h)
-    slice_before_w[w_axis] = slice(0, new_w)
-
-    # Apply FFT to target axes
-    # Move target axes to the end for easier vectorization
-    axes_to_move = [h_axis, w_axis]
-    other_axes = [i for i in range(ndim) if i not in axes_to_move]
-    new_order = other_axes + axes_to_move
-    inverse_order = list(np.argsort(new_order))
-
-    # Transpose to bring target axes to the end
-    img_transposed = xp.transpose(img, new_order)
-
-    # Get shape after transpose
-    transposed_shape = img_transposed.shape
-    batch_shape = transposed_shape[:-2]
-
-    # Reshape to 2D: (batch_size, orig_h * orig_w) for FFT
-    img_flat = img_transposed.reshape(-1, orig_h, orig_w)
-
-    # Apply 2D FFT to each slice
-    img_fft = fft.fft2(img_flat, axes=(-2, -1))
-
-    # Crop or pad in frequency domain
-    # Center the FFT (shift zero frequency to center)
-    img_fft_shifted = fft.fftshift(img_fft, axes=(-2, -1))
-
-    # Calculate crop/pad regions
-    h_center = orig_h // 2
-    w_center = orig_w // 2
-    h_half_new = new_h // 2
-    w_half_new = new_w // 2
-
-    # Create output frequency array
-    new_shape_2d = (img_fft.shape[0], new_h, new_w)
-    img_fft_resized = xp.zeros(new_shape_2d, dtype=img_fft.dtype)
-
-    # Determine source slices
-    h_start_src = max(0, h_center - h_half_new)
-    h_end_src = min(orig_h, h_center + h_half_new + (new_h % 2))
-    w_start_src = max(0, w_center - w_half_new)
-    w_end_src = min(orig_w, w_center + w_half_new + (new_w % 2))
-
-    # Determine destination slices
-    h_start_dst = max(0, h_half_new - h_center)
-    h_end_dst = h_start_dst + (h_end_src - h_start_src)
-    w_start_dst = max(0, w_half_new - w_center)
-    w_end_dst = w_start_dst + (w_end_src - w_start_src)
-
-    # Copy frequency components
-    img_fft_resized[:, h_start_dst:h_end_dst, w_start_dst:w_end_dst] = img_fft_shifted[
-        :, h_start_src:h_end_src, w_start_src:w_end_src
-    ]
-
-    # Inverse shift and inverse FFT
-    img_fft_resized_shifted = fft.ifftshift(img_fft_resized, axes=(-2, -1))
-    img_resized_flat = fft.ifft2(img_fft_resized_shifted, axes=(-2, -1)).real
-
-    # Reshape back to original batch dimensions
-    img_resized_batch = img_resized_flat.reshape(*batch_shape, new_h, new_w)
-
-    # Transpose back to original axis order
-    img_resized = xp.transpose(img_resized_batch, inverse_order)
-
-    # Scale to preserve energy/values
-    scale_factor = (orig_h * orig_w) / (new_h * new_w)
-    img_resized = img_resized * scale_factor
-
-    return img_resized
-
-def zoom_slicewise_fast(arr, new_h, new_w, axes=(-2, -1), use_gpu=True):
-    """
-    Zoom each 2D slice independently to new height and width.
-    Vectorized for better performance.
-    """
-
-    original_shape = arr.shape
-    ndim = len(original_shape)
-
-    # Determine dimensions
-    if ndim == 3:  # (nt, ny, nx)
-        nt, ny, nx = original_shape
-        nchannel = 1
-        arr_reshaped = arr.reshape(nt, 1, ny, nx)
-    elif ndim == 4:  # (nt, nchannel, ny, nx)
-        nt, nchannel, ny, nx = original_shape
-        arr_reshaped = arr
-    else:
-        raise ValueError(f"Expected 3 or 4D array, got {ndim}D")
-
-    # Calculate zoom factors
-    zoom_h = new_h / ny
-    zoom_w = new_w / nx
-
-    # Reshape to combine all slices into a single batch dimension
-    # This way each slice is processed independently but in parallel
-    total_slices = nt * nchannel
-    arr_flat = arr_reshaped.reshape(total_slices, ny, nx)
-
-    if use_gpu:
-        try:
-
-            if not isinstance(arr, cp.ndarray):
-                arr_flat_gpu = cp.asarray(arr_flat)
-            else:
-                arr_flat_gpu = arr_flat
-
-            # Create output array
-            result_flat_gpu = cp.zeros((total_slices, new_h, new_w), dtype=arr_flat_gpu.dtype)
-
-            # Process each slice independently (still loop, but fewer iterations)
-            for i in range(total_slices):
-                result_flat_gpu[i, :, :] = zoom_gpu(arr_flat_gpu[i, :, :], (zoom_h, zoom_w), order=1)
-
-            # Reshape back
-            result_gpu = result_flat_gpu.reshape(nt, nchannel, new_h, new_w)
-
-            if ndim == 3:
-                return result_gpu.reshape(nt, new_h, new_w).get()
-            else:
-                return result_gpu.get()
-
-        except (ImportError, Exception) as e:
-            print(f"GPU zoom failed or not available: {e}")
-            print("Falling back to CPU...")
-
-    # CPU version
-    result_flat = np.zeros((total_slices, new_h, new_w), dtype=arr_flat.dtype)
-
-    for i in range(total_slices):
-        result_flat[i, :, :] = zoom_cpu(arr_flat[i, :, :], (zoom_h, zoom_w), order=1)
-
-    result = result_flat.reshape(nt, nchannel, new_h, new_w)
-
-    if ndim == 3:
-        return result.reshape(nt, new_h, new_w)
-    else:
-        return result
-
-def resize_fft2_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np, fft=np.fft):
-    """Spectral resize using FFT. Vectorized across all non-target axes."""
-    # 1. Move target axes to front: (..., H, W, ...) -> (H, W, ...)
-    img_t = np.moveaxis(img, axes, (0, 1))
-    h, w = img_t.shape[:2]
-
-    # 2. Vectorized FFT across the first two dimensions
-    F = fft.fftshift(fft.fft2(img_t, axes=(0, 1)), axes=(0, 1))
-
-    # 3. Create zero-padded array and calculate center crop/pad indices
-    F_new = xp.zeros((new_h, new_w, *img_t.shape[2:]), dtype=F.dtype)
-    h_min, w_min = min(h, new_h), min(w, new_w)
-
-    ho, wo = (h - h_min) // 2, (w - w_min) // 2
-    hn, wn = (new_h - h_min) // 2, (new_w - w_min) // 2
-
-    # 4. Perform center crop/pad (Vectorized)
-    F_new[hn : hn + h_min, wn : wn + w_min, ...] = F[
-        ho : ho + h_min, wo : wo + w_min, ...
-    ]
-
-    # 5. Inverse FFT and Scale
-    res_t = fft.ifftshift(F_new, axes=(0, 1))
-    res_t = fft.ifft2(res_t, axes=(0, 1)).real * (new_h * new_w / (h * w))
-
-    # 6. Restore original axes positions
-    return np.moveaxis(res_t, (0, 1), axes)
-
-# def resize_matlab_slicewise(img, new_h, new_w, axes=(-2, -1), xp=np):
-#     """Spatial resize. Loops over remaining dimensions since imresize is 2D."""
-#     img_t = np.moveaxis(img, axes, (0, 1))
-#     h, w = img_t.shape[:2]
-
-#     # Reshape to (H, W, -1) to loop through all other dimensions as one slice
-#     flat_img = img_t.reshape(h, w, -1)
-#     out = xp.empty((new_h, new_w, flat_img.shape[-1]), dtype=img.dtype)
-
-#     for i in range(flat_img.shape[-1]):
-#         # Assuming imresize is a provided utility function
-#         out[:, :, i] = imresize(flat_img[:, :, i], output_shape=(new_h, new_w))
-
-#     # Reshape back to target axes and move axes back
-#     res_t = out.reshape(new_h, new_w, *img_t.shape[2:])
-#     return np.moveaxis(res_t, (0, 1), axes)
-
-
-def pad_array_centrally(arr, new_shape, xp):
-    """Pad array centrally to new shape"""
-    if isinstance(new_shape, int):
-        new_shape = (new_shape, new_shape)
-
-    ny, nx = arr.shape[-2:]
-    new_ny, new_nx = new_shape
-
-    if new_ny < ny or new_nx < nx:
-        raise ValueError("new_shape must be >= current shape")
-
-    pad_y0 = (new_ny - ny) // 2
-    pad_y1 = new_ny - ny - pad_y0
-    pad_x0 = (new_nx - nx) // 2
-    pad_x1 = new_nx - nx - pad_x0
-
-    pad_width = [(0, 0)] * arr.ndim
-    pad_width[-2] = (pad_y0, pad_y1)
-    pad_width[-1] = (pad_x0, pad_x1)
-
-    return xp.pad(arr, pad_width, mode="constant")
-
-
-def crop_array_centrally(arr, target_shape, xp):
-    """Crop array centrally to target shape"""
-    if isinstance(target_shape, int):
-        target_shape = (target_shape, target_shape)
-
-    ny, nx = arr.shape[-2:]
-    tgt_ny, tgt_nx = target_shape
-
-    if tgt_ny > ny or tgt_nx > nx:
-        raise ValueError("target_shape must be <= current shape")
-
-    crop_y0 = (ny - tgt_ny) // 2
-    crop_y1 = crop_y0 + tgt_ny
-    crop_x0 = (nx - tgt_nx) // 2
-    crop_x1 = crop_x0 + tgt_nx
-
-    slices = [slice(None)] * arr.ndim
-    slices[-2] = slice(crop_y0, crop_y1)
-    slices[-1] = slice(crop_x0, crop_x1)
-
-    return arr[tuple(slices)]
-
-@cache
-def elliptical_mask(ny, nx, radius_frac, xp):
-    """Create elliptical boolean mask"""
-    radius_frac = max(0.0, min(1.0, float(radius_frac)))
-    a = (nx / 2) * radius_frac
-    b = (ny / 2) * radius_frac
-
-    Y, X = xp.ogrid[:ny, :nx]
-    cy, cx = ny / 2, nx / 2
-
-    mask = ((X - cx) / a) ** 2 + ((Y - cy) / b) ** 2 <= 1.0
-    return mask
-
-
-def gaussian_flatfield(A, gaussian_width, gaussian_filter_func):
-    """Apply Gaussian flatfield correction"""
-    return A / gaussian_filter_func(A, gaussian_width)
-
-
-def subpixel_parabola(vm, v0, vp):
-    """Subpixel refinement using parabola fit"""
-    denom = vm - 2.0 * v0 + vp
-    if abs(float(denom)) < 1e-12:
-        return 0.0
-    return 0.5 * float(vm - vp) / float(denom)
-
-
-def signed_peak(ky, kx, ny, nx):
-    """Convert peak indices to signed shifts"""
-    if ky > ny // 2:
-        ky -= ny
-    if kx > nx // 2:
-        kx -= nx
-    return float(ky), float(kx)
-
-
-def temporal_gaussian_filter(arr, sigma):
-    """Apply 1D Gaussian filter along time axis"""
-    if sigma == 0:
-        return arr
-    from scipy.ndimage import gaussian_filter1d
-
-    return gaussian_filter1d(arr.astype(np.float32), sigma=sigma, axis=2)
-
-
-def normalize_image(arr):
-    """Normalize image to 0-255 range"""
-    arr = arr.astype(np.float32)
-    lo, hi = arr.min(), arr.max()
-    if hi > lo:
-        return ((arr - lo) / (hi - lo) * 255).astype(np.uint8)
-    return arr.astype(np.uint8)
-
-
-def temporal_gaussian(arr, sigma):
-    if sigma == 0:
-        return arr
-    return gaussian_filter1d(arr.astype(np.float32), sigma=sigma, axis=2)
-
-
-def flatfield3D(arr, gw):
-    if arr.ndim != 3:
-        raise ValueError("Input array must be 3D")
-    if gw <= 1:
-        return arr
-    blurred = np_gaussian_filter(arr, sigma=(gw, gw, 1))
-    blurred[blurred == 0] = 1
-    return arr / blurred
-
-def complex_to_color(complex_img, mode='hsv', normalize=True):
-    """
-    Convert a complex 2D array to a color image.
-
-    Parameters:
-    -----------
-    complex_img : np.ndarray
-        2D complex-valued array
-    mode : str
-        Color mapping mode: 'hsv', 'phase_amplitude', 'log_amplitude', or 'amplitude_phase'
-    normalize : bool
-        Whether to normalize amplitude values to [0,1]
-
-    Returns:
-    --------
-    np.ndarray
-        RGB image (H, W, 3) with values in [0, 255] dtype=uint8
-    """
-    phase = np.angle(complex_img)  # Range: [-π, π]
-    amplitude = np.abs(complex_img)
-
-    if normalize and mode != 'log_amplitude':
-        amplitude = amplitude / (amplitude.max() + 1e-10)
-    elif mode == 'log_amplitude':
-        amplitude = np.log1p(amplitude)
-        amplitude = amplitude / (amplitude.max() + 1e-10)
-
-    if mode == 'hsv':
-        # HSV: Hue = phase, Saturation = 1, Value = amplitude
-        hue = (phase + np.pi) / (2 * np.pi)  # Map to [0, 1]
-        saturation = np.ones_like(phase)
-        value = amplitude
-
-        # Convert HSV to RGB
-        rgb = hsv_to_rgb(np.stack([hue, saturation, value], axis=-1))
-
-    elif mode == 'phase_amplitude':
-        # RGB: Red = cos(phase), Green = sin(phase), Blue = amplitude
-        r = (np.cos(phase) + 1) / 2
-        g = (np.sin(phase) + 1) / 2
-        b = amplitude
-        rgb = np.stack([r, g, b], axis=-1)
-
-    elif mode == 'amplitude_phase':
-        # Amplitude modulates intensity, phase modulates color
-        hue = (phase + np.pi) / (2 * np.pi)
-        # Use amplitude as both saturation and value for different effects
-        saturation = np.clip(amplitude * 1.5, 0, 1)
-        value = np.clip(amplitude * 1.2, 0, 1)
-        rgb = hsv_to_rgb(np.stack([hue, saturation, value], axis=-1))
-
-    elif mode == 'log_amplitude_phase':
-        # Log amplitude with phase coloring
-        amplitude_log = np.log1p(np.abs(complex_img))
-        amplitude_log = amplitude_log / (amplitude_log.max() + 1e-10)
-        hue = (phase + np.pi) / (2 * np.pi)
-        rgb = hsv_to_rgb(np.stack([hue, np.ones_like(phase), amplitude_log], axis=-1))
-
-    else:
-        raise ValueError(f"Unknown mode: {mode}. Use 'hsv', 'phase_amplitude', 'amplitude_phase', or 'log_amplitude_phase'")
-
-    # Convert to uint8 in range [0, 255]
-    rgb = (np.clip(rgb, 0, 1) * 255).astype(np.uint8)
-
-    return rgb
-
-def hsv_to_rgb(hsv):
-    """
-    Convert HSV to RGB.
-
-    Parameters:
-    -----------
-    hsv : np.ndarray
-        HSV image (H, W, 3) with values in [0, 1]
-
-    Returns:
-    --------
-    np.ndarray
-        RGB image (H, W, 3) with values in [0, 1]
-    """
-    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
-
-    h = h * 6.0  # Scale hue to [0, 6)
-    i = np.floor(h).astype(int)
-    f = h - i
-    p = v * (1 - s)
-    q = v * (1 - s * f)
-    t = v * (1 - s * (1 - f))
-
-    i = i % 6
-    rgb = np.zeros_like(hsv)
-
-    # Vectorized assignment
-    mask0 = i == 0
-    rgb[mask0] = np.stack([v[mask0], t[mask0], p[mask0]], axis=-1)
-
-    mask1 = i == 1
-    rgb[mask1] = np.stack([q[mask1], v[mask1], p[mask1]], axis=-1)
-
-    mask2 = i == 2
-    rgb[mask2] = np.stack([p[mask2], v[mask2], t[mask2]], axis=-1)
-
-    mask3 = i == 3
-    rgb[mask3] = np.stack([p[mask3], q[mask3], v[mask3]], axis=-1)
-
-    mask4 = i == 4
-    rgb[mask4] = np.stack([t[mask4], p[mask4], v[mask4]], axis=-1)
-
-    mask5 = i == 5
-    rgb[mask5] = np.stack([v[mask5], p[mask5], q[mask5]], axis=-1)
-
-    return rgb
-
-# Alternative simpler version using only numpy and standard functions
-def complex_to_color_simple(complex_img):
-    """
-    Simple conversion: phase -> hue, amplitude -> value.
-    """
-    phase = np.angle(complex_img)
-    amplitude = np.abs(complex_img)
-
-    # Normalize amplitude
-    amplitude = amplitude / (amplitude.max() + 1e-10)
-
-    # Map phase from [-π, π] to [0, 1] for hue
-    hue = (phase + np.pi) / (2 * np.pi)
-
-    # Create HSV image
-    hsv = np.stack([hue, np.ones_like(hue), amplitude], axis=-1)
-
-    # Convert to RGB manually (simpler HSV to RGB)
-    rgb = np.zeros((*complex_img.shape, 3))
-
-    h = hue * 6.0
-    i = np.floor(h).astype(int)
-    f = h - i
-    p = amplitude * (1 - 1)  # saturation=1, so p=0
-    q = amplitude * (1 - f)
-    t = amplitude * f
-
-    i = i % 6
-    # Apply for each hue sector
-    rgb[i == 0] = np.stack([amplitude[i == 0], t[i == 0], p[i == 0]], axis=-1)
-    rgb[i == 1] = np.stack([q[i == 1], amplitude[i == 1], p[i == 1]], axis=-1)
-    rgb[i == 2] = np.stack([p[i == 2], amplitude[i == 2], t[i == 2]], axis=-1)
-    rgb[i == 3] = np.stack([p[i == 3], q[i == 3], amplitude[i == 3]], axis=-1)
-    rgb[i == 4] = np.stack([t[i == 4], p[i == 4], amplitude[i == 4]], axis=-1)
-    rgb[i == 5] = np.stack([amplitude[i == 5], p[i == 5], q[i == 5]], axis=-1)
-
-    return (rgb * 255).astype(np.uint8)
-
-
-def load_config(config_path):
-    if isinstance(config_path,dict):
-        config = config_path
-    else :
-        config_path = Path(config_path)
-        with open(config_path, "r") as f:
-            config = yaml.safe_load(f) if config_path.suffix == ".yaml" else json.load(f)
-
-    def list_to_tuple(d):
-        for k, v in d.items():
-            if isinstance(v, dict):
-                d[k] = list_to_tuple(v)
-            elif isinstance(v, list):
-                d[k] = tuple(v)
-        return d
-
-    return list_to_tuple(config)
-
-
-
-def _pad_to_even(frames):
-    """
-    Pads H/W to even size for libx264/yuv420p.
-    Supports:
-      (T, H, W)
-      (T, H, W, C)
-    """
-    h = frames.shape[1]
-    w = frames.shape[2]
-
-    pad_h = h % 2
-    pad_w = w % 2
-
-    if pad_h == 0 and pad_w == 0:
-        return frames
-
-    if frames.ndim == 3:
-        pad_width = (
-            (0, 0),      # T
-            (0, pad_h),  # H
-            (0, pad_w),  # W
-        )
-    else:
-        pad_width = (
-            (0, 0),      # T
-            (0, pad_h),  # H
-            (0, pad_w),  # W
-            (0, 0),      # C
+    if video_frames.ndim != 3:
+        raise ValueError(
+            "video_frames must have shape "
+            "(n_frames, height, width)"
         )
 
-    return np.pad(frames, pad_width, mode="edge")
+    _, height, width = video_frames.shape
+
+    if newy is None or newx is None:
+        target_height = target_width = max(height, width)
+    else:
+        target_height = int(newy)
+        target_width = int(newx)
+
+    zoom_factors = (
+        1.0,
+        target_height / height,
+        target_width / width,
+    )
+
+    return backend.zoom(
+        video_frames,
+        zoom_factors,
+        order=3,
+    )
+
+def resize_frames(
+    video_frames,
+    new_height,
+    new_width,
+    *,
+    order=3,
+):
+    """Resize an image or stack of images.
+
+    Parameters
+    ----------
+    video_frames:
+        Image with shape ``(height, width)`` or a stack of images
+        with shape ``(n_frames, height, width)``.
+
+    new_height:
+        Target height.
+
+    new_width:
+        Target width.
+
+    order:
+        Interpolation order passed to the backend.
+
+    Returns
+    -------
+    array
+        Resized image with shape ``(height, width)`` if the input was
+        2D, otherwise a frame stack with shape
+        ``(n_frames, height, width)``.
+    """
+
+    video_frames = backend.to_backend(video_frames)
+
+    was_2d = video_frames.ndim == 2
+
+    if was_2d:
+        video_frames = video_frames[None, ...]
+
+    elif video_frames.ndim != 3:
+        raise ValueError(
+            "video_frames must have shape "
+            "(height, width) or "
+            "(n_frames, height, width)"
+        )
+
+    _, height, width = video_frames.shape
+
+    zoom_factors = (
+        1.0,
+        new_height / height,
+        new_width / width,
+    )
+
+    resized = backend.zoom(
+        video_frames,
+        zoom_factors,
+        order=order,
+    )
+
+    resized = backend.to_numpy(resized)
+
+    if was_2d:
+        return resized[0]
+
+    return resized
+
+
+
+# ============================================================================
+# Contrast / intensity adjustment
+# ============================================================================
+
+
+def stretchlim(
+    data,
+    low_percent=1,
+    high_percent=99,
+):
+    """Calculate intensity limits using percentiles.
+
+    For a 4D array, percentiles are calculated independently for the final
+    dimension. This preserves the behavior of the original implementation.
+
+    Parameters
+    ----------
+    data:
+        Input array.
+    low_percent:
+        Lower percentile.
+    high_percent:
+        Upper percentile.
+
+    Returns
+    -------
+    low, high
+        Percentile limits.
+    """
+    if not 0 <= low_percent <= 100:
+        raise ValueError(
+            "low_percent must be between 0 and 100."
+        )
+
+    if not 0 <= high_percent <= 100:
+        raise ValueError(
+            "high_percent must be between 0 and 100."
+        )
+
+    if low_percent >= high_percent:
+        raise ValueError(
+            "low_percent must be smaller than high_percent."
+        )
+
+    # Percentile calculation in the original implementation was NumPy
+    # based. Keep this operation CPU-side.
+    data = backend.to_numpy(data)
+
+    if data.ndim == 4:
+        flat = data.reshape(-1, data.shape[-1])
+
+        low = np.nanpercentile(
+            flat,
+            low_percent,
+            axis=0,
+        )
+
+        high = np.nanpercentile(
+            flat,
+            high_percent,
+            axis=0,
+        )
+    else:
+        flat = data.ravel()
+
+        low = np.nanpercentile(
+            flat,
+            low_percent,
+        )
+
+        high = np.nanpercentile(
+            flat,
+            high_percent,
+        )
+
+    return low, high
+
+
+def stretchlimcp(
+    data,
+    low_percent=1,
+    high_percent=99,
+):
+    """Calculate intensity limits on the active backend.
+
+    The historical ``cp`` suffix is retained for compatibility, but the
+    implementation now follows the active backend.
+    """
+    if not 0 <= low_percent <= 100:
+        raise ValueError(
+            "low_percent must be between 0 and 100."
+        )
+
+    if not 0 <= high_percent <= 100:
+        raise ValueError(
+            "high_percent must be between 0 and 100."
+        )
+
+    if low_percent >= high_percent:
+        raise ValueError(
+            "low_percent must be smaller than high_percent."
+        )
+
+    flat = data.ravel()
+
+    return (
+        backend.xp.percentile(
+            flat,
+            low_percent,
+        ),
+        backend.xp.percentile(
+            flat,
+            high_percent,
+        ),
+    )
+
+
+def imadjust(
+    data,
+    low,
+    high,
+    gamma=1.0,
+):
+    """Adjust image intensity using the active backend.
+
+    The input is converted to the active backend before processing.
+    """
+    data = backend.to_backend(data)
+
+    adjusted = (
+        backend.xp.clip(data, low, high) - low
+    ) / (
+        high - low + 1e-12
+    )
+
+    if gamma != 1.0:
+        adjusted = backend.xp.power(
+            adjusted,
+            gamma,
+        )
+
+    return adjusted
+
+
+def imadjust_cupy(
+    data,
+    low,
+    high,
+    gamma=1.0,
+):
+    """Backend-compatible version of :func:`imadjust`.
+
+    The original function name is retained for API compatibility.
+    """
+    return imadjust(
+        data,
+        low,
+        high,
+        gamma=gamma,
+    )
+
+
+def scaling(
+    data,
+    low,
+    high,
+):
+    """Scale values from ``low`` to ``high``."""
+    return (
+        data - low
+    ) / (
+        high - low + 1e-12
+    )
+
+
+# ============================================================================
+# Sharpening / projection
+# ============================================================================
+
 
 def unsharp_projection(
     bm,
@@ -675,71 +354,651 @@ def unsharp_projection(
     amount=2.0,
     dtype=np.float32,
 ):
+    """Create an unsharp-mask projection from a stack of images.
 
-    imgs_arr = np.asarray(imgs_arr, dtype=dtype)
+    Parameters
+    ----------
+    bm:
+        Backend manager. This argument is retained for compatibility with
+        the existing code. It should normally be the project's global
+        ``backend`` module or a compatible backend object.
+    imgs_arr:
+        Array with shape ``(n_images, height, width)``.
+    output_shape:
+        Target ``(height, width)``.
+    radius:
+        Gaussian blur sigma.
+    amount:
+        Sharpening strength.
+    dtype:
+        Working dtype.
+
+    Returns
+    -------
+    numpy.ndarray
+        Projection transferred back to CPU memory.
+    """
+    imgs_arr = bm.to_backend(imgs_arr)
 
     if imgs_arr.ndim != 3:
-        raise ValueError("imgs_arr must have shape (nt, nx, ny)")
+        raise ValueError(
+            "imgs_arr must have shape "
+            "(nt, nx, ny)"
+        )
 
     nt, nx, ny = imgs_arr.shape
+
+    if nt == 0:
+        raise ValueError(
+            "imgs_arr must contain at least one image."
+        )
+
     out_nx, out_ny = output_shape
 
-    zoom_factors = (out_nx / nx, out_ny / ny)
+    zoom_factors = (
+        out_nx / nx,
+        out_ny / ny,
+    )
 
     xp = bm.xp
 
+    accumulator = xp.zeros(
+        output_shape,
+        dtype=xp.float32,
+    )
 
-    imgs_gpu = xp.asarray(imgs_arr)
-
-    acc = xp.zeros(output_shape, dtype=xp.float32)
-
-    for i in range(nt):
-        img = imgs_gpu[i]
-
-        blurred = bm.gaussian_filter(img, sigma=radius)
-        sharp = img + amount * (img - blurred)
-
-        sharp_resized = bm.zoom(
-            sharp,
-            zoom_factors,
-            order=3,          # bicubic interpolation, prettier / MATLAB like
-            # mode="nearest",
+    for image in imgs_arr:
+        blurred = bm.gaussian_filter(
+            image,
+            sigma=radius,
         )
 
-        acc += sharp_resized
+        sharpened = (
+            image
+            + amount * (image - blurred)
+        )
 
-    projection = acc / nt
-    return xp.asnumpy(projection)
+        sharpened_resized = bm.zoom(
+            sharpened,
+            zoom_factors,
+            order=3,
+        )
 
-# ------------------------------------------------------------------
-# Footer parameter update
-# ------------------------------------------------------------------
-def update_from_footer(parameters, holofooter):
+        accumulator += sharpened_resized
+
+    projection = accumulator / nt
+
+    return bm.to_numpy(projection)
+
+
+# ============================================================================
+# Gaussian filtering / flat-field correction
+# ============================================================================
+
+
+def gaussian_flatfield(
+    array,
+    gaussian_width,
+    gaussian_filter_func=None,
+):
+    """Apply Gaussian flat-field correction.
+
+    Parameters
+    ----------
+    array:
+        Input array.
+    gaussian_width:
+        Gaussian filter width.
+    gaussian_filter_func:
+        Optional filtering function. If omitted, the active backend's
+        Gaussian filter is used.
+    """
+    if gaussian_filter_func is None:
+        gaussian_filter_func = backend.gaussian_filter
+
+    blurred = gaussian_filter_func(
+        array,
+        gaussian_width,
+    )
+
+    return array / blurred
+
+
+def temporal_gaussian_filter(
+    arr,
+    sigma,
+    axis=0,
+):
+    """Apply a 1D Gaussian filter along the temporal axis.
+
+    Parameters
+    ----------
+    arr:
+        Input array.
+    sigma:
+        Gaussian sigma.
+    axis:
+        Temporal axis. Defaults to 0.
+    """
+    if sigma == 0:
+        return arr
+
+    arr = backend.to_backend(
+        arr,
+    )
+
+    return backend.xp.asarray(
+        backend.gaussian_filter(
+            arr,
+            sigma=[
+                sigma if i == axis else 0
+                for i in range(arr.ndim)
+            ],
+        )
+    )
+
+
+# ============================================================================
+# Masks
+# ============================================================================
+
+
+@cache
+def elliptical_mask(
+    ny,
+    nx,
+    radius_frac,
+    xp = None
+):
+    """Create an elliptical boolean mask.
+
+    The result is generated using the currently selected backend.
+
+    Parameters
+    ----------
+    ny, nx:
+        Mask dimensions.
+    radius_frac:
+        Fraction of the image radius occupied by the ellipse.
+    xp: 
+        Optional module to use, default is backend.
+
+    Returns
+    -------
+    array
+        Boolean mask on the active backend.
+
+    Notes
+    -----
+    The result is cached. Changing the backend after a mask has been
+    generated can therefore return a mask created by the previous backend.
+
+    For long-running applications that switch backend dynamically, call:
+
+        elliptical_mask.cache_clear()
+    """
+
+    if xp is None:
+        xp = backend.xp
+        
+    radius_frac = max(
+        0.0,
+        min(1.0, float(radius_frac)),
+    )
+
+    if radius_frac == 0:
+        return xp.zeros(
+            (ny, nx),
+            dtype=bool,
+        )
+
+    a = (nx / 2.0) * radius_frac
+    b = (ny / 2.0) * radius_frac
+
+    y, x = xp.ogrid[
+        :ny,
+        :nx,
+    ]
+
+    cy = ny / 2.0
+    cx = nx / 2.0
+
+    mask = (
+        ((x - cx) / a) ** 2
+        + ((y - cy) / b) ** 2
+        <= 1.0
+    )
+
+    return mask
+
+
+# ============================================================================
+# Central padding / cropping
+# ============================================================================
+
+
+def pad_array_centrally(
+    arr,
+    new_shape,
+):
+    """Pad the final two dimensions centrally.
+
+    Parameters
+    ----------
+    arr:
+        Input array.
+    new_shape:
+        Integer or ``(height, width)`` tuple.
+
+    Returns
+    -------
+    array
+        Centrally padded array on the active backend.
+    """
+    arr = backend.to_backend(arr)
+
+    if isinstance(new_shape, int):
+        new_shape = (
+            new_shape,
+            new_shape,
+        )
+
+    if len(new_shape) != 2:
+        raise ValueError(
+            "new_shape must contain exactly two dimensions."
+        )
+
+    ny, nx = arr.shape[-2:]
+    new_ny, new_nx = new_shape
+
+    if new_ny < ny or new_nx < nx:
+        raise ValueError(
+            "new_shape must be >= current shape."
+        )
+
+    pad_y0 = (new_ny - ny) // 2
+    pad_y1 = new_ny - ny - pad_y0
+
+    pad_x0 = (new_nx - nx) // 2
+    pad_x1 = new_nx - nx - pad_x0
+
+    pad_width = [
+        (0, 0)
+        for _ in range(arr.ndim)
+    ]
+
+    pad_width[-2] = (
+        pad_y0,
+        pad_y1,
+    )
+
+    pad_width[-1] = (
+        pad_x0,
+        pad_x1,
+    )
+
+    return backend.xp.pad(
+        arr,
+        pad_width,
+        mode="constant",
+    )
+
+
+def crop_array_centrally(
+    arr,
+    target_shape,
+):
+    """Crop the final two dimensions centrally.
+
+    Parameters
+    ----------
+    arr:
+        Input array.
+    target_shape:
+        Integer or ``(height, width)`` tuple.
+
+    Returns
+    -------
+    array
+        Centrally cropped array.
+    """
+    if isinstance(target_shape, int):
+        target_shape = (
+            target_shape,
+            target_shape,
+        )
+
+    if len(target_shape) != 2:
+        raise ValueError(
+            "target_shape must contain exactly two dimensions."
+        )
+
+    ny, nx = arr.shape[-2:]
+    target_ny, target_nx = target_shape
+
+    if target_ny > ny or target_nx > nx:
+        raise ValueError(
+            "target_shape must be <= current shape."
+        )
+
+    crop_y0 = (ny - target_ny) // 2
+    crop_x0 = (nx - target_nx) // 2
+
+    slices = [
+        slice(None)
+        for _ in range(arr.ndim)
+    ]
+
+    slices[-2] = slice(
+        crop_y0,
+        crop_y0 + target_ny,
+    )
+
+    slices[-1] = slice(
+        crop_x0,
+        crop_x0 + target_nx,
+    )
+
+    return arr[
+        tuple(slices)
+    ]
+
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+
+def load_config(
+    config_path,
+):
+    """Load a YAML or JSON configuration.
+
+    Lists are recursively converted to tuples.
+
+    Parameters
+    ----------
+    config_path:
+        Path to a YAML/JSON configuration file or an existing dictionary.
+
+    Returns
+    -------
+    dict
+        Configuration dictionary with lists converted to tuples.
+    """
+    if isinstance(config_path, Mapping):
+        config = dict(config_path)
+
+    else:
+        config_path = Path(
+            config_path
+        )
+
+        with config_path.open(
+            "r",
+            encoding="utf-8",
+        ) as file:
+            suffix = config_path.suffix.lower()
+
+            if suffix in {".yaml", ".yml"}:
+                config = yaml.safe_load(file)
+
+            elif suffix == ".json":
+                config = json.load(file)
+
+            else:
+                raise ValueError(
+                    f"Unsupported configuration format: "
+                    f"{config_path.suffix!r}. "
+                    "Expected .json, .yaml or .yml."
+                )
+
+    def list_to_tuple(value):
+        if isinstance(value, dict):
+            return {
+                key: list_to_tuple(item)
+                for key, item in value.items()
+            }
+
+        if isinstance(value, list):
+            return tuple(
+                list_to_tuple(item)
+                for item in value
+            )
+
+        return value
+
+    return list_to_tuple(config)
+
+
+# ============================================================================
+# HoloVibes footer
+# ============================================================================
+
+
+def update_from_holo_footer(
+    parameters,
+    holofooter,
+):
+    """Update processing parameters using a HoloVibes footer.
+
+    Parameters whose value is ``"use_holovibes"`` are replaced with the
+    corresponding values found in the HoloVibes metadata.
+
+    The original function name is retained for compatibility.
+    """
+    if holofooter is None:
+        return parameters
+
     try:
-        if parameters.get("wavelength") == "use_holovibes" and holofooter is not None:
-            parameters["wavelength"] = holofooter["compute_settings"]["image_rendering"]["lambda"]
-        if parameters.get("spatial_propagation") == "use_holovibes" and holofooter is not None:
-            holovibes_transform = holofooter["compute_settings"]["image_rendering"][
+        compute_settings = holofooter[
+            "compute_settings"
+        ]
+
+        image_rendering = compute_settings[
+            "image_rendering"
+        ]
+
+        info = holofooter[
+            "info"
+        ]
+
+        # ------------------------------------------------------------------
+        # Wavelength
+        # ------------------------------------------------------------------
+
+        if parameters.get(
+            "wavelength"
+        ) == "use_holovibes":
+            parameters["wavelength"] = (
+                image_rendering["lambda"]
+            )
+
+        # ------------------------------------------------------------------
+        # Spatial propagation
+        # ------------------------------------------------------------------
+
+        if parameters.get(
+            "spatial_propagation"
+        ) == "use_holovibes":
+
+            holovibes_transform = image_rendering[
                 "space_transformation"
             ]
+
             if holovibes_transform == "FRESNELTR":
-                parameters["spatial_propagation"] = "Fresnel"
+                parameters[
+                    "spatial_propagation"
+                ] = "Fresnel"
+
             elif holovibes_transform == "ANGULARTR":
-                parameters["spatial_propagation"] = "AngularSpectrum"
+                parameters[
+                    "spatial_propagation"
+                ] = "AngularSpectrum"
+
             else:
                 print(
-                    "Couldn't parse spatial transform name in Holovibes footer "
-                    f"({holovibes_transform!r}); using Fresnel."
+                    "Couldn't parse spatial transform name "
+                    "in HoloVibes footer "
+                    f"({holovibes_transform!r}); "
+                    "using Fresnel."
                 )
-                parameters["spatial_propagation"] = "Fresnel"
-        if parameters.get("z") == "use_holovibes" and holofooter is not None:
-            parameters["z"] = holofooter["compute_settings"]["image_rendering"]["propagation_distance"]
-        if parameters.get("pixel_pitch") == "use_holovibes" and holofooter is not None:
-            parameters["pixel_pitch"] = (holofooter["info"]["pixel_pitch"]["y"] * 1e-6, holofooter["info"]["pixel_pitch"]["x"] * 1e-6)
-        if parameters.get("sampling_freq") == "use_holovibes" and holofooter is not None:
-            parameters["sampling_freq"] = holofooter["info"]["camera_fps"]
-        if parameters.get("high_freq") == "use_holovibes" and holofooter is not None:
-            parameters["high_freq"] = holofooter["info"]["camera_fps"]/2
-    except Exception as e:
-        print(f"Issue from holovibes footer: {e}")
+
+                parameters[
+                    "spatial_propagation"
+                ] = "Fresnel"
+
+        # ------------------------------------------------------------------
+        # Propagation distance
+        # ------------------------------------------------------------------
+
+        if parameters.get(
+            "z"
+        ) == "use_holovibes":
+            parameters["z"] = image_rendering[
+                "propagation_distance"
+            ]
+
+        # ------------------------------------------------------------------
+        # Pixel pitch
+        # ------------------------------------------------------------------
+
+        if parameters.get(
+            "pixel_pitch"
+        ) == "use_holovibes":
+
+            pixel_pitch = info[
+                "pixel_pitch"
+            ]
+
+            parameters["pixel_pitch"] = (
+                pixel_pitch["y"] * 1e-6,
+                pixel_pitch["x"] * 1e-6,
+            )
+
+        # ------------------------------------------------------------------
+        # Sampling frequency
+        # ------------------------------------------------------------------
+
+        if parameters.get(
+            "sampling_freq"
+        ) == "use_holovibes":
+
+            parameters[
+                "sampling_freq"
+            ] = info["camera_fps"]
+
+        # ------------------------------------------------------------------
+        # High frequency
+        # ------------------------------------------------------------------
+
+        if parameters.get(
+            "high_freq"
+        ) == "use_holovibes":
+
+            parameters[
+                "high_freq"
+            ] = info["camera_fps"] / 2
+
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        print(
+            f"Issue from HoloVibes footer: {exc}"
+        )
+
     return parameters
+
+def update_from_cine_metadata(
+        parameters,
+        metadata
+    ):
+
+    # ------------------------------------------------------------------
+    # Pixel pitch
+    # ------------------------------------------------------------------
+
+    if parameters.get(
+        "pixel_pitch"
+    ) == "use_metadata":
+
+        parameters["pixel_pitch"] = (
+            1/metadata.extra["biYPelsPerMeter"],
+            1/metadata.extra["biXPelsPerMeter"],
+        )
+
+    # ------------------------------------------------------------------
+    # Sampling frequency
+    # ------------------------------------------------------------------
+
+    if parameters.get(
+        "sampling_freq"
+    ) == "use_metadata":
+
+        parameters[
+            "sampling_freq"
+        ] = metadata.extra["FrameRate"]
+    # ------------------------------------------------------------------
+    # High frequency
+    # ------------------------------------------------------------------
+
+    if parameters.get(
+        "high_freq"
+    ) == "use_metadata":
+
+        parameters[
+            "high_freq"
+        ] = metadata.extra["FrameRate"] / 2
+    
+    return parameters
+    
+
+# ============================================================================
+# Registration
+# ============================================================================
+
+
+def subpixel_parabola(
+    vm,
+    v0,
+    vp,
+):
+    """Refine a peak location using a parabolic fit.
+
+    Returns the subpixel offset relative to ``v0``.
+    """
+    denominator = (
+        vm
+        - 2.0 * v0
+        + vp
+    )
+
+    if abs(float(denominator)) < 1e-12:
+        return 0.0
+
+    return (
+        0.5
+        * float(vm - vp)
+        / float(denominator)
+    )
+
+
+def signed_peak(
+    ky,
+    kx,
+    ny,
+    nx,
+):
+    """Convert FFT peak indices into signed shifts."""
+    if ky > ny // 2:
+        ky -= ny
+
+    if kx > nx // 2:
+        kx -= nx
+
+    return (
+        float(ky),
+        float(kx),
+    )

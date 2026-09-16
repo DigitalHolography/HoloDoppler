@@ -52,7 +52,7 @@ import pyvisa
 
 # --- Tektronix AFG3252C Configuration ---
 TIME_DELAY = 5.0  # seconds to wait before turning on after trigger
-TIME_OFF = 10.0  # seconds to keep output on before turning off
+TIME_OFF = 12.0  # seconds to keep output on before turning off
 
 
 # --- Initialize Tektronix Connection ---

@@ -13,14 +13,14 @@ batch_stride = 256
 
 reader = FileReaderFactory.create(FILE_PATH_ON_SSD)
 
-print(FILE_PATH_ON_SSD,  reader.file_header)
+print(FILE_PATH_ON_SSD,  reader.header)
 
 first_frame = 0
 end_frame = -1
 if end_frame <= 0:
     end_frame = (
-        reader.file_header.num_frames
-        if reader.ext == ".holo"
+        reader.header.num_frames
+        if reader.extension == ".holo"
         else reader.TotalImageCount
     )
 
@@ -39,14 +39,14 @@ if num_batch <= 0:
 
 reader = FileReaderFactory.create(FILE_PATH_ON_NAS)
 
-print(FILE_PATH_ON_NAS,  reader.file_header)
+print(FILE_PATH_ON_NAS,  reader.header)
 
 first_frame = 0
 end_frame = -1
 if end_frame <= 0:
     end_frame = (
-        reader.file_header.num_frames
-        if reader.ext == ".holo"
+        reader.header.num_frames
+        if reader.extension == ".holo"
         else reader.TotalImageCount
     )
 

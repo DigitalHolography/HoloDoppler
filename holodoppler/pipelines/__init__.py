@@ -1,10 +1,9 @@
 """Lazy registry for all bundled HoloDoppler processing pipelines."""
 
-from importlib import import_module
 import inspect
-from pathlib import Path
 import pkgutil
-
+from importlib import import_module
+from pathlib import Path
 
 pipelines = {}
 
@@ -26,6 +25,7 @@ def _lazy_function(module_name: str, function_name: str):
         parameters,
         *,
         progress_callback=None,
+        warning_callback=None,
         save_debug: bool = True,
     ):
         module = import_module(f".{module_name}", package=__name__)
@@ -34,6 +34,8 @@ def _lazy_function(module_name: str, function_name: str):
         kwargs = {}
         if "progress_callback" in signature.parameters:
             kwargs["progress_callback"] = progress_callback
+        if "warning_callback" in signature.parameters:
+            kwargs["warning_callback"] = warning_callback
         if "save_debug" in signature.parameters:
             kwargs["save_debug"] = save_debug
         return func(file_path, parameters, **kwargs)

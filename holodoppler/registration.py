@@ -1,6 +1,11 @@
 """
 Image registration using phase correlation for Translation, Rotation, and Scale (TRS).
 """
+import os
+import cv2
+import numpy as np
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor
 
 from .utils import elliptical_mask
 from .utils import signed_peak, subpixel_parabola
@@ -41,10 +46,6 @@ def register_laplacian(xp, fft, video, radius=None, gauge="minimal", ref_frame=0
     if gauge == "reference":
         return shifts_y - shifts_y[ref_frame], shifts_x - shifts_x[ref_frame]
     raise ValueError(f"gauge must be 'minimal' or 'reference', got {gauge!r}")
-
-
-
-
 
 
 def register_images_shifts(
@@ -93,6 +94,7 @@ def register_images_shifts(
         shift_y, shift_x = intensity_corr_subpixel(xp, fft, fixed_e, moving_e)
 
     return shift_y, shift_x
+
 
 def apply_register_images_shifts(
     xp,
@@ -153,20 +155,6 @@ def _preprocess(xp, img, mask=None, gaussian_sigma=None, gaussian_filter=None):
     mean = xp.sum(out * mask_f) / xp.maximum(xp.sum(mask_f), 1.0)
 
     return (out - mean) * mask_f
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 _EPS = 1e-12
@@ -395,7 +383,7 @@ def fourier_magnitude(xp, fft, img, dc_radius_factor=32):
     r = max(4, min(ny, nx) // dc_radius_factor)
 
     yy, xx = xp.ogrid[:ny, :nx]
-    dc_mask = (yy - cy) ** 2 + (xx - cx) ** 2 <= r ** 2
+    dc_mask = (yy - cy) ** 2 + (xx - cx) ** 2 <= r**2
 
     mag[dc_mask] = 0
     return mag
@@ -576,6 +564,7 @@ def apply_registration(
 
     return out
 
+
 def apply_registration3D(
     xp,
     fft,
@@ -602,6 +591,167 @@ def apply_registration3D(
         raise ValueError("reg must have 2 or 4 elements.")
 
     for i in range(img3D.shape[0]):
-        img3D[i] = apply_registration(xp,fft,ndi,img3D[i],reg,integer_translation=integer_translation,translation_method=translation_method)
+        img3D[i] = apply_registration(
+            xp,
+            fft,
+            ndi,
+            img3D[i],
+            reg,
+            integer_translation=integer_translation,
+            translation_method=translation_method,
+        )
 
     return img3D
+
+
+def _ecc_worker(args):
+
+    """Register one frame against the reference."""
+
+    i, frame, ref, mask, criteria, ecc_threshold = args
+
+    warp = np.eye(2, 3, dtype=np.float32)
+
+    try:
+        ecc, warp = cv2.findTransformECC(
+            ref, frame, warp, cv2.MOTION_AFFINE,
+            criteria, mask, gaussFiltSize=5
+        )
+
+        # Reject registration if NCC is too low
+        if ecc < ecc_threshold:
+            warp = np.eye(2, 3, dtype=np.float32)
+
+        a, b, tx = warp[0]
+        c, d, ty = warp[1]
+        theta = np.arctan2(c - b, a + d)
+        scale = np.sqrt(max(a * d - b * c, 0))
+        shear_x = b + scale * np.sin(theta)
+        shear_y = c - scale * np.sin(theta)
+
+        return i, [
+            i, tx, ty, np.degrees(theta), scale,
+            a, b, c, d, shear_x, shear_y, ecc
+        ]
+
+    except cv2.error:
+        return i, [i] + [np.nan] * 11
+
+
+def register_with_ecc(
+    video,
+    radius=0.9,
+    ecc_min_threshold=0.7,
+    iterations=300,
+    eps=1e-6,
+    n_workers=8,
+    progress_callback=None,
+):
+    """
+    video : float32 ndarray, shape (N, H, W)
+
+    Returns
+    -------
+    reg : ndarray, shape (N, 12)
+        [frame, tx, ty, rotation_deg, scale,
+         a, b, c, d, shear_x, shear_y, ecc]
+
+    n_workers is capped at half the available CPU cores.
+    progress_callback(completed, total, message) reports registered frames.
+    """
+
+    N, H, W = video.shape
+
+    # --------------------------------------------------------
+    # Safe worker count
+    # --------------------------------------------------------
+    max_workers = max(1, (os.cpu_count() or 1) // 2)
+    n_workers = min(n_workers, max_workers)
+
+    # --------------------------------------------------------
+    # Reference + mask
+    # --------------------------------------------------------
+    ref = video[0]
+
+    Y, X = np.indices((H, W), dtype=np.float32)
+
+    cx, cy = (W - 1) / 2, (H - 1) / 2
+    R = radius * min(H, W) / 2
+
+    mask = (
+        ((X - cx)**2 + (Y - cy)**2) <= R**2
+    ).astype(np.uint8) * 255
+
+    criteria = (
+        cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT,
+        iterations,
+        eps
+    )
+
+    # --------------------------------------------------------
+    # Frame 0
+    # --------------------------------------------------------
+    reg = np.full((N, 12), np.nan, dtype=np.float32)
+
+    reg[0] = [
+        0, 0, 0, 0, 1,
+        1, 0, 0, 1,
+        0, 0, 1
+    ]
+    if progress_callback is not None:
+        progress_callback(1, N, f"Frame 1/{N}")
+
+    # --------------------------------------------------------
+    # Parallel registration
+    # --------------------------------------------------------
+    jobs = (
+        (i, video[i], ref, mask, criteria, ecc_min_threshold)
+        for i in range(1, N)
+    )
+
+    with ProcessPoolExecutor(max_workers=n_workers) as executor:
+
+        for i, result in tqdm(
+            executor.map(_ecc_worker, jobs),
+            total=N - 1,
+            desc="ECC registration"
+        ):
+            reg[i] = result
+            if progress_callback is not None:
+                progress_callback(i + 1, N, f"Frame {i + 1}/{N}")
+
+    return reg
+
+
+def apply_ecc_registration(video, registration, background="zero"):
+    """
+    video: float32 numpy array, shape (N, H, W)
+    registration: output from register_with_ecc()
+
+    background:
+        "zero" -> zero outside image
+        "mean" -> mean of initial/reference image
+    """
+    N, H, W = video.shape
+    output = np.empty_like(video)
+
+    fill = 0 if background == "zero" else video[0].mean()
+
+    for i in range(N):
+        _, _, _, _, _, a, b, c, d, _, _, _ = registration[i]
+        tx, ty = registration[i, 1:3]
+
+        if np.any(np.isnan([a, b, c, d, tx, ty])):
+            output[i] = video[i]
+            continue
+
+        warp = np.array([[a, b, tx], [c, d, ty]], dtype=np.float32)
+
+        output[i] = cv2.warpAffine(
+            video[i], warp, (W, H),
+            flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=float(fill)
+        )
+
+    return output

@@ -90,16 +90,16 @@ class UI(BaseTk):
 
     def set_input_paths(self, paths: list[Path]) -> None:
         selection = expand_input_paths(paths)
-        self.input_paths = selection.paths
+        self.input_paths = list(dict.fromkeys([*self.input_paths, *selection.paths]))
         if self.input_paths:
-            self.store.set_last_input_dir(self.input_paths[0].parent)
+            self.store.set_last_input_dir(self.input_paths[-1].parent)
             self.store.remember_inputs(self.input_paths)
         self._sync_views()
 
         if selection.paths and selection.rejected:
-            self._set_status(f"Loaded {len(selection.paths)} input file(s); ignored {len(selection.rejected)} unsupported or missing path(s).")
+            self._set_status(f"Loaded {len(self.input_paths)} input file(s); ignored {len(selection.rejected)} unsupported or missing path(s).")
         elif selection.paths:
-            self._set_status(f"Loaded {len(selection.paths)} input file(s)")
+            self._set_status(f"Loaded {len(self.input_paths)} input file(s)")
         else:
             self._set_status("No supported input files found")
 
@@ -107,7 +107,7 @@ class UI(BaseTk):
         if self._busy():
             return
         if not self.input_paths:
-            messagebox.showinfo("Run", "Load a .holo, .cine, or .txt input list first.", parent=self)
+            messagebox.showinfo("Run", "Drop a folder or load a .holo, .cine, or .txt input list first.", parent=self)
             return
 
         try:
@@ -239,6 +239,7 @@ class UI(BaseTk):
 
     def _process_worker(self, paths: list[Path], parameters: dict[str, Any]) -> None:
         total_files = len(paths)
+        pulse_not_detected_paths: list[Path] = []
         self.events.put({"kind": "process_started", "total": total_files})
         try:
             for index, path in enumerate(paths, start=1):
@@ -258,16 +259,90 @@ class UI(BaseTk):
                         }
                     )
 
-                process(str(path), copy.deepcopy(parameters), progress_callback=on_progress)
-                self.events.put({"kind": "file_progress", "completed": 1, "total": 1, "message": "File complete"})
-                self.events.put({"kind": "batch_progress", "completed": index, "total": total_files})
+                pulse_not_detected = False
+
+                def on_warning(code: str, _message: str) -> None:
+                    nonlocal pulse_not_detected
+                    if code == "cardiac_pulse_not_detected":
+                        pulse_not_detected = True
+
+                results = process(
+                    str(path),
+                    copy.deepcopy(parameters),
+                    progress_callback=on_progress,
+                    warning_callback=on_warning,
+                )
+                if pulse_not_detected:
+                    pulse_not_detected_paths.append(path)
+                image = self._first_m0_frame(results)
+                del results
+                self.events.put({"kind": "processed_preview", "path": path, "image": image})
+                completion_message = (
+                    "File complete (pulse not detected)"
+                    if pulse_not_detected
+                    else "File complete"
+                )
+                self.events.put(
+                    {
+                        "kind": "file_progress",
+                        "completed": 1,
+                        "total": 1,
+                        "message": completion_message,
+                    }
+                )
+                self.events.put(
+                    {
+                        "kind": "batch_progress",
+                        "completed": index,
+                        "total": total_files,
+                        "pulse_not_detected": pulse_not_detected,
+                    }
+                )
 
             else:
-                self.events.put({"kind": "status", "message": "Processing complete"})
+                if pulse_not_detected_paths:
+                    self.events.put(
+                        {
+                            "kind": "pulse_detection_summary",
+                            "paths": pulse_not_detected_paths,
+                        }
+                    )
+                else:
+                    self.events.put({"kind": "status", "message": "Processing complete"})
         except Exception as exc:
             self.events.put({"kind": "error", "message": str(exc), "traceback": traceback.format_exc()})
         finally:
             self.events.put({"kind": "worker_done"})
+
+    @staticmethod
+    def _first_m0_frame(results: object) -> object | None:
+        if not isinstance(results, dict):
+            return None
+
+        import numpy as np
+
+        for name in (
+            "M0",
+            "moment_0",
+            "moment0",
+            "M0ff",
+            "moment_0_ff",
+            "moment0ff",
+            "Projection",
+            "Projectionff",
+        ):
+            if name not in results:
+                continue
+            frame = np.asarray(results[name])
+            if frame.size == 0:
+                continue
+            if np.iscomplexobj(frame):
+                frame = np.abs(frame)
+            while frame.ndim > 2:
+                frame = frame[0]
+            if frame.ndim == 2:
+                return frame.copy()
+        return None
 
     def _preview_worker(self, path: Path, parameters: dict[str, Any]) -> None:
         self.events.put({"kind": "preview_started", "path": path})
@@ -304,16 +379,20 @@ class UI(BaseTk):
         elif kind == "file_progress":
             completed = int(event["completed"])
             total = int(event["total"])
-            self.minimal.set_file_progress(completed, total)
-            self.advanced.set_file_progress(completed, total)
             message = str(event.get("message") or "")
-            if message:
-                self._set_status(message)
+            self.minimal.set_file_progress(completed, total, message)
+            self.advanced.set_file_progress(completed, total, message)
         elif kind == "batch_progress":
             completed = int(event["completed"])
             total = int(event["total"])
             self.minimal.set_batch_progress(completed, total)
+            if event.get("pulse_not_detected", False):
+                self.advanced.set_file_pulse_not_detected(completed)
+            else:
+                self.advanced.set_file_completed(completed)
             self.advanced.set_batch_progress(completed, total)
+        elif kind == "processed_preview":
+            self.advanced.show_processed_preview(event["path"], event.get("image"))
         elif kind == "preview_started":
             path = event["path"]
             self._set_status(f"Loading preview: {path.name}")
@@ -321,6 +400,19 @@ class UI(BaseTk):
             self.advanced.show_preview(event["path"], event["image"])
         elif kind == "status":
             self._set_status(str(event["message"]))
+        elif kind == "pulse_detection_summary":
+            paths = [Path(path) for path in event.get("paths", [])]
+            self._set_status(
+                f"Processing complete; pulse not detected in {len(paths)} file(s)"
+            )
+            file_list = "\n".join(f"- {path}" for path in paths)
+            messagebox.showwarning(
+                "Cardiac pulse not detected",
+                "No valid cardiac pulse was detected in:\n\n"
+                f"{file_list}\n\n"
+                "All other results, including long-time spectrograms, were saved.",
+                parent=self,
+            )
         elif kind == "error":
             log_path = self._write_error_log(str(event.get("traceback", "")))
             self._set_status("Error")
