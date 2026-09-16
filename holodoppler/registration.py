@@ -608,7 +608,7 @@ def _ecc_worker(args):
 
     """Register one frame against the reference."""
 
-    i, frame, ref, mask, criteria, ncc_threshold = args
+    i, frame, ref, mask, criteria, ecc_threshold = args
 
     warp = np.eye(2, 3, dtype=np.float32)
 
@@ -618,25 +618,8 @@ def _ecc_worker(args):
             criteria, mask, gaussFiltSize=5
         )
 
-        # Check NCC after registration
-        registered = cv2.warpAffine(
-            frame, warp, (frame.shape[1], frame.shape[0]),
-            flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP
-        )
-
-        ref_vals = ref[mask > 0].astype(np.float64)
-        reg_vals = registered[mask > 0].astype(np.float64)
-
-        ref_vals -= ref_vals.mean()
-        reg_vals -= reg_vals.mean()
-
-        denom = np.sqrt(
-            np.sum(ref_vals ** 2) * np.sum(reg_vals ** 2)
-        )
-        ncc = np.sum(ref_vals * reg_vals) / denom if denom > 0 else 0.0
-
         # Reject registration if NCC is too low
-        if ncc < ncc_threshold:
+        if ecc < ecc_threshold:
             warp = np.eye(2, 3, dtype=np.float32)
 
         a, b, tx = warp[0]
@@ -658,7 +641,7 @@ def _ecc_worker(args):
 def register_with_ecc(
     video,
     radius=0.9,
-    ncc_min_threshold=0.7,
+    ecc_min_threshold=0.7,
     iterations=300,
     eps=1e-6,
     n_workers=8,
@@ -722,7 +705,7 @@ def register_with_ecc(
     # Parallel registration
     # --------------------------------------------------------
     jobs = (
-        (i, video[i], ref, mask, criteria, ncc_min_threshold)
+        (i, video[i], ref, mask, criteria, ecc_min_threshold)
         for i in range(1, N)
     )
 

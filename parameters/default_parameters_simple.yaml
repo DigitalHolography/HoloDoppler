@@ -52,6 +52,7 @@ registration_sub_pixel: true
 # Advanced Image registration
 image_registration_with_ecc: true #uses the first computed frame as reference
 registration_ecc_radius: 0.8
+registration_ecc_min_threshold: 0.7
 
 # Corner compensation
 corner_compensation: false
