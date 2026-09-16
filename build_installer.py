@@ -87,6 +87,7 @@ FROZEN_HIDDEN_IMPORTS = (
     "matplotlib.backends.backend_agg",
     "matplotlib.backends.backend_pdf",
     "matplotlib.backends.backend_tkagg",
+    "scipy._external.array_api_compat.numpy.fft",
 )
 
 FROZEN_SUBMODULE_COLLECTIONS = (
