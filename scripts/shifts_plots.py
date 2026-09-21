@@ -77,7 +77,12 @@ SHACK_HARTMANN_ZERNIKE_FIT_MODES = [4, 5, 6]
 N_SUBAPS_Y=5
 N_SUBAPS_X=5
 
-PHASE_COLORMAP = "twilight"
+# ---------------------------------------------------------------------------
+# Plot configuration
+# ---------------------------------------------------------------------------
+# Smooth cyclic black-and-white phase colormap.
+# The phase still represents [0, 2*pi).
+PHASE_COLORMAP = "cyclic_gray"
 
 # Optical parameters.
 #
@@ -430,181 +435,120 @@ def plot_phase_with_slopes(
     Features
     --------
     - Phase wrapped to [0, 2*pi)
-    - Selectable twilight / grayscale colormap
+    - Smooth cyclic black/white phase colormap
     - Invalid phase pixels displayed as white
-    - Pixel axes
+    - No axes / ticks / labels
     - Black Shack-Hartmann slope arrows
     - No colorbar
     - No legend
     - No title
-    - No interpolation artifacts
     """
 
     Ny, Nx = phase.shape
     nsy, nsx = shifts_y.shape
 
-    # ------------------------------------------------------------------
-    # Validate colormap
-    # ------------------------------------------------------------------
+    fig, ax = plt.subplots(figsize=(8, 8))
 
-    if PHASE_COLORMAP not in ("twilight", "gray"):
-        raise ValueError(
-            "PHASE_COLORMAP must be either "
-            "'twilight' or 'gray'. "
-            f"Got: {PHASE_COLORMAP!r}"
-        )
-
-    # ------------------------------------------------------------------
-    # Create figure
-    # ------------------------------------------------------------------
-
-    fig, ax = plt.subplots(
-        figsize=(8, 8),
-    )
-
-    # ------------------------------------------------------------------
-    # Phase validity mask
-    # ------------------------------------------------------------------
-
-    phase = np.asarray(
-        phase,
-        dtype=np.float64,
-    )
+    # -----------------------------------------------------------------------
+    # Phase
+    # -----------------------------------------------------------------------
+    phase = np.asarray(phase, dtype=np.float64)
 
     valid_phase = np.isfinite(phase)
 
-    # ------------------------------------------------------------------
-    # Wrap phase to [0, 2*pi)
-    # ------------------------------------------------------------------
+    # Wrap phase into [0, 2*pi)
+    phase_wrapped = np.mod(phase, 2.0 * np.pi)
 
-    phase_wrapped = np.mod(
-        phase,
-        2.0 * np.pi,
-    )
-
-    # Explicitly mask invalid pixels.
-    #
-    # This is important because otherwise interpolation can produce
-    # thin artificial lines at the boundary between valid and invalid
-    # regions.
-
+    # Mask invalid values
     phase_masked = np.ma.array(
         phase_wrapped,
         mask=~valid_phase,
     )
 
-    # ------------------------------------------------------------------
-    # Colormap
-    # ------------------------------------------------------------------
+    # -----------------------------------------------------------------------
+    # Smooth cyclic black/white colormap
+    #
+    # 0       -> black
+    # pi/2    -> gray
+    # pi      -> white
+    # 3pi/2   -> gray
+    # 2pi     -> black
+    #
+    # This gives a smooth cyclic grayscale appearance similar to twilight.
+    # -----------------------------------------------------------------------
+    from matplotlib.colors import LinearSegmentedColormap
 
-    if PHASE_COLORMAP == "twilight":
-        cmap = plt.get_cmap("twilight").copy()
+    n_colors = 256
 
-    elif PHASE_COLORMAP == "gray":
-        cmap = plt.get_cmap("gray").copy()
+    phase_positions = np.linspace(0.0, 1.0, n_colors)
 
-    # Invalid pixels -> white
-    cmap.set_bad(
-        color="white",
+    # Smooth cosine-based cyclic grayscale:
+    #
+    # phase 0      -> black
+    # phase pi     -> white
+    # phase 2*pi   -> black
+    #
+    # cos() gives a smooth derivative at the wrap point.
+    gray_values = 0.5 * (
+        1.0 - np.cos(2.0 * np.pi * phase_positions)
     )
 
-    # ------------------------------------------------------------------
-    # Display phase
-    # ------------------------------------------------------------------
+    gray_colors = np.column_stack(
+        [
+            gray_values,
+            gray_values,
+            gray_values,
+            np.ones(n_colors),
+        ]
+    )
+
+    cyclic_gray = LinearSegmentedColormap.from_list(
+        "cyclic_gray",
+        gray_colors,
+    )
+
+    # Invalid / masked pixels are white
+    cyclic_gray.set_bad(color="white")
 
     ax.imshow(
         phase_masked,
         origin="lower",
-        extent=[
-            0,
-            Nx,
-            0,
-            Ny,
-        ],
-        cmap=cmap,
+        extent=[0, Nx, 0, Ny],
+        cmap=cyclic_gray,
         vmin=0.0,
         vmax=2.0 * np.pi,
         interpolation="nearest",
         aspect="equal",
     )
 
-    # ------------------------------------------------------------------
-    # Shack-Hartmann sub-aperture centers
-    # ------------------------------------------------------------------
+    # -----------------------------------------------------------------------
+    # Shack-Hartmann slope arrows
+    # -----------------------------------------------------------------------
+    x_centers = (np.arange(nsx) + 0.5) * Nx / nsx
+    y_centers = (np.arange(nsy) + 0.5) * Ny / nsy
 
-    x_centers = (
-        np.arange(nsx) + 0.5
-    ) * Nx / nsx
+    X, Y = np.meshgrid(x_centers, y_centers)
 
-    y_centers = (
-        np.arange(nsy) + 0.5
-    ) * Ny / nsy
+    U = np.asarray(shifts_x, dtype=np.float64)
+    V = np.asarray(shifts_y, dtype=np.float64)
 
-    X, Y = np.meshgrid(
-        x_centers,
-        y_centers,
-    )
+    valid_slopes = np.isfinite(U) & np.isfinite(V)
 
-    U = np.asarray(
-        shifts_x,
-        dtype=np.float64,
-    )
-
-    V = np.asarray(
-        shifts_y,
-        dtype=np.float64,
-    )
-
-    # ------------------------------------------------------------------
-    # Only draw valid slope vectors
-    # ------------------------------------------------------------------
-
-    valid_slopes = (
-        np.isfinite(U)
-        & np.isfinite(V)
-    )
-
-    # ------------------------------------------------------------------
-    # Normalize arrow lengths for visualization
-    # ------------------------------------------------------------------
-
-    magnitude = np.sqrt(
-        U**2 + V**2
-    )
-
+    magnitude = np.sqrt(U**2 + V**2)
     finite_mag = magnitude[valid_slopes]
 
     if finite_mag.size:
-        reference = np.nanpercentile(
-            finite_mag,
-            95,
-        )
+        reference = np.nanpercentile(finite_mag, 95)
 
-        if (
-            not np.isfinite(reference)
-            or reference <= 0
-        ):
+        if not np.isfinite(reference) or reference <= 0:
             reference = 1.0
-
     else:
         reference = 1.0
 
-    # Arrow size in image pixels.
-    arrow_scale = Nx / (
-        max(nsx, nsy) * 2.5
-    )
+    arrow_scale = Nx / (max(nsx, nsy) * 2.5)
 
-    U_plot = (
-        U / reference
-    ) * arrow_scale
-
-    V_plot = (
-        V / reference
-    ) * arrow_scale
-
-    # ------------------------------------------------------------------
-    # Wavefront slope arrows
-    # ------------------------------------------------------------------
+    U_plot = (U / reference) * arrow_scale
+    V_plot = (V / reference) * arrow_scale
 
     ax.quiver(
         X[valid_slopes],
@@ -621,61 +565,25 @@ def plot_phase_with_slopes(
         headaxislength=4.0,
     )
 
-    # ------------------------------------------------------------------
-    # Pixel axes
-    # ------------------------------------------------------------------
+    # -----------------------------------------------------------------------
+    # Remove axes completely
+    # -----------------------------------------------------------------------
+    ax.set_axis_off()
 
-    ax.set_xlim(
-        0,
-        Nx,
-    )
+    ax.set_xlim(0, Nx)
+    ax.set_ylim(0, Ny)
+    ax.margins(0)
 
-    ax.set_ylim(
-        0,
-        Ny,
-    )
-
-    ax.set_xlabel(
-        "X [pixels]",
-        fontsize=12,
-    )
-
-    ax.set_ylabel(
-        "Y [pixels]",
-        fontsize=12,
-    )
-
-    ax.tick_params(
-        axis="both",
-        which="major",
-        labelsize=10,
-    )
-
-    # ------------------------------------------------------------------
-    # Explicitly remove title / legend
-    # ------------------------------------------------------------------
-
-    ax.set_title("")
-
-    legend = ax.get_legend()
-
-    if legend is not None:
-        legend.remove()
-
-    # ------------------------------------------------------------------
+    # -----------------------------------------------------------------------
     # Save
-    # ------------------------------------------------------------------
-
-    output_png.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    # -----------------------------------------------------------------------
+    output_png.parent.mkdir(parents=True, exist_ok=True)
 
     fig.savefig(
         output_png,
         dpi=300,
         bbox_inches="tight",
-        pad_inches=0.05,
+        pad_inches=0,
         facecolor="white",
     )
 
@@ -683,7 +591,7 @@ def plot_phase_with_slopes(
         output_eps,
         format="eps",
         bbox_inches="tight",
-        pad_inches=0.05,
+        pad_inches=0,
         facecolor="white",
     )
 
@@ -691,7 +599,6 @@ def plot_phase_with_slopes(
 
     print(f"Saved PNG: {output_png}")
     print(f"Saved EPS: {output_eps}")
-    print(f"Phase colormap: {PHASE_COLORMAP}")
 
 
 
