@@ -40,5 +40,10 @@ holodoppler = [
   "ui/defaults/*",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
 [project.scripts]
 holodoppler = "holodoppler.__main__:main"

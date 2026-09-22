@@ -319,92 +319,79 @@ def prepare_ffmpeg_frames(
 
 def find_ffmpeg() -> str:
     """
-    Find FFmpeg, downloading it with ffmpeg-downloader if necessary.
+    Return an absolute path to an FFmpeg executable.
 
-    Search order:
-        1. FFmpeg already available on PATH.
-        2. FFmpeg already installed by ffmpeg-downloader.
-        3. Download FFmpeg using ffmpeg-downloader.
+    Order of preference:
+        1. FFMPEG_BINARY environment variable, if set and valid.
+        2. imageio-ffmpeg's bundled binary (always present once the
+           package is installed; the wheel ships the executable).
+        3. FFmpeg on PATH (last resort for exotic environments).
 
-    Returns:
-        Absolute path to ffmpeg executable.
+    Never raises for the normal cases; only raises if *every* source is
+    unavailable AND auto-install is disabled.
     """
-    # ---------------------------------------------------------
-    # 1. Check normal PATH first
-    # ---------------------------------------------------------
-    executable = shutil.which("ffmpeg")
+    # 1. Explicit override
+    env_binary = os.environ.get("FFMPEG_BINARY")
+    if env_binary:
+        p = Path(env_binary).expanduser().resolve()
+        if p.is_file():
+            return str(p)
 
-    if executable is not None:
-        path = Path(executable).resolve()
+    # 2. imageio-ffmpeg (preferred: bundled binary, no PATH needed)
+    exe = _ffmpeg_from_imageio()
+    if exe is not None:
+        return exe
 
-        if path.is_file():
-            return str(path)
+    # 3. Last resort: whatever is on PATH
+    exe = shutil.which("ffmpeg")
+    if exe is not None:
+        p = Path(exe).resolve()
+        if p.is_file():
+            return str(p)
 
-    # ---------------------------------------------------------
-    # 2. Check ffmpeg-downloader installation
-    # ---------------------------------------------------------
-    try:
-        import ffmpeg_downloader as ffdl
-    except ImportError as exc:
-        raise RuntimeError(
-            "FFmpeg was not found and ffmpeg-downloader is not installed.\n"
-            "Install it with:\n"
-            "    pip install ffmpeg-downloader"
-        ) from exc
+    # 4. Optional auto-install of imageio-ffmpeg
+    if os.environ.get("ALLOW_FFMPEG_AUTOINSTALL", "1") == "1":
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--quiet",
+                 "imageio-ffmpeg"],
+                check=True,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "No FFmpeg available and auto-install of imageio-ffmpeg "
+                f"failed: {exc}"
+            ) from exc
 
-    ffmpeg_path = getattr(ffdl, "ffmpeg_path", None)
+        exe = _ffmpeg_from_imageio()
+        if exe is not None:
+            return exe
 
-    if ffmpeg_path:
-        path = Path(ffmpeg_path)
-
-        if path.is_file():
-            return str(path.resolve())
-
-    # ---------------------------------------------------------
-    # 3. Download FFmpeg
-    # ---------------------------------------------------------
-    print("FFmpeg not found. Downloading FFmpeg...")
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "ffmpeg_downloader",
-            "install",
-        ],
-        check=False,
+    raise RuntimeError(
+        "Could not locate or install FFmpeg.\n"
+        "Install it with:\n"
+        "    pip install imageio-ffmpeg\n"
+        "or set FFMPEG_BINARY to an existing executable."
     )
 
-    if result.returncode != 0:
-        raise RuntimeError(
-            "ffmpeg-downloader failed to install FFmpeg "
-            f"(exit code {result.returncode})."
-        )
 
-    # ---------------------------------------------------------
-    # 4. Read the path provided by ffmpeg-downloader
-    # ---------------------------------------------------------
-    import importlib
+def _ffmpeg_from_imageio() -> str | None:
+    """Return the imageio-ffmpeg bundled binary path, or None."""
+    try:
+        import imageio_ffmpeg
+    except ImportError:
+        return None
 
-    ffdl = importlib.reload(ffdl)
+    try:
+        exe = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
 
-    ffmpeg_path = getattr(ffdl, "ffmpeg_path", None)
+    if not exe:
+        return None
 
-    if not ffmpeg_path:
-        raise RuntimeError(
-            "FFmpeg was installed, but ffmpeg-downloader did not "
-            "provide an ffmpeg_path."
-        )
-
-    path = Path(ffmpeg_path).resolve()
-
-    if not path.is_file():
-        raise RuntimeError(
-            f"FFmpeg was installed but the executable does not exist:\n"
-            f"{path}"
-        )
-
-    return str(path)
+    p = Path(exe).resolve()
+    return str(p) if p.is_file() else None
 
 
 def save_video(

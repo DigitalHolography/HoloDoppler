@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -10,6 +11,7 @@ import sys
 import textwrap
 import tomllib
 from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, distribution as _distribution
 from pathlib import Path
 
 
@@ -55,6 +57,9 @@ PAYLOAD_EXTRA_FILES = (
     VERSION_FILE,
 )
 
+# --- Metadata ---------------------------------------------------------------
+# Base names. The build will resolve each to whichever of these is actually
+# installed: <name>, <name>-cu12, <name>-cu13. Missing entries are skipped.
 FROZEN_METADATA_DISTRIBUTIONS = (
     "holodoppler",
     "imageio",
@@ -67,7 +72,6 @@ FROZEN_METADATA_DISTRIBUTIONS = (
     "pillow",
     "tkinterdnd2",
     "sv-ttk",
-    "cinereader",
     "tqdm",
     "PyYAML",
     "cupy-cuda13x",
@@ -81,6 +85,8 @@ FROZEN_METADATA_DISTRIBUTIONS = (
     "nvidia-cusparse",
     "nvidia-nvjitlink",
 )
+
+_METADATA_SUFFIXES = ("", "-cu13", "-cu12", "-cu11")
 
 FROZEN_HIDDEN_IMPORTS = (
     "graphlib",
@@ -100,7 +106,6 @@ FROZEN_SUBMODULE_COLLECTIONS = (
     "imageio",
     "imageio_ffmpeg",
     "cv2",
-    "cinereader",
     "tkinterdnd2",
     "sv_ttk",
     "PIL",
@@ -454,6 +459,37 @@ def _write_pyinstaller_entrypoint() -> Path:
     return GENERATED_ENTRYPOINT
 
 
+# --- Tolerant helpers for PyInstaller args ---------------------------------
+
+def _package_is_importable(name: str) -> bool:
+    """Return True if the module name can be located by the import system."""
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _resolve_installed_distribution(base_name: str) -> str | None:
+    """Return the actual installed distribution name for base_name.
+
+    Tries the plain name first, then common CUDA-suffixed variants.
+    """
+    seen: set[str] = set()
+    for suffix in _METADATA_SUFFIXES:
+        candidate = f"{base_name}{suffix}"
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            _distribution(candidate)
+            return candidate
+        except PackageNotFoundError:
+            continue
+        except Exception:
+            continue
+    return None
+
+
 def _run_pyinstaller(console: bool) -> None:
     if not PACKAGE_DIR.exists():
         raise SystemExit(f"Package source directory not found: {PACKAGE_DIR}")
@@ -480,27 +516,50 @@ def _run_pyinstaller(console: bool) -> None:
         PROJECT_ROOT,
         "--icon",
         icon_file,
-        "--runtime-hook",
-        CUDA_RUNTIME_HOOK,
     ]
+
+    if CUDA_RUNTIME_HOOK.is_file():
+        command.extend(["--runtime-hook", CUDA_RUNTIME_HOOK])
+    else:
+        print(f"[build] Runtime hook not found, skipping: {CUDA_RUNTIME_HOOK}")
 
     for hidden_import in FROZEN_HIDDEN_IMPORTS:
         command.extend(["--hidden-import", hidden_import])
 
+    # Only collect submodules/data/binaries for packages that are importable,
+    # so a missing optional dep doesn't abort the whole build.
     for package in FROZEN_SUBMODULE_COLLECTIONS:
-        command.extend(["--collect-submodules", package])
+        if _package_is_importable(package):
+            command.extend(["--collect-submodules", package])
+        else:
+            print(f"[build] Skipping --collect-submodules {package} (not importable)")
 
     for package in FROZEN_DATA_COLLECTIONS:
-        command.extend(["--collect-data", package])
+        if _package_is_importable(package):
+            command.extend(["--collect-data", package])
+        else:
+            print(f"[build] Skipping --collect-data {package} (not importable)")
 
     for package in FROZEN_BINARY_COLLECTIONS:
-        command.extend(["--collect-binaries", package])
+        if _package_is_importable(package):
+            command.extend(["--collect-binaries", package])
+        else:
+            print(f"[build] Skipping --collect-binaries {package} (not importable)")
 
     for package in FROZEN_ALL_COLLECTIONS:
-        command.extend(["--collect-all", package])
+        if _package_is_importable(package):
+            command.extend(["--collect-all", package])
+        else:
+            print(f"[build] Skipping --collect-all {package} (not importable)")
 
-    for distribution in FROZEN_METADATA_DISTRIBUTIONS:
-        command.extend(["--copy-metadata", distribution])
+    for base_name in FROZEN_METADATA_DISTRIBUTIONS:
+        resolved = _resolve_installed_distribution(base_name)
+        if resolved is None:
+            print(f"[build] Skipping --copy-metadata {base_name} (not installed)")
+            continue
+        if resolved != base_name:
+            print(f"[build] Using metadata distribution: {resolved} (for {base_name})")
+        command.extend(["--copy-metadata", resolved])
 
     if console:
         command.append("--console")
