@@ -52,6 +52,8 @@ def legacy_app_settings_dir() -> Path:
 
 
 def repository_parameters_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "parameters"
     return project_root() / "parameters"
 
 
