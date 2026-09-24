@@ -128,6 +128,8 @@ import matplotlib.pyplot as plt
 
 
 
+
+
 # ============================================================
 
 # Configuration
@@ -148,6 +150,8 @@ FIGURE_HEIGHT = FIGURE_WIDTH / GOLDEN_RATIO
 
 
 
+
+
 # ============================================================
 
 # Y-axis limits
@@ -162,7 +166,7 @@ YLIM_SCALE = None
 
 YLIM_ROTATION = None
 
-YLIM_TRANSLATION = None
+YLIM_TRANSLATION = (0.99, 1.050)
 
 YLIM_DOPPLER = None
 
@@ -176,11 +180,13 @@ YLIM_SCALE = (0.99, 1.050)
 
 YLIM_ROTATION = (-1.0, 1.0)
 
-YLIM_TRANSLATION = None
+YLIM_TRANSLATION = (-20,20)
 
 # YLIM_DOPPLER = (0.8, 1.4)
 
 # YLIM_ZERNIKE = (-0.9, 0.3)
+
+
 
 
 
@@ -208,7 +214,7 @@ YLIM_TRANSLATION = None
 
 #   ...
 
-SWITCH_DELAY = 1.0
+SWITCH_DELAY = 2.0
 
 # Grayscale intensity:
 
@@ -222,6 +228,8 @@ BACKGROUND_ALPHA = 1.0
 
 
 
+
+
 # ============================================================
 
 # Doppler disk
@@ -229,6 +237,8 @@ BACKGROUND_ALPHA = 1.0
 # ============================================================
 
 DISK_RADIUS_FRACTION = 0.90
+
+
 
 
 
@@ -243,8 +253,12 @@ COLOR_BLACK = "0.0"
 COLOR_MEDIUM = "0.50"
 
 COLOR_LIGHT = "0.70"
+
 COLOR_SECONDARY = "0.65"
+
 COLOR_SECONDARY_LIGHT = "0.75"
+
+
 
 
 
@@ -255,11 +269,14 @@ COLOR_SECONDARY_LIGHT = "0.75"
 # ============================================================
 
 SCATTER_SIZE = 3
+
 SCATTER_SIZE_SECONDARY = 20
 
 SCATTER_ALPHA = 0.75
 
 LINE_WIDTH = 1.5
+
+
 
 
 
@@ -313,6 +330,8 @@ def configure_matplotlib(font_size):
 
 
 
+
+
 # ============================================================
 
 # File discovery
@@ -337,33 +356,54 @@ def find_first_file(folder, extension):
 
 
 
+
+
 def find_secondary_registration_file(folder, primary_path):
+
     """
+
     Find the optional secondary registration CSV.
 
     Prefer the matching <primary_stem>_2.csv. If the primary file
+
     ends in _1, use the corresponding <stem_without__1>_2.csv.
+
     As a fallback, use the first *_2.csv in the folder.
+
     """
+
     primary_path = Path(primary_path)
 
     if primary_path.stem.endswith("_1"):
+
         candidate = primary_path.with_name(
+
             primary_path.stem[:-2] + "_2" + primary_path.suffix
+
         )
+
     else:
+
         candidate = primary_path.with_name(
+
             primary_path.stem + "_2" + primary_path.suffix
+
         )
 
     if candidate.exists():
+
         return candidate
 
     candidates = sorted(folder.glob("*_2.csv"))
+
     if candidates:
+
         return candidates[0]
 
     return None
+
+
+
 
 
 
@@ -472,6 +512,8 @@ def load_json_parameters(json_path):
 
 
 
+
+
 # ============================================================
 
 # Time calculation
@@ -499,6 +541,8 @@ def calculate_time(nt, dt):
         dtype=float,
 
     ) * dt
+
+
 
 
 
@@ -606,6 +650,8 @@ def load_registration_csv(csv_path):
 
 
 
+
+
 # ============================================================
 
 # HDF5 loading
@@ -659,6 +705,8 @@ def load_hdf5_data(h5_path):
         ][:]
 
     return band_0_15000_18300, zernike
+
+
 
 
 
@@ -720,6 +768,8 @@ def make_centered_disk(
 
 
 
+
+
 def compute_doppler_signal(
 
     band_0_15000_18300,
@@ -772,6 +822,8 @@ def compute_doppler_signal(
 
 
 
+
+
 # ============================================================
 
 # Figure creation
@@ -797,6 +849,8 @@ def create_figure():
         )
 
     )
+
+
 
 
 
@@ -938,6 +992,8 @@ def add_switch_background(
 
 
 
+
+
 # ============================================================
 
 # Common axis formatting
@@ -1026,6 +1082,8 @@ def configure_axes(
 
 
 
+
+
 # ============================================================
 
 # Save EPS + PNG
@@ -1087,6 +1145,8 @@ def save_figure(
     print(f"Saved: {eps_path}")
 
     print(f"Saved: {png_path}")
+
+
 
 
 
@@ -1277,6 +1337,7 @@ def generate_plots(
     )
 
 
+
     # Optional second registration CSV.
 
     # It is plotted behind the primary registration in a slightly lighter gray.
@@ -1444,6 +1505,7 @@ def generate_plots(
         )
 
 
+
     nt = n_moment0
 
     # --------------------------------------------------------
@@ -1603,6 +1665,7 @@ def generate_plots(
         )
 
 
+
     ax.scatter(
 
         time,
@@ -1678,6 +1741,7 @@ def generate_plots(
         )
 
 
+
     ax.scatter(
 
         time,
@@ -1732,97 +1796,97 @@ def generate_plots(
 
     fig, ax = create_figure()
 
+    # Primary registration (_1): black, small dots.
+    # Secondary registration (_2): gray, large dots.
     if registration_2 is not None:
-
         ax.scatter(
-
             time,
-
             translation_x_2,
-
             s=SCATTER_SIZE_SECONDARY,
-
             color=COLOR_SECONDARY,
-
             alpha=SCATTER_ALPHA,
-
             edgecolors="none",
-
-
             zorder=1.5,
-
         )
-
 
         ax.scatter(
-
             time,
-
             translation_y_2,
-
             s=SCATTER_SIZE_SECONDARY,
-
-            color=COLOR_SECONDARY_LIGHT,
-
+            color=COLOR_SECONDARY,
             alpha=SCATTER_ALPHA,
-
             edgecolors="none",
-
-
             zorder=1.5,
-
         )
 
-
     ax.scatter(
-
         time,
-
         translation_x,
-
         s=SCATTER_SIZE,
-
         color=COLOR_BLACK,
-
         alpha=SCATTER_ALPHA,
-
         edgecolors="none",
-
-        label=r"$x$",
-
-            zorder=2,
-
+        zorder=2,
     )
 
     ax.scatter(
-
         time,
-
         translation_y,
-
         s=SCATTER_SIZE,
-
-        color=COLOR_MEDIUM,
-
+        color=COLOR_BLACK,
         alpha=SCATTER_ALPHA,
-
         edgecolors="none",
-
-        label=r"$y$",
-
-            zorder=2,
-
+        zorder=2,
     )
+
+    # Small arrows identify the primary tx and ty signals.
+    if len(time) > 0:
+        idx_x = int(0.70 * (len(time) - 1))
+        idx_y = int(0.30 * (len(time) - 1))
+
+        ax.annotate(
+            r"$x$",
+            xy=(time[idx_x], translation_x[idx_x]),
+            xytext=(8, 10),
+            textcoords="offset points",
+            ha="left",
+            va="bottom",
+            fontsize=FONT_SIZE * 0.9,
+            color=COLOR_BLACK,
+            arrowprops=dict(
+                arrowstyle="->",
+                color=COLOR_BLACK,
+                linewidth=0.8,
+                shrinkA=2,
+                shrinkB=2,
+                mutation_scale=7,
+            ),
+            zorder=4,
+        )
+
+        ax.annotate(
+            r"$y$",
+            xy=(time[idx_y], translation_y[idx_y]),
+            xytext=(8, -12),
+            textcoords="offset points",
+            ha="left",
+            va="top",
+            fontsize=FONT_SIZE * 0.9,
+            color=COLOR_BLACK,
+            arrowprops=dict(
+                arrowstyle="->",
+                color=COLOR_BLACK,
+                linewidth=0.8,
+                shrinkA=2,
+                shrinkB=2,
+                mutation_scale=7,
+            ),
+            zorder=4,
+        )
 
     ax.set_xlabel("Time (s)")
 
     ax.set_ylabel("Translation (px)")
-
-    ax.legend(
-
-        frameon=False
-
-    )
 
     configure_axes(
 
@@ -2010,6 +2074,8 @@ def generate_plots(
 
 
 
+
+
 # ============================================================
 
 # Command-line interface
@@ -2133,6 +2199,8 @@ def main():
         switch_delay=args.switch_delay,
 
     )
+
+
 
 
 
