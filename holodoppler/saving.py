@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 import shutil
 import csv
 import json
@@ -16,7 +15,6 @@ import h5py
 import numpy as np
 import yaml
 from PIL import Image
-import ffmpeg_downloader as ffdl
 
 from holodoppler.get_version import get_version
 from holodoppler.utils import resize_frames
@@ -319,92 +317,46 @@ def prepare_ffmpeg_frames(
 
 def find_ffmpeg() -> str:
     """
-    Find FFmpeg, downloading it with ffmpeg-downloader if necessary.
+    Return the FFmpeg executable provided by imageio-ffmpeg.
 
-    Search order:
-        1. FFmpeg already available on PATH.
-        2. FFmpeg already installed by ffmpeg-downloader.
-        3. Download FFmpeg using ffmpeg-downloader.
+    imageio-ffmpeg ships a platform-specific FFmpeg binary with the Python
+    package.  PyInstaller includes that binary in the Windows installer, so
+    resolving it through imageio-ffmpeg works both from source and from the
+    installed application without a second download.
 
     Returns:
         Absolute path to ffmpeg executable.
     """
-    # ---------------------------------------------------------
-    # 1. Check normal PATH first
-    # ---------------------------------------------------------
-    executable = shutil.which("ffmpeg")
-
-    if executable is not None:
-        path = Path(executable).resolve()
-
-        if path.is_file():
-            return str(path)
-
-    # ---------------------------------------------------------
-    # 2. Check ffmpeg-downloader installation
-    # ---------------------------------------------------------
     try:
-        import ffmpeg_downloader as ffdl
+        import imageio_ffmpeg
     except ImportError as exc:
         raise RuntimeError(
-            "FFmpeg was not found and ffmpeg-downloader is not installed.\n"
-            "Install it with:\n"
-            "    pip install ffmpeg-downloader"
+            "FFmpeg support is unavailable because imageio-ffmpeg is not "
+            "installed. Reinstall HoloDoppler to restore the bundled FFmpeg."
         ) from exc
 
-    ffmpeg_path = getattr(ffdl, "ffmpeg_path", None)
+    try:
+        executable = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception as exc:
+        raise RuntimeError(
+            "The FFmpeg executable bundled with HoloDoppler could not be "
+            "located. Reinstall HoloDoppler to restore it."
+        ) from exc
 
-    if ffmpeg_path:
-        path = Path(ffmpeg_path)
+    path = Path(executable).expanduser()
+    if path.is_file():
+        return str(path.resolve())
 
-        if path.is_file():
-            return str(path.resolve())
+    # get_ffmpeg_exe() can legitimately return a command name for an
+    # environment override or a system installation.
+    resolved = shutil.which(executable)
+    if resolved is not None:
+        return str(Path(resolved).resolve())
 
-    # ---------------------------------------------------------
-    # 3. Download FFmpeg
-    # ---------------------------------------------------------
-    print("FFmpeg not found. Downloading FFmpeg...")
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "ffmpeg_downloader",
-            "install",
-        ],
-        check=False,
+    raise RuntimeError(
+        "imageio-ffmpeg selected an FFmpeg executable that does not exist: "
+        f"{executable}"
     )
-
-    if result.returncode != 0:
-        raise RuntimeError(
-            "ffmpeg-downloader failed to install FFmpeg "
-            f"(exit code {result.returncode})."
-        )
-
-    # ---------------------------------------------------------
-    # 4. Read the path provided by ffmpeg-downloader
-    # ---------------------------------------------------------
-    import importlib
-
-    ffdl = importlib.reload(ffdl)
-
-    ffmpeg_path = getattr(ffdl, "ffmpeg_path", None)
-
-    if not ffmpeg_path:
-        raise RuntimeError(
-            "FFmpeg was installed, but ffmpeg-downloader did not "
-            "provide an ffmpeg_path."
-        )
-
-    path = Path(ffmpeg_path).resolve()
-
-    if not path.is_file():
-        raise RuntimeError(
-            f"FFmpeg was installed but the executable does not exist:\n"
-            f"{path}"
-        )
-
-    return str(path)
 
 
 def save_video(

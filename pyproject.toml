@@ -22,7 +22,6 @@ dependencies = [
   "pyyaml",
   "sv-ttk>=2.6.1",
   "pillow>=11.0",
-  "ffmpeg-downloader",
 ]
 
 [project.optional-dependencies]
