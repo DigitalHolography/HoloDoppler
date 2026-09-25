@@ -31,14 +31,22 @@ DEFAULT_WINDOW_MINSIZES = {
 class SettingsStore:
     def __init__(self) -> None:
         self.base_dir = app_settings_dir()
-        self.parameters_dir = self.base_dir / "parameters"
+        repository_dir = repository_parameters_dir()
+        managed_parameters_dir = self.base_dir / "parameters"
+        self.parameters_dir = repository_dir if repository_dir.is_dir() else managed_parameters_dir
+        self._managed_parameters_dir = managed_parameters_dir
         self.settings_path = self.base_dir / APP_SETTINGS_NAME
-        self.loaded_parameters_path = self.parameters_dir / LOADED_PARAMETERS_NAME
+        self.loaded_parameters_path = self.base_dir / LOADED_PARAMETERS_NAME
 
     def initialize(self) -> None:
         self._migrate_legacy_current_version()
+        self.base_dir.mkdir(parents=True, exist_ok=True)
         self.parameters_dir.mkdir(parents=True, exist_ok=True)
-        self._seed_default_parameters()
+        self._migrate_loaded_parameters()
+        if self._uses_managed_parameters_dir():
+            self._seed_default_parameters()
+        else:
+            self._migrate_managed_parameter_files()
         self._write_version_file()
 
         state = self.load_state()
@@ -100,13 +108,13 @@ class SettingsStore:
         return _with_spectral_cube_defaults(_read_parameter_object(path))
 
     def select_parameters(self, path: Path) -> Path:
-        parameter_path = self._copy_into_appdata(path) if not self._is_in_parameters_dir(path) else path
+        parameter_path = self._copy_into_parameters_dir(path) if not self._is_in_parameters_dir(path) else path
         self.load_parameters(parameter_path)
         self._update_selected_parameter(parameter_path)
         return parameter_path
 
     def import_parameters(self, path: Path) -> Path:
-        imported_path = self._copy_into_appdata(path)
+        imported_path = self._copy_into_parameters_dir(path)
         return self.select_parameters(imported_path)
 
     def save_current_parameters(self, data: dict[str, Any]) -> Path:
@@ -117,7 +125,8 @@ class SettingsStore:
         return target_path
 
     def save_parameters_as(self, name: str, data: dict[str, Any]) -> Path:
-        safe_name = _safe_parameter_filename(name)
+        selected_suffix = self.selected_parameters_path().suffix.lower()
+        safe_name = _safe_parameter_filename(name, default_suffix=selected_suffix)
         target_path = self.parameters_dir / safe_name
         self._write_parameters(target_path, data)
         self._update_selected_parameter(target_path)
@@ -216,6 +225,32 @@ class SettingsStore:
         self.base_dir.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(legacy_dir, self.base_dir)
 
+    def _migrate_loaded_parameters(self) -> None:
+        """Move the session copy out of the user-editable preset directory."""
+        legacy_path = self._managed_parameters_dir / LOADED_PARAMETERS_NAME
+        if self.loaded_parameters_path.is_file() or not legacy_path.is_file():
+            return
+        self.loaded_parameters_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(legacy_path, self.loaded_parameters_path)
+
+    def _migrate_managed_parameter_files(self) -> None:
+        """Keep custom presets created by UI versions that used AppData."""
+        if not self._managed_parameters_dir.is_dir():
+            return
+        bundled_names = {
+            path.name
+            for path in _iter_parameter_files(bundled_defaults_dir())
+        }
+        for source_path in _iter_parameter_files(self._managed_parameters_dir):
+            if (
+                source_path.name in EXCLUDED_PARAMETER_NAMES
+                or source_path.name in bundled_names
+            ):
+                continue
+            target_path = self.parameters_dir / source_path.name
+            if not target_path.exists():
+                shutil.copy2(source_path, target_path)
+
     def _normalized_selected_parameters_path(self, state: dict[str, Any]) -> Path:
         previous_default = state.get("default_parameters_name")
         previous_default_name = previous_default if isinstance(previous_default, str) else LEGACY_DEFAULT_PARAMETERS_NAME
@@ -297,7 +332,7 @@ class SettingsStore:
                     seen_names.add(path.name)
         return sources
 
-    def _copy_into_appdata(self, path: Path) -> Path:
+    def _copy_into_parameters_dir(self, path: Path) -> Path:
         source_path = path.expanduser().resolve()
         if not source_path.is_file():
             raise FileNotFoundError(f"Parameter file does not exist: {source_path}")
@@ -306,6 +341,9 @@ class SettingsStore:
         if source_path != target_path:
             shutil.copy2(source_path, target_path)
         return target_path
+
+    def _uses_managed_parameters_dir(self) -> bool:
+        return self.parameters_dir.resolve() == self._managed_parameters_dir.resolve()
 
     def _update_selected_parameter(self, selected_path: Path) -> None:
         state = self.load_state()
@@ -378,7 +416,7 @@ def _with_spectral_cube_defaults(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-def _safe_parameter_filename(name: str) -> str:
+def _safe_parameter_filename(name: str, *, default_suffix: str = ".json") -> str:
     stripped = name.strip()
     if not stripped:
         stripped = "custom_parameters"
@@ -386,7 +424,12 @@ def _safe_parameter_filename(name: str) -> str:
     stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", path.stem).strip("._")
     if not stem:
         stem = "custom_parameters"
-    return f"{stem}.json"
+    requested_suffix = path.suffix.lower()
+    fallback_suffix = default_suffix.lower()
+    if fallback_suffix not in PARAMETER_SUFFIXES:
+        fallback_suffix = ".json"
+    suffix = requested_suffix if requested_suffix in PARAMETER_SUFFIXES else fallback_suffix
+    return f"{stem}{suffix}"
 
 
 def _normalized_tab_name(tab_name: Any) -> str:

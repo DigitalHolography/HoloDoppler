@@ -48,6 +48,12 @@ or explicitly:
 holodoppler gui
 ```
 
+The GUI reads and writes presets directly in `parameters/` (the `parameters/`
+folder beside the installed executable in packaged builds). Presets may use
+`.yaml`, `.yml`, or `.json`. Individual values and newly added parameters also
+accept YAML/JSON syntax, so values such as `0.5`, `true`, and `[1, 2]` keep
+their numeric, boolean, and list types.
+
 ### Run a Batch of Files in CLI
 
 ```bash
@@ -64,8 +70,7 @@ python build_installer.py
 ```
 
 The installer build script must run under Python 3.13 or newer.
-The installer build uses the bundled UI defaults from
-`holodoppler/ui/defaults/` and verifies they match `parameters/*.json`,
-`parameters/*.yaml`, and `parameters/*.yml`.
+The installer packages presets from `parameters/`. It also verifies that the
+corresponding fallback files in `holodoppler/ui/defaults/` remain in sync.
 Use `python build_installer.py --verify-installer` to run the installer smoke
 verification when Inno Setup is available.
