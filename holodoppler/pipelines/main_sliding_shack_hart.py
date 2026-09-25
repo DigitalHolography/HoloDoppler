@@ -53,7 +53,7 @@ from holodoppler.registration import (
 )
 
 from holodoppler.file_reader import FileReaderFactory
-
+from holodoppler.plots import plot_phase_with_slopes_rgb
 
 def _process_batch(
     parameters,
@@ -416,7 +416,6 @@ def _process_shack_hartmann(
                     "shack_hartmann_zernike_fit_modes"
                 ),
             )
-
         if output_dict is not None:
             output_dict["shack_hartmann_zernike_coefs"] = coefs
             output_dict["shack_hartmann_wavefront_phase"] = phase
@@ -636,6 +635,8 @@ def _process_one_batch(
 
             res["shack_hartmann_zernike_coefs"] = coefs
             res["shack_hartmann_wavefront_phase"] = phase
+
+            res["shack_hartmann_wavefront_color_image"] = plot_phase_with_slopes_rgb(phase.get(),shifts_y.get(),shifts_x.get()) # slower but cool plot
 
             phase_term = xp.exp(-1j * phase)
             phase_term = xp.nan_to_num(
