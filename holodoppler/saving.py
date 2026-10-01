@@ -1243,6 +1243,7 @@ def save_outputs(
         "moment1",
         "moment2",
         "spectrum_line",
+        "sh_psd"
     ]
 
     save_h5_list.extend(
