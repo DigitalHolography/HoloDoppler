@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 import holodoppler.backend as backend
-from holodoppler.cli import _resolve_backend_mode
+from holodoppler.execution.runner import resolve_backend_mode
 
 
 # The GPU-failure tests rely on CUDA being unusable. On a machine with a
@@ -265,8 +265,8 @@ def test_empty_batch_file_returns_nonzero(batch_case, run_cli) -> None:
 # ---------------------------------------------------------------------------
 
 def test_absent_backend_resolves_to_auto() -> None:
-    assert _resolve_backend_mode({}) == "auto"
-    assert _resolve_backend_mode({"backend": "auto"}) == "auto"
+    assert resolve_backend_mode({}) == "auto"
+    assert resolve_backend_mode({"backend": "auto"}) == "auto"
 
 
 @pytest.mark.parametrize(
@@ -281,14 +281,14 @@ def test_absent_backend_resolves_to_auto() -> None:
     ],
 )
 def test_backend_parameter_values_resolve(value: str, expected: str) -> None:
-    assert _resolve_backend_mode({"backend": value}) == expected
+    assert resolve_backend_mode({"backend": value}) == expected
 
 
 def test_force_numpy_takes_precedence_over_backend() -> None:
-    assert _resolve_backend_mode({"backend": "gpu", "force_numpy": True}) == "cpu"
-    assert _resolve_backend_mode({"force_numpy": True}) == "cpu"
+    assert resolve_backend_mode({"backend": "gpu", "force_numpy": True}) == "cpu"
+    assert resolve_backend_mode({"force_numpy": True}) == "cpu"
 
 
 def test_unknown_backend_parameter_raises() -> None:
     with pytest.raises(ValueError):
-        _resolve_backend_mode({"backend": "nonsense"})
+        resolve_backend_mode({"backend": "nonsense"})

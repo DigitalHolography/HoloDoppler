@@ -18,7 +18,7 @@ import numpy as np
 
 import holodoppler.backend as backend
 from holodoppler.core.propagation import fresnel_transform
-from holodoppler.pipelines import pipelines
+from holodoppler.pipelines import PIPELINES
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -91,7 +91,7 @@ def test_shipped_presets_reference_unregistered_pipelines(
 ) -> None:
     """Four bundled presets name pipelines that do not exist."""
     assert _read_preset(name)["pipeline_name"] == stale_name
-    assert stale_name not in pipelines, (
+    assert stale_name not in PIPELINES, (
         f"{stale_name!r} became a registered pipeline; update or remove this pin"
     )
 

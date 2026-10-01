@@ -1,47 +1,26 @@
-"""Lazy registry for the bundled HoloDoppler processing pipelines."""
+"""Bundled processing pipelines.
 
-import inspect
-import pkgutil
-from importlib import import_module
-from pathlib import Path
+The registry is explicit (see :mod:`holodoppler.pipelines.registry`), so a
+pipeline's public name never depends on its module's filename.
+"""
 
+from __future__ import annotations
 
-pipelines = {}
-
-# Module name -> public pipeline name, for the cases where they differ.
-_PIPELINE_ALIASES = {
-    "main_sliding_shack_hart": "sliding_shack_hartmann",
-}
+from .base import Pipeline
+from .registry import SPECS, PipelineSpec, create, names, spec
 
 
-def _lazy_function(module_name: str, function_name: str):
-    """Import a pipeline on first use.
-
-    The bundled pipelines do not share one signature yet, so only the keywords
-    the target actually accepts are forwarded.
-    """
-
-    def wrapper(file_path, parameters, *, progress_callback=None):
-        module = import_module(f".{module_name}", package=__name__)
-        func = getattr(module, function_name)
-
-        if "progress_callback" in inspect.signature(func).parameters:
-            return func(file_path, parameters, progress_callback=progress_callback)
-
-        return func(file_path, parameters)
-
-    wrapper.__name__ = function_name
-    wrapper.__qualname__ = f"{module_name}.{function_name}"
-    return wrapper
+__all__ = [
+    "PIPELINES",
+    "SPECS",
+    "Pipeline",
+    "PipelineSpec",
+    "create",
+    "names",
+    "spec",
+]
 
 
-_package_dir = Path(__file__).parent
-
-for info in pkgutil.iter_modules([str(_package_dir)]):
-    module_name = info.name
-    if module_name.startswith("_"):
-        continue
-
-    key = _PIPELINE_ALIASES.get(module_name, module_name.removeprefix("main_"))
-    pipelines[key] = _lazy_function(module_name, "process")
-    pipelines[f"preview_{key}"] = _lazy_function(module_name, "preview")
+#: Every registered pipeline by name. Pipelines hold no per-run state, so the
+#: registry instantiates each one once.
+PIPELINES: dict[str, Pipeline] = {name: create(name) for name in names()}

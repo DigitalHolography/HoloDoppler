@@ -348,31 +348,29 @@ class SettingsEditor(ttk.Frame):
 
 def _pipeline_choice_pairs() -> tuple[tuple[str, str], ...]:
     try:
-        from holodoppler.pipelines import pipelines
+        from holodoppler.pipelines import PIPELINES
     except Exception:
         return (("sliding_shack_hartmann", "Sliding Shack-Hartmann"),)
 
-    preview_targets = {
-        name.removeprefix("preview_")
-        for name in pipelines
-        if name.startswith("preview_")
-    }
-    process_names = sorted(name for name in pipelines if not name.startswith("preview_"))
     preferred_order = [
         "simple",
         "sliding_shack_hartmann",
         "sh_avg",
     ]
+    available = list(PIPELINES)
     ordered_names = [
-        name for name in preferred_order if name in process_names
+        name for name in preferred_order if name in available
     ] + [
-        name for name in process_names if name not in preferred_order
+        name for name in available if name not in preferred_order
     ]
 
     return tuple(
         (
             name,
-            _pipeline_label(name, supports_preview=name in preview_targets),
+            _pipeline_label(
+                name,
+                supports_preview=PIPELINES[name].supports_preview(),
+            ),
         )
         for name in ordered_names
     )

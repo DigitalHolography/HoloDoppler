@@ -5,6 +5,7 @@ import numpy as np
 from collections import defaultdict
 from pathlib import Path
 
+from .base import Pipeline
 import holodoppler.backend as backend
 from tqdm import tqdm
 
@@ -31,11 +32,6 @@ from holodoppler.core.zernike import (
     fit_zernike_angular_spectrum,
 )
 
-from holodoppler.config import (
-    update_from_cine_metadata,
-    update_from_holo_footer,
-)
-
 from holodoppler.core.arrays import gaussian_flatfield, resize_frames
 
 from holodoppler.core.filtering import (
@@ -55,7 +51,6 @@ from holodoppler.core.registration import (
     apply_ecc_registration
 )
 
-from holodoppler.readers import FileReaderFactory
 
 
 def _process_batch(parameters, frames, phase_term=None, output_dict=None):
@@ -1102,28 +1097,9 @@ def _process_cupy(
 
     return output, M0_reg
 
-def preview(file_path, parameters):
-    if parameters.get("force_numpy",False):
-        backend.set_backend("numpy")
-    file_reader = FileReaderFactory.create(file_path)
-
-    print("previewing file :", file_path)
-
-    if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
-
-        parameters = update_from_holo_footer(
-            parameters,
-            file_reader.footer,
-        )
-
-    if file_reader.extension == ".cine":
-        print("file header :", file_reader.header)
-
-        parameters = update_from_cine_metadata(
-            parameters,
-            file_reader.header
-        )
+def preview_file(file_reader, parameters):
+    """Run a single reference batch."""
+    print("previewing file :", file_reader.file_path)
 
     print("parameters : ", parameters)
 
@@ -1200,27 +1176,8 @@ def preview(file_path, parameters):
     return res_np["M0ff"]
 
 
-def process(file_path, parameters, progress_callback=None):
-    if parameters.get("force_numpy",False):
-        backend.set_backend("numpy")
-    file_reader = FileReaderFactory.create(file_path)
-
-    if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
-
-        parameters = update_from_holo_footer(
-            parameters,
-            file_reader.footer,
-        )
-
-    if file_reader.extension == ".cine":
-        print("file header :", file_reader.header)
-
-        parameters = update_from_cine_metadata(
-            parameters,
-            file_reader.header
-        )
-
+def process_file(file_reader, parameters, progress_callback=None):
+    """Run the whole pipeline over an already-open reader."""
     print("parameters : ", parameters)
 
     batch_size = parameters["batch_size"]
@@ -1439,3 +1396,15 @@ def process(file_path, parameters, progress_callback=None):
         output=output,
         parameters=parameters,
     )
+
+
+class SimplePipeline(Pipeline):
+    """The ``simple`` spectral-moment pipeline."""
+
+    name = "simple"
+
+    def process(self, file, config, context):
+        return process_file(file, config, progress_callback=context.progress_callback)
+
+    def preview(self, file, config, context):
+        return preview_file(file, config)

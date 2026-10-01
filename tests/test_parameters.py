@@ -13,9 +13,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from holodoppler.cli import _resolve_backend_mode
-from holodoppler.pipelines import pipelines
 from holodoppler.config import load_config
+from holodoppler.execution.runner import resolve_backend_mode
+from holodoppler.pipelines import PIPELINES
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -75,9 +75,9 @@ def test_parameter_file_loads(path: Path) -> None:
 def test_parameter_file_pipeline_is_registered(path: Path) -> None:
     name = load_config(path)["pipeline_name"]
 
-    assert name in pipelines, (
+    assert name in PIPELINES, (
         f"{path.name} references unknown pipeline {name!r}. "
-        f"Available: {sorted(k for k in pipelines if not k.startswith('preview_'))}"
+        f"Available: {sorted(PIPELINES)}"
     )
 
 
@@ -85,7 +85,7 @@ def test_parameter_file_pipeline_is_registered(path: Path) -> None:
 def test_parameter_file_resolves_to_a_valid_backend_mode(path: Path) -> None:
     parameters = load_config(path)
 
-    mode = _resolve_backend_mode(parameters)
+    mode = resolve_backend_mode(parameters)
 
     assert mode in VALID_MODES
 
@@ -101,7 +101,7 @@ def test_parameters_without_a_backend_key_default_to_auto() -> None:
         if parameters.get("force_numpy", False):
             continue
 
-        assert _resolve_backend_mode(parameters) == "auto"
+        assert resolve_backend_mode(parameters) == "auto"
         checked += 1
 
     assert checked > 0, "No parameter file exercised the default backend path"
@@ -112,7 +112,7 @@ def test_offline_preset_pins_the_cpu_backend() -> None:
     parameters = load_config(PARAMETERS_DIR / "default_parameters_simple_offline.yaml")
 
     assert parameters.get("force_numpy") is True
-    assert _resolve_backend_mode(parameters) == "cpu"
+    assert resolve_backend_mode(parameters) == "cpu"
 
 
 @pytest.mark.parametrize(
@@ -127,7 +127,7 @@ def test_offline_preset_pins_the_cpu_backend() -> None:
     ],
 )
 def test_explicit_backend_values_resolve(backend_value: str, expected: str) -> None:
-    assert _resolve_backend_mode({"backend": backend_value}) == expected
+    assert resolve_backend_mode({"backend": backend_value}) == expected
 
 
 def test_loading_parameter_files_does_not_modify_them() -> None:

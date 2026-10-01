@@ -4,6 +4,7 @@ import numpy as np
 from collections import defaultdict
 from pathlib import Path
 
+from .base import Pipeline
 import holodoppler.backend as backend
 from tqdm import tqdm
 
@@ -30,11 +31,6 @@ from holodoppler.core.zernike import (
     fit_zernike_angular_spectrum,
 )
 
-from holodoppler.config import (
-    update_from_cine_metadata,
-    update_from_holo_footer,
-)
-
 from holodoppler.core.arrays import gaussian_flatfield, resize_frames
 
 from holodoppler.core.filtering import (
@@ -52,7 +48,6 @@ from holodoppler.core.registration import (
     apply_register_images_shifts,
 )
 
-from holodoppler.readers import FileReaderFactory
 from holodoppler.core.plots import plot_phase_with_slopes_rgb
 
 def _process_batch(
@@ -636,7 +631,11 @@ def _process_one_batch(
             res["shack_hartmann_zernike_coefs"] = coefs
             res["shack_hartmann_wavefront_phase"] = phase
 
-            res["shack_hartmann_wavefront_color_image"] = plot_phase_with_slopes_rgb(phase.get(),shifts_y.get(),shifts_x.get()) # slower but cool plot
+            res["shack_hartmann_wavefront_color_image"] = plot_phase_with_slopes_rgb(
+                backend.to_numpy(phase),
+                backend.to_numpy(shifts_y),
+                backend.to_numpy(shifts_x),
+            )  # slower but cool plot
 
             phase_term = xp.exp(-1j * phase)
             phase_term = xp.nan_to_num(
@@ -1095,36 +1094,9 @@ def _process_cupy(
     return output, M0_reg
 
 
-def preview(file_path, parameters):
-    """
-    Process a single preview batch.
-
-    The preview uses the same backend abstraction as process(), so it
-    works with either NumPy or CuPy.
-    """
-
-    file_reader = FileReaderFactory.create(file_path)
-
-    print("previewing file :", file_path)
-
-    # ------------------------------------------------------------------
-    # File metadata
-    # ------------------------------------------------------------------
-    if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
-
-        parameters = update_from_holo_footer(
-            parameters,
-            file_reader.footer,
-        )
-
-    if file_reader.extension == ".cine":
-        print("file header :", file_reader.header)
-
-        parameters = update_from_cine_metadata(
-            parameters,
-            file_reader.header
-        )
+def preview_file(file_reader, parameters):
+    """Run a single sliding Shak-Hartmann reference batch."""
+    print("previewing file :", file_reader.file_path)
 
     print("parameters : ", parameters)
 
@@ -1204,28 +1176,8 @@ def preview(file_path, parameters):
     return res_np["M0ff"]
 
 
-def process(file_path, parameters, progress_callback=None):
-    """
-    Process a complete holographic file using the same public calling
-    convention as main_simple.py, while retaining sliding SH accumulation.
-    """
-    file_reader = FileReaderFactory.create(file_path)
-
-    if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
-        parameters = update_from_holo_footer(
-            parameters,
-            file_reader.footer,
-        )
-
-    if file_reader.extension == ".cine":
-        print("file header :", file_reader.header)
-
-        parameters = update_from_cine_metadata(
-            parameters,
-            file_reader.header
-        )
-
+def process_file(file_reader, parameters, progress_callback=None):
+    """Run the sliding Shak-Hartmann pipeline over an already-open reader."""
     print("parameters : ", parameters)
 
     batch_size = parameters["batch_size"]
@@ -1405,3 +1357,15 @@ def process(file_path, parameters, progress_callback=None):
         output=output,
         parameters=parameters,
     )
+
+
+class SlidingShackHartmannPipeline(Pipeline):
+    """The sliding Shak-Hartmann pipeline."""
+
+    name = "sliding_shack_hartmann"
+
+    def process(self, file, config, context):
+        return process_file(file, config, progress_callback=context.progress_callback)
+
+    def preview(self, file, config, context):
+        return preview_file(file, config)

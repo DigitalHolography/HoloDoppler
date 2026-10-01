@@ -21,12 +21,21 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_DIR = PROJECT_ROOT / "holodoppler"
 
 # Per layer: the ``holodoppler.<something>`` targets it may import.
+#
+# ``core -> execution.context`` is a deliberate one-module-wide seam: core
+# numerics need the active array module but must not read the process-global
+# backend. It is also the only remaining cycle, because the numerics still
+# resolve the active backend internally instead of receiving it. Closing that
+# seam is the "inject the context everywhere" follow-up.
+#
+# Imports guarded by ``if TYPE_CHECKING:`` are ignored: they are annotations
+# only and create no runtime coupling.
 LAYER_IMPORTS: dict[str, set[str]] = {
     "readers": set(),
     "config": set(),
     "core": {"execution.context"},
-    "execution": {"readers", "config", "core"},
-    "pipelines": {"readers", "config", "core", "execution"},
+    "pipelines": {"readers", "core"},
+    "execution": {"readers", "config", "pipelines"},
 }
 
 # Layers allowed to import the remaining top-level modules (backend, saving, ...).
@@ -39,6 +48,17 @@ LAYER_NAMES = frozenset(LAYER_IMPORTS)
 # Import resolution
 # ---------------------------------------------------------------------------
 
+def _is_type_checking(node: ast.expr) -> bool:
+    """True for a ``TYPE_CHECKING`` or ``typing.TYPE_CHECKING`` guard."""
+    if isinstance(node, ast.Name):
+        return node.id == "TYPE_CHECKING"
+
+    if isinstance(node, ast.Attribute):
+        return node.attr == "TYPE_CHECKING"
+
+    return False
+
+
 def resolve_imports(source: str, package_parts: list[str]) -> set[str]:
     """Return every absolute module name imported by ``source``.
 
@@ -50,12 +70,24 @@ def resolve_imports(source: str, package_parts: list[str]) -> set[str]:
     ``from .. import x`` forms, where the imported names are sub-modules rather
     than attributes. Missing that form would let ``from .. import backend`` in
     ``core/`` slip through the layering check.
+
+    Imports inside an ``if TYPE_CHECKING:`` block are skipped: they exist for
+    annotations only and are not runtime dependencies.
     """
     tree = ast.parse(source)
     package = ["holodoppler", *package_parts]
     found: set[str] = set()
 
+    type_only: set[int] = set()
     for node in ast.walk(tree):
+        if isinstance(node, ast.If) and _is_type_checking(node.test):
+            for child in ast.walk(node):
+                type_only.add(id(child))
+
+    for node in ast.walk(tree):
+        if id(node) in type_only:
+            continue
+
         if isinstance(node, ast.Import):
             for alias in node.names:
                 found.add(alias.name)
@@ -217,6 +249,30 @@ def test_import_resolution_on_a_real_module() -> None:
 
     assert "holodoppler.cli" in resolved  # absolute import
     assert "holodoppler.ui.advanced" in resolved  # from .advanced import
+
+
+def test_type_checking_imports_are_not_runtime_edges() -> None:
+    """A type-only import creates no runtime coupling and must be ignored."""
+    source = (
+        "from __future__ import annotations\n"
+        "from typing import TYPE_CHECKING\n"
+        "from holodoppler.readers import FileReader\n"
+        "if TYPE_CHECKING:\n"
+        "    from holodoppler.execution.context import ExecutionContext\n"
+    )
+
+    resolved = resolve_imports(source, ["pipelines"])
+
+    assert "holodoppler.readers" in resolved
+    assert "holodoppler.execution.context" not in resolved
+
+
+def test_real_pipeline_base_has_no_runtime_execution_dependency() -> None:
+    """``pipelines/base.py`` only needs the context for its annotations."""
+    resolved = imported_modules(PACKAGE_DIR / "pipelines" / "base.py")
+
+    assert "holodoppler.readers" in resolved
+    assert "holodoppler.execution.context" not in resolved
 
 
 def test_layering_rules_reference_real_layers() -> None:

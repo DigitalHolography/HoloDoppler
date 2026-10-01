@@ -188,3 +188,34 @@ def update_from_cine_metadata(
         ] = metadata.extra["FrameRate"] / 2
     
     return parameters
+
+
+def resolve_metadata(parameters, file_reader):
+    """Fill metadata-dependent parameters from an open reader.
+
+    A parameter left as the sentinel ``"use_holovibes"`` or ``"use_metadata"``
+    is replaced with the value carried by the input file. Dispatching on the
+    reader keeps the format-specific branches in one place instead of repeated
+    in every pipeline.
+
+    Parameters
+    ----------
+    parameters:
+        Processing parameters. Mutated in place and returned.
+    file_reader:
+        An open reader; its ``extension`` selects the metadata source.
+
+    Returns
+    -------
+    dict
+        The same parameters mapping.
+    """
+    extension = getattr(file_reader, "extension", None)
+
+    if extension == ".holo":
+        return update_from_holo_footer(parameters, file_reader.footer)
+
+    if extension == ".cine":
+        return update_from_cine_metadata(parameters, file_reader.header)
+
+    return parameters
