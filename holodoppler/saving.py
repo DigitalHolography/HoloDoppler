@@ -1171,8 +1171,10 @@ def save_outputs(
     """
     parameters = parameters or {}
 
-    default_path = get_default_output_path(
-        file_reader.file_path
+    default_path = (
+        Path(parameters["saving_to_folder"]).expanduser()
+        if parameters.get("saving_to_folder")
+        else get_default_output_path(file_reader.file_path)
     )
 
     # ------------------------------------------------------------------

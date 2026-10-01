@@ -7,7 +7,7 @@ Follow the steps below to install dependencies and run the example.
 ```bash
 python -m venv .venv
 source ./.venv/Scripts/activate
-python -m pip install -e .
+python -m pip install -e '.[gui,gpu]'
 ```
 
 ## 2. Run the CLI Examples
@@ -59,7 +59,7 @@ Give a `.txt` file with one `.holo` or `.cine` path per line.
 ### Build the Windows Installer
 
 ```bash
-python -m pip install -e .[build]
+python -m pip install -e '.[gui,gpu,build]'
 python build_installer.py
 ```
 
@@ -69,3 +69,8 @@ The installer build uses the bundled UI defaults from
 `parameters/*.yaml`, and `parameters/*.yml`.
 Use `python build_installer.py --verify-installer` to run the installer smoke
 verification when Inno Setup is available.
+
+### Linux CLI with Docker
+
+See [the Docker guide](docs/docker.md) for CPU and NVIDIA GPU images, input and
+output mounts, and the image release workflow.

@@ -1,6 +1,7 @@
 """HoloDoppler command-line interface module."""
 
 import argparse
+import hashlib
 import json
 import sys
 from enum import Enum
@@ -28,6 +29,8 @@ KNOWN_CLI_OPTIONS: set = {
     "config",
     "batch",
     "command",
+    "output-dir",
+    "saving_to_folder",
 }
 
 # Exit codes
@@ -287,12 +290,12 @@ def _read_batch_file(batch_file: Path) -> List[Path]:
 
 def _batch_process(
     file_paths: List[Path], parameters: dict, mode: PipelineMode
-) -> None:
+) -> int:
     """
-    Process multiple files in batch mode (side-effect only).
+    Process multiple files in batch mode.
 
-    This function prints progress and results to stdout/stderr but doesn't
-    return results to avoid memory issues with large batches.
+    This function prints progress and results to stdout/stderr and returns
+    the number of failed files without retaining processing results.
 
     Args:
         file_paths: List of input file paths
@@ -309,6 +312,16 @@ def _batch_process(
         try:
             # Copy parameters to avoid cross-file contamination
             params_copy = parameters.copy()
+            if params_copy.get("saving_to_folder"):
+                # Keep outputs separate when files from different directories
+                # have the same name.
+                path_hash = hashlib.sha256(
+                    str(file_path.resolve()).encode("utf-8")
+                ).hexdigest()[:8]
+                params_copy["saving_to_folder"] = str(
+                    Path(params_copy["saving_to_folder"])
+                    / f"{file_path.stem}_{path_hash}"
+                )
 
             # Execute pipeline
             result = _run_pipeline(file_path, params_copy, mode)
@@ -337,6 +350,8 @@ def _batch_process(
         print("\nFailed files:")
         for path, error in errors:
             print(f"  - {path.name}: {error}")
+
+    return len(errors)
 
 
 # ============================================================================
@@ -413,6 +428,10 @@ def _apply_cli_overrides(parameters: dict, args: argparse.Namespace) -> dict:
     if backend is not None:
         parameters["backend"] = backend
 
+    output_dir = getattr(args, "output_dir", None)
+    if output_dir is not None:
+        parameters["saving_to_folder"] = str(output_dir)
+
     # Handle dynamic flags (--optionA, --optionB, etc.)
     dynamic_options = getattr(args, "dynamic_options", {})
     for option, value in dynamic_options.items():
@@ -426,6 +445,13 @@ def _apply_cli_overrides(parameters: dict, args: argparse.Namespace) -> dict:
 # ============================================================================
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     """Add common arguments to a parser."""
+    parser.add_argument(
+        "--output-dir",
+        "--saving_to_folder",
+        dest="output_dir",
+        type=Path,
+        help="Directory in which to save results instead of beside the input file.",
+    )
     parser.add_argument(
         "--verbose",
         action="store_true",
@@ -619,8 +645,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             file_paths = _read_batch_file(args.batch)
 
             # Process in batch mode (side-effect only)
-            _batch_process(file_paths=file_paths, parameters=parameters, mode=mode)
-            return EXIT_SUCCESS
+            failures = _batch_process(
+                file_paths=file_paths, parameters=parameters, mode=mode
+            )
+            return EXIT_FAILURE if failures else EXIT_SUCCESS
 
         # ===== SINGLE FILE PROCESSING =====
         # Resolve input path

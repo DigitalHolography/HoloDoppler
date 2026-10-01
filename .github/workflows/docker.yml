@@ -1,0 +1,25 @@
+name: Docker CLI
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        target: [cpu, gpu]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ${{ matrix.target }} image
+        run: docker build --pull --target "${{ matrix.target }}" -t "holodoppler:ci-${{ matrix.target }}" .
+      - name: Check CLI and imports
+        run: |
+          docker run --rm "holodoppler:ci-${{ matrix.target }}" --help
+          docker run --rm --entrypoint python "holodoppler:ci-${{ matrix.target }}" \
+            -c 'import cv2, h5py, imageio, matplotlib, scipy; from holodoppler.cli import main; from holodoppler.pipelines import main_simple, main_sh_avg, main_sliding_shack_hart'
+      - name: Check CuPy import
+        if: matrix.target == 'gpu'
+        run: docker run --rm --entrypoint python holodoppler:ci-gpu -c 'import cupy'
