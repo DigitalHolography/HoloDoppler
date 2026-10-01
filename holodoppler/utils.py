@@ -269,7 +269,7 @@ def stretchlimcp(
             "low_percent must be smaller than high_percent."
         )
 
-    flat = data.ravel()
+    flat = backend.to_backend(data).ravel()
 
     return (
         backend.xp.percentile(
@@ -504,43 +504,17 @@ def temporal_gaussian_filter(
 
 
 @cache
-def elliptical_mask(
+def _elliptical_mask_cached(
+    xp,
     ny,
     nx,
     radius_frac,
-    xp = None
 ):
-    """Create an elliptical boolean mask.
+    """Build an elliptical boolean mask for a specific array module.
 
-    The result is generated using the currently selected backend.
-
-    Parameters
-    ----------
-    ny, nx:
-        Mask dimensions.
-    radius_frac:
-        Fraction of the image radius occupied by the ellipse.
-    xp: 
-        Optional module to use, default is backend.
-
-    Returns
-    -------
-    array
-        Boolean mask on the active backend.
-
-    Notes
-    -----
-    The result is cached. Changing the backend after a mask has been
-    generated can therefore return a mask created by the previous backend.
-
-    For long-running applications that switch backend dynamically, call:
-
-        elliptical_mask.cache_clear()
+    ``xp`` participates in the cache key, so a mask built for the CPU is never
+    reused for the GPU (or the other way round).
     """
-
-    if xp is None:
-        xp = backend.xp
-        
     radius_frac = max(
         0.0,
         min(1.0, float(radius_frac)),
@@ -572,6 +546,58 @@ def elliptical_mask(
     return mask
 
 
+def _clear_elliptical_mask_cache() -> None:
+    """Drop every cached elliptical mask."""
+    _elliptical_mask_cached.cache_clear()
+
+
+def elliptical_mask(
+    ny,
+    nx,
+    radius_frac,
+    xp=None,
+):
+    """Create an elliptical boolean mask.
+
+    The result is generated using the requested array module, or the currently
+    selected backend when ``xp`` is omitted.
+
+    Parameters
+    ----------
+    ny, nx:
+        Mask dimensions.
+    radius_frac:
+        Fraction of the image radius occupied by the ellipse.
+    xp:
+        Optional array module to use. Defaults to the active backend.
+
+    Returns
+    -------
+    array
+        Boolean mask on the active backend.
+
+    Notes
+    -----
+    The result is cached per array module, so switching the backend can never
+    return a mask created by the previous backend. For long-running
+    applications that need to drop the cached masks, call:
+
+        elliptical_mask.cache_clear()
+    """
+    if xp is None:
+        xp = backend.xp
+
+    return _elliptical_mask_cached(
+        xp,
+        ny,
+        nx,
+        radius_frac,
+    )
+
+
+elliptical_mask.cache_clear = _clear_elliptical_mask_cache  # type: ignore[attr-defined]
+
+
 # ============================================================================
 # Central padding / cropping
 # ============================================================================
@@ -580,6 +606,7 @@ def elliptical_mask(
 def pad_array_centrally(
     arr,
     new_shape,
+    xp=None,
 ):
     """Pad the final two dimensions centrally.
 
@@ -589,6 +616,10 @@ def pad_array_centrally(
         Input array.
     new_shape:
         Integer or ``(height, width)`` tuple.
+    xp:
+        Accepted for call-site compatibility with the propagation kernels.
+        The padding is performed on the active backend by this module, so the
+        argument is intentionally ignored.
 
     Returns
     -------

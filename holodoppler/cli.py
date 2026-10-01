@@ -3,9 +3,12 @@
 import argparse
 import json
 import sys
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union, Callable
+
+import holodoppler.backend as backend
 
 from .utils import load_config
 from .pipelines import pipelines
@@ -33,6 +36,55 @@ KNOWN_CLI_OPTIONS: set = {
 # Exit codes
 EXIT_SUCCESS: int = 0
 EXIT_FAILURE: int = 1
+
+
+@dataclass
+class BatchResult:
+    """Outcome of a batch run.
+
+    Attributes
+    ----------
+    total:
+        Number of jobs listed by the batch file, including entries that could
+        not be read.
+    succeeded:
+        Number of jobs that completed without raising.
+    failures:
+        ``(path, reason)`` pairs for every job that did not complete.
+    mode:
+        The pipeline mode the batch ran in.
+    """
+
+    total: int
+    succeeded: int
+    failures: List[Tuple[Path, str]]
+    mode: "PipelineMode"
+
+    @property
+    def failed(self) -> int:
+        """Number of failed jobs."""
+        return len(self.failures)
+
+    def summary(self) -> str:
+        """Render the human-readable batch summary."""
+        lines = [
+            "",
+            "=" * 50,
+            f"Batch processing complete ({self.mode.value} mode):",
+            f"  Total files: {self.total}",
+            f"  Successful:  {self.succeeded}",
+            f"  Failed:      {self.failed}",
+        ]
+
+        if self.failures:
+            lines.append("")
+            lines.append("Failed files:")
+            for path, error in self.failures:
+                lines.append(f"  - {path.name}: {error}")
+            lines.append("")
+            lines.append(f"{self.failed}/{self.total} jobs failed")
+
+        return "\n".join(lines)
 
 
 class AppMode(str, Enum):
@@ -78,6 +130,10 @@ def _run_pipeline(
     # Convert parameters to dict if needed
     if not isinstance(parameters, dict):
         parameters = load_config(parameters)
+
+    # Resolve the backend before any processing starts so that an explicit GPU
+    # request fails loudly instead of silently processing on the CPU.
+    backend.set_backend(_resolve_backend_mode(parameters))
 
     # Validate parameters
     if "pipeline_name" not in parameters:
@@ -240,9 +296,69 @@ def _resolve_config_path(provided_path: Optional[Path]) -> Path:
 
 
 # ============================================================================
+# BACKEND SELECTION
+# ============================================================================
+def _resolve_backend_mode(parameters: dict) -> str:
+    """
+    Resolve the backend mode requested by CLI options and parameters.
+
+    ``force_numpy`` is the legacy switch that used to be honoured inside the
+    pipelines. It is an explicit CPU request, so it takes precedence over
+    ``backend``.
+
+    Args:
+        parameters: Processing parameters
+
+    Returns:
+        One of "cpu", "gpu" or "auto"
+
+    Raises:
+        ValueError: If ``backend`` is not a recognised backend name
+    """
+    if parameters.get("force_numpy", False):
+        return "cpu"
+
+    requested = parameters.get("backend")
+    if requested is None:
+        return "auto"
+
+    # Validate here so an unknown value fails with a clear message before any
+    # processing or output writing starts.
+    return backend.resolve_mode(requested).value
+
+
+# ============================================================================
 # BATCH PROCESSING
 # ============================================================================
-def _read_batch_file(batch_file: Path) -> List[Path]:
+def _safe_print(message: str, *, file=None) -> None:
+    """
+    Print a message, degrading gracefully on unencodable characters.
+
+    Batch progress uses the "check" and "cross" markers. Windows consoles
+    commonly default to cp1252, where those glyphs cannot be encoded, and a
+    UnicodeEncodeError would turn a completed job into a reported failure.
+    Fall back to a lossy but encodable rendering when the stream cannot carry
+    the character.
+
+    Args:
+        message: Text to print
+        file: Target stream, defaults to stdout
+    """
+    stream = sys.stdout if file is None else file
+
+    try:
+        print(message, file=stream)
+    except UnicodeEncodeError:
+        encoding = getattr(stream, "encoding", None) or "ascii"
+        print(
+            message.encode(encoding, "replace").decode(encoding, "replace"),
+            file=stream,
+        )
+
+
+def _read_batch_file(
+    batch_file: Path,
+) -> Tuple[List[Path], List[Tuple[Path, str]]]:
     """
     Read a text file containing file paths (one per line).
 
@@ -250,12 +366,14 @@ def _read_batch_file(batch_file: Path) -> List[Path]:
         batch_file: Path to the batch file
 
     Returns:
-        List of resolved Path objects
+        Tuple of (resolved existing paths, [(missing path, reason), ...])
 
     Raises:
-        SystemExit: If file cannot be read or no valid paths found
+        SystemExit: If the file cannot be read or contains no entries at all
     """
     paths: List[Path] = []
+    failures: List[Tuple[Path, str]] = []
+
     try:
         with batch_file.open("r", encoding="utf-8") as f:
             for line_num, line in enumerate(f, 1):
@@ -266,44 +384,58 @@ def _read_batch_file(batch_file: Path) -> List[Path]:
 
                 path = Path(line).expanduser().resolve()
                 if not path.is_file():
-                    print(
-                        f"Warning: Line {line_num} in batch file '{batch_file}': "
-                        f"File does not exist: {path}. Skipping.",
+                    reason = (
+                        f"line {line_num} of {batch_file.name} points to a "
+                        f"file that does not exist: {path}"
+                    )
+                    _safe_print(
+                        f"Warning: {reason}. Skipping.",
                         file=sys.stderr,
                     )
+                    # A missing entry is counted as a failed job so the batch
+                    # cannot report success while silently ignoring inputs.
+                    failures.append((path, reason))
                     continue
                 paths.append(path)
     except OSError as e:
         raise SystemExit(f"Error reading batch file '{batch_file}': {e}")
 
-    if not paths:
+    if not paths and not failures:
         raise SystemExit(
             f"No valid file paths found in batch file: {batch_file}\n"
             f"Please ensure the file contains at least one valid .holo path."
         )
 
-    return paths
+    return paths, failures
 
 
 def _batch_process(
-    file_paths: List[Path], parameters: dict, mode: PipelineMode
-) -> None:
+    file_paths: List[Path],
+    parameters: dict,
+    mode: PipelineMode,
+    missing: Optional[List[Tuple[Path, str]]] = None,
+) -> BatchResult:
     """
-    Process multiple files in batch mode (side-effect only).
+    Process multiple files in batch mode.
 
-    This function prints progress and results to stdout/stderr but doesn't
-    return results to avoid memory issues with large batches.
+    Every job is attempted even when an earlier job fails. Individual error
+    messages are preserved and the caller decides the process exit status from
+    the returned :class:`BatchResult`.
 
     Args:
         file_paths: List of input file paths
         parameters: Parameters dict to use for all files
         mode: Pipeline mode (preview or process)
+        missing: Jobs that could not be read from the batch file
+
+    Returns:
+        BatchResult describing successes and failures
     """
     results_count: int = 0
-    errors: List[Tuple[Path, str]] = []
+    errors: List[Tuple[Path, str]] = list(missing or [])
 
     # Sequential processing
-    total = len(file_paths)
+    total = len(file_paths) + len(errors)
     for idx, file_path in enumerate(file_paths, 1):
         print(f"Processing file {idx}/{total}: {file_path.name}")
         try:
@@ -316,27 +448,26 @@ def _batch_process(
             # Optionally log result summary if needed
             if result is not None:
                 result_type = type(result).__name__
-                print(f"✓ Completed: {file_path.name} (result: {result_type})")
+                _safe_print(f"✓ Completed: {file_path.name} (result: {result_type})")
             else:
-                print(f"✓ Completed: {file_path.name} (no result)")
+                _safe_print(f"✓ Completed: {file_path.name} (no result)")
 
             results_count += 1
 
         except Exception as e:
             errors.append((file_path, str(e)))
-            print(f"✗ Failed: {file_path.name} - {e}", file=sys.stderr)
+            _safe_print(f"✗ Failed: {file_path.name} - {e}", file=sys.stderr)
 
-    # Summary
-    print(f"\n{'='*50}")
-    print(f"Batch processing complete ({mode.value} mode):")
-    print(f"  Total files: {len(file_paths)}")
-    print(f"  Successful:  {results_count}")
-    print(f"  Failed:      {len(errors)}")
+    batch_result = BatchResult(
+        total=total,
+        succeeded=results_count,
+        failures=errors,
+        mode=mode,
+    )
 
-    if errors:
-        print("\nFailed files:")
-        for path, error in errors:
-            print(f"  - {path.name}: {error}")
+    _safe_print(batch_result.summary())
+
+    return batch_result
 
 
 # ============================================================================
@@ -409,9 +540,9 @@ def _apply_cli_overrides(parameters: dict, args: argparse.Namespace) -> dict:
     if getattr(args, "debug", False):
         parameters["debug"] = True
 
-    backend = getattr(args, "backend", None)
-    if backend is not None:
-        parameters["backend"] = backend
+    backend_value = getattr(args, "backend", None)
+    if backend_value is not None:
+        parameters["backend"] = backend_value
 
     # Handle dynamic flags (--optionA, --optionB, etc.)
     dynamic_options = getattr(args, "dynamic_options", {})
@@ -444,7 +575,15 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--backend",
         type=str,
-        help="Force 'backend' to specified value in parameters.",
+        metavar="{cpu,gpu,auto}",
+        default=None,
+        help=(
+            "Force the numerical backend. "
+            "cpu: use CPU only. "
+            "gpu: require a working CUDA/CuPy backend. "
+            "auto: use GPU when available, otherwise CPU (default). "
+            "Legacy names such as 'cupyRAM' are still accepted."
+        ),
     )
 
 
@@ -504,12 +643,14 @@ def _build_main_parser() -> argparse.ArgumentParser:
         description="HoloDoppler: Holographic Doppler signal processing toolkit.",
         epilog=(
             "Examples:\n"
-            "  holodoppler preview input.h5 config.yaml\n"
-            "  holodoppler process input.h5 config.yaml --debug --threshold 0.5\n"
+            "  holodoppler preview input.holo config.yaml\n"
+            "  holodoppler process input.holo config.yaml --debug --threshold 0.5\n"
+            "  holodoppler process input.cine config.yaml --backend cpu\n"
             "  holodoppler preview --batch file_list.txt config.yaml\n"
             "  holodoppler gui                     # Launch GUI application\n"
             "\n"
-            "For more information, visit: https://github.com/yourusername/holodoppler"
+            "For more information, visit: "
+            "https://github.com/DigitalHolography/HoloDoppler"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -606,6 +747,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         # Apply CLI overrides
         parameters = _apply_cli_overrides(parameters, args)
 
+        # ===== BACKEND SELECTION =====
+        # Resolve the backend before any input or output work. An explicit GPU
+        # request that cannot be honoured must fail here, before any output
+        # file is created, rather than silently running on the CPU.
+        backend.set_backend(_resolve_backend_mode(parameters))
+
         # ===== BATCH PROCESSING =====
         if args.batch:
             print(f"Batch mode activated. Reading files from: {args.batch}")
@@ -616,10 +763,24 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
 
             # Read files from batch file
-            file_paths = _read_batch_file(args.batch)
+            file_paths, missing = _read_batch_file(args.batch)
 
-            # Process in batch mode (side-effect only)
-            _batch_process(file_paths=file_paths, parameters=parameters, mode=mode)
+            # Process every job, then report the overall outcome
+            batch_result = _batch_process(
+                file_paths=file_paths,
+                parameters=parameters,
+                mode=mode,
+                missing=missing,
+            )
+
+            if batch_result.failures:
+                print(
+                    f"Error: {batch_result.failed}/{batch_result.total} "
+                    f"batch jobs failed.",
+                    file=sys.stderr,
+                )
+                return EXIT_FAILURE
+
             return EXIT_SUCCESS
 
         # ===== SINGLE FILE PROCESSING =====

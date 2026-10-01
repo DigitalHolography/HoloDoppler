@@ -12,6 +12,19 @@ from .cinereader_copy import read_metadata
 import numpy as np
 
 
+__all__ = [
+    "CineFileReader",
+    "CineMetadata",
+    "FileHeader",
+    "FileReader",
+    "FileReaderFactory",
+    "HoloFileReader",
+    "get_reader",
+    "unpack_12bitL_batch_to_uint16",
+    "unpack_12bitL_vectorized",
+]
+
+
 @dataclass(frozen=True)
 class FileHeader:
     """Parsed binary .holo file header."""
@@ -135,6 +148,11 @@ class FileReader(ABC):
         """Parsed file header / metadata."""
 
     @property
+    @abstractmethod
+    def dtype(self) -> np.dtype:
+        """NumPy dtype of a single frame as returned by this reader."""
+
+    @property
     def footer(self) -> dict[str, Any]:
         return {}
 
@@ -196,6 +214,10 @@ class HoloFileReader(FileReader):
     @property
     def total_frames(self) -> int:
         return self.header.num_frames
+
+    @property
+    def dtype(self) -> np.dtype:
+        return self.header.get_dtype()
 
     def open(self) -> "HoloFileReader":
         self._get_memmap()
@@ -401,6 +423,10 @@ class CineFileReader(FileReader):
     def total_frames(self) -> int:
         return self.header.num_frames
 
+    @property
+    def dtype(self) -> np.dtype:
+        return np.dtype(np.float32)
+
     def _read_offsets(
         self,
         file,
@@ -546,3 +572,32 @@ class FileReaderFactory:
             ) from exc
 
         return reader_cls(path)
+
+
+def get_reader(file_path: str | os.PathLike[str]) -> FileReader:
+    """Return the reader matching a file path's extension.
+
+    Extension matching is case-insensitive, so ``.HOLO`` and ``.CINE`` work as
+    well as their lowercase forms.
+
+    Parameters
+    ----------
+    file_path:
+        Path to a ``.holo`` or ``.cine`` file.
+
+    Returns
+    -------
+    FileReader
+        ``HoloFileReader`` or ``CineFileReader``.
+
+    Raises
+    ------
+    ValueError
+        When the extension is not supported.
+
+    Examples
+    --------
+    >>> reader = get_reader("acquisition.holo")
+    >>> frames = reader.read_frames(first_frame=0, batch_size=8)
+    """
+    return FileReaderFactory.create(file_path)

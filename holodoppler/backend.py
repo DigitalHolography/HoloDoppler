@@ -1,98 +1,331 @@
-"""Backend management for NumPy/CuPy switching.
+"""Backend management for NumPy/CuPy selection.
 
-CuPy is preferred when available. If CuPy is installed but the CUDA runtime
-is not actually usable, the backend automatically falls back to NumPy.
+HoloDoppler supports three explicit backend modes:
+
+``cpu``
+    Always use NumPy. CuPy is never imported for numerical execution.
+``gpu``
+    Use CuPy. If CuPy or the CUDA runtime is not usable, backend
+    initialization fails with :class:`BackendNotAvailableError` instead of
+    silently falling back to NumPy.
+``auto``
+    Use CuPy when it is actually usable, otherwise NumPy. This is the only
+    mode in which a GPU -> CPU fallback is allowed.
+
+The *requested* mode and the *actual* backend are separate values and can be
+inspected through :meth:`BackendManager.mode` and
+:meth:`BackendManager.actual`.
+
+Consumers must use this module instead of importing CuPy directly. The active
+backend is available through::
+
+    backend.xp
+    backend.fft
+    backend.gaussian_filter
+    backend.ndi
+    backend.zoom
+    backend.linalg
+    backend.is_gpu
+    backend.to_backend()
+    backend.to_numpy()
+
+The module-level names above resolve lazily, so they always reflect the
+currently selected backend. CuPy is imported lazily as well: importing
+HoloDoppler never requires CuPy to be installed.
 """
 
 from __future__ import annotations
 
+import importlib.util
+import sys
+from dataclasses import dataclass
+from enum import Enum
+from functools import cache
+from typing import Any, Literal
+
 import numpy as np
 import scipy.fft as np_fft
 import scipy.ndimage as np_ndi
+import scipy.linalg as np_linalg
 from scipy.ndimage import gaussian_filter as np_gaussian_filter
 from scipy.ndimage import zoom as scipy_zoom
-import scipy.linalg as np_linalg
 
 
 # ---------------------------------------------------------------------------
-# Optional CuPy import
+# Public types
 # ---------------------------------------------------------------------------
 
-try:
-    import cupy as cp
-    import cupyx.scipy.fft as cp_fft
-    import cupyx.scipy.ndimage as cp_ndi
-    from cupyx.scipy.ndimage import gaussian_filter as cp_gaussian_filter
-    from cupyx.scipy.ndimage import zoom as cupy_zoom
-    import cupy.linalg as cp_linalg
-    _cupy_imported = True
+class BackendMode(str, Enum):
+    """Explicitly requested numerical backend."""
 
-except Exception:
-    cp = None
-    cp_fft = None
-    cp_ndi = None
-    cp_gaussian_filter = None
-    cupy_zoom = None
-    cp_linalg = None
-    _cupy_imported = False
+    CPU = "cpu"
+    GPU = "gpu"
+    AUTO = "auto"
 
 
-# ---------------------------------------------------------------------------
-# CUDA usability test
-# ---------------------------------------------------------------------------
+ActualBackend = Literal["numpy", "cupy"]
 
-def _cupy_usable() -> bool:
-    """Return True only when CuPy can actually execute CUDA operations.
 
-    Importing CuPy alone is not enough. This test detects cases such as:
+class BackendError(RuntimeError):
+    """Base class for backend selection errors."""
 
-        cudaErrorInsufficientDriver
 
-    where CuPy is installed but the NVIDIA driver is missing, incompatible,
-    or otherwise unable to execute the CUDA runtime.
+class BackendNotAvailableError(BackendError):
+    """Raised when the GPU backend is requested but cannot be used."""
 
-    The test performs:
-      1. A CUDA device query.
-      2. A tiny GPU allocation.
-      3. A tiny GPU operation.
-      4. A synchronization.
-      5. A transfer back to the CPU.
 
-    Returns
-    -------
-    bool
-        True if CuPy is actually usable, False otherwise.
+GPU_UNAVAILABLE_MESSAGE = (
+    "GPU backend requested but CuPy/CUDA could not be initialized.\n"
+    "Use --backend cpu or --backend auto if CPU execution is intended."
+)
+
+
+# Legacy parameter values are still accepted so that existing parameter files
+# keep working. They are resolved *strictly*: ``cupyRAM`` means "use the GPU",
+# so it fails loudly when no usable GPU is present rather than falling back.
+_MODE_ALIASES: dict[str, BackendMode] = {
+    "cpu": BackendMode.CPU,
+    "numpy": BackendMode.CPU,
+    "np": BackendMode.CPU,
+    "gpu": BackendMode.GPU,
+    "cupy": BackendMode.GPU,
+    "cp": BackendMode.GPU,
+    "cupyram": BackendMode.GPU,
+    "auto": BackendMode.AUTO,
+}
+
+
+def resolve_mode(value: Any = None) -> BackendMode:
+    """Resolve a user-supplied backend value to a :class:`BackendMode`.
+
+    Parameters
+    ----------
+    value:
+        ``None``, a :class:`BackendMode`, or a string. ``None`` resolves to
+        :attr:`BackendMode.AUTO`. Legacy names such as ``"cupyRAM"`` are
+        accepted.
+
+    Raises
+    ------
+    ValueError
+        When the value is not a recognised backend name.
     """
-    if not _cupy_imported or cp is None:
+    if value is None:
+        return BackendMode.AUTO
+
+    if isinstance(value, BackendMode):
+        return value
+
+    try:
+        key = str(value).strip().lower()
+    except Exception:  # pragma: no cover - defensive
+        key = ""
+
+    try:
+        return _MODE_ALIASES[key]
+    except KeyError:
+        raise ValueError(
+            f"Unknown backend {value!r}. Use 'cpu', 'gpu' or 'auto'."
+        ) from None
+
+
+# ---------------------------------------------------------------------------
+# Lazy CuPy access
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class _CupyModules:
+    """The CuPy modules used by the GPU backend."""
+
+    cp: Any
+    fft: Any
+    ndi: Any
+    gaussian_filter: Any
+    zoom: Any
+    linalg: Any
+
+
+def _cupy_installed() -> bool:
+    """Return True when CuPy appears to be installed.
+
+    A broken or hostile import hook must not make the package unusable, so
+    every failure mode is reported as "not installed".
+    """
+    try:
+        return importlib.util.find_spec("cupy") is not None
+    except Exception:
         return False
+
+
+@cache
+def _cupy_modules() -> _CupyModules | None:
+    """Import and bundle the CuPy modules, or return ``None``.
+
+    CuPy is imported here rather than at module import time so that importing
+    HoloDoppler never requires CuPy.
+    """
+    try:
+        import cupy as cp
+        import cupy.linalg as cp_linalg
+        import cupyx.scipy.fft as cp_fft
+        import cupyx.scipy.ndimage as cp_ndi
+        from cupyx.scipy.ndimage import gaussian_filter as cp_gaussian_filter
+        from cupyx.scipy.ndimage import zoom as cp_zoom
+
+    except Exception:
+        return None
+
+    return _CupyModules(
+        cp=cp,
+        fft=cp_fft,
+        ndi=cp_ndi,
+        gaussian_filter=cp_gaussian_filter,
+        zoom=cp_zoom,
+        linalg=cp_linalg,
+    )
+
+
+@cache
+def _cupy_report() -> tuple[str, str | None]:
+    """Return ``(state, detail)`` for the local CuPy installation.
+
+    ``state`` is one of:
+
+    ``"absent"``
+        CuPy is not installed.
+    ``"unusable"``
+        CuPy is installed but CUDA cannot execute work.
+    ``"usable"``
+        CuPy can actually execute CUDA work.
+
+    The result is cached: the CUDA probe performs a real allocation and is
+    therefore only executed once per process.
+    """
+    if not _cupy_installed():
+        return "absent", None
+
+    modules = _cupy_modules()
+    if modules is None:
+        return "unusable", "CuPy could not be imported"
+
+    cp = modules.cp
 
     try:
         # Make sure at least one CUDA device is visible.
         if cp.cuda.runtime.getDeviceCount() < 1:
-            return False
+            return "unusable", "no CUDA device is visible"
 
         # Actually allocate something on the GPU.
         x = cp.zeros(1, dtype=cp.float32)
 
-        # Perform a real GPU operation.
+        # Perform a real GPU operation and force CUDA to execute it now.
         x += 1
-
-        # Force CUDA to execute the operation now.
         cp.cuda.runtime.deviceSynchronize()
 
-        # Force a device -> host transfer as a final sanity check.
-        return float(x.get()[0]) == 1.0
+        # A device -> host transfer is the final sanity check.
+        if float(x.get()[0]) != 1.0:
+            return "unusable", "CUDA sanity check returned an unexpected value"
 
-    except Exception as exc:
-        print(
-            "CuPy detected but CUDA is not usable; "
-            f"falling back to NumPy: {exc}"
-        )
-        return False
+        return "usable", None
+
+    except Exception as exc:  # noqa: BLE001 - any CUDA failure means unusable
+        return "unusable", str(exc)
 
 
-# Test CuPy once when this module is imported.
-_cupy_available = _cupy_usable()
+def _cupy_state() -> str:
+    """Return ``"absent"``, ``"unusable"`` or ``"usable"``."""
+    return _cupy_report()[0]
+
+
+def _warn_auto_fallback() -> None:
+    """Explain an ``auto`` fallback that was caused by a broken CUDA setup.
+
+    ``auto`` with CuPy absent is the normal CPU installation, so it stays
+    silent. A degraded CUDA runtime is worth a single notice.
+    """
+    state, detail = _cupy_report()
+
+    if state != "unusable":
+        return
+
+    message = "CuPy is installed but CUDA is not usable; using the NumPy backend"
+    if detail:
+        message = f"{message}: {detail}"
+
+    print(message, file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------
+# Backend state
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class BackendState:
+    """Resolved backend: what was requested and what is actually in use."""
+
+    requested: BackendMode
+    actual: ActualBackend
+    xp: Any
+    fft: Any
+    ndi: Any
+    gaussian_filter: Any
+    zoom: Any
+    linalg: Any
+
+
+def _numpy_state(requested: BackendMode) -> BackendState:
+    """Build the NumPy state for the given requested mode."""
+    return BackendState(
+        requested=requested,
+        actual="numpy",
+        xp=np,
+        fft=np_fft,
+        ndi=np_ndi,
+        gaussian_filter=np_gaussian_filter,
+        zoom=scipy_zoom,
+        linalg=np_linalg,
+    )
+
+
+def _cupy_state_for(requested: BackendMode) -> BackendState:
+    """Build the CuPy state for the given requested mode."""
+    modules = _cupy_modules()
+
+    if modules is None:  # pragma: no cover - guarded by _cupy_state()
+        raise BackendNotAvailableError(GPU_UNAVAILABLE_MESSAGE)
+
+    return BackendState(
+        requested=requested,
+        actual="cupy",
+        xp=modules.cp,
+        fft=modules.fft,
+        ndi=modules.ndi,
+        gaussian_filter=modules.gaussian_filter,
+        zoom=modules.zoom,
+        linalg=modules.linalg,
+    )
+
+
+def _resolve_state(mode: BackendMode) -> BackendState:
+    """Resolve ``mode`` into a concrete :class:`BackendState`.
+
+    ``cpu`` never touches CuPy. ``gpu`` requires a usable GPU. ``auto`` is the
+    only mode allowed to fall back to NumPy.
+    """
+    if mode is BackendMode.CPU:
+        return _numpy_state(mode)
+
+    if mode is BackendMode.GPU:
+        if _cupy_state() != "usable":
+            raise BackendNotAvailableError(GPU_UNAVAILABLE_MESSAGE)
+        return _cupy_state_for(mode)
+
+    # BackendMode.AUTO
+    if _cupy_state() == "usable":
+        return _cupy_state_for(mode)
+
+    _warn_auto_fallback()
+    return _numpy_state(mode)
 
 
 # ---------------------------------------------------------------------------
@@ -104,104 +337,89 @@ class BackendManager:
 
     Parameters
     ----------
-    backend:
-        Accepted values:
+    mode:
+        ``"cpu"``, ``"gpu"``, ``"auto"`` or a legacy alias such as
+        ``"cupyRAM"``.
 
-        - ``"auto"``  : use CuPy if actually usable, otherwise NumPy.
-        - ``"numpy"`` : force NumPy.
-        - ``"np"``    : alias for NumPy.
-        - ``"cpu"``   : alias for NumPy.
-        - ``"cupy"``  : request CuPy; falls back to NumPy if unusable.
-        - ``"cp"``    : alias for CuPy.
-        - ``"gpu"``   : alias for CuPy.
+    Attributes
+    ----------
+    state:
+        The resolved :class:`BackendState`. Its ``requested`` field records
+        what the caller asked for and its ``actual`` field records what is
+        really in use.
     """
 
-    def __init__(self, backend: str = "auto"):
-        self.backend_name = backend.lower()
-
-        self.xp = None
-        self.fft = None
-        self.gaussian_filter = None
-        self.ndi = None
-        self.zoom = None
-        self.linalg = None
-
-        self._init_backend()
+    def __init__(self, mode: BackendMode | str = BackendMode.AUTO) -> None:
+        self.state = _resolve_state(resolve_mode(mode))
 
     # ------------------------------------------------------------------
-    # Backend initialization
+    # State introspection
     # ------------------------------------------------------------------
 
-    def _init_backend(self) -> None:
+    @property
+    def mode(self) -> BackendMode:
+        """The requested backend mode."""
+        return self.state.requested
 
-        # --------------------------------------------------------------
-        # Explicit NumPy
-        # --------------------------------------------------------------
+    @property
+    def requested(self) -> BackendMode:
+        """The requested backend mode."""
+        return self.state.requested
 
-        if self.backend_name in {"numpy", "np", "cpu"}:
-            self.backend_name = "numpy"
+    @property
+    def actual(self) -> ActualBackend:
+        """The backend that is actually in use."""
+        return self.state.actual
 
-            self.xp = np
-            self.fft = np_fft
-            self.gaussian_filter = np_gaussian_filter
-            self.ndi = np_ndi
-            self.zoom = scipy_zoom
-            self.linalg = np_linalg
+    @property
+    def backend_name(self) -> ActualBackend:
+        """Legacy alias for :attr:`actual`."""
+        return self.state.actual
 
-            return
+    @property
+    def array_module(self) -> Any:
+        """The array module currently in use."""
+        return self.state.xp
 
-        # --------------------------------------------------------------
-        # CuPy / auto
-        # --------------------------------------------------------------
+    @property
+    def xp(self) -> Any:
+        return self.state.xp
 
-        if self.backend_name in {"cupy", "cp", "gpu", "auto"}:
+    @property
+    def fft(self) -> Any:
+        return self.state.fft
 
-            if _cupy_available:
-                self.backend_name = "cupy"
+    @property
+    def ndi(self) -> Any:
+        return self.state.ndi
 
-                self.xp = cp
-                self.fft = cp_fft
-                self.gaussian_filter = cp_gaussian_filter
-                self.ndi = cp_ndi
-                self.zoom = cupy_zoom
-                self.linalg = cp_linalg
+    @property
+    def gaussian_filter(self) -> Any:
+        return self.state.gaussian_filter
 
-                return
+    @property
+    def zoom(self) -> Any:
+        return self.state.zoom
 
-            # CuPy is not usable -> NumPy fallback
-            self.backend_name = "numpy"
-
-            self.xp = np
-            self.fft = np_fft
-            self.gaussian_filter = np_gaussian_filter
-            self.ndi = np_ndi
-            self.zoom = scipy_zoom
-            self.linalg = np_linalg
-
-            return
-
-        # --------------------------------------------------------------
-        # Unknown backend
-        # --------------------------------------------------------------
-
-        raise ValueError(
-            f"Unknown backend {self.backend_name!r}. "
-            "Use 'auto', 'numpy' or 'cupy'."
-        )
-
-    # ------------------------------------------------------------------
-    # Properties
-    # ------------------------------------------------------------------
+    @property
+    def linalg(self) -> Any:
+        return self.state.linalg
 
     @property
     def is_gpu(self) -> bool:
         """True when CuPy is the active backend."""
-        return self.backend_name == "cupy" and self.xp is cp
+        return self.state.actual == "cupy"
 
     @property
     def is_numpy(self) -> bool:
         """True when NumPy is the active backend."""
-        return self.backend_name == "numpy"
+        return self.state.actual == "numpy"
+
+    def __repr__(self) -> str:
+        return (
+            f"BackendManager(requested={self.state.requested.value!r}, "
+            f"actual={self.state.actual!r})"
+        )
 
     # ------------------------------------------------------------------
     # Array conversion
@@ -209,15 +427,19 @@ class BackendManager:
 
     def to_backend(self, arr):
         """Convert/move an array to the active backend."""
-        if self.is_gpu:
-            return cp.asarray(arr)
+        if self.state.actual == "cupy":
+            modules = _cupy_modules()
+            if modules is not None:
+                return modules.cp.asarray(arr)
 
         return np.asarray(arr)
 
     def to_numpy(self, arr):
         """Convert an array to NumPy."""
-        if self.is_gpu and isinstance(arr, cp.ndarray):
-            return cp.asnumpy(arr)
+        if self.state.actual == "cupy":
+            modules = _cupy_modules()
+            if modules is not None and isinstance(arr, modules.cp.ndarray):
+                return modules.cp.asnumpy(arr)
 
         return np.asarray(arr)
 
@@ -233,6 +455,8 @@ class BackendManager:
         if not self.is_gpu:
             return
 
+        cp = self.state.xp
+
         if synchronize:
             cp.cuda.Device().synchronize()
 
@@ -247,7 +471,7 @@ class BackendManager:
         if not self.is_gpu:
             return
 
-        free_bytes, total_bytes = cp.cuda.runtime.memGetInfo()
+        free_bytes, total_bytes = self.state.xp.cuda.runtime.memGetInfo()
         used_bytes = total_bytes - free_bytes
 
         print(f"Used GPU memory: {used_bytes / 1e6:.1f} MB")
@@ -255,97 +479,123 @@ class BackendManager:
     def synchronize(self) -> None:
         """Synchronize the GPU.
 
-        This is a no-op for NumPy.
+        This is a no-op when NumPy is active.
         """
         if self.is_gpu:
-            cp.cuda.Device().synchronize()
+            self.state.xp.cuda.Device().synchronize()
 
 
 # ---------------------------------------------------------------------------
-# Process-wide default backend
+# Process-wide backend
 # ---------------------------------------------------------------------------
 
-# Automatically select CuPy when CUDA is really usable,
-# otherwise use NumPy.
-backend = BackendManager("auto")
+_backend: BackendManager | None = None
 
 
-# ---------------------------------------------------------------------------
-# Backend selection
-# ---------------------------------------------------------------------------
+def get_backend() -> BackendManager:
+    """Return the process-wide backend, initializing it on first use.
 
-def set_backend(name: str = "auto") -> BackendManager:
+    The default mode is :attr:`BackendMode.AUTO`, matching HoloDoppler's
+    historical behaviour of preferring the GPU and falling back to the CPU.
+    """
+    global _backend
+
+    if _backend is None:
+        _backend = BackendManager(BackendMode.AUTO)
+
+    return _backend
+
+
+def set_backend(name: Any = None) -> BackendManager:
     """Select the process-wide backend.
 
     Parameters
     ----------
     name:
-        ``"auto"``, ``"numpy"`` or ``"cupy"``.
+        ``"cpu"``, ``"gpu"``, ``"auto"`` or a legacy alias. ``None`` means
+        ``"auto"``.
 
     Returns
     -------
     BackendManager
         The newly selected backend manager.
 
-    Examples
-    --------
-    Force CPU:
+    Raises
+    ------
+    BackendNotAvailableError
+        When ``"gpu"`` is requested and CuPy/CUDA is not usable.
+    ValueError
+        When the name is not a recognised backend.
 
-    >>> import holodoppler.backend as backend
-    >>> backend.set_backend("numpy")
-
-    Request GPU:
-
-    >>> backend.set_backend("cupy")
-
-    Automatic selection:
-
-    >>> backend.set_backend("auto")
+    Notes
+    -----
+    Re-selecting the current mode is a no-op: the CUDA probe is not repeated.
     """
     global _backend
-    global backend
-    global xp
-    global fft
-    global gaussian_filter
-    global ndi
-    global zoom
-    global linalg
-    global is_gpu
-    global cupy_available
 
-    backend = BackendManager(name)
+    mode = resolve_mode(name)
 
-    _backend = backend
+    if _backend is not None and _backend.mode is mode:
+        return _backend
 
-    xp = _backend.xp
-    fft = _backend.fft
-    gaussian_filter = _backend.gaussian_filter
-    ndi = _backend.ndi
-    zoom = _backend.zoom
-    linalg = _backend.linalg
-    is_gpu = _backend.is_gpu
-
-
-    cupy_available = _cupy_available
+    _backend = BackendManager(mode)
 
     return _backend
+
+
+def reset_backend(*, clear_probe: bool = False) -> None:
+    """Forget the process-wide backend.
+
+    Parameters
+    ----------
+    clear_probe:
+        Also discard the cached CuPy/CUDA probe result. Intended for tests
+        that need to observe probing again.
+
+    Notes
+    -----
+    Backend-dependent caches elsewhere in HoloDoppler are keyed on the active
+    array module, so they do not need to be cleared when the backend changes.
+    """
+    global _backend
+
+    _backend = None
+
+    if clear_probe:
+        _cupy_modules.cache_clear()
+        _cupy_report.cache_clear()
 
 
 # ---------------------------------------------------------------------------
 # Module-level aliases
 # ---------------------------------------------------------------------------
+#
+# These names are resolved lazily through PEP 562 so that ``backend.xp`` and
+# friends always report the backend that is currently selected. Defining them
+# as plain globals would freeze them at ``set_backend`` time.
 
-_backend = backend
+_BACKEND_ATTRIBUTES = (
+    "xp",
+    "fft",
+    "ndi",
+    "gaussian_filter",
+    "zoom",
+    "linalg",
+    "is_gpu",
+)
 
-xp = _backend.xp
-fft = _backend.fft
-gaussian_filter = _backend.gaussian_filter
-ndi = _backend.ndi
-zoom = _backend.zoom
-linalg = _backend.linalg
-is_gpu = _backend.is_gpu
 
-cupy_available = _cupy_available
+def __getattr__(name: str) -> Any:
+    if name in _BACKEND_ATTRIBUTES:
+        return getattr(get_backend(), name)
+
+    if name == "cupy_available":
+        return _cupy_state() == "usable"
+
+    if name == "backend":
+        return get_backend()
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -354,26 +604,29 @@ cupy_available = _cupy_available
 
 def to_backend(arr):
     """Convert an array to the currently selected backend."""
-    return _backend.to_backend(arr)
+    return get_backend().to_backend(arr)
 
 
 def to_numpy(arr):
     """Convert an array to NumPy."""
-    return _backend.to_numpy(arr)
+    return get_backend().to_numpy(arr)
 
 
 def clear_gpu_memory(synchronize: bool = True):
     """Clear GPU memory when CuPy is active."""
-    return _backend.clear_gpu_memory(synchronize=synchronize)
+    return get_backend().clear_gpu_memory(synchronize=synchronize)
 
 
 def print_gpu_used_memory():
     """Print GPU memory usage when CuPy is active."""
-    return _backend.print_gpu_used_memory()
+    return get_backend().print_gpu_used_memory()
 
-def get_backend_name():
-    return _backend.backend_name
+
+def get_backend_name() -> ActualBackend:
+    """Return ``"numpy"`` or ``"cupy"`` for the active backend."""
+    return get_backend().actual
+
 
 def synchronize():
     """Synchronize GPU when CuPy is active."""
-    return _backend.synchronize()
+    return get_backend().synchronize()
