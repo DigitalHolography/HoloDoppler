@@ -6,7 +6,7 @@ from pathlib import Path
 from scipy.ndimage import gaussian_filter
 import imageio.v3 as iio
 from holodoppler.saving import _write_video_fast
-from holodoppler.utils import stretchlim, imadjustcp, stretchlimcp, scaling
+from holodoppler.core.arrays import stretchlim, imadjustcp, stretchlimcp, scaling
 from cupyx.scipy.ndimage import zoom, gaussian_filter
 
 """ From an h5 file containing raw images arrays this scripts can generate avi and pngs with high quality of details with different parameters"""

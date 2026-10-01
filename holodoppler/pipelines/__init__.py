@@ -1,44 +1,34 @@
-"""Lazy registry for all bundled HoloDoppler processing pipelines."""
+"""Lazy registry for the bundled HoloDoppler processing pipelines."""
 
 import inspect
 import pkgutil
 from importlib import import_module
 from pathlib import Path
 
+
 pipelines = {}
 
+# Module name -> public pipeline name, for the cases where they differ.
 _PIPELINE_ALIASES = {
-    "main_pipeline_xp_on_ram_dp": "main",
     "main_sliding_shack_hart": "sliding_shack_hartmann",
-}
-
-_PIPELINE_FUNCTIONS = {
-    "main_pipeline_xp_on_ram_dp": ("process_moments", "preview_process_moments"),
 }
 
 
 def _lazy_function(module_name: str, function_name: str):
-    """Import a pipeline on first use while preserving the release UI API."""
+    """Import a pipeline on first use.
 
-    def wrapper(
-        file_path,
-        parameters,
-        *,
-        progress_callback=None,
-        warning_callback=None,
-        save_debug: bool = True,
-    ):
+    The bundled pipelines do not share one signature yet, so only the keywords
+    the target actually accepts are forwarded.
+    """
+
+    def wrapper(file_path, parameters, *, progress_callback=None):
         module = import_module(f".{module_name}", package=__name__)
         func = getattr(module, function_name)
-        signature = inspect.signature(func)
-        kwargs = {}
-        if "progress_callback" in signature.parameters:
-            kwargs["progress_callback"] = progress_callback
-        if "warning_callback" in signature.parameters:
-            kwargs["warning_callback"] = warning_callback
-        if "save_debug" in signature.parameters:
-            kwargs["save_debug"] = save_debug
-        return func(file_path, parameters, **kwargs)
+
+        if "progress_callback" in inspect.signature(func).parameters:
+            return func(file_path, parameters, progress_callback=progress_callback)
+
+        return func(file_path, parameters)
 
     wrapper.__name__ = function_name
     wrapper.__qualname__ = f"{module_name}.{function_name}"
@@ -53,9 +43,5 @@ for info in pkgutil.iter_modules([str(_package_dir)]):
         continue
 
     key = _PIPELINE_ALIASES.get(module_name, module_name.removeprefix("main_"))
-    process_name, preview_name = _PIPELINE_FUNCTIONS.get(
-        module_name,
-        ("process", "preview"),
-    )
-    pipelines[key] = _lazy_function(module_name, process_name)
-    pipelines[f"preview_{key}"] = _lazy_function(module_name, preview_name)
+    pipelines[key] = _lazy_function(module_name, "process")
+    pipelines[f"preview_{key}"] = _lazy_function(module_name, "preview")

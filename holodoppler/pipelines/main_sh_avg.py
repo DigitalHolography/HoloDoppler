@@ -12,33 +12,33 @@ from holodoppler.saving import (
     save_outputs,
 )
 
-from holodoppler.propagation import (
+from holodoppler.core.propagation import (
     fresnel_transform,
     fresnel_transform_with_phase,
     angular_spectrum_transform,
     angular_spectrum_transform_with_phase,
 )
 
-from holodoppler.shack_hartmann import (
+from holodoppler.core.shack_hartmann import (
     construct_subapertures_fresnel,
     construct_subapertures_angular,
     calculate_displacements,
     calculate_displacements_graph_laplacian,
 )
 
-from holodoppler.zernike import (
+from holodoppler.core.zernike import (
     fit_zernike_fresnel,
     fit_zernike_angular_spectrum,
 )
 
-from holodoppler.utils import (
-    gaussian_flatfield,
-    update_from_holo_footer,
+from holodoppler.config import (
     update_from_cine_metadata,
-    resize_frames,
+    update_from_holo_footer,
 )
 
-from holodoppler.filtering import (
+from holodoppler.core.arrays import gaussian_flatfield, resize_frames
+
+from holodoppler.core.filtering import (
     filter_2d,
     svd_filter,
     frequency_symmetric_filtering,
@@ -46,16 +46,16 @@ from holodoppler.filtering import (
     corner_compensation,
 )
 
-from holodoppler.moments import moment, moments
+from holodoppler.core.doppler import moment, moments
 
-from holodoppler.registration import (
+from holodoppler.core.registration import (
     register_images_shifts,
     apply_register_images_shifts,
     register_with_ecc,
     apply_ecc_registration
 )
 
-from holodoppler.file_reader import FileReaderFactory
+from holodoppler.readers import FileReaderFactory
 
 
 

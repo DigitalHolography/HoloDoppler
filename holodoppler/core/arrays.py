@@ -1,51 +1,37 @@
-"""Utility functions for array operations.
+"""Array, mask and padding helpers on the active backend.
 
-Numerical array operations are delegated to the project's backend module,
-which transparently selects NumPy or CuPy.
+Every function here operates on whichever array module the active
+:class:`~holodoppler.execution.context.ExecutionContext` carries, so this
+module never reads the process-global backend directly.
 
-The active backend is available through:
-
-    backend.xp
-    backend.fft
-    backend.gaussian_filter
-    backend.zoom
-    backend.to_backend()
-    backend.to_numpy()
-
-This module should therefore not import or use CuPy directly.
+Cached functions take ``xp`` explicitly, which keeps backend identity part of
+the cache key.
 """
 
 from __future__ import annotations
 
-import json
 from functools import cache
-from pathlib import Path
-from typing import Any, Mapping
 
 import numpy as np
-import yaml
 
-import holodoppler.backend as backend
+from holodoppler.execution.context import ExecutionContext
 
 
-# ============================================================================
-# Array / backend helpers
-# ============================================================================
+def _active() -> ExecutionContext:
+    """The execution context for the currently selected backend."""
+    return ExecutionContext.current()
 
 
 def to_backend(data):
     """Convert data to the currently selected numerical backend."""
-    return backend.to_backend(data)
+    return _active().to_backend(data)
+
 
 
 def to_numpy(data):
     """Convert data to a NumPy array."""
-    return backend.to_numpy(data)
+    return _active().to_numpy(data)
 
-
-# ============================================================================
-# Resizing
-# ============================================================================
 
 
 def square_cupy(
@@ -91,11 +77,13 @@ def square_cupy(
         target_width / width,
     )
 
-    return backend.zoom(
+    return _active().zoom(
         video_frames,
         zoom_factors,
         order=3,
     )
+
+
 
 def resize_frames(
     video_frames,
@@ -129,7 +117,7 @@ def resize_frames(
         ``(n_frames, height, width)``.
     """
 
-    video_frames = backend.to_backend(video_frames)
+    video_frames = _active().to_backend(video_frames)
 
     was_2d = video_frames.ndim == 2
 
@@ -151,24 +139,19 @@ def resize_frames(
         new_width / width,
     )
 
-    resized = backend.zoom(
+    resized = _active().zoom(
         video_frames,
         zoom_factors,
         order=order,
     )
 
-    resized = backend.to_numpy(resized)
+    resized = _active().to_numpy(resized)
 
     if was_2d:
         return resized[0]
 
     return resized
 
-
-
-# ============================================================================
-# Contrast / intensity adjustment
-# ============================================================================
 
 
 def stretchlim(
@@ -212,7 +195,7 @@ def stretchlim(
 
     # Percentile calculation in the original implementation was NumPy
     # based. Keep this operation CPU-side.
-    data = backend.to_numpy(data)
+    data = _active().to_numpy(data)
 
     if data.ndim == 4:
         flat = data.reshape(-1, data.shape[-1])
@@ -244,6 +227,7 @@ def stretchlim(
     return low, high
 
 
+
 def stretchlimcp(
     data,
     low_percent=1,
@@ -269,18 +253,19 @@ def stretchlimcp(
             "low_percent must be smaller than high_percent."
         )
 
-    flat = backend.to_backend(data).ravel()
+    flat = _active().to_backend(data).ravel()
 
     return (
-        backend.xp.percentile(
+        _active().xp.percentile(
             flat,
             low_percent,
         ),
-        backend.xp.percentile(
+        _active().xp.percentile(
             flat,
             high_percent,
         ),
     )
+
 
 
 def imadjust(
@@ -293,21 +278,22 @@ def imadjust(
 
     The input is converted to the active backend before processing.
     """
-    data = backend.to_backend(data)
+    data = _active().to_backend(data)
 
     adjusted = (
-        backend.xp.clip(data, low, high) - low
+        _active().xp.clip(data, low, high) - low
     ) / (
         high - low + 1e-12
     )
 
     if gamma != 1.0:
-        adjusted = backend.xp.power(
+        adjusted = _active().xp.power(
             adjusted,
             gamma,
         )
 
     return adjusted
+
 
 
 def imadjust_cupy(
@@ -328,6 +314,7 @@ def imadjust_cupy(
     )
 
 
+
 def scaling(
     data,
     low,
@@ -340,10 +327,6 @@ def scaling(
         high - low + 1e-12
     )
 
-
-# ============================================================================
-# Sharpening / projection
-# ============================================================================
 
 
 def unsharp_projection(
@@ -431,10 +414,6 @@ def unsharp_projection(
     return bm.to_numpy(projection)
 
 
-# ============================================================================
-# Gaussian filtering / flat-field correction
-# ============================================================================
-
 
 def gaussian_flatfield(
     array,
@@ -454,7 +433,7 @@ def gaussian_flatfield(
         Gaussian filter is used.
     """
     if gaussian_filter_func is None:
-        gaussian_filter_func = backend.gaussian_filter
+        gaussian_filter_func = _active().gaussian_filter
 
     blurred = gaussian_filter_func(
         array,
@@ -462,6 +441,7 @@ def gaussian_flatfield(
     )
 
     return array / blurred
+
 
 
 def temporal_gaussian_filter(
@@ -483,12 +463,12 @@ def temporal_gaussian_filter(
     if sigma == 0:
         return arr
 
-    arr = backend.to_backend(
+    arr = _active().to_backend(
         arr,
     )
 
-    return backend.xp.asarray(
-        backend.gaussian_filter(
+    return _active().xp.asarray(
+        _active().gaussian_filter(
             arr,
             sigma=[
                 sigma if i == axis else 0
@@ -497,10 +477,6 @@ def temporal_gaussian_filter(
         )
     )
 
-
-# ============================================================================
-# Masks
-# ============================================================================
 
 
 @cache
@@ -546,9 +522,11 @@ def _elliptical_mask_cached(
     return mask
 
 
+
 def _clear_elliptical_mask_cache() -> None:
     """Drop every cached elliptical mask."""
     _elliptical_mask_cached.cache_clear()
+
 
 
 def elliptical_mask(
@@ -585,7 +563,7 @@ def elliptical_mask(
         elliptical_mask.cache_clear()
     """
     if xp is None:
-        xp = backend.xp
+        xp = _active().xp
 
     return _elliptical_mask_cached(
         xp,
@@ -595,12 +573,9 @@ def elliptical_mask(
     )
 
 
+
 elliptical_mask.cache_clear = _clear_elliptical_mask_cache  # type: ignore[attr-defined]
 
-
-# ============================================================================
-# Central padding / cropping
-# ============================================================================
 
 
 def pad_array_centrally(
@@ -626,7 +601,7 @@ def pad_array_centrally(
     array
         Centrally padded array on the active backend.
     """
-    arr = backend.to_backend(arr)
+    arr = _active().to_backend(arr)
 
     if isinstance(new_shape, int):
         new_shape = (
@@ -668,11 +643,12 @@ def pad_array_centrally(
         pad_x1,
     )
 
-    return backend.xp.pad(
+    return _active().xp.pad(
         arr,
         pad_width,
         mode="constant",
     )
+
 
 
 def crop_array_centrally(
@@ -735,261 +711,6 @@ def crop_array_centrally(
     ]
 
 
-# ============================================================================
-# Configuration
-# ============================================================================
-
-
-def load_config(
-    config_path,
-):
-    """Load a YAML or JSON configuration.
-
-    Lists are recursively converted to tuples.
-
-    Parameters
-    ----------
-    config_path:
-        Path to a YAML/JSON configuration file or an existing dictionary.
-
-    Returns
-    -------
-    dict
-        Configuration dictionary with lists converted to tuples.
-    """
-    if isinstance(config_path, Mapping):
-        config = dict(config_path)
-
-    else:
-        config_path = Path(
-            config_path
-        )
-
-        with config_path.open(
-            "r",
-            encoding="utf-8",
-        ) as file:
-            suffix = config_path.suffix.lower()
-
-            if suffix in {".yaml", ".yml"}:
-                config = yaml.safe_load(file)
-
-            elif suffix == ".json":
-                config = json.load(file)
-
-            else:
-                raise ValueError(
-                    f"Unsupported configuration format: "
-                    f"{config_path.suffix!r}. "
-                    "Expected .json, .yaml or .yml."
-                )
-
-    def list_to_tuple(value):
-        if isinstance(value, dict):
-            return {
-                key: list_to_tuple(item)
-                for key, item in value.items()
-            }
-
-        if isinstance(value, list):
-            return tuple(
-                list_to_tuple(item)
-                for item in value
-            )
-
-        return value
-
-    return list_to_tuple(config)
-
-
-# ============================================================================
-# HoloVibes footer
-# ============================================================================
-
-
-def update_from_holo_footer(
-    parameters,
-    holofooter,
-):
-    """Update processing parameters using a HoloVibes footer.
-
-    Parameters whose value is ``"use_holovibes"`` are replaced with the
-    corresponding values found in the HoloVibes metadata.
-
-    The original function name is retained for compatibility.
-    """
-    if holofooter is None:
-        return parameters
-
-    try:
-        compute_settings = holofooter[
-            "compute_settings"
-        ]
-
-        image_rendering = compute_settings[
-            "image_rendering"
-        ]
-
-        info = holofooter[
-            "info"
-        ]
-
-        # ------------------------------------------------------------------
-        # Wavelength
-        # ------------------------------------------------------------------
-
-        if parameters.get(
-            "wavelength"
-        ) == "use_holovibes":
-            parameters["wavelength"] = (
-                image_rendering["lambda"]
-            )
-
-        # ------------------------------------------------------------------
-        # Spatial propagation
-        # ------------------------------------------------------------------
-
-        if parameters.get(
-            "spatial_propagation"
-        ) == "use_holovibes":
-
-            holovibes_transform = image_rendering[
-                "space_transformation"
-            ]
-
-            if holovibes_transform == "FRESNELTR":
-                parameters[
-                    "spatial_propagation"
-                ] = "Fresnel"
-
-            elif holovibes_transform == "ANGULARTR":
-                parameters[
-                    "spatial_propagation"
-                ] = "AngularSpectrum"
-
-            else:
-                print(
-                    "Couldn't parse spatial transform name "
-                    "in HoloVibes footer "
-                    f"({holovibes_transform!r}); "
-                    "using Fresnel."
-                )
-
-                parameters[
-                    "spatial_propagation"
-                ] = "Fresnel"
-
-        # ------------------------------------------------------------------
-        # Propagation distance
-        # ------------------------------------------------------------------
-
-        if parameters.get(
-            "z"
-        ) == "use_holovibes":
-            parameters["z"] = image_rendering[
-                "propagation_distance"
-            ]
-
-        # ------------------------------------------------------------------
-        # Pixel pitch
-        # ------------------------------------------------------------------
-
-        if parameters.get(
-            "pixel_pitch"
-        ) == "use_holovibes":
-
-            pixel_pitch = info[
-                "pixel_pitch"
-            ]
-
-            parameters["pixel_pitch"] = (
-                pixel_pitch["y"] * 1e-6,
-                pixel_pitch["x"] * 1e-6,
-            )
-
-        # ------------------------------------------------------------------
-        # Sampling frequency
-        # ------------------------------------------------------------------
-
-        if parameters.get(
-            "sampling_freq"
-        ) == "use_holovibes":
-
-            parameters[
-                "sampling_freq"
-            ] = info["camera_fps"]
-
-        # ------------------------------------------------------------------
-        # High frequency
-        # ------------------------------------------------------------------
-
-        if parameters.get(
-            "high_freq"
-        ) == "use_holovibes":
-
-            parameters[
-                "high_freq"
-            ] = info["camera_fps"] / 2
-
-    except (
-        KeyError,
-        TypeError,
-        ValueError,
-    ) as exc:
-        print(
-            f"Issue from HoloVibes footer: {exc}"
-        )
-
-    return parameters
-
-def update_from_cine_metadata(
-        parameters,
-        metadata
-    ):
-
-    # ------------------------------------------------------------------
-    # Pixel pitch
-    # ------------------------------------------------------------------
-
-    if parameters.get(
-        "pixel_pitch"
-    ) == "use_metadata":
-
-        parameters["pixel_pitch"] = (
-            1/metadata.extra["biYPelsPerMeter"],
-            1/metadata.extra["biXPelsPerMeter"],
-        )
-
-    # ------------------------------------------------------------------
-    # Sampling frequency
-    # ------------------------------------------------------------------
-
-    if parameters.get(
-        "sampling_freq"
-    ) == "use_metadata":
-
-        parameters[
-            "sampling_freq"
-        ] = metadata.extra["FrameRate"]
-    # ------------------------------------------------------------------
-    # High frequency
-    # ------------------------------------------------------------------
-
-    if parameters.get(
-        "high_freq"
-    ) == "use_metadata":
-
-        parameters[
-            "high_freq"
-        ] = metadata.extra["FrameRate"] / 2
-    
-    return parameters
-    
-
-# ============================================================================
-# Registration
-# ============================================================================
-
 
 def subpixel_parabola(
     vm,
@@ -1014,6 +735,7 @@ def subpixel_parabola(
         * float(vm - vp)
         / float(denominator)
     )
+
 
 
 def signed_peak(

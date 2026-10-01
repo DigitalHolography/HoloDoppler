@@ -261,16 +261,10 @@ class UI(BaseTk):
 
                 pulse_not_detected = False
 
-                def on_warning(code: str, _message: str) -> None:
-                    nonlocal pulse_not_detected
-                    if code == "cardiac_pulse_not_detected":
-                        pulse_not_detected = True
-
                 results = process(
                     str(path),
                     copy.deepcopy(parameters),
                     progress_callback=on_progress,
-                    warning_callback=on_warning,
                 )
                 if pulse_not_detected:
                     pulse_not_detected_paths.append(path)
@@ -347,7 +341,7 @@ class UI(BaseTk):
     def _preview_worker(self, path: Path, parameters: dict[str, Any]) -> None:
         self.events.put({"kind": "preview_started", "path": path})
         try:
-            image = preview(str(path), parameters, save_debug=False)
+            image = preview(str(path), parameters)
             self.events.put({"kind": "preview_result", "path": path, "image": image})
         except Exception as exc:
             self.events.put({"kind": "error", "message": str(exc), "traceback": traceback.format_exc()})

@@ -1,3 +1,5 @@
+"""Low-level Phantom ``.cine`` header parser (vendored)."""
+
 import numpy as np
 import struct as s
 import datetime as dti

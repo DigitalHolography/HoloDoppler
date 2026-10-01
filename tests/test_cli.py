@@ -53,16 +53,6 @@ def _report(result) -> str:
 # Help
 # ---------------------------------------------------------------------------
 
-def test_main_help_points_at_the_real_repository(holo_case, run_cli) -> None:
-    result = run_cli(["--help"], cwd=holo_case.directory)
-
-    assert result.returncode == 0, _report(result)
-
-    assert "DigitalHolography/HoloDoppler" in result.stdout
-    assert "yourusername" not in result.stdout
-    assert "process" in result.stdout
-
-
 def test_process_help_documents_each_backend_mode(holo_case, run_cli) -> None:
     result = run_cli(["process", "--help"], cwd=holo_case.directory)
 

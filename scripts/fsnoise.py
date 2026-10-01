@@ -1,5 +1,5 @@
 from pathlib import Path
-from holodoppler.file_reader import FileReaderFactory
+from holodoppler.readers import FileReaderFactory
 import numpy as np
 import matplotlib.pyplot as plt
 

@@ -24,7 +24,7 @@ n_modes = 6            # number of modes to display
 
 DATA_PATH = r"/data/Lourds/langevin/data/AUZOS.holo"
 
-from holodoppler.file_reader import FileReaderFactory
+from holodoppler.readers import FileReaderFactory
 
 reader = FileReaderFactory.create(DATA_PATH)
 

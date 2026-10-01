@@ -13,5 +13,5 @@ uv.lock
 
 /debug_outputs
 /temp
-
+.pytest_cache
 .debug_paths.json

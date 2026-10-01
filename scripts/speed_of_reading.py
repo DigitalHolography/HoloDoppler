@@ -1,4 +1,4 @@
-from holodoppler.file_reader import FileReaderFactory
+from holodoppler.readers import FileReaderFactory
 from tqdm import tqdm
 import numpy as np
 

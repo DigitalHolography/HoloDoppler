@@ -9,9 +9,9 @@ Workflow
 2. Find the first .h5 file.
 3. Load the `shack_hartmann_sub_images` dataset.
 4. Calculate Shack-Hartmann displacement maps using:
-       holodoppler.shack_hartmann.calculate_displacements_graph_laplacian
+       holodoppler.core.shack_hartmann.calculate_displacements_graph_laplacian
 5. Fit Zernike modes using:
-       holodoppler.zernike.fit_zernike_fresnel
+       holodoppler.core.zernike.fit_zernike_fresnel
 6. Plot the reconstructed phase with wavefront slopes overlaid.
 7. Save PNG and EPS files to:
        <root_folder>/preview/plots/
@@ -35,8 +35,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import holodoppler
-from holodoppler.shack_hartmann import calculate_displacements_graph_laplacian
-from holodoppler.zernike import fit_zernike_fresnel
+from holodoppler.core.shack_hartmann import calculate_displacements_graph_laplacian
+from holodoppler.core.zernike import fit_zernike_fresnel
 
 
 # ---------------------------------------------------------------------------

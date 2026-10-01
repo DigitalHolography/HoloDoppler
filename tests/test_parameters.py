@@ -15,7 +15,7 @@ import yaml
 
 from holodoppler.cli import _resolve_backend_mode
 from holodoppler.pipelines import pipelines
-from holodoppler.utils import load_config
+from holodoppler.config import load_config
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -25,9 +25,6 @@ DEFAULTS_DIR = PROJECT_ROOT / "holodoppler" / "ui" / "defaults"
 PARAMETER_FILES = sorted(PARAMETERS_DIR.glob("*.yaml")) + sorted(
     PARAMETERS_DIR.glob("*.json")
 )
-
-# Registered, shipped with a parameter file, but frozen as broken for this PR.
-BROKEN_PIPELINES = frozenset({"pca_accumulation", "spectral_cube", "split_apertures"})
 
 VALID_MODES = frozenset({"cpu", "gpu", "auto"})
 
@@ -77,9 +74,6 @@ def test_parameter_file_loads(path: Path) -> None:
 @pytest.mark.parametrize("path", PARAMETER_FILES, ids=lambda p: p.name)
 def test_parameter_file_pipeline_is_registered(path: Path) -> None:
     name = load_config(path)["pipeline_name"]
-
-    if name in BROKEN_PIPELINES:
-        pytest.xfail(f"{name} is deliberately frozen as broken (see test_known_issues)")
 
     assert name in pipelines, (
         f"{path.name} references unknown pipeline {name!r}. "

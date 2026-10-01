@@ -1,3 +1,9 @@
+"""Wavefront rendering helpers.
+
+Returns RGB arrays rather than opening figures, so callers decide how
+the image is stored.
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 

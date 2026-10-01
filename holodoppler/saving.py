@@ -17,7 +17,7 @@ import yaml
 from PIL import Image
 
 from holodoppler.get_version import get_version
-from holodoppler.utils import resize_frames
+from holodoppler.core.arrays import resize_frames
 
 
 def ensure_directory(path: Path) -> Path:

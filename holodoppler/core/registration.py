@@ -7,8 +7,8 @@ import numpy as np
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor
 
-from .utils import elliptical_mask
-from .utils import signed_peak, subpixel_parabola
+from .arrays import elliptical_mask
+from .arrays import signed_peak, subpixel_parabola
 
 
 def register_laplacian(xp, fft, video, radius=None, gauge="minimal", ref_frame=0):

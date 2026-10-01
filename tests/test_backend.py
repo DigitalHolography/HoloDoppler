@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 import holodoppler.backend as backend
-from holodoppler.utils import (
+from holodoppler.core.arrays import (
     elliptical_mask,
     pad_array_centrally,
     stretchlimcp,
@@ -453,7 +453,7 @@ def test_stretchlimcp_follows_the_active_backend(backend_env) -> None:
 
 def test_fresnel_transform_without_padding_runs() -> None:
     """The un-padded propagation path keeps working with backend arrays."""
-    from holodoppler.propagation import fresnel_transform
+    from holodoppler.core.propagation import fresnel_transform
 
     frames = np.random.default_rng(3).random((2, 8, 8)).astype(np.complex64)
 

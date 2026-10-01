@@ -1,13 +1,12 @@
-"""Pins for known problems that this PR deliberately does not fix.
+"""Pins for known problems that this cleanup deliberately does not fix.
 
-These tests assert the *current, broken* state on purpose. If someone repairs
-one of these areas, the corresponding pin will start failing, which is the
+These tests assert the *current, broken or stale* state on purpose. If someone
+repairs one of these areas, the corresponding pin starts failing, which is the
 signal to update or delete it.
 """
 
 from __future__ import annotations
 
-import importlib
 import json
 import re
 from pathlib import Path
@@ -18,62 +17,21 @@ import yaml
 import numpy as np
 
 import holodoppler.backend as backend
+from holodoppler.core.propagation import fresnel_transform
 from holodoppler.pipelines import pipelines
-from holodoppler.propagation import fresnel_transform
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_DIR = PROJECT_ROOT / "holodoppler"
-PIPELINES_DIR = PACKAGE_DIR / "pipelines"
 DEFAULTS_DIR = PACKAGE_DIR / "ui" / "defaults"
 
 
 # ---------------------------------------------------------------------------
-# Frozen pipelines
+# CuPy isolation
 # ---------------------------------------------------------------------------
 
-FROZEN_PIPELINES = ("main_pca_accumulation", "main_spectral_cube", "main_split_apertures")
-
-# The exact modules that still import CuPy directly. They are the same frozen
-# pipelines, so "no CuPy knowledge outside backend.py" is met for every
-# reachable code path but not yet for the frozen three.
-FROZEN_DIRECT_CUPY_MODULES = frozenset(
-    {
-        "pipelines/main_pca_accumulation.py",
-        "pipelines/main_spectral_cube.py",
-        "pipelines/main_split_apertures.py",
-    }
-)
-
-
-@pytest.mark.parametrize("module_name", FROZEN_PIPELINES)
-def test_frozen_pipelines_are_registered_but_not_importable(module_name: str) -> None:
-    """Frozen as broken by decision, not by accident.
-
-    The registry advertises them and parameter files reference them, but the
-    modules call ``saving``/``utils``/``propagation`` APIs that no longer exist.
-    """
-    registry_key = module_name.removeprefix("main_")
-    assert registry_key in pipelines
-
-    with pytest.raises(ImportError):
-        importlib.import_module(f"holodoppler.pipelines.{module_name}")
-
-
-def test_frozen_pipelines_fail_on_missing_saving_or_utils_apis() -> None:
-    """Record *why* the frozen pipelines are broken."""
-    import holodoppler.saving as saving
-    import holodoppler.utils as utils
-
-    assert not hasattr(saving, "_create_directories")
-    assert not hasattr(saving, "save_preview_images")
-    assert not hasattr(saving, "H5_OUTPUT_PATH_PARAMETER")
-    assert not hasattr(utils, "update_from_footer")
-    assert not hasattr(utils, "temporal_gaussian")
-
-
-def test_direct_cupy_imports_are_confined_to_the_frozen_pipelines() -> None:
-    """``backend.py`` is the only supported place for CuPy knowledge."""
+def test_cupy_is_confined_to_the_backend_module() -> None:
+    """``backend.py`` is the only module allowed to know about CuPy."""
     pattern = re.compile(r"^\s*(?:import|from)\s+cupyx?\b", re.MULTILINE)
 
     offenders = set()
@@ -84,9 +42,9 @@ def test_direct_cupy_imports_are_confined_to_the_frozen_pipelines() -> None:
         if pattern.search(path.read_text(encoding="utf-8")):
             offenders.add(path.relative_to(PACKAGE_DIR).as_posix())
 
-    assert offenders == FROZEN_DIRECT_CUPY_MODULES, (
-        "Direct CuPy usage changed. Either move it into backend.py or update "
-        "FROZEN_DIRECT_CUPY_MODULES."
+    assert offenders == set(), (
+        "CuPy must only be imported by holodoppler/backend.py, but found: "
+        f"{sorted(offenders)}"
     )
 
 
@@ -118,11 +76,9 @@ def _read_preset(name: str) -> dict:
     return json.loads(text)
 
 
-@pytest.mark.parametrize(
-    "name, value", sorted(LEGACY_BACKEND_PRESETS.items())
-)
+@pytest.mark.parametrize("name, value", sorted(LEGACY_BACKEND_PRESETS.items()))
 def test_shipped_presets_still_use_legacy_backend_names(name: str, value: str) -> None:
-    """Untouched by design: repairs here would change shipped GUI behaviour."""
+    """Untouched by design: repairing these would change shipped preset behaviour."""
     assert _read_preset(name)["backend"] == value
 
     # Accepted, and interpreted strictly as "use the GPU".
@@ -140,21 +96,8 @@ def test_shipped_presets_reference_unregistered_pipelines(
     )
 
 
-def test_pipeline_registry_keeps_dead_alias_configuration() -> None:
-    """The registry still maps a module that was removed."""
-    from holodoppler.pipelines import _PIPELINE_ALIASES, _PIPELINE_FUNCTIONS
-
-    dead_module = "main_pipeline_xp_on_ram_dp"
-
-    assert dead_module in _PIPELINE_ALIASES
-    assert dead_module in _PIPELINE_FUNCTIONS
-    assert not (PIPELINES_DIR / f"{dead_module}.py").exists()
-    assert _PIPELINE_ALIASES[dead_module] == "main"
-    assert "main" not in pipelines
-
-
 # ---------------------------------------------------------------------------
-# Packaging
+# Numerical
 # ---------------------------------------------------------------------------
 
 def test_fresnel_zero_padding_path_is_frozen_broken() -> None:
@@ -164,7 +107,7 @@ def test_fresnel_zero_padding_path_is_frozen_broken() -> None:
     only then pads the frames, so the multiply cannot broadcast. The
     ``pad_array_centrally`` signature mismatch that previously masked this as a
     ``TypeError`` is fixed, but reordering the kernel construction would change
-    numerical behaviour and is therefore left for a dedicated PR.
+    numerical behaviour and is therefore left alone.
     """
     frames = np.random.default_rng(5).random((2, 8, 8)).astype(np.complex64)
 
@@ -180,8 +123,16 @@ def test_fresnel_zero_padding_path_is_frozen_broken() -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Packaging
+# ---------------------------------------------------------------------------
+
 def test_cupy_is_still_a_hard_dependency_in_packaging_metadata() -> None:
-    """This PR makes the *code* CuPy-optional; packaging is a follow-up."""
+    """The code no longer requires CuPy; the packaging metadata still does.
+
+    Packaging is deliberately frozen for now. When it is updated, this pin
+    should be replaced by a test asserting the optional extra exists.
+    """
     pyproject = (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
     assert "cupy" in pyproject

@@ -115,7 +115,7 @@ def test_linalg_eigh_matches_numpy(sample: np.ndarray) -> None:
 
 @requires_cuda
 def test_elliptical_mask_matches_numpy() -> None:
-    from holodoppler.utils import elliptical_mask
+    from holodoppler.core.arrays import elliptical_mask
 
     elliptical_mask.cache_clear()
 
@@ -132,7 +132,7 @@ def test_elliptical_mask_matches_numpy() -> None:
 
 @requires_cuda
 def test_gpu_output_is_not_cached_for_cpu() -> None:
-    from holodoppler.utils import elliptical_mask
+    from holodoppler.core.arrays import elliptical_mask
 
     elliptical_mask.cache_clear()
 

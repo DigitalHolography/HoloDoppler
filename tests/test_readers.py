@@ -9,12 +9,13 @@ primitives, and range validation. The offset-addressing behaviour is pinned by
 
 from __future__ import annotations
 
+import importlib
 import struct
 
 import numpy as np
 import pytest
 
-from holodoppler.file_reader import (
+from holodoppler.readers import (
     CineFileReader,
     CineMetadata,
     FileReader,
@@ -244,7 +245,7 @@ def test_holo_repr_reports_unreadable_files(holo_case) -> None:
 # ---------------------------------------------------------------------------
 
 class _FakeMetaData:
-    """Stand-in for ``cinereader_copy.MetaData``."""
+    """Stand-in for ``readers.cine_parser.MetaData``."""
 
     def __init__(self, **fields) -> None:
         for key, value in fields.items():
@@ -277,10 +278,10 @@ def cine_path(case_dir):
 
 
 def test_cine_reader_maps_known_metadata(monkeypatch, cine_path) -> None:
-    import holodoppler.file_reader as file_reader
+    import holodoppler.readers.cine as cine_reader
 
     monkeypatch.setattr(
-        file_reader, "read_metadata", lambda path: _cine_metadata()
+        cine_reader, "read_metadata", lambda path: _cine_metadata()
     )
 
     reader = CineFileReader(cine_path)
@@ -300,11 +301,11 @@ def test_cine_reader_maps_known_metadata(monkeypatch, cine_path) -> None:
 
 
 def test_cine_metadata_can_feed_parameter_overrides(monkeypatch, cine_path) -> None:
-    import holodoppler.file_reader as file_reader
-    from holodoppler.utils import update_from_cine_metadata
+    import holodoppler.readers.cine as cine_reader
+    from holodoppler.config import update_from_cine_metadata
 
     monkeypatch.setattr(
-        file_reader, "read_metadata", lambda path: _cine_metadata()
+        cine_reader, "read_metadata", lambda path: _cine_metadata()
     )
 
     parameters = {
@@ -323,10 +324,10 @@ def test_cine_metadata_can_feed_parameter_overrides(monkeypatch, cine_path) -> N
 
 
 def test_cine_empty_selection_returns_an_empty_stack(monkeypatch, cine_path) -> None:
-    import holodoppler.file_reader as file_reader
+    import holodoppler.readers.cine as cine_reader
 
     monkeypatch.setattr(
-        file_reader, "read_metadata", lambda path: _cine_metadata()
+        cine_reader, "read_metadata", lambda path: _cine_metadata()
     )
 
     empty = CineFileReader(cine_path).read_selected_frames([])
@@ -354,10 +355,10 @@ def test_cine_invalid_ranges(
     expected_error: type,
 ) -> None:
     """Range validation must happen before any frame payload is touched."""
-    import holodoppler.file_reader as file_reader
+    import holodoppler.readers.cine as cine_reader
 
     monkeypatch.setattr(
-        file_reader, "read_metadata", lambda path: _cine_metadata()
+        cine_reader, "read_metadata", lambda path: _cine_metadata()
     )
 
     reader = CineFileReader(cine_path)
@@ -367,11 +368,11 @@ def test_cine_invalid_ranges(
 
 
 def test_cine_unsupported_compression_is_explicit(monkeypatch, cine_path) -> None:
-    import holodoppler.file_reader as file_reader
+    import holodoppler.readers.cine as cine_reader
 
     metadata = _cine_metadata(biCompression=999)
 
-    monkeypatch.setattr(file_reader, "read_metadata", lambda path: metadata)
+    monkeypatch.setattr(cine_reader, "read_metadata", lambda path: metadata)
 
     reader = CineFileReader(cine_path)
 
@@ -381,12 +382,12 @@ def test_cine_unsupported_compression_is_explicit(monkeypatch, cine_path) -> Non
 
 
 def test_cine_repr_reports_unreadable_files(monkeypatch, cine_path) -> None:
-    import holodoppler.file_reader as file_reader
+    import holodoppler.readers.cine as cine_reader
 
     def boom(path):
         raise OSError("cannot read")
 
-    monkeypatch.setattr(file_reader, "read_metadata", boom)
+    monkeypatch.setattr(cine_reader, "read_metadata", boom)
 
     assert "[unreadable]" in repr(CineFileReader(cine_path))
 
@@ -440,7 +441,7 @@ def test_cine_decodes_frames_using_its_documented_offset_layout(
     This is *not* a validation against the real Phantom format; see
     ``test_cine_offset_addressing_seeks_before_the_offset_table``.
     """
-    import holodoppler.file_reader as file_reader
+    import holodoppler.readers.cine as cine_reader
 
     rng = np.random.default_rng(11)
     frames = rng.integers(0, 1 << 12, size=(3, 4, 4), dtype=np.uint16)
@@ -449,7 +450,7 @@ def test_cine_decodes_frames_using_its_documented_offset_layout(
     _write_synthetic_cine(path, frames)
 
     monkeypatch.setattr(
-        file_reader, "read_metadata", lambda p: _cine_metadata()
+        cine_reader, "read_metadata", lambda p: _cine_metadata()
     )
 
     reader = CineFileReader(path)
@@ -554,3 +555,17 @@ def test_unpack_12bitl_batch_rejects_bad_shape() -> None:
 
     with pytest.raises(ValueError):
         unpack_12bitL_batch_to_uint16(np.zeros(6, dtype=np.uint8), 4, 6)
+
+
+# ---------------------------------------------------------------------------
+# Factory surface
+# ---------------------------------------------------------------------------
+
+def test_factory_reports_supported_extensions() -> None:
+    assert FileReaderFactory.supported_extensions() == [".cine", ".holo"]
+
+
+def test_the_former_file_reader_module_is_gone() -> None:
+    """Readers live in ``holodoppler.readers``; no top-level shim remains."""
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("holodoppler.file_reader")

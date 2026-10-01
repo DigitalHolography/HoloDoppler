@@ -11,7 +11,7 @@ from .filtering import (
     svd_filter_batched,
     frequency_symmetric_filtering,
 )
-from .utils import elliptical_mask
+from .arrays import elliptical_mask
 
 
 def construct_subapertures_fresnel(

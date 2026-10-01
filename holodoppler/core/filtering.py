@@ -4,9 +4,9 @@ Filtering operations: SVD, frequency filtering
 
 from functools import cache
 
-from .utils import elliptical_mask
+from .arrays import elliptical_mask
 
-import holodoppler.backend as backend
+from holodoppler.execution.context import ExecutionContext
 
 
 def filter_2d(xp, fft, frames, filter2d_low):
@@ -86,7 +86,7 @@ def svd_filter(
             return H, None, None, None, None, None, None
         return H
 
-    xp = backend.xp
+    xp = ExecutionContext.current().xp
 
     # ------------------------------------------------------------------
     # Remove DC
@@ -130,10 +130,10 @@ def svd_filter(
     # ------------------------------------------------------------------
     # Hermitian eigendecomposition
     #
-    # backend.linalg should map to the appropriate implementation:
+    # ExecutionContext.linalg maps to the appropriate implementation:
     # NumPy/SciPy on CPU, CuPy on GPU.
     # ------------------------------------------------------------------
-    S, V = backend.linalg.eigh(cov)
+    S, V = ExecutionContext.current().linalg.eigh(cov)
 
     # eigh returns ascending eigenvalues.
     #

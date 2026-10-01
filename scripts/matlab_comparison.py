@@ -1,5 +1,5 @@
 from holodoppler.cli import process, preview
-from holodoppler.utils import load_config
+from holodoppler.config import load_config
 import json
 import os
 from pathlib import Path

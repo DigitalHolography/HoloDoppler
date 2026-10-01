@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union, Callable
 
 import holodoppler.backend as backend
 
-from .utils import load_config
+from .config import load_config
 from .pipelines import pipelines
 
 # ============================================================================
@@ -110,7 +110,6 @@ def _run_pipeline(
     mode: PipelineMode,
     *,
     progress_callback=None,
-    warning_callback=None,
 ) -> Any:
     """
     Execute a pipeline with the given parameters.
@@ -175,7 +174,7 @@ def _run_pipeline(
         raise ValueError(error_msg)
 
     # Execute pipeline
-    return pipeline_func(file_path, parameters, progress_callback=progress_callback, warning_callback=warning_callback)
+    return pipeline_func(file_path, parameters, progress_callback=progress_callback)
 
 
 def preview(file_path: Path, parameters: Union[dict, Path, str]) -> Any:
@@ -196,7 +195,6 @@ def process(
     file_path: Path,
     parameters: Union[dict, Path, str],
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
-    warning_callback: Optional[Callable[[str, str], None]] = None,
 ) -> Any:
     """
     Run in process mode.
@@ -205,12 +203,11 @@ def process(
         file_path: Path to the input file
         parameters: Either a parameters dict or a path to a config file
         progress_callback: Monitors progress bar, total count, and progress text (for the gui)
-        warning_callback: Receive a warning code and message without stopping processing (for the gui)
 
     Returns:
         The result from the process pipeline
     """
-    return _run_pipeline(file_path, parameters, PipelineMode.PROCESS, progress_callback=progress_callback, warning_callback=warning_callback)
+    return _run_pipeline(file_path, parameters, PipelineMode.PROCESS, progress_callback=progress_callback)
 
 
 # ============================================================================

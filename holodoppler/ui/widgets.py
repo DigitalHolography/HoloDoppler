@@ -42,7 +42,6 @@ class SettingsEditor(ttk.Frame):
         ("Optics", ("wavelength", "pixel_pitch", "spatial_propagation", "zero_padding", "z")),
         ("Registration", ("image_registration", "image_registration_type", "registration_", "apply_registration")),
         ("Shack-Hartmann", ("shack_hartmann",)),
-        ("Spectrograms", ("spectral_cube_enabled", "spectral_cube_settings")),
         (
             "Frequency",
             (
@@ -53,8 +52,6 @@ class SettingsEditor(ttk.Frame):
                 "high_freq",
                 "frequency_bands",
                 "f_bins",
-                "spectral_cube_signal_",
-                "spectral_cube_corner_",
                 "spectral_endpoints_",
                 "filter2d",
                 "pca_",
@@ -363,13 +360,8 @@ def _pipeline_choice_pairs() -> tuple[tuple[str, str], ...]:
     process_names = sorted(name for name in pipelines if not name.startswith("preview_"))
     preferred_order = [
         "simple",
-        "sliding",
         "sliding_shack_hartmann",
-        "split_apertures",
-        "pca_accumulation",
         "sh_avg",
-        "simple_numpy",
-        "main",
     ]
     ordered_names = [
         name for name in preferred_order if name in process_names
@@ -389,14 +381,8 @@ def _pipeline_choice_pairs() -> tuple[tuple[str, str], ...]:
 def _pipeline_label(name: str, *, supports_preview: bool) -> str:
     labels = {
         "sliding_shack_hartmann": "Sliding Shack-Hartmann",
-        "sliding": "Sliding",
         "simple": "Simple",
-        "simple_numpy": "Simple (CPU multiprocessing)",
-        "split_apertures": "Split apertures",
-        "pca_accumulation": "PCA accumulation",
         "sh_avg": "Shack-Hartmann average",
-        "main": "Legacy moments main",
-        "moments_main_pipeline": "Moments main pipeline",
     }
     label = labels.get(name, name.replace("_", " ").strip().title())
     if not supports_preview:
