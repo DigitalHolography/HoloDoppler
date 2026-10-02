@@ -1,27 +1,8 @@
 """Version stamping for saved output bundles."""
 
 from __future__ import annotations
-
-import subprocess
 from pathlib import Path
-
-from holodoppler.get_version import get_version
-
-
-def get_git_version() -> str:
-    """Return the current Git commit, or a fallback string."""
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"],
-            stderr=subprocess.DEVNULL,
-            text=True,
-        ).strip()
-    except (
-        subprocess.CalledProcessError,
-        FileNotFoundError,
-        OSError,
-    ):
-        return "Not Available"
+from holodoppler.get_version import get_version, get_git_version
 
 
 def save_version_files(target_dir: Path) -> None:

@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 
@@ -17,3 +18,18 @@ def get_version() -> str:
     from importlib.metadata import version
 
     return version("holodoppler")
+
+def get_git_version() -> str:
+    """Return the current Git commit, or a fallback string."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except (
+        subprocess.CalledProcessError,
+        FileNotFoundError,
+        OSError,
+    ):
+        return "Not Available"

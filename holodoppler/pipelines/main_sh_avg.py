@@ -1177,7 +1177,6 @@ def preview_file(file_reader, parameters):
         output=res_np,
         parameters=parameters,
         custom_relative_path="preview",
-        square=True,
     )
 
     return res_np["M0ff"]
