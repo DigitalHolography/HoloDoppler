@@ -8,10 +8,38 @@ wheels/
 *.spec
 
 # Virtual environments
-.venv
+.venv/
+venv/
 uv.lock
 
-/debug_outputs
-/temp
+# Python tool caches and coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 
+# Local Docker bind mounts
+/data/
+/results/
+/gui-config/
+
+# HoloDoppler recordings and processing output
+/debug_outputs/
+/temp/
+*_HD/
+*_HD_[0-9]*/
+*.holo
+*.cine
+*.h5
+*.hdf5
+*.avi
+*.mp4
+
+# Local debugging and operating-system files
 .debug_paths.json
+holodoppler-error.log
+.DS_Store
+Thumbs.db
+Desktop.ini

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# Build with --target cpu (default) or --target gpu.
+# Build with --target cpu (default), gpu, gui-cpu, or gui-gpu.
 ARG PYTHON_IMAGE=python:3.13-slim-bookworm
 
 FROM ${PYTHON_IMAGE} AS build
@@ -17,6 +17,16 @@ RUN /opt/venv/bin/python -m pip install --no-cache-dir --only-binary=:all: \
 FROM build AS build-gpu
 RUN /opt/venv/bin/python -m pip install --no-cache-dir --only-binary=:all: \
         -r requirements/cli-gpu-linux-py313.txt \
+    && /opt/venv/bin/python -m pip check
+
+FROM build AS build-gui
+RUN /opt/venv/bin/python -m pip install --no-cache-dir --only-binary=:all: \
+        -r requirements/gui-linux-py313.txt \
+    && /opt/venv/bin/python -m pip check
+
+FROM build-gpu AS build-gpu-gui
+RUN /opt/venv/bin/python -m pip install --no-cache-dir --only-binary=:all: \
+        -r requirements/gui-linux-py313.txt \
     && /opt/venv/bin/python -m pip check
 
 FROM ${PYTHON_IMAGE} AS runtime
@@ -42,6 +52,23 @@ CMD ["--help"]
 
 FROM runtime AS gpu
 COPY --from=build-gpu /opt/venv /opt/venv
+
+FROM runtime AS gui-runtime
+# The slim Python image includes _tkinter but removes its Tcl/Tk shared
+# libraries. Install them and a fallback font only in the GUI variants.
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        tk8.6 tcl8.6 libxcursor1 fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+USER 10001:10001
+CMD ["gui"]
+
+FROM gui-runtime AS gui-cpu
+COPY --from=build-gui /opt/venv /opt/venv
+
+FROM gui-runtime AS gui-gpu
+COPY --from=build-gpu-gui /opt/venv /opt/venv
 
 FROM runtime AS cpu
 COPY --from=build /opt/venv /opt/venv

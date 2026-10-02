@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        target: [cpu, gpu]
+        target: [cpu, gpu, gui-cpu, gui-gpu]
     steps:
       - uses: actions/checkout@v4
       - name: Build ${{ matrix.target }} image
@@ -21,5 +21,22 @@ jobs:
           docker run --rm --entrypoint python "holodoppler:ci-${{ matrix.target }}" \
             -c 'import cv2, h5py, imageio, matplotlib, scipy; from holodoppler.cli import main; from holodoppler.pipelines import main_simple, main_sh_avg, main_sliding_shack_hart'
       - name: Check CuPy import
-        if: matrix.target == 'gpu'
-        run: docker run --rm --entrypoint python holodoppler:ci-gpu -c 'import cupy'
+        if: matrix.target == 'gpu' || matrix.target == 'gui-gpu'
+        run: docker run --rm --entrypoint python "holodoppler:ci-${{ matrix.target }}" -c 'import cupy'
+      - name: Check GUI startup on a virtual display
+        if: matrix.target == 'gui-cpu' || matrix.target == 'gui-gpu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          Xvfb :99 -ac -screen 0 1280x800x24 &
+          xvfb_pid=$!
+          trap 'kill "$xvfb_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 20); do
+            test -S /tmp/.X11-unix/X99 && break
+            sleep 0.5
+          done
+          test -S /tmp/.X11-unix/X99
+          timeout 60s docker run --rm -e DISPLAY=:99 \
+            --mount type=bind,src=/tmp/.X11-unix,dst=/tmp/.X11-unix \
+            --entrypoint python "holodoppler:ci-${{ matrix.target }}" \
+            -c 'import tkinterdnd2, sv_ttk; from holodoppler.ui import UI; app = UI(); app.update(); app.destroy()'

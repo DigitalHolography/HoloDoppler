@@ -250,7 +250,8 @@ class SettingsStore:
         for source_path in self._default_parameter_sources():
             target_path = self.parameters_dir / source_path.name
             if not target_path.exists():
-                shutil.copy2(source_path, target_path)
+                # Editable presets need content, not source permissions or timestamps.
+                shutil.copyfile(source_path, target_path)
 
     def _default_parameters_path(self) -> Path:
         preferred = self.parameters_dir / DEFAULT_PARAMETERS_NAME
@@ -304,7 +305,7 @@ class SettingsStore:
         _read_parameter_object(source_path)
         target_path = self.parameters_dir / source_path.name
         if source_path != target_path:
-            shutil.copy2(source_path, target_path)
+            shutil.copyfile(source_path, target_path)
         return target_path
 
     def _update_selected_parameter(self, selected_path: Path) -> None:

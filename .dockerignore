@@ -9,6 +9,9 @@ build
 dist
 debug_outputs
 temp
+data
+results
+gui-config
 .pytest_cache
 .debug_paths.json
 *.holo

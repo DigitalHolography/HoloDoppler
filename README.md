@@ -70,7 +70,7 @@ The installer build uses the bundled UI defaults from
 Use `python build_installer.py --verify-installer` to run the installer smoke
 verification when Inno Setup is available.
 
-### Linux CLI with Docker
+### Docker on Linux
 
-See [the Docker guide](docs/docker.md) for CPU and NVIDIA GPU images, input and
-output mounts, and the image release workflow.
+See [the Docker guide](docs/docker.md) for CPU and NVIDIA GPU images with CLI or
+GUI targets, display and data mounts, and the image release workflow.
