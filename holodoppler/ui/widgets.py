@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 import tkinter as tk
 from dataclasses import dataclass
-from tkinter import messagebox, ttk
+from tkinter import messagebox, simpledialog, ttk
 from tkinter.scrolledtext import ScrolledText
 from typing import Any, Callable
+
+import yaml
 
 from .theme import configure_plain_widget
 
@@ -94,14 +96,41 @@ class SettingsEditor(ttk.Frame):
         self._build()
 
     def load(self, parameters: dict[str, Any]) -> None:
-        self.tree.delete(*self.tree.get_children())
-        self.fields.clear()
-        self.selected_key = None
+        self.fields = {
+            key: ParameterField(key=key, original=value, value=value, item_id="")
+            for key, value in parameters.items()
+        }
+        self._rebuild_tree()
 
-        grouped = self._group_parameters(parameters)
+    def values(self) -> dict[str, Any]:
+        self._apply_current_editor(silent=True)
+        return {key: field.value for key, field in self.fields.items()}
+
+    def _rebuild_tree(self, preferred_key: str | None = None) -> None:
+        self.tree.delete(*self.tree.get_children())
+        self.selected_key = None
+        for field in self.fields.values():
+            field.item_id = ""
+
+        visible_keys = self._visible_parameter_keys()
+        grouped = self._group_parameters(
+            {
+                key: field.value
+                for key, field in self.fields.items()
+                if key in visible_keys
+            }
+        )
         first_item: str | None = None
+        preferred_item: str | None = None
         for group_name, items in grouped.items():
-            group_id = self.tree.insert("", "end", text=group_name, values=("",), open=True, tags=("group",))
+            group_id = self.tree.insert(
+                "",
+                "end",
+                text=group_name,
+                values=("",),
+                open=True,
+                tags=("group",),
+            )
             for key, value in items:
                 item_id = self.tree.insert(
                     group_id,
@@ -110,19 +139,61 @@ class SettingsEditor(ttk.Frame):
                     values=(self._display_field_value(key, value),),
                     tags=("parameter",),
                 )
-                self.fields[key] = ParameterField(key=key, original=value, value=value, item_id=item_id)
+                self.fields[key].item_id = item_id
                 first_item = first_item or item_id
+                if key == preferred_key:
+                    preferred_item = item_id
 
         self._clear_editor("Select a parameter to edit it.")
-        if first_item is not None:
-            self.tree.selection_set(first_item)
-            self.tree.focus(first_item)
-            self.tree.see(first_item)
+        selected_item = preferred_item or first_item
+        if selected_item is not None:
+            self.tree.selection_set(selected_item)
+            self.tree.focus(selected_item)
+            self.tree.see(selected_item)
             self._show_selected_editor()
 
-    def values(self) -> dict[str, Any]:
-        self._apply_current_editor(silent=True)
-        return {key: field.value for key, field in self.fields.items()}
+    def _visible_parameter_keys(self) -> set[str]:
+        parameters = {key: field.value for key, field in self.fields.items()}
+        return {
+            key
+            for key in self.fields
+            if parameter_is_visible(key, parameters)
+        }
+
+    def _add_parameter(self) -> None:
+        key = simpledialog.askstring(
+            "Add parameter",
+            "Parameter name",
+            parent=self,
+        )
+        if key is None:
+            return
+        key = key.strip()
+        if not key:
+            messagebox.showerror("Invalid parameter", "The parameter name cannot be empty.", parent=self)
+            return
+        if key in self.fields:
+            messagebox.showerror("Invalid parameter", f"{key!r} already exists.", parent=self)
+            return
+
+        raw_value = simpledialog.askstring(
+            "Add parameter",
+            "Value (YAML or JSON syntax)",
+            initialvalue="null",
+            parent=self,
+        )
+        if raw_value is None:
+            return
+        try:
+            value = parse_parameter_value(raw_value)
+        except ValueError as exc:
+            messagebox.showerror("Invalid parameter value", str(exc), parent=self)
+            return
+
+        self.fields[key] = ParameterField(key=key, original=value, value=value, item_id="")
+        self._rebuild_tree(preferred_key=key)
+        if self.on_apply is not None:
+            self.on_apply({name: field.value for name, field in self.fields.items()})
 
     def _build(self) -> None:
         self.columnconfigure(0, weight=1)
@@ -132,24 +203,37 @@ class SettingsEditor(ttk.Frame):
         table_frame = ttk.Frame(self)
         table_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
         table_frame.columnconfigure(0, weight=1)
-        table_frame.rowconfigure(0, weight=1)
+        table_frame.rowconfigure(1, weight=1)
+
+        table_controls = ttk.Frame(table_frame)
+        table_controls.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        ttk.Button(
+            table_controls,
+            text="Add parameter",
+            command=self._add_parameter,
+        ).pack(side="left")
+        ttk.Label(
+            table_controls,
+            text="Values accept YAML or JSON syntax",
+            style="Muted.TLabel",
+        ).pack(side="left", padx=(10, 0))
 
         self.tree = ttk.Treeview(table_frame, columns=("value",), show=("tree", "headings"), selectmode="browse")
         self.tree.heading("#0", text="Parameter")
         self.tree.heading("value", text="Value")
         self.tree.column("#0", minwidth=220, width=360, stretch=True)
         self.tree.column("value", minwidth=220, width=420, stretch=True)
-        self.tree.grid(row=0, column=0, sticky="nsew")
+        self.tree.grid(row=1, column=0, sticky="nsew")
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<Double-1>", self._focus_editor)
         self.tree.tag_configure("group", font=("Segoe UI", 10, "bold"))
 
         y_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
-        y_scroll.grid(row=0, column=1, sticky="ns")
+        y_scroll.grid(row=1, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=y_scroll.set)
 
         x_scroll = ttk.Scrollbar(table_frame, orient="horizontal", command=self.tree.xview)
-        x_scroll.grid(row=1, column=0, sticky="ew")
+        x_scroll.grid(row=2, column=0, sticky="ew")
         self.tree.configure(xscrollcommand=x_scroll.set)
 
         self.editor_frame = ttk.LabelFrame(self, text="Value", padding=8)
@@ -226,7 +310,7 @@ class SettingsEditor(ttk.Frame):
             control.insert("1.0", json.dumps(value, indent=2))
             self.value_text = control
         else:
-            variable = tk.StringVar(value="" if value is None else str(value))
+            variable = tk.StringVar(value=self._display_value(value))
             control = ttk.Entry(self.editor_host, textvariable=variable)
             control.bind("<Return>", lambda _event: self._apply_current_editor())
             self.value_variable = variable
@@ -240,14 +324,19 @@ class SettingsEditor(ttk.Frame):
             return
 
         field = self.fields[self.selected_key]
+        visible_before = self._visible_parameter_keys()
         try:
             field.value = self._editor_value(field)
+            field.original = field.value
         except ValueError as exc:
             if silent:
                 raise ValueError(f"{field.key}: {exc}") from exc
             messagebox.showerror("Invalid settings", f"{field.key}: {exc}", parent=self)
             return
-        self.tree.set(field.item_id, "value", self._display_field_value(field.key, field.value))
+        if visible_before != self._visible_parameter_keys():
+            self._rebuild_tree(preferred_key=field.key)
+        elif field.item_id:
+            self.tree.set(field.item_id, "value", self._display_field_value(field.key, field.value))
         if not silent and self.on_apply is not None:
             self.on_apply({key: item.value for key, item in self.fields.items()})
 
@@ -255,25 +344,15 @@ class SettingsEditor(ttk.Frame):
         original = field.original
         if self.value_text is not None:
             raw_text = self.value_text.get("1.0", "end").strip()
-            value = json.loads(raw_text or "null")
-            if not isinstance(value, type(original)):
-                raise ValueError(f"expected {type(original).__name__}")
-            return value
+            return parse_parameter_value(raw_text)
 
         if isinstance(original, bool):
             return bool(self.value_variable.get()) if self.value_variable is not None else original
 
         raw_value = str(self.value_variable.get()).strip() if self.value_variable is not None else ""
         if self._has_choices(field.key):
-            raw_value = self._choice_value_for_label(field.key, raw_value)
-
-        if isinstance(original, int):
-            return int(float(raw_value))
-        if isinstance(original, float):
-            return float(raw_value)
-        if original is None:
-            return json.loads(raw_value)
-        return raw_value
+            return self._choice_value_for_label(field.key, raw_value)
+        return parse_parameter_value(raw_value)
 
     def _clear_editor(self, message: str) -> None:
         self.selected_key = None
@@ -347,6 +426,48 @@ class SettingsEditor(ttk.Frame):
                 if key == pattern or key.startswith(pattern):
                     return group_name
         return "Other"
+
+
+def parse_parameter_value(raw_text: str) -> Any:
+    """Parse one editor value using the YAML/JSON scalar rules."""
+    if not raw_text.strip():
+        return ""
+    try:
+        return yaml.safe_load(raw_text)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"invalid YAML/JSON value: {exc}") from exc
+
+
+def parameter_is_visible(key: str, parameters: dict[str, Any]) -> bool:
+    """Return whether a parameter is relevant under the current feature toggles."""
+    if key.startswith("registration_ecc_"):
+        return not _setting_is_off(parameters, "image_registration_with_ecc")
+    if key.startswith("registration_") or key in {
+        "image_registration_type",
+        "batch_size_registration",
+        "apply_registration",
+    }:
+        return not _setting_is_off(parameters, "image_registration")
+    if key.startswith("filter2d_"):
+        return not _setting_is_off(parameters, "filter2d")
+    if key.startswith("contrast_"):
+        return not _setting_is_off(parameters, "contrast")
+    if key == "spectral_cube_settings":
+        return not _setting_is_off(parameters, "spectral_cube_enabled")
+    if key.startswith("svd_") and key != "svd_filtering":
+        return not _setting_is_off(parameters, "svd_filtering")
+    if key.startswith("shack_hartmann_") and key != "shack_hartmann_autofocus":
+        controllers = [
+            parameters[name]
+            for name in ("shack_hartmann", "shack_hartmann_autofocus")
+            if name in parameters
+        ]
+        return not controllers or any(bool(value) for value in controllers)
+    return True
+
+
+def _setting_is_off(parameters: dict[str, Any], key: str) -> bool:
+    return key in parameters and parameters[key] is False
 
 
 def _pipeline_choice_pairs() -> tuple[tuple[str, str], ...]:
@@ -430,7 +551,12 @@ class RawJsonDialog(tk.Toplevel):
         button_row = ttk.Frame(self, padding=(12, 0, 12, 12))
         button_row.grid(row=1, column=0, sticky="ew")
         ttk.Button(button_row, text="Cancel", command=self.destroy).pack(side="right")
-        ttk.Button(button_row, text="Apply JSON", command=self._apply, style="Accent.TButton").pack(side="right", padx=(0, 8))
+        ttk.Button(
+            button_row,
+            text="Apply YAML / JSON",
+            command=self._apply,
+            style="Accent.TButton",
+        ).pack(side="right", padx=(0, 8))
 
         self.transient(master.winfo_toplevel())
         self.grab_set()
@@ -438,12 +564,16 @@ class RawJsonDialog(tk.Toplevel):
 
     def _apply(self) -> None:
         try:
-            data = json.loads(self.editor.get("1.0", "end"))
-        except json.JSONDecodeError as exc:
-            messagebox.showerror("Invalid JSON", str(exc), parent=self)
+            data = yaml.safe_load(self.editor.get("1.0", "end"))
+        except yaml.YAMLError as exc:
+            messagebox.showerror("Invalid YAML / JSON", str(exc), parent=self)
             return
         if not isinstance(data, dict):
-            messagebox.showerror("Invalid JSON", "The root value must be an object.", parent=self)
+            messagebox.showerror(
+                "Invalid YAML / JSON",
+                "The root value must be an object/mapping.",
+                parent=self,
+            )
             return
         self.on_apply(data)
         self.destroy()

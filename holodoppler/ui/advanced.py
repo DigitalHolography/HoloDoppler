@@ -333,7 +333,7 @@ class AdvancedView(ttk.Frame):
         self.save_button.grid(row=0, column=5, padx=(0, 6))
         self.save_as_button = ttk.Button(controls, text="Save as", command=self._save_as)
         self.save_as_button.grid(row=0, column=6, padx=(0, 6))
-        self.raw_button = ttk.Button(controls, text="Edit JSON", command=self._edit_raw_json)
+        self.raw_button = ttk.Button(controls, text="Edit YAML / JSON", command=self._edit_raw_json)
         self.raw_button.grid(row=0, column=7)
 
         self.editor = SettingsEditor(frame, theme=self.theme, on_apply=self._load_editor_values)
@@ -394,7 +394,11 @@ class AdvancedView(ttk.Frame):
             self.controller.import_parameter_file(Path(path))
 
     def _new_custom(self) -> None:
-        name = simpledialog.askstring("New custom settings", "Name", parent=self)
+        name = simpledialog.askstring(
+            "New custom settings",
+            "Name (optional .yaml, .yml, or .json extension)",
+            parent=self,
+        )
         if not name:
             return
         try:
@@ -424,7 +428,11 @@ class AdvancedView(ttk.Frame):
         self.controller.save_current_parameters(data)
 
     def _save_as(self) -> None:
-        name = simpledialog.askstring("Save settings as", "Name", parent=self)
+        name = simpledialog.askstring(
+            "Save settings as",
+            "Name (optional .yaml, .yml, or .json extension)",
+            parent=self,
+        )
         if not name:
             return
         try:
@@ -442,7 +450,7 @@ class AdvancedView(ttk.Frame):
 
         RawJsonDialog(
             self,
-            title="Edit settings JSON",
+            title="Edit settings (YAML or JSON)",
             data=data,
             theme=self.theme,
             on_apply=self._apply_raw_json,
