@@ -9,7 +9,8 @@ def main() -> int:
     """Run the GUI when no command is given, otherwise dispatch to the CLI."""
     if len(sys.argv) == 1 or (len(sys.argv) > 1 and sys.argv[1] == "gui"):
         # Imported lazily so that CLI usage does not require the GUI toolkit.
-        from holodoppler.ui import UI
+        # Only the dependency-light UI is shipped; the full UI lives in old/ui/.
+        from holodoppler.ui_simplest import UI
 
         UI().mainloop()
         return 0

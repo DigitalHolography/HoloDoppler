@@ -18,11 +18,13 @@ APP_EXE_NAME = f"{APP_NAME}.exe"
 APP_PUBLISHER = "HoloDoppler"
 APPDATA_SLUG = "holodopplerpython"
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+# Archived: this script now lives in ``old/`` outside the package, so the
+# project root is its parent directory rather than its own directory.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_DIR = PROJECT_ROOT / "holodoppler"
 PARAMETERS_DIR = PROJECT_ROOT / "parameters"
-DEFAULTS_DIR = PACKAGE_DIR / "ui" / "defaults"
-APP_ICON_SOURCE = PACKAGE_DIR / "ui" / "assets" / "logo.png"
+DEFAULTS_DIR = PACKAGE_DIR / "defaults"
+APP_ICON_SOURCE = Path(__file__).resolve().parent / "ui" / "assets" / "logo.png"
 PYPROJECT_FILE = PROJECT_ROOT / "pyproject.toml"
 VERSION_FILE = PROJECT_ROOT / "version_holodoppler.txt"
 
@@ -35,7 +37,7 @@ SMOKE_WORK_DIR = BUILD_DIR / "installer_smoke_workspace"
 GENERATED_ENTRYPOINT = BUILD_DIR / "_pyinstaller_holodoppler_entry.py"
 GENERATED_ISS_FILE = BUILD_DIR / f"{APP_NAME}.iss"
 GENERATED_ICON_FILE = BUILD_DIR / "holodoppler.ico"
-CUDA_RUNTIME_HOOK = PROJECT_ROOT / "packaging" / "pyi_rth_cuda.py"
+CUDA_RUNTIME_HOOK = PROJECT_ROOT / "old" / "packaging" / "pyi_rth_cuda.py"
 
 INSTALLER_OUTPUT_DIR = DIST_DIR
 DIST_APP_DIR = DIST_DIR / APP_NAME
@@ -58,7 +60,6 @@ PAYLOAD_EXTRA_FILES = (
 FROZEN_METADATA_DISTRIBUTIONS = (
     "holodoppler",
     "imageio",
-    "imageio-ffmpeg",
     "numpy",
     "scipy",
     "matplotlib",
@@ -66,7 +67,6 @@ FROZEN_METADATA_DISTRIBUTIONS = (
     "opencv-python",
     "pillow",
     "tkinterdnd2",
-    "sv-ttk",
     "cinereader",
     "tqdm",
     "PyYAML",
@@ -102,7 +102,6 @@ FROZEN_SUBMODULE_COLLECTIONS = (
     "cv2",
     "cinereader",
     "tkinterdnd2",
-    "sv_ttk",
     "PIL",
     "matplotlib",
     "yaml",
@@ -113,7 +112,6 @@ FROZEN_DATA_COLLECTIONS = (
     "cupy",
     "matplotlib",
     "tkinterdnd2",
-    "sv_ttk",
     "PIL",
     "imageio",
     "imageio_ffmpeg",
@@ -422,7 +420,7 @@ def _write_pyinstaller_entrypoint() -> Path:
             _configure_standard_streams()
 
             from holodoppler.cli import main as cli_main
-            from holodoppler.ui import UI
+            from holodoppler.ui_simplest import UI
 
 
             def _check_ffmpeg() -> None:

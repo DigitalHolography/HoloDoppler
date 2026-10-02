@@ -44,7 +44,8 @@ GOLDEN_STRING_DATASETS = frozenset(
 GOLDEN_ATTRIBUTES = frozenset({"git_commit", "version"})
 
 # Every artifact the pipeline is expected to produce, relative to the
-# ``<stem>_HD`` output directory.
+# ``<stem>_HD`` output directory. Each video is written twice: MJPEG in ``avi/``
+# and H.264 in ``mp4/``.
 GOLDEN_ARTIFACTS = frozenset(
     {
         "avi/band_0_3000_9000.avi",
@@ -53,6 +54,12 @@ GOLDEN_ARTIFACTS = frozenset(
         "avi/moment0ff.avi",
         "avi/moment1.avi",
         "avi/moment2.avi",
+        "mp4/band_0_3000_9000.mp4",
+        "mp4/band_1_9000_18000.mp4",
+        "mp4/moment0.mp4",
+        "mp4/moment0ff.mp4",
+        "mp4/moment1.mp4",
+        "mp4/moment2.mp4",
         "csv/shack_hartmann_autofocus_zernike_coefs.csv",
         "git_version.txt",
         "h5/test_HD_output.h5",

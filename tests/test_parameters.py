@@ -20,7 +20,7 @@ from holodoppler.pipelines import PIPELINES
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PARAMETERS_DIR = PROJECT_ROOT / "parameters"
-DEFAULTS_DIR = PROJECT_ROOT / "holodoppler" / "ui" / "defaults"
+DEFAULTS_DIR = PROJECT_ROOT / "holodoppler" / "defaults"
 
 PARAMETER_FILES = sorted(PARAMETERS_DIR.glob("*.yaml")) + sorted(
     PARAMETERS_DIR.glob("*.json")
@@ -29,8 +29,8 @@ PARAMETER_FILES = sorted(PARAMETERS_DIR.glob("*.yaml")) + sorted(
 VALID_MODES = frozenset({"cpu", "gpu", "auto"})
 
 # Pre-existing divergence between the two shipped copies of the sh_avg preset.
-# ``build_installer.py`` compares these and therefore fails today. Reported, not
-# fixed, by this PR.
+# The archived installer build (``old/build_installer.py``) compares these and
+# therefore fails today. Reported, not fixed, by this change.
 SH_AVG_KEYS_ONLY_IN_PARAMETERS = frozenset(
     {
         "contrast",
@@ -142,8 +142,8 @@ def test_loading_parameter_files_does_not_modify_them() -> None:
     assert before == after
 
 
-def test_sh_avg_parameters_and_ui_defaults_desync_is_documented() -> None:
-    """Pin the pre-existing divergence that breaks ``build_installer.py``.
+def test_sh_avg_parameters_and_bundled_defaults_desync_is_documented() -> None:
+    """Pin the pre-existing divergence that breaks ``old/build_installer.py``.
 
     When the two copies are brought back into sync this pin must be removed.
     """
@@ -165,10 +165,10 @@ def test_sh_avg_parameters_and_ui_defaults_desync_is_documented() -> None:
 
 
 def test_repository_parameter_files_have_a_bundled_default() -> None:
-    """``build_installer.py`` requires every repository preset to be bundled."""
+    """Every repository preset must also ship, or the installer build fails."""
     bundled_names = {path.name for path in DEFAULTS_DIR.iterdir() if path.is_file()}
 
     for path in PARAMETER_FILES:
         assert path.name in bundled_names, (
-            f"{path.name} has no bundled default; the installer build would fail"
+            f"{path.name} has no bundled default in {DEFAULTS_DIR.name}/"
         )

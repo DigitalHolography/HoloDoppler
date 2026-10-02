@@ -27,7 +27,7 @@ TESTS_ROOT = PROJECT_ROOT / "tests"
 TEMP_ROOT = PROJECT_ROOT / "temp"
 CASES_ROOT = TEMP_ROOT / "cases"
 PARAMETERS_DIR = PROJECT_ROOT / "parameters"
-DEFAULTS_DIR = PROJECT_ROOT / "holodoppler" / "ui" / "defaults"
+DEFAULTS_DIR = PROJECT_ROOT / "holodoppler" / "defaults"
 SYNTHETIC_SCRIPT = PROJECT_ROOT / "scripts" / "make_synthetic_test_data.py"
 
 

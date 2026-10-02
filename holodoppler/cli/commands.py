@@ -197,8 +197,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # Quick check for GUI mode
     if argv and argv[0] == GUI_COMMAND:
-        # Handle GUI mode - import here to avoid circular imports
-        from holodoppler.ui import UI
+        # Handle GUI mode - import here to avoid circular imports.
+        # Only the dependency-light UI is shipped; the full UI lives in old/ui/.
+        from holodoppler.ui_simplest import UI
 
         UI().mainloop()
         return EXIT_SUCCESS

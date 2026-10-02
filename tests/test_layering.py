@@ -11,6 +11,7 @@ top-level modules (``backend``, ``saving``) until those move.
 from __future__ import annotations
 
 import ast
+import re
 import sys
 from pathlib import Path
 
@@ -245,10 +246,23 @@ def test_import_resolution_handles_every_relative_form() -> None:
 
 
 def test_import_resolution_on_a_real_module() -> None:
-    resolved = imported_modules(PACKAGE_DIR / "ui" / "app.py")
+    resolved = imported_modules(PACKAGE_DIR / "cli" / "commands.py")
 
-    assert "holodoppler.cli" in resolved  # absolute import
-    assert "holodoppler.ui.advanced" in resolved  # from .advanced import
+    assert "holodoppler.ui_simplest" in resolved  # absolute, lazy GUI import
+    assert "holodoppler.cli.parser" in resolved  # from .parser import
+    assert "holodoppler.execution.batch" in resolved  # from ..execution import
+
+
+def test_the_full_ui_is_archived_outside_the_package() -> None:
+    """The heavyweight UI lives in old/ui/ and must not be imported anymore."""
+    assert not (PACKAGE_DIR / "ui").exists()
+
+    stale_reference = re.compile(r"holodoppler\.ui(?!_simplest)")
+
+    for path in sorted(PACKAGE_DIR.rglob("*.py")):
+        assert not stale_reference.search(path.read_text(encoding="utf-8")), (
+            f"{path} still references the archived holodoppler.ui package"
+        )
 
 
 def test_type_checking_imports_are_not_runtime_edges() -> None:

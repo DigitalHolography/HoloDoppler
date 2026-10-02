@@ -48,6 +48,10 @@ or explicitly:
 holodoppler gui
 ```
 
+Both launch the dependency-light UI in `holodoppler/ui_simplest.py`. The full
+Tkinter UI (advanced/minimal views, settings store, theming) is archived in
+`old/ui/`; see `old/README.md`.
+
 ### Run a Batch of Files in CLI
 
 ```bash
@@ -56,16 +60,24 @@ holodoppler process --batch "path/to/files.txt" "./parameters/default_parameters
 
 Give a `.txt` file with one `.holo` or `.cine` path per line.
 
-### Build the Windows Installer
+## Output
 
-```bash
-python -m pip install -e .[build]
-python build_installer.py
+Every run writes into `<input stem>/<input stem>_HD/`:
+
+| directory | contents |
+|---|---|
+| `avi/` | one MJPEG AVI per video output (full-range 4:2:2) |
+| `mp4/` | the same videos as H.264 with `yuv420p` |
+| `png/` | images, and the temporal average of each video |
+| `h5/` | numerical outputs, parameters and version stamps |
+| `json/`, `csv/`, `yaml/` | metadata and tabular outputs |
+
+The saving stage prints a single summary line, for example:
+
+```
+Saving completed in 12.3 seconds
+  videos[avi]: 6 | videos[mp4]: 6 | pngs: 7 | csv: 1 | json: 3 | h5: 1
 ```
 
-The installer build script must run under Python 3.13 or newer.
-The installer build uses the bundled UI defaults from
-`holodoppler/ui/defaults/` and verifies they match `parameters/*.json`,
-`parameters/*.yaml`, and `parameters/*.yml`.
-Use `python build_installer.py --verify-installer` to run the installer smoke
-verification when Inno Setup is available.
+The installer build script now lives in `old/` and is not part of the normal
+workflow (see `old/README.md`).

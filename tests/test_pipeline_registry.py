@@ -18,7 +18,7 @@ from holodoppler.pipelines import PIPELINES, SPECS, Pipeline, create, names, spe
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PARAMETERS_DIR = PROJECT_ROOT / "parameters"
-DEFAULTS_DIR = PROJECT_ROOT / "holodoppler" / "ui" / "defaults"
+DEFAULTS_DIR = PROJECT_ROOT / "holodoppler" / "defaults"
 
 # The exact pipeline names shipped today.
 GOLDEN_PIPELINES = (

@@ -18,9 +18,9 @@ dependencies = [
   "opencv-python",
   "cupy-cuda13x>=14.0.1",
   "imageio[ffmpeg]>=2.37.3",
+  "imageio-ffmpeg>=0.6",
   "tkinterdnd2",
   "pyyaml",
-  "sv-ttk>=2.6.1",
   "pillow>=11.0",
   "pytest>=9.1.1",
 ]
@@ -35,9 +35,11 @@ where = ["."]
 include = ["holodoppler*"]
 
 [tool.setuptools.package-data]
+# Bundled parameter presets: the copies that the repository ``parameters/``
+# directory is validated against. The UI assets moved to old/ui/ with the
+# heavyweight UI.
 holodoppler = [
-  "ui/assets/*",
-  "ui/defaults/*",
+  "defaults/*",
 ]
 
 [project.scripts]

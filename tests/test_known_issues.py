@@ -23,7 +23,7 @@ from holodoppler.pipelines import PIPELINES
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PACKAGE_DIR = PROJECT_ROOT / "holodoppler"
-DEFAULTS_DIR = PACKAGE_DIR / "ui" / "defaults"
+DEFAULTS_DIR = PACKAGE_DIR / "defaults"
 
 
 # ---------------------------------------------------------------------------
