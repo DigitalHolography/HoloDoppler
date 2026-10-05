@@ -35,9 +35,6 @@ where = ["."]
 include = ["holodoppler*"]
 
 [tool.setuptools.package-data]
-# Bundled parameter presets: the copies that the repository ``parameters/``
-# directory is validated against. The UI assets moved to old/ui/ with the
-# heavyweight UI.
 holodoppler = [
   "defaults/*",
 ]

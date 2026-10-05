@@ -13,5 +13,7 @@ uv.lock
 
 /debug_outputs
 /temp
+/.local
+/.cupy_cache
 .pytest_cache
 .debug_paths.json

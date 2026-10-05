@@ -165,6 +165,12 @@ def _cupy_modules() -> _CupyModules | None:
     HoloDoppler never requires CuPy.
     """
     try:
+        from pathlib import Path
+        import os
+
+        cache = Path(".cupy_cache") # force the cupy cache to be local.
+        cache.mkdir(parents=True, exist_ok=True)
+        os.environ["CUPY_CACHE_DIR"] = str(cache.resolve())
         import cupy as cp
         import cupy.linalg as cp_linalg
         import cupyx.scipy.fft as cp_fft
