@@ -23,6 +23,28 @@ jobs:
       - name: Check CuPy import
         if: matrix.target == 'gpu' || matrix.target == 'gui-gpu'
         run: docker run --rm --entrypoint python "holodoppler:ci-${{ matrix.target }}" -c 'import cupy'
+      - name: Check folder jobs and failure handling
+        if: matrix.target == 'cpu' || matrix.target == 'gpu'
+        run: |
+          docker run --rm --mount type=bind,src="$PWD/tests",dst=/tests,readonly \
+            --entrypoint python "holodoppler:ci-${{ matrix.target }}" \
+            -m unittest discover -s /tests -p test_cli_folder.py -v
+      - name: Package CLI starter
+        if: matrix.target == 'cpu'
+        run: python scripts/package_docker_starter.py
+      - name: Process recordings with defaults as an unprivileged user
+        if: matrix.target == 'cpu'
+        run: |
+          docker run --rm --init --user 12345:23456 -e HOME=/tmp \
+            --tmpfs /workspace:uid=12345,gid=23456 \
+            --mount type=bind,src="$PWD/tests",dst=/tests,readonly \
+            --entrypoint python "holodoppler:ci-cpu" /tests/docker_smoke.py /workspace
+      - name: Upload CLI starter
+        if: matrix.target == 'cpu'
+        uses: actions/upload-artifact@v4
+        with:
+          name: holodoppler-cli-starter
+          path: dist/holodoppler-cli-starter.zip
       - name: Check GUI startup on a virtual display
         if: matrix.target == 'gui-cpu' || matrix.target == 'gui-gpu'
         run: |

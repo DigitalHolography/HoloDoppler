@@ -3,8 +3,9 @@
 The Dockerfile has four targets. `cpu` is the default and contains the NumPy
 backend. `gpu` adds CuPy and the CUDA 13 component wheels. `gui-cpu` and
 `gui-gpu` add Tkinter, the GUI dependencies, and the Tcl/Tk runtime. The GUI
-targets launch `holodoppler gui` by default; the CLI targets print `--help` by
-default. None exposes a port or runs a daemon. The images currently target
+targets launch `holodoppler gui` by default; the CLI targets process recordings
+in `/data` with `/config/parameters.yaml` and save to `/output` by default.
+None exposes a port or runs a daemon. The images currently target
 Linux `amd64` and Python 3.13.
 
 | Image | Use for |
@@ -19,6 +20,89 @@ currently import legacy names that are absent from `holodoppler.saving`. They
 need application fixes and processing tests before a GPU image can be released
 for those pipelines. Containerizing them does not resolve those import errors.
 
+## Drop recordings in a folder
+
+The [CLI starter](../docker/README.md) supplies folders and settings for either
+image. From the source repository, put recordings in `docker/input/`, edit
+`docker/config/parameters.yaml` if needed, and run:
+
+```powershell
+.\docker\run-cpu.cmd -Build
+.\docker\run-gpu.cmd -Build
+```
+
+On Linux / WSL, use `sh docker/run.sh --build` or
+`sh docker/run.sh --build --gpu`. Omit the build option on later runs. Add
+`-Preview` / `--preview` for previews or `-Recursive` / `--recursive` to scan
+subfolders. No file list is required. Results go into `docker/output/`, with a
+separate directory per recording. GPU mode checks CUDA access and settings
+before starting.
+
+The launchers create host folders as the current user and preserve settings.
+On Linux, the shell launcher passes the host UID/GID to the container. On
+Windows, Docker Desktop provides access to Windows bind mounts. Recordings
+and configuration are mounted read-only; only output is writable.
+
+The image includes its own `/data`, `/config`, and `/output`, but editable
+settings and persistent results live on the host. A bind mount hides the
+image's files at that path. A small starter folder and launcher therefore
+accompany the images to create host folders with the user's ownership.
+See [Docker bind mounts](https://docs.docker.com/engine/storage/bind-mounts/).
+
+## Processing performance
+
+The starter persists CuPy's compiled kernels in `output/.cupy-cache/`. This
+avoids recompiling them whenever a `run --rm` container is recreated. CUDA
+context initialization still happens once per process, and new kernel variants
+can still need compilation. See [CuPy performance guidance](https://docs.cupy.dev/en/stable/user_guide/performance.html).
+For GPU runs using your own `docker run` command, set
+`-e CUPY_CACHE_DIR=/output/.cupy-cache` with a writable `/output` mount.
+
+Measure the first launch separately from subsequent launches, keeping the
+recordings, configuration, and output formats the same. Use real recordings
+for final comparisons. On this workstation (Xeon w5-2465X, RTX 4090), a generated
+256-by-256 recording with 1,024 uint16 frames took approximately 25 seconds
+with a fresh GPU kernel cache and 4.5 seconds when reusing it. CPU processing
+took approximately 13 seconds, including 9 seconds of autofocus. These are
+illustrative timings of processing and saving, excluding Docker/Python startup;
+they are not representative throughput guarantees.
+
+The `simple` settings enable Shack-Hartmann autofocus once per recording and
+CPU ECC registration after processing. Disabling either can save work, but
+changes the corrections. Compare image quality before choosing that tradeoff.
+Reducing `batch_size` changes temporal frequency resolution and the SVD problem;
+it is not an equivalent way to process the same data faster.
+
+CPU batches use `numpy_num_workers` (8 by default). Benchmark fewer workers
+when memory or bandwidth is limited. Each worker's BLAS library can also start
+threads, so test `OPENBLAS_NUM_THREADS=1` in the container rather than assuming
+more threads will help. For example, from the Windows starter folder:
+
+```powershell
+docker compose --profile cpu run --rm -e OPENBLAS_NUM_THREADS=1 cpu
+```
+
+On Linux, preserve the shell launcher's ownership handling when testing this:
+
+```sh
+HOLODOPPLER_UID="$(id -u)" HOLODOPPLER_GID="$(id -g)" \
+  docker compose --profile cpu run --rm -e OPENBLAS_NUM_THREADS=1 cpu
+```
+
+For large jobs on Docker Desktop, benchmark keeping the working folder inside
+the WSL Linux filesystem and launching `sh run.sh` there. Windows bind mounts
+cross the Windows/Linux filesystem boundary; the benefit depends on the actual
+I/O workload. Files remain accessible through Explorer at `\\wsl$`. See
+[Microsoft's filesystem performance guidance](https://learn.microsoft.com/en-us/windows/wsl/filesystems).
+
+The next code targets are autofocus's subaperture covariance/projection
+products, redundant resizing of already square outputs, GPU transfer overlap,
+and optional video export. A prototype replacing NumPy `einsum` with matrix
+products reduced the isolated subaperture-filter test from about 8.4 seconds
+to 0.6 seconds. It also changed downstream fitted corrections on the synthetic
+test, so that rewrite is not enabled in the release. Validate numerical and
+image-quality behavior on representative recordings before adopting it.
+
 ## Build
 
 Install Docker Engine on the Linux machine, then run these commands from the
@@ -32,8 +116,10 @@ docker build --pull --target gui-gpu -t holodoppler:1.0-gui-gpu .
 docker run --rm holodoppler:1.0-cpu --help
 ```
 
-The GPU build does not need a GPU. Running it on a GPU requires a compatible
-NVIDIA driver and NVIDIA Container Toolkit on the **host**. The current CUDA
+The GPU build does not need a GPU. On Linux, running it requires a compatible
+NVIDIA driver and NVIDIA Container Toolkit on the **host**. On Windows, use
+Docker Desktop's WSL 2 engine and a compatible Windows NVIDIA driver; Docker
+Desktop supplies container integration. The current CUDA
 13 dependency needs an NVIDIA driver in the 580 series or newer. Check the
 driver compatibility table when updating the CUDA lock file. The CUDA toolkit
 libraries are already included in the GPU image through CuPy's `ctk` extra.
@@ -90,6 +176,12 @@ docker run --rm --init \
 Batch results go under `/output/<file-stem>_<path-hash>/` to prevent files
 with the same name in different input directories from overwriting each other.
 The job exits nonzero if any file fails.
+
+Alternatively, use `process --folder /data /config/parameters.yaml
+--output-dir /output`, or `preview --folder` with the same arguments. Folder
+mode finds `.holo` and `.cine` files case-insensitively in filename order.
+Add `--recursive` for subfolders. `--require-gpu` checks CUDA access and rejects
+settings that select CPU processing. Output access is checked before processing.
 
 ## Run the GUI
 
@@ -177,5 +269,20 @@ Use the same pattern for the GPU variant after its GPU-host processing check.
 Inspect the pushed image's digest in the registry and use that digest in
 production run commands.
 
-These containers are batch jobs, so a service health check or Compose file is
-not needed. The CLI exit code is the job result.
+After publishing the tested CLI images, create the starter download:
+
+```sh
+python scripts/package_docker_starter.py
+```
+
+Attach `dist/holodoppler-cli-starter.zip` to the GitHub Release. It contains
+the runtime Compose file, launchers, default settings, and empty input/output
+folders; users need neither the source repository nor Python. Compose image
+defaults must match the published tags. Build both images with those names:
+
+```sh
+docker compose -f docker/compose.yaml -f docker/compose.build.yaml --profile cpu --profile gpu build
+```
+
+The starter uses `docker compose run --rm` for one batch job and propagates
+its exit code; it does not start a service.

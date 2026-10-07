@@ -1,9 +1,11 @@
 """HoloDoppler command-line interface module."""
 
 import argparse
+from copy import deepcopy
 import hashlib
 import json
 import sys
+import tempfile
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union, Callable
@@ -28,6 +30,9 @@ KNOWN_CLI_OPTIONS: set = {
     "filepath",
     "config",
     "batch",
+    "folder",
+    "recursive",
+    "require-gpu",
     "command",
     "output-dir",
     "saving_to_folder",
@@ -245,6 +250,53 @@ def _resolve_config_path(provided_path: Optional[Path]) -> Path:
 # ============================================================================
 # BATCH PROCESSING
 # ============================================================================
+def _read_input_folder(folder: Path, *, recursive: bool = False) -> List[Path]:
+    """Find recordings in a folder without requiring a text file of paths."""
+    candidates = folder.rglob("*") if recursive else folder.iterdir()
+    paths = sorted(
+        (path for path in candidates if path.is_file() and path.suffix.lower() in {".holo", ".cine"}),
+        key=lambda path: (str(path).casefold(), str(path)),
+    )
+    if not paths:
+        raise ValueError(
+            f"No .holo or .cine files found in {folder}. "
+            "Put your recordings in the input folder and run again. "
+            "Use --recursive to include subfolders."
+        )
+    return paths
+
+
+def _check_output_directory(output_dir: Path) -> None:
+    """Fail before processing if the result directory is not writable."""
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryFile(dir=output_dir):
+            pass
+    except OSError as exc:
+        raise ValueError(
+            f"Cannot write results to {output_dir}: {exc}. "
+            "Choose a writable output folder. On Linux, use docker/run.sh "
+            "to run with your user ID."
+        ) from exc
+
+
+def _check_required_gpu(parameters: dict) -> None:
+    """Prevent a GPU job from silently falling back to CPU processing."""
+    import holodoppler.backend as backend
+
+    if parameters.get("force_numpy") or parameters.get("use_parallel"):
+        raise ValueError(
+            "GPU mode needs force_numpy: false and use_parallel: false "
+            "in your settings. Use the CPU launcher for CPU processing."
+        )
+    if not backend.is_gpu:
+        raise ValueError(
+            "CUDA is unavailable. Check the NVIDIA driver and Docker GPU access, "
+            "or use the CPU launcher. On Windows, use Docker Desktop's WSL 2 engine."
+        )
+    print("Processing backend: CuPy (GPU)")
+
+
 def _read_batch_file(batch_file: Path) -> List[Path]:
     """
     Read a text file containing file paths (one per line).
@@ -311,7 +363,7 @@ def _batch_process(
         print(f"Processing file {idx}/{total}: {file_path.name}")
         try:
             # Copy parameters to avoid cross-file contamination
-            params_copy = parameters.copy()
+            params_copy = deepcopy(parameters)
             if params_copy.get("saving_to_folder"):
                 # Keep outputs separate when files from different directories
                 # have the same name.
@@ -362,6 +414,13 @@ def _existing_file(value: str) -> Path:
     path = Path(value).expanduser().resolve()
     if not path.is_file():
         raise argparse.ArgumentTypeError(f"File does not exist: {path}")
+    return path
+
+
+def _existing_directory(value: str) -> Path:
+    path = Path(value).expanduser().resolve()
+    if not path.is_dir():
+        raise argparse.ArgumentTypeError(f"Input folder does not exist: {path}")
     return path
 
 
@@ -472,6 +531,11 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
         type=str,
         help="Force 'backend' to specified value in parameters.",
     )
+    parser.add_argument(
+        "--require-gpu",
+        action="store_true",
+        help="Check CUDA access and fail instead of falling back to CPU processing.",
+    )
 
 
 def _add_file_arguments(parser: argparse.ArgumentParser) -> None:
@@ -484,7 +548,7 @@ def _add_file_arguments(parser: argparse.ArgumentParser) -> None:
         help=(
             "Input file path (.holo file). "
             f"Uses HOLOFILEPATH from {DEBUG_CONFIG_FILENAME} if not provided. "
-            "Ignored if --batch is used."
+            "For --batch or --folder, the single positional argument is the config file."
         ),
     )
     parser.add_argument(
@@ -494,14 +558,14 @@ def _add_file_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         help=(
             f"Config file path. Uses {DEFAULT_PARAMETERS_PATH} if not provided. "
-            "Ignored if --batch is used (config must be specified as a file)."
         ),
     )
 
 
 def _add_batch_argument(parser: argparse.ArgumentParser) -> None:
-    """Add batch processing argument to a parser."""
-    parser.add_argument(
+    """Add mutually exclusive ways to select a batch of recordings."""
+    batch_group = parser.add_mutually_exclusive_group()
+    batch_group.add_argument(
         "--batch",
         type=_existing_file,
         metavar="BATCH_FILE",
@@ -509,6 +573,17 @@ def _add_batch_argument(parser: argparse.ArgumentParser) -> None:
             "Path to a text file containing .holo file paths (one per line) "
             "for batch processing. Lines starting with '#' are ignored."
         ),
+    )
+    batch_group.add_argument(
+        "--folder",
+        type=_existing_directory,
+        metavar="INPUT_FOLDER",
+        help="Process all .holo and .cine files in this folder, in filename order.",
+    )
+    parser.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Include subfolders when using --folder.",
     )
 
 
@@ -533,6 +608,7 @@ def _build_main_parser() -> argparse.ArgumentParser:
             "  holodoppler preview input.h5 config.yaml\n"
             "  holodoppler process input.h5 config.yaml --debug --threshold 0.5\n"
             "  holodoppler preview --batch file_list.txt config.yaml\n"
+            "  holodoppler process --folder ./input config.yaml --output-dir ./output\n"
             "  holodoppler gui                     # Launch GUI application\n"
             "\n"
             "For more information, visit: https://github.com/yourusername/holodoppler"
@@ -618,9 +694,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     # In batch mode there is no input filepath positional.
     # Therefore, if argparse assigned the only positional argument
     # to `filepath`, reinterpret it as the config path.
-    if args.batch is not None and args.config is None and args.filepath is not None:
+    if (args.batch is not None or args.folder is not None) and args.config is None and args.filepath is not None:
         args.config = args.filepath
         args.filepath = None
+
+    if args.recursive and args.folder is None:
+        parser.error("--recursive requires --folder")
+    if (args.batch is not None or args.folder is not None) and args.filepath is not None:
+        parser.error("Use one config argument with --batch or --folder, without an input filepath")
 
     try:
         # Resolve config path
@@ -632,9 +713,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         # Apply CLI overrides
         parameters = _apply_cli_overrides(parameters, args)
 
+        if args.require_gpu:
+            _check_required_gpu(parameters)
+        if parameters.get("saving_to_folder"):
+            _check_output_directory(Path(parameters["saving_to_folder"]))
+
         # ===== BATCH PROCESSING =====
-        if args.batch:
-            print(f"Batch mode activated. Reading files from: {args.batch}")
+        if args.batch or args.folder:
             mode = (
                 PipelineMode.PREVIEW
                 if args.command == "preview"
@@ -642,7 +727,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
 
             # Read files from batch file
-            file_paths = _read_batch_file(args.batch)
+            if args.folder:
+                file_paths = _read_input_folder(args.folder, recursive=args.recursive)
+                print(f"Found {len(file_paths)} recording(s) in: {args.folder}")
+            else:
+                print(f"Batch mode activated. Reading files from: {args.batch}")
+                file_paths = _read_batch_file(args.batch)
 
             # Process in batch mode (side-effect only)
             failures = _batch_process(

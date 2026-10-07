@@ -1,0 +1,46 @@
+name: holodoppler
+
+x-processing: &processing
+  platform: linux/amd64
+  init: true
+  user: "${HOLODOPPLER_UID:-10001}:${HOLODOPPLER_GID:-10001}"
+  environment:
+    HOME: /tmp
+  volumes:
+    - type: bind
+      source: ./input
+      target: /data
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./config
+      target: /config
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./output
+      target: /output
+      bind:
+        create_host_path: false
+
+services:
+  cpu:
+    <<: *processing
+    image: "${HOLODOPPLER_CPU_IMAGE:-ghcr.io/digitalholography/holodoppler:1.0-cpu}"
+    profiles: [cpu]
+  gpu:
+    <<: *processing
+    image: "${HOLODOPPLER_GPU_IMAGE:-ghcr.io/digitalholography/holodoppler:1.0-gpu}"
+    profiles: [gpu]
+    environment:
+      HOME: /tmp
+      CUPY_CACHE_DIR: /output/.cupy-cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

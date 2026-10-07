@@ -41,17 +41,19 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 holodoppler \
     && useradd --uid 10001 --gid 10001 --create-home holodoppler \
-    && mkdir -p /data /output \
+    && mkdir -p /data /config /output \
     && chown holodoppler:holodoppler /output
 
 WORKDIR /app
 COPY parameters/ ./parameters/
+COPY docker/config/parameters.yaml /config/parameters.yaml
 USER 10001:10001
 ENTRYPOINT ["holodoppler"]
 CMD ["--help"]
 
 FROM runtime AS gpu
 COPY --from=build-gpu /opt/venv /opt/venv
+CMD ["process", "--folder", "/data", "/config/parameters.yaml", "--output-dir", "/output", "--require-gpu"]
 
 FROM runtime AS gui-runtime
 # The slim Python image includes _tkinter but removes its Tcl/Tk shared
@@ -72,3 +74,4 @@ COPY --from=build-gpu-gui /opt/venv /opt/venv
 
 FROM runtime AS cpu
 COPY --from=build /opt/venv /opt/venv
+CMD ["process", "--folder", "/data", "/config/parameters.yaml", "--output-dir", "/output"]

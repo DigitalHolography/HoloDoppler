@@ -1,0 +1,2 @@
+# Shell launchers must keep Unix line endings when checked out on Windows.
+docker/run.sh text eol=lf

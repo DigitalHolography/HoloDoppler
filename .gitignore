@@ -24,6 +24,10 @@ htmlcov/
 /data/
 /results/
 /gui-config/
+/docker/input/*
+!/docker/input/.gitkeep
+/docker/output/*
+!/docker/output/.gitkeep
 
 # HoloDoppler recordings and processing output
 /debug_outputs/

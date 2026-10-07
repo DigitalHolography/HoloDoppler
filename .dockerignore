@@ -12,6 +12,8 @@ temp
 data
 results
 gui-config
+docker/input
+docker/output
 .pytest_cache
 .debug_paths.json
 *.holo

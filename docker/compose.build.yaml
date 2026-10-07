@@ -1,0 +1,10 @@
+# Used only when building from the source repository (run.ps1 -Build / run.sh --build).
+services:
+  cpu:
+    build:
+      context: ..
+      target: cpu
+  gpu:
+    build:
+      context: ..
+      target: gpu

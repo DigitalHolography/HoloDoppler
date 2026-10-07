@@ -70,7 +70,21 @@ The installer build uses the bundled UI defaults from
 Use `python build_installer.py --verify-installer` to run the installer smoke
 verification when Inno Setup is available.
 
-### Docker on Linux
+### Docker CLI on Windows or Linux
+
+The [CLI starter](docker/README.md) includes `input/`,
+`config/parameters.yaml`, and `output/`. Put recordings in `docker/input/`,
+edit the settings if needed, and run:
+
+```powershell
+.\docker\run-cpu.cmd -Build
+# Or, with an NVIDIA GPU:
+.\docker\run-gpu.cmd -Build
+```
+
+`-Build` builds from this source checkout. Once the images are built or
+published, run without `-Build`. On Linux / WSL, use
+`sh docker/run.sh --build` or `sh docker/run.sh --build --gpu`.
 
 See [the Docker guide](docs/docker.md) for CPU and NVIDIA GPU images with CLI or
 GUI targets, display and data mounts, and the image release workflow.
