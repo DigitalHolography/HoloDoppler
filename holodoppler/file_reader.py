@@ -546,3 +546,6 @@ class FileReaderFactory:
             ) from exc
 
         return reader_cls(path)
+
+def get_reader(file_path: str | os.PathLike[str]) -> FileReader:
+    return FileReaderFactory.create(file_path)
