@@ -41,7 +41,7 @@ from holodoppler.core.zernike import (
     fit_zernike_angular_spectrum,
     fit_zernike_fresnel,
 )
-from holodoppler.file_reader import FileReaderFactory
+from holodoppler.file_reader import get_reader
 from holodoppler.saving import (
     save_outputs,
 )
@@ -1094,7 +1094,7 @@ def _process_cupy(
 def preview(file_path, parameters):
     if parameters.get("force_numpy",False):
         backend.set_backend("numpy")
-    file_reader = FileReaderFactory.create(file_path)
+    file_reader = get_reader(file_path)
 
     print("previewing file :", file_path)
 
@@ -1192,7 +1192,7 @@ def preview(file_path, parameters):
 def process(file_path, parameters, progress_callback=None):
     if parameters.get("force_numpy",False):
         backend.set_backend("numpy")
-    file_reader = FileReaderFactory.create(file_path)
+    file_reader = get_reader(file_path)
 
     if file_reader.extension == ".holo":
         print("file header :", file_reader.header)
