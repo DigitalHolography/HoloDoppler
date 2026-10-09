@@ -7,7 +7,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union, Callable
 
-from .utils import load_config
+from .config import load_config
 from .pipelines import pipelines
 
 # ============================================================================

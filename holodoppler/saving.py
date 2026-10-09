@@ -17,13 +17,31 @@ import yaml
 from PIL import Image
 
 from holodoppler.get_version import get_version
-from holodoppler.utils import resize_frames
+from holodoppler.core.image_utils import resize_frames
 
 
 def ensure_directory(path: Path) -> Path:
-    """Create a directory if necessary and return it."""
+    """Create a directory and report useful Windows filesystem diagnostics."""
     path = Path(path)
-    path.mkdir(parents=True, exist_ok=True)
+
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        absolute_path = path.resolve(strict=False)
+
+        print("\n[ensure_directory] FAILED")
+        print(f"Requested path : {path}")
+        print(f"Absolute path  : {absolute_path}")
+        print(f"Current cwd    : {Path.cwd()}")
+        print(f"Exists         : {absolute_path.exists()}")
+        print(f"Is directory   : {absolute_path.is_dir()}")
+        print(f"Is file        : {absolute_path.is_file()}")
+        print(f"Parent         : {absolute_path.parent}")
+        print(f"Parent exists  : {absolute_path.parent.exists()}")
+        print(f"Exception      : {exc!r}")
+
+        raise
+
     return path
 
 

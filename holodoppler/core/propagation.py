@@ -3,7 +3,7 @@ Propagation kernels (Fresnel and Angular Spectrum)
 """
 
 from functools import cache
-from .utils import pad_array_centrally
+from .image_utils import pad_array_centrally
 
 
 def ensure_yx_pixel_pitch(pixel_pitch):
