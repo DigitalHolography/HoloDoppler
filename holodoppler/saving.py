@@ -377,113 +377,6 @@ def find_ffmpeg() -> str:
     )
 
 
-def save_video(
-    path: Path,
-    data: np.ndarray,
-    fps: float,
-    ffmpeg: str | None = None,
-    codec: str = "mjpeg",
-) -> None:
-    """
-    Save a video using FFmpeg.
-
-    MJPEG:
-        codec="mjpeg"
-        q:v=1 gives very high quality but is still lossy.
-
-    Ut Video:
-        codec="utvideo"
-        lossless.
-    """
-    path = Path(path)
-    ensure_directory(path.parent)
-
-    if ffmpeg is None:
-        ffmpeg = find_ffmpeg()
-
-    frames, input_pix_fmt, output_pix_fmt = prepare_ffmpeg_frames(data)
-
-    height = frames.shape[1]
-    width = frames.shape[2]
-
-    command = [
-        ffmpeg,
-        "-y",
-
-        "-f",
-        "rawvideo",
-        "-vcodec",
-        "rawvideo",
-        "-pix_fmt",
-        input_pix_fmt,
-        "-s",
-        f"{width}x{height}",
-        "-r",
-        str(float(fps)),
-        "-i",
-        "-",
-
-        "-an",
-
-        "-c:v",
-        codec,
-    ]
-
-    # MJPEG quality.
-    if codec.lower() == "mjpeg":
-        command += [
-            "-q:v",
-            "1",
-        ]
-
-    command += [
-        "-pix_fmt",
-        output_pix_fmt,
-        str(path),
-    ]
-
-    process = subprocess.Popen(
-        command,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-
-    try:
-        assert process.stdin is not None
-        assert process.stderr is not None
-
-        frames = np.ascontiguousarray(frames)
-
-        try:
-            process.stdin.write(frames.tobytes())
-            process.stdin.close()
-        except BrokenPipeError:
-            # FFmpeg exited early. Continue so we can read its actual error.
-            try:
-                process.stdin.close()
-            except Exception:
-                pass
-
-        stderr = process.stderr.read().decode(
-            errors="replace"
-        )
-
-        return_code = process.wait()
-
-    except Exception:
-        process.kill()
-        process.wait()
-        raise
-
-    if return_code != 0:
-        raise RuntimeError(
-            f"FFmpeg failed while saving {path}.\n"
-            f"Command: {' '.join(command)}\n"
-            f"FFmpeg output:\n{stderr}"
-        )
-
-
 # ============================================================================
 # 4. PNG saving
 # ============================================================================
@@ -892,54 +785,219 @@ def create_directories(
     for directory in subdirectories:
         ensure_directory(target_dir / directory)
 
+from typing import Literal
+
+VideoWriter = Literal["imageio", "cmd"]
+
+
+def save_video(
+    path: Path,
+    data: np.ndarray,
+    fps: float,
+    ffmpeg: str | None = None,
+    codec: str = "utvideo",
+    writer: VideoWriter = "imageio",
+) -> None:
+    """Save a video using ImageIO or the FFmpeg command line.
+
+    Supported combinations:
+        AVI + utvideo: lossless
+        AVI + mjpeg: lossy
+        MP4 + libx264: H.264
+
+    The output container is inferred from the file extension.
+    """
+    path = Path(path)
+    ensure_directory(path.parent)
+
+    suffix = path.suffix.lower()
+    if suffix not in {".avi", ".mp4"}:
+        raise ValueError(f"Unsupported video extension: {suffix}")
+
+    if suffix == ".mp4":
+        codec = "libx264"
+
+    if writer == "imageio":
+        save_video_imageio(path, data, fps, codec=codec)
+    elif writer == "cmd":
+        if ffmpeg is None:
+            ffmpeg = find_ffmpeg()
+        save_video_cmd(path, data, fps, ffmpeg, codec=codec)
+    else:
+        raise ValueError(
+            f"Unsupported video writer: {writer!r}. "
+            "Expected 'imageio' or 'cmd'."
+        )
+
+
+def save_video_imageio(
+    path: Path,
+    data: np.ndarray,
+    fps: float,
+    codec: str,
+) -> None:
+    """Save video using ImageIO's FFmpeg plugin."""
+    import imageio.v2 as imageio
+
+    frames = video_to_uint8(data)
+    frames = make_even_dimensions(frames)
+
+    # Use RGB for broad codec and container compatibility.
+    if frames.ndim == 3:
+        frames = np.repeat(frames[..., None], 3, axis=-1)
+    elif frames.shape[-1] == 4:
+        frames = frames[..., :3]
+
+    frames = np.ascontiguousarray(frames)
+
+    kwargs = {
+        "fps": float(fps),
+        "codec": codec,
+        "macro_block_size": 2,
+    }
+
+    if path.suffix.lower() == ".mp4":
+        kwargs.update({
+            "pixelformat": "yuv420p",
+            "ffmpeg_params": ["-crf", "18", "-preset", "medium"],
+        })
+    elif codec.lower() == "utvideo":
+        kwargs.update({
+            "pixelformat": "yuv444p",
+        })
+    elif codec.lower() == "mjpeg":
+        kwargs.update({
+            "pixelformat": "yuvj422p",
+            "quality": 10,
+        })
+
+    with imageio.get_writer(str(path), **kwargs) as video:
+        for frame in frames:
+            video.append_data(frame)
+
+
+def save_video_cmd(
+    path: Path,
+    data: np.ndarray,
+    fps: float,
+    ffmpeg: str,
+    codec: str,
+) -> None:
+    """Save video through the explicit FFmpeg CLI."""
+    frames = video_to_uint8(data)
+    frames = make_even_dimensions(frames)
+
+    if frames.ndim == 3:
+        input_pix_fmt = "gray"
+    else:
+        if frames.shape[-1] == 4:
+            frames = frames[..., :3]
+        if frames.shape[-1] != 3:
+            raise ValueError(f"Unsupported video shape: {frames.shape}")
+        input_pix_fmt = "rgb24"
+
+    frames = np.ascontiguousarray(frames)
+    height, width = frames.shape[1:3]
+
+    is_mp4 = path.suffix.lower() == ".mp4"
+    if is_mp4:
+        codec = "libx264"
+        output_pix_fmt = "yuv420p"
+    elif codec.lower() == "utvideo":
+        output_pix_fmt = "yuv444p" if frames.ndim == 4 else "gray"
+    elif codec.lower() == "mjpeg":
+        output_pix_fmt = "yuvj422p" if frames.ndim == 4 else "gray"
+    else:
+        output_pix_fmt = "yuv444p" if frames.ndim == 4 else "gray"
+
+    command = [
+        ffmpeg, "-y",
+        "-f", "rawvideo",
+        "-vcodec", "rawvideo",
+        "-pix_fmt", input_pix_fmt,
+        "-s", f"{width}x{height}",
+        "-r", str(float(fps)),
+        "-i", "-",
+        "-an",
+        "-c:v", codec,
+    ]
+
+    if is_mp4:
+        command += [
+            "-crf", "18",
+            "-preset", "medium",
+        ]
+    elif codec.lower() == "mjpeg":
+        command += ["-q:v", "1"]
+
+    command += ["-pix_fmt", output_pix_fmt, str(path)]
+
+    result = subprocess.run(
+        command,
+        input=frames.tobytes(),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"FFmpeg failed while saving {path}.\n"
+            f"Command: {' '.join(command)}\n"
+            f"FFmpeg output:\n"
+            f"{result.stderr.decode(errors='replace')}"
+        )
+
+
 def save_videos(
     target_dir: Path,
     data_map: dict[str, Any],
     fps: float,
     video_keys: Iterable[str] | None = None,
+    video_formats: Iterable[str] = ("avi",),
+    writer: VideoWriter = "imageio",
 ) -> None:
-    """
-    Save all requested video arrays as Ut Video AVI files.
-
-    Images are ignored.
-
-    FFmpeg is located/downloaded once and reused for all videos.
-    """
+    """Save selected videos as AVI and/or MP4."""
     avi_dir = ensure_directory(Path(target_dir) / "avi")
+    mp4_dir = ensure_directory(Path(target_dir) / "mp4")
 
     selected = None if video_keys is None else set(video_keys)
+    formats = {fmt.lower().lstrip(".") for fmt in video_formats}
 
-    # Find existing FFmpeg or download it.
-    ffmpeg = find_ffmpeg()
+    unsupported = formats - {"avi", "mp4"}
+    if unsupported:
+        raise ValueError(f"Unsupported video formats: {unsupported}")
 
-    print(f"Using FFmpeg: {ffmpeg}")
+    ffmpeg = find_ffmpeg() if writer == "cmd" else None
+    if ffmpeg:
+        print(f"Using FFmpeg: {ffmpeg}")
 
     for name, value in data_map.items():
-
         if value is None or not isinstance(value, np.ndarray):
             continue
-
         if not is_video(value):
             continue
-
         if selected is not None and name not in selected:
             continue
 
-        path = avi_dir / f"{name}.avi"
+        for fmt in sorted(formats):
+            directory = avi_dir if fmt == "avi" else mp4_dir
+            path = directory / f"{name}.{fmt}"
+            codec = "utvideo" if fmt == "avi" else "libx264"
 
-        start = time.time()
-
-        save_video(
-            path,
-            value,
-            fps=fps,
-            ffmpeg=ffmpeg,
-        )
-
-        print(
-            f"Saved video: {path} "
-            f"({time.time() - start:.1f}s)"
-        )
+            start = time.time()
+            save_video(
+                path,
+                value,
+                fps=fps,
+                ffmpeg=ffmpeg,
+                codec=codec,
+                writer=writer,
+            )
+            print(
+                f"Saved video: {path} "
+                f"({time.time() - start:.1f}s)"
+            )
 
 
 # ============================================================================
@@ -1037,124 +1095,6 @@ def calculate_fps(
 # Bundle saving
 # ============================================================================
 
-def save_bundle(
-    target_dir: Path,
-    output: dict[str, Any],
-    parameters: dict[str, Any] | None = None,
-    file_reader: Any = None,
-    fps: float = 30.0,
-    save_h5_output: bool = True,
-    save_h5_list: Iterable[str] | None = None,
-    video_keys: Iterable[str] | None = None,
-    png_keys: Iterable[str] | None = None,
-    json_outputs: dict[str, Any] | None = None,
-    yaml_outputs: dict[str, Any] | None = None,
-    reg_list: Any = None,
-    coefs_list: Any = None,
-    backend: Any = None,
-    square: bool = False,
-) -> None:
-    """Save a complete Holodoppler output bundle."""
-    start_time = time.time()
-    target_dir = Path(target_dir)
-
-    create_directories(
-        target_dir,
-        full=save_h5_output,
-    )
-
-    print(f"Saving output bundle to: {target_dir}")
-
-    # ------------------------------------------------------------------
-    # 1. Videos
-    # ------------------------------------------------------------------
-
-    save_videos(
-        target_dir,
-        output,
-        fps=fps,
-        video_keys=video_keys,
-    )
-
-    # ------------------------------------------------------------------
-    # 2. PNGs
-    # ------------------------------------------------------------------
-
-    save_pngs(
-        target_dir,
-        output,
-        png_keys=png_keys,
-    )
-
-    # ------------------------------------------------------------------
-    # 3. Automatic CSV outputs
-    #
-    # Any output containing "coefs" or "registration" is saved as CSV
-    # and included in HDF5.
-    # ------------------------------------------------------------------
-
-    csv_h5_names = save_csv_outputs(
-        target_dir,
-        output,
-    )
-
-    # ------------------------------------------------------------------
-    # 4. JSON / YAML
-    # ------------------------------------------------------------------
-
-    if json_outputs:
-        for name, value in json_outputs.items():
-            save_json(
-                target_dir / "json" / f"{name}.json",
-                value,
-            )
-
-    if yaml_outputs:
-        for name, value in yaml_outputs.items():
-            save_yaml(
-                target_dir / "yaml" / f"{name}.yaml",
-                value,
-            )
-
-    # ------------------------------------------------------------------
-    # 5. Metadata
-    # ------------------------------------------------------------------
-
-    save_metadata(
-        target_dir,
-        file_reader=file_reader,
-        parameters=parameters,
-    )
-
-    # ------------------------------------------------------------------
-    # 6. HDF5
-    # ------------------------------------------------------------------
-
-    if save_h5_output:
-        h5_names = list(save_h5_list or [])
-
-        for name in csv_h5_names:
-            if name not in h5_names:
-                h5_names.append(name)
-
-        save_h5(
-            target_dir,
-            output,
-            parameters=parameters,
-            save_only_list=h5_names,
-            reg_list=reg_list,
-            coefs_list=coefs_list,
-            git_commit=get_git_version(),
-        )
-
-    elapsed = time.time() - start_time
-    print(f"Saving completed in {elapsed:.1f} seconds")
-
-
-# ============================================================================
-# Main public entry point
-# ============================================================================
-
 def save_outputs(
     file_reader: Any,
     output: dict[str, Any],
@@ -1173,52 +1113,46 @@ def save_outputs(
     png_keys: Iterable[str] | None = None,
     video_keys: Iterable[str] | None = None,
     square: bool = False,
+    video_formats: Iterable[str] = ("avi","mp4"),
+    video_writer: VideoWriter = "imageio",
+    json_outputs: dict[str, Any] | None = None,
+    yaml_outputs: dict[str, Any] | None = None,
 ) -> Path:
-    """
-    Main public saving entry point.
+    """Save a complete HoloDoppler output bundle.
+
+    video_formats:
+        Iterable containing "avi", "mp4", or both.
+
+    video_writer:
+        "imageio" to use ImageIO's FFmpeg plugin.
+        "cmd" to invoke the FFmpeg executable directly.
 
     custom_path:
         Absolute path used directly as the output directory.
 
     custom_relative_path:
         Path relative to the default *_HD output directory.
-
-    Example:
-        custom_relative_path="preview"
-        -> <default_output_path>/preview
     """
+    start_time = time.time()
     parameters = parameters or {}
 
-    default_path = get_default_output_path(
-        file_reader.file_path
-    )
+    default_path = get_default_output_path(file_reader.file_path)
 
-    # ------------------------------------------------------------------
-    # Resolve target path
-    # ------------------------------------------------------------------
-
+    # Resolve output path.
     if custom_path is not None and custom_relative_path is not None:
         raise ValueError(
-            "custom_path and custom_relative_path "
-            "cannot be used together"
+            "custom_path and custom_relative_path cannot be used together"
         )
 
     if custom_path is not None:
         target_dir = Path(custom_path).expanduser()
-
         if not target_dir.is_absolute():
-            raise ValueError(
-                "custom_path must be an absolute path"
-            )
+            raise ValueError("custom_path must be an absolute path")
 
     elif custom_relative_path is not None:
         relative_path = Path(custom_relative_path)
-
         if relative_path.is_absolute():
-            raise ValueError(
-                "custom_relative_path must be relative"
-            )
-
+            raise ValueError("custom_relative_path must be relative")
         target_dir = default_path / relative_path
 
     elif holodoppler_path:
@@ -1238,10 +1172,12 @@ def save_outputs(
     else:
         target_dir = default_path
 
-    # ------------------------------------------------------------------
-    # FPS
-    # ------------------------------------------------------------------
+    target_dir = Path(target_dir)
+    create_directories(target_dir, full=save_h5_output)
 
+    print(f"Saving output bundle to: {target_dir}")
+
+    # FPS.
     fps = calculate_fps(
         num_batch=num_batch,
         end_frame=end_frame,
@@ -1249,49 +1185,73 @@ def save_outputs(
         parameters=parameters,
     )
 
-    # ------------------------------------------------------------------
-    # HDF5 outputs
-    #
-    # Fixed outputs + all "band_*" + automatic coefs/registration.
-    # ------------------------------------------------------------------
-
-    save_h5_list = [
-        "moment0ff",
-        "moment0",
-        "moment1",
-        "moment2",
-        "spectrum_line",
-        "sh_psd"
-    ]
-
-    save_h5_list.extend(
-        key
-        for key in output
-        if (
-            "band_" in key
-            or "coefs" in key.lower()
-            or "registration" in key.lower()
-        )
-    )
-
-    # ------------------------------------------------------------------
-    # Save
-    # ------------------------------------------------------------------
-
-    save_bundle(
-        target_dir=target_dir,
-        output=output,
-        parameters=parameters,
-        file_reader=file_reader,
+    # 1. Videos.
+    save_videos(
+        target_dir,
+        output,
         fps=fps,
-        save_h5_output=save_h5_output,
-        save_h5_list=save_h5_list,
         video_keys=video_keys,
-        png_keys=png_keys,
-        reg_list=reg_list,
-        coefs_list=coefs_list,
-        backend=backend,
-        square=square,
+        video_formats=video_formats,
+        writer=video_writer,
     )
 
+    # 2. PNGs.
+    save_pngs(
+        target_dir,
+        output,
+        png_keys=png_keys,
+    )
+
+    # 3. CSV outputs, also selected for HDF5.
+    csv_h5_names = save_csv_outputs(target_dir, output)
+
+    # 4. JSON and YAML.
+    for name, value in (json_outputs or {}).items():
+        save_json(target_dir / "json" / f"{name}.json", value)
+
+    for name, value in (yaml_outputs or {}).items():
+        save_yaml(target_dir / "yaml" / f"{name}.yaml", value)
+
+    # 5. Metadata.
+    save_metadata(
+        target_dir,
+        file_reader=file_reader,
+        parameters=parameters,
+    )
+
+    # 6. HDF5.
+    if save_h5_output:
+        h5_names = [
+                "moment0ff",
+                "moment0",
+                "moment1",
+                "moment2",
+                "spectrum_line",
+                "sh_psd",
+            ]
+
+        # Include all band_* and automatically selected CSV outputs.
+        for name in output:
+            if (
+                "band_" in name
+                or "coefs" in name.lower()
+                or "registration" in name.lower()
+            ) and name not in h5_names:
+                h5_names.append(name)
+
+        for name in csv_h5_names:
+            if name not in h5_names:
+                h5_names.append(name)
+
+        save_h5(
+            target_dir,
+            output,
+            parameters=parameters,
+            save_only_list=h5_names,
+            reg_list=reg_list,
+            coefs_list=coefs_list,
+            git_commit=get_git_version(),
+        )
+
+    print(f"Saving completed in {time.time() - start_time:.1f} seconds")
     return target_dir
