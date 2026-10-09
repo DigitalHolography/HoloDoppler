@@ -57,11 +57,13 @@ def process_holo_path(holo_path):
     mean_vals = np.mean(data, axis=0)
 
     defocus = mean_vals[0] if len(mean_vals) > 0 else np.nan
-    astig1  = mean_vals[1] if len(mean_vals) > 1 else np.nan
-    astig2  = mean_vals[2] if len(mean_vals) > 2 else np.nan
+    astig1 = mean_vals[1] if len(mean_vals) > 1 else np.nan
+    astig2 = mean_vals[2] if len(mean_vals) > 2 else np.nan
 
-    print(f"{name} : zernike coefs : defocus = {defocus:.6f} "
-          f"astig1 = {astig1:.6f} astig2 = {astig2:.6f}")
+    print(
+        f"{name} : zernike coefs : defocus = {defocus:.6f} "
+        f"astig1 = {astig1:.6f} astig2 = {astig2:.6f}"
+    )
 
 
 def main(txt_file):

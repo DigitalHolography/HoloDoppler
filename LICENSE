@@ -519,6 +519,7 @@ you grant is automatically extended to all recipients of the covered
 work and works based on it.
 
   A patent license is "discriminatory" if it does not include within
+<<<<<<< HEAD
 the scope of its coverage, prohibits the exercise of, or is conditioned
 on the non-exercise of one or more of the rights that are specifically
 granted under this License.  You may not convey a covered work if you
@@ -532,6 +533,21 @@ you (or copies made from those copies), or (b) primarily for and in
 connection with specific products or compilations that contain the
 covered work, unless you entered into that arrangement, or that patent
 license was granted, prior to 28 March 2007.
+=======
+the scope of its coverage, prohibits the exercise of, or is
+conditioned on the non-exercise of one or more of the rights that are
+specifically granted under this License.  You may not convey a covered
+work if you are a party to an arrangement with a third party that is
+in the business of distributing software, under which you make payment
+to the third party based on the extent of your activity of conveying
+the work, and under which the third party grants, to any of the
+parties who would receive the covered work from you, a discriminatory
+patent license (a) in connection with copies of the covered work
+conveyed by you (or copies made from those copies), or (b) primarily
+for and in connection with specific products or compilations that
+contain the covered work, unless you entered into that arrangement,
+or that patent license was granted, prior to 28 March 2007.
+>>>>>>> 272c17b8fe113fb3c67734f48f624727c99d8788
 
   Nothing in this License shall be construed as excluding or limiting
 any implied license or other defenses to infringement that may
@@ -593,9 +609,15 @@ APPLICABLE LAW.  EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT
 HOLDERS AND/OR OTHER PARTIES PROVIDE THE PROGRAM "AS IS" WITHOUT WARRANTY
 OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO,
 THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+<<<<<<< HEAD
 PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
 PROGRAM IS WITH YOU.  SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE
 COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+=======
+PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE PROGRAM
+IS WITH YOU.  SHOULD THE PROGRAM PROVE DEFECTIVE, YOU ASSUME THE COST OF
+ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+>>>>>>> 272c17b8fe113fb3c67734f48f624727c99d8788
 
   16. Limitation of Liability.
 

@@ -10,27 +10,68 @@ source ./.venv/Scripts/activate
 python -m pip install -e .
 ```
 
-## 2. Run the Example
+## 2. Run the CLI Examples
 
 ### Preview
 
 ```bash
-holodoppler preview "D:\path\to\holo.holo" "./src/holodoppler/default_parameters.json"
+holodoppler preview "D:\path\to\holo.holo" "./parameters/default_parameters_debug.json"
 ```
 
 ### Process
 
 ```bash
-holodoppler process "D:\path\to\holo.holo" "./src/holodoppler/default_parameters.json"
+holodoppler process "D:\path\to\holo.holo" "./parameters/default_parameters_debug.json"
 ```
 
-### Building app
+### Debug And Profile
+
+```bash
+holodoppler process "D:\path\to\holo.holo" "./parameters/default_parameters_debug.json" --debug --tictoc
+```
+
+```bash
+holodoppler preview "D:\path\to\holo.holo" "./parameters/default_parameters_debug.json" --debug --tictoc
+```
+
+The `--debug` provides more output visually and `--tictoc` provides information about processing time.
+
+### Run the GUI
+
+```bash
+holodoppler
+```
+
+or explicitly:
+
+```bash
+holodoppler gui
+```
+
+### Run a Batch of Files in CLI
+
+```bash
+holodoppler process --batch "path/to/files.txt" "./parameters/default_parameters_debug.json"
+```
+
+Give a `.txt` file with one `.holo` or `.cine` path per line.
+
+### Build the Windows Installer
 
 ```bash
 python -m pip install -e .[build]
 python build_installer.py
 ```
 
+<<<<<<< HEAD
 ## License
 
 This project is licensed under the GNU General Public License v3.0 only. See [LICENSE](LICENSE).
+=======
+The installer build script must run under Python 3.13 or newer.
+The installer build uses the bundled UI defaults from
+`holodoppler/ui/defaults/` and verifies they match `parameters/*.json`,
+`parameters/*.yaml`, and `parameters/*.yml`.
+Use `python build_installer.py --verify-installer` to run the installer smoke
+verification when Inno Setup is available.
+>>>>>>> 272c17b8fe113fb3c67734f48f624727c99d8788
