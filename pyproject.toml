@@ -22,12 +22,15 @@ dependencies = [
   "pyyaml",
   "sv-ttk>=2.6.1",
   "pillow>=11.0",
-  "pytest>=9.1.1",
 ]
 
 [project.optional-dependencies]
+dev = [
+    "pytest>=9.1.1",
+]
 build = [
-  "pyinstaller>=6.0",
+    "build>=1.2",
+    "pyinstaller>=6.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -38,6 +41,7 @@ include = ["holodoppler*"]
 holodoppler = [
   "ui/assets/*",
   "ui/defaults/*",
+  "parameters/*",
 ]
 
 [project.scripts]

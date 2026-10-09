@@ -4,7 +4,7 @@ pipeline_name: "pca_accumulation"
 batch_size: 32
 first_frame: 0
 batch_stride: 32
-end_frame: -1  # -1 means process all frames
+end_frame: 3000  # -1 means process all frames
 accumulation: 32
 
 # Propagation parameters
@@ -24,9 +24,17 @@ pca_range: [0, 16]
 low_freq: 0.2  # Low frequency cutoff in reduced frequency
 high_freq: 0.5  # High frequency cutoff in reduced frequency
 
-# Image registration
-image_registration: true
-registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
+# Image registration Live 
+image_registration: false
+registration_ref_first_frame: 0
+registration_ref_batch_size: 512
+registration_radius: 0.8
+registration_sub_pixel: true
+
+# Advanced Image registration
+image_registration_with_ecc: true #uses the first computed frame as reference
+registration_ecc_radius: 0.8
+registration_ecc_min_threshold: 0.7
 
 # Image resizing
 square: true
