@@ -1041,7 +1041,6 @@ def preview(file_path, parameters):
         output=res_np,
         parameters=parameters,
         custom_relative_path="preview",
-        square=True,
     )
 
     return res_np["PROJff"]
