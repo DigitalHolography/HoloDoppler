@@ -1163,6 +1163,7 @@ def save_outputs(
                 "moment2",
                 "spectrum_line",
                 "sh_psd",
+                "spectrograms"
             ]
 
         # Include all band_* and automatically selected CSV outputs.
