@@ -1354,6 +1354,34 @@ def save_outputs(
         target_dir = default_path
 
     target_dir = Path(target_dir)
+
+    overwrite_option = parameters.get("overwrite_option", "overwrite")
+
+    if target_dir.exists():
+        if overwrite_option == "archive_old":
+            archive_dir = target_dir.parent / "archive"
+            archive_dir.mkdir(parents=True, exist_ok=True)
+
+            archive_target = archive_dir / target_dir.name
+            number = 1
+
+            while archive_target.exists():
+                archive_target = archive_dir / f"{target_dir.name} (#{number})"
+                number += 1
+
+            shutil.move(str(target_dir), str(archive_target))
+
+        elif overwrite_option == "erase":
+            if target_dir.is_dir():
+                shutil.rmtree(target_dir)
+            else:
+                target_dir.unlink()
+
+        elif overwrite_option != "overwrite":
+            raise ValueError(f"Unknown overwrite_option: {overwrite_option}")
+
+    target_dir.mkdir(parents=True, exist_ok=True)
+
     create_directories(target_dir)
 
     print(f"Saving output bundle to: {target_dir}")
