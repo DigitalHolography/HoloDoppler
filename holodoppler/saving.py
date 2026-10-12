@@ -9,7 +9,8 @@ import subprocess
 import time
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Iterable, Any
 
 import h5py
 import numpy as np
@@ -786,7 +787,8 @@ def create_directories(
 
 from typing import Literal
 
-VideoWriter = Literal["imageio", "cmd"]
+VideoWriter = Literal["imageio", "cmd", "pyav"]
+
 
 
 def save_video(
@@ -797,36 +799,54 @@ def save_video(
     codec: str = "mjpeg",
     writer: VideoWriter = "imageio",
 ) -> None:
-    """Save a video using ImageIO or the FFmpeg command line.
+    """
+    Save a video using ImageIO, FFmpeg CLI, or PyAV.
 
     Supported combinations:
         AVI + utvideo: lossless
         AVI + mjpeg: lossy
         MP4 + libx264: H.264
 
-    The output container is inferred from the file extension.
+    Output container is inferred from file extension.
     """
     path = Path(path)
     ensure_directory(path.parent)
 
     suffix = path.suffix.lower()
+
     if suffix not in {".avi", ".mp4"}:
         raise ValueError(f"Unsupported video extension: {suffix}")
 
     if suffix == ".mp4":
         codec = "libx264"
-
+    
     if writer == "imageio":
-        save_video_imageio(path, data, fps, codec=codec)
+        save_video_imageio(
+            path, data, fps,
+            codec=codec,
+        )
+
     elif writer == "cmd":
         if ffmpeg is None:
             ffmpeg = find_ffmpeg()
-        save_video_cmd(path, data, fps, ffmpeg, codec=codec)
+
+        save_video_cmd(
+            path, data, fps, ffmpeg,
+            codec=codec,
+        )
+
+    elif writer == "pyav":
+        save_video_pyav(
+            path, data, fps,
+            codec=codec,
+        )
+
     else:
         raise ValueError(
             f"Unsupported video writer: {writer!r}. "
-            "Expected 'imageio' or 'cmd'."
+            "Expected 'imageio', 'cmd', or 'pyav'."
         )
+
 
 
 def save_video_imageio(
@@ -874,6 +894,88 @@ def save_video_imageio(
     with imageio.get_writer(str(path), **kwargs) as video:
         for frame in frames:
             video.append_data(frame)
+
+
+
+def save_video_pyav(
+    path: Path,
+    data: np.ndarray,
+    fps: float,
+    codec: str,
+) -> None:
+    """
+    Save AVI or MP4 using PyAV.
+
+    The entire video is prepared as a contiguous NumPy array,
+    then frames are submitted directly to the FFmpeg encoder.
+    """
+    import av
+    from fractions import Fraction
+
+    path = Path(path)
+    ensure_directory(path.parent)
+
+    if not np.isfinite(fps) or fps <= 0:
+        raise ValueError(f"Invalid FPS: {fps}")
+
+    if path.suffix.lower() not in (".avi", ".mp4"):
+        raise ValueError("Only AVI and MP4 are supported")
+
+    if path.suffix.lower() == ".mp4":
+        codec = "libx264"
+
+    frames = video_to_uint8(data)
+    frames = make_even_dimensions(frames)
+
+    if frames.ndim == 3:
+        input_format = "gray"
+
+    elif frames.shape[-1] == 4:
+        frames = frames[..., :3]
+        input_format = "rgb24"
+
+    else:
+        input_format = "rgb24"
+
+    frames = np.ascontiguousarray(frames)
+
+    height, width = frames.shape[1:3]
+    rate = Fraction(str(float(fps))).limit_denominator(100000)
+
+    with av.open(str(path), mode="w") as container:
+        stream = container.add_stream(codec, rate=rate)
+        stream.width = width
+        stream.height = height
+
+        if codec == "libx264":
+            stream.pix_fmt = "yuv420p"
+            stream.options = {
+                "crf": "18",
+                "preset": "medium",
+            }
+
+        elif codec == "mjpeg":
+            stream.pix_fmt = "yuvj422p"
+
+            # Do not pass "qscale" as an encoder option.
+            stream.options = {}
+
+        elif codec == "utvideo":
+            stream.pix_fmt = "gbrp"
+            stream.options = {}
+
+        for array in frames:
+            frame = av.VideoFrame.from_ndarray(
+                array,
+                format=input_format,
+            )
+
+            for packet in stream.encode(frame):
+                container.mux(packet)
+
+        for packet in stream.encode():
+            container.mux(packet)
+
 
 
 def save_video_cmd(
@@ -955,7 +1057,7 @@ def save_videos(
     fps: float,
     video_keys: Iterable[str] | None = None,
     video_formats: Iterable[str] = ("avi",),
-    writer: VideoWriter = "imageio",
+    writer: VideoWriter = "cmd",
 ) -> None:
     """Save selected videos as AVI and/or MP4. Saves avi in mjpeg for now and mp4 in libx264"""
     avi_dir = ensure_directory(Path(target_dir) / "avi")
@@ -998,6 +1100,140 @@ def save_videos(
                 f"Saved video: {path} "
                 f"({time.time() - start:.1f}s)"
             )
+
+def save_videos_parallel(
+    target_dir: Path,
+    data_map: dict[str, Any],
+    fps: float,
+    video_keys: Iterable[str] | None = None,
+    video_formats: Iterable[str] = ("avi",),
+    writer: VideoWriter = "cmd",
+    max_workers: int = 8,
+) -> None:
+    """
+    Save selected videos as AVI and/or MP4 in parallel.
+
+    AVI: MJPEG
+    MP4: H.264 (libx264)
+
+    Each worker runs one independent video encoding job.
+    """
+
+    target_dir = Path(target_dir)
+
+    avi_dir = ensure_directory(target_dir / "avi")
+    mp4_dir = ensure_directory(target_dir / "mp4")
+
+    selected = None if video_keys is None else set(video_keys)
+    formats = {fmt.lower().lstrip(".") for fmt in video_formats}
+
+    unsupported = formats - {"avi", "mp4"}
+    if unsupported:
+        raise ValueError(f"Unsupported video formats: {unsupported}")
+
+    if max_workers < 1:
+        raise ValueError("max_workers must be >= 1")
+
+    cpu_count = os.cpu_count() or 1
+    max_workers = max(min(max_workers, cpu_count // 2),1)
+
+    ffmpeg = find_ffmpeg() if writer == "cmd" else None
+
+    if ffmpeg:
+        print(f"Using FFmpeg: {ffmpeg}")
+
+    def save_one_video(
+        name: str,
+        value: np.ndarray,
+        fmt: str,
+    ) -> tuple[Path, float]:
+
+        directory = avi_dir if fmt == "avi" else mp4_dir
+        path = directory / f"{name}.{fmt}"
+
+        codec = "mjpeg" if fmt == "avi" else "libx264"
+
+        start = time.perf_counter()
+
+        save_video(
+            path,
+            value,
+            fps=fps,
+            ffmpeg=ffmpeg,
+            codec=codec,
+            writer=writer,
+        )
+
+        elapsed = time.perf_counter() - start
+        return path, elapsed
+
+    # Build encoding jobs without duplicating NumPy arrays.
+    jobs = []
+
+    for name, value in data_map.items():
+        if value is None or not isinstance(value, np.ndarray):
+            continue
+
+        if not is_video(value):
+            continue
+
+        if selected is not None and name not in selected:
+            continue
+
+        for fmt in sorted(formats):
+            jobs.append((name, value, fmt))
+
+    if not jobs:
+        print("No videos to save.")
+        return
+
+    print(
+        f"Saving {len(jobs)} video(s) "
+        f"using {min(max_workers, len(jobs))} workers..."
+    )
+
+    start_total = time.perf_counter()
+    errors = []
+
+    with ThreadPoolExecutor(
+        max_workers=max_workers,
+        thread_name_prefix="VideoEncoder",
+    ) as executor:
+
+        futures = {
+            executor.submit(save_one_video, name, value, fmt):
+                (name, fmt)
+            for name, value, fmt in jobs
+        }
+
+        for future in as_completed(futures):
+            name, fmt = futures[future]
+
+            try:
+                path, elapsed = future.result()
+
+                print(
+                    f"Saved video: {path} "
+                    f"({elapsed:.1f}s)"
+                )
+
+            except Exception as exc:
+                errors.append((name, fmt, exc))
+                print(
+                    f"Failed to save {name}.{fmt}: {exc}"
+                )
+
+    elapsed_total = time.perf_counter() - start_total
+
+    print(
+        f"Video saving completed in {elapsed_total:.1f}s "
+        f"({len(jobs) - len(errors)}/{len(jobs)} successful)"
+    )
+
+    if errors:
+        raise RuntimeError(
+            f"{len(errors)} video encoding job(s) failed."
+        ) from errors[0][2]
 
 
 # ============================================================================
@@ -1128,7 +1364,7 @@ def save_outputs(
     )
 
     # 1. Videos.
-    save_videos(
+    save_videos_parallel(
         target_dir,
         output,
         fps=fps,
