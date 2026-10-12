@@ -13,6 +13,7 @@ from typing import Any, Iterable
 
 import h5py
 import numpy as np
+from numpy._core.numeric import True_
 import yaml
 from PIL import Image
 
@@ -550,6 +551,11 @@ def save_yaml(path: Path, value: Any) -> None:
             allow_unicode=True,
         )
 
+def save_json_and_yaml(json_path: Path, yaml_path: Path, value: Any) -> None:
+    """Save a Python object as YAML and JSON."""
+    save_json(json_path, value)
+    save_yaml(yaml_path, value)
+
 
 # ============================================================================
 # 6. HDF5
@@ -561,8 +567,6 @@ def save_h5(
     data_map: dict[str, Any],
     parameters: dict[str, Any] | None = None,
     save_only_list: Iterable[str] | None = None,
-    reg_list: Any = None,
-    coefs_list: Any = None,
     h5_file_name = None,
     git_commit: str | None = None,
 ) -> Path:
@@ -689,10 +693,12 @@ def save_metadata(
     """Save generic and HoloVibes-specific metadata."""
     target_dir = Path(target_dir)
     json_dir = ensure_directory(target_dir / "json")
+    yaml_dir = ensure_directory(target_dir / "yaml")
 
     if parameters is not None:
-        save_json(
+        save_json_and_yaml(
             json_dir / "parameters_holodoppler.json",
+            yaml_dir / "parameters_holodoppler.yaml",
             parameters,
         )
 
@@ -700,8 +706,9 @@ def save_metadata(
         if getattr(file_reader, "extension", None) == ".holo":
             footer = getattr(file_reader, "footer", None)
             if footer is not None:
-                save_json(
+                save_json_and_yaml(
                     json_dir / "holovibes_footer.json",
+                    yaml_dir / "holovibes_footer.yaml",
                     footer,
                 )
 
@@ -709,8 +716,9 @@ def save_metadata(
             if header is not None:
                 if is_dataclass(header):
                     header = asdict(header)
-                save_json(
+                save_json_and_yaml(
                     json_dir / "holovibes_header.json",
+                    yaml_dir / "holovibes_header.yaml",
                     header,
                 )
         if getattr(file_reader, "extension", None) == ".cine":
@@ -718,8 +726,9 @@ def save_metadata(
             if header is not None:
                 if is_dataclass(header):
                     header = asdict(header)
-                save_json(
+                save_json_and_yaml(
                     json_dir / "cine_metadata.json",
+                    yaml_dir / "cine_metadata.yaml",
                     header,
                 )
 
@@ -730,7 +739,7 @@ def save_metadata(
 # Output helpers
 # ============================================================================
 
-def is_csv_h5_output(name: str) -> bool:
+def is_csv_output(name: str) -> bool:
     """Return True if an output must be saved to both CSV and HDF5."""
     name = name.lower()
     return "coefs" in name or "registration" in name
@@ -738,22 +747,18 @@ def is_csv_h5_output(name: str) -> bool:
 
 def save_csv_outputs(
     target_dir: Path,
-    output: dict[str, Any],
-) -> list[str]:
+    output: dict[str, Any]
+    ):
     """
     Save coefs/registration outputs to CSV.
 
     Returns the output names that should also be stored in HDF5.
     """
     csv_dir = ensure_directory(Path(target_dir) / "csv")
-    h5_names = []
 
     for name, value in output.items():
-        if value is None or not is_csv_h5_output(name):
+        if value is None or not is_csv_output(name):
             continue
-
-        h5_names.append(name)
-
         try:
             path = csv_dir / f"{name}.csv"
             save_csv(path, value)
@@ -761,12 +766,8 @@ def save_csv_outputs(
         except Exception as exc:
             print(f"Failed to save CSV {name}: {exc}")
 
-    return h5_names
-
-
 def create_directories(
     target_dir: Path,
-    full: bool = True,
 ) -> None:
     """Create the output directory structure."""
     target_dir = Path(target_dir)
@@ -777,10 +778,8 @@ def create_directories(
         "json",
         "csv",
         "yaml",
+        "h5"
     ]
-
-    if full:
-        subdirectories.append("h5")
 
     for directory in subdirectories:
         ensure_directory(target_dir / directory)
@@ -958,7 +957,7 @@ def save_videos(
     video_formats: Iterable[str] = ("avi",),
     writer: VideoWriter = "imageio",
 ) -> None:
-    """Save selected videos as AVI and/or MP4."""
+    """Save selected videos as AVI and/or MP4. Saves avi in mjpeg for now and mp4 in libx264"""
     avi_dir = ensure_directory(Path(target_dir) / "avi")
     mp4_dir = ensure_directory(Path(target_dir) / "mp4")
 
@@ -1064,32 +1063,13 @@ def get_default_output_path(
 # ============================================================================
 
 def calculate_fps(
-    num_batch: int | None,
-    end_frame: int | None,
-    first_frame: int | None,
     parameters: dict[str, Any] | None,
     default_fps: float = 30.0,
     maximum_fps: float = 65.0,
 ) -> float:
     """Calculate output FPS with safe fallbacks."""
-    if (
-        num_batch is None
-        or end_frame is None
-        or first_frame is None
-    ):
-        return default_fps
 
-    frame_range = end_frame - first_frame
-
-    if frame_range <= 0:
-        return default_fps
-
-    parameters = parameters or {}
-    sampling_freq = parameters.get("sampling_freq", 1000)
-
-    fps = num_batch / frame_range * sampling_freq
-
-    return min(float(fps), maximum_fps)
+    return default_fps # TODO change but 144Hz is to fast to display anyway
 
 
 # ============================================================================
@@ -1100,33 +1080,11 @@ def save_outputs(
     file_reader: Any,
     output: dict[str, Any],
     parameters: dict[str, Any] | None = None,
-    holodoppler_path: str | Path | bool | None = None,
-    video_path: str | Path | bool | None = None,
     custom_path: str | Path | None = None,
     custom_relative_path: str | Path | None = None,
-    reg_list: Any = None,
-    coefs_list: Any = None,
-    end_frame: int | None = None,
-    first_frame: int | None = None,
-    num_batch: int | None = None,
-    backend: Any = None,
-    save_h5_output: bool = True,
-    png_keys: Iterable[str] | None = None,
-    video_keys: Iterable[str] | None = None,
-    square: bool = False,
-    video_formats: Iterable[str] = ("avi","mp4"),
-    video_writer: VideoWriter = "imageio",
-    json_outputs: dict[str, Any] | None = None,
-    yaml_outputs: dict[str, Any] | None = None,
+    save_to_h5: bool = True
 ) -> Path:
     """Save a complete HoloDoppler output bundle.
-
-    video_formats:
-        Iterable containing "avi", "mp4", or both.
-
-    video_writer:
-        "imageio" to use ImageIO's FFmpeg plugin.
-        "cmd" to invoke the FFmpeg executable directly.
 
     custom_path:
         Absolute path used directly as the output directory.
@@ -1156,33 +1114,16 @@ def save_outputs(
             raise ValueError("custom_relative_path must be relative")
         target_dir = default_path / relative_path
 
-    elif holodoppler_path:
-        target_dir = (
-            default_path
-            if isinstance(holodoppler_path, bool)
-            else Path(holodoppler_path)
-        )
-
-    elif video_path:
-        target_dir = (
-            default_path
-            if isinstance(video_path, bool)
-            else Path(video_path)
-        )
-
     else:
         target_dir = default_path
 
     target_dir = Path(target_dir)
-    create_directories(target_dir, full=save_h5_output)
+    create_directories(target_dir)
 
     print(f"Saving output bundle to: {target_dir}")
 
     # FPS.
     fps = calculate_fps(
-        num_batch=num_batch,
-        end_frame=end_frame,
-        first_frame=first_frame,
         parameters=parameters,
     )
 
@@ -1191,27 +1132,20 @@ def save_outputs(
         target_dir,
         output,
         fps=fps,
-        video_keys=video_keys,
-        video_formats=video_formats,
-        writer=video_writer,
+        video_formats=("avi","mp4"),
+        writer="imageio",
     )
 
     # 2. PNGs.
     save_pngs(
         target_dir,
         output,
-        png_keys=png_keys,
     )
 
     # 3. CSV outputs, also selected for HDF5.
-    csv_h5_names = save_csv_outputs(target_dir, output)
+    save_csv_outputs(target_dir, output)
 
     # 4. JSON and YAML.
-    for name, value in (json_outputs or {}).items():
-        save_json(target_dir / "json" / f"{name}.json", value)
-
-    for name, value in (yaml_outputs or {}).items():
-        save_yaml(target_dir / "yaml" / f"{name}.yaml", value)
 
     # 5. Metadata.
     save_metadata(
@@ -1221,7 +1155,7 @@ def save_outputs(
     )
 
     # 6. HDF5.
-    if save_h5_output:
+    if save_to_h5:
         h5_names = [
                 "moment0ff",
                 "moment0",
@@ -1240,17 +1174,11 @@ def save_outputs(
             ) and name not in h5_names:
                 h5_names.append(name)
 
-        for name in csv_h5_names:
-            if name not in h5_names:
-                h5_names.append(name)
-
         save_h5(
             target_dir,
             output,
             parameters=parameters,
             save_only_list=h5_names,
-            reg_list=reg_list,
-            coefs_list=coefs_list,
             git_commit=get_git_version(),
         )
 
