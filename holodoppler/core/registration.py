@@ -7,46 +7,8 @@ import numpy as np
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor
 
-from .utils import elliptical_mask
-from .utils import signed_peak, subpixel_parabola
-
-
-def register_laplacian(xp, fft, video, radius=None, gauge="minimal", ref_frame=0):
-    """Estimate globally consistent integer shifts from all frame pairs."""
-    nt, ny, nx = video.shape
-    mask = elliptical_mask(ny, nx, radius, xp) if radius else None
-    preprocessed = xp.zeros((nt, ny, nx), dtype=xp.float32)
-    for index in range(nt):
-        frame = video[index].astype(xp.float32, copy=False)
-        preprocessed[index] = _preprocess(xp, frame, mask=mask)
-
-    pairwise_y = xp.zeros((nt, nt), dtype=xp.float32)
-    pairwise_x = xp.zeros((nt, nt), dtype=xp.float32)
-    counts = xp.zeros((nt, nt), dtype=xp.float32)
-    for first in range(nt):
-        for second in range(first + 1, nt):
-            shift_y, shift_x = intensity_corr_integer(
-                xp,
-                fft,
-                preprocessed[first],
-                preprocessed[second],
-            )
-            pairwise_y[first, second] = shift_y
-            pairwise_x[first, second] = shift_x
-            pairwise_y[second, first] = -shift_y
-            pairwise_x[second, first] = -shift_x
-            counts[first, second] = counts[second, first] = 1
-
-    row_counts = xp.maximum(xp.sum(counts, axis=1), 1)
-    shifts_y = xp.sum(pairwise_y, axis=1) / row_counts
-    shifts_x = xp.sum(pairwise_x, axis=1) / row_counts
-
-    if gauge == "minimal":
-        return shifts_y - xp.mean(shifts_y), shifts_x - xp.mean(shifts_x)
-    if gauge == "reference":
-        return shifts_y - shifts_y[ref_frame], shifts_x - shifts_x[ref_frame]
-    raise ValueError(f"gauge must be 'minimal' or 'reference', got {gauge!r}")
-
+from .image_utils import elliptical_mask
+from .image_utils import signed_peak, subpixel_parabola
 
 def register_images_shifts(
     xp,
@@ -95,7 +57,6 @@ def register_images_shifts(
 
     return shift_y, shift_x
 
-
 def apply_register_images_shifts(
     xp,
     image,
@@ -139,7 +100,6 @@ def apply_register_images_shifts(
         integer=False,
     )
 
-
 def _preprocess(xp, img, mask=None, gaussian_sigma=None, gaussian_filter=None):
     """Convert to float32, optionally smooth, subtract masked mean, and apply mask."""
     out = img.astype(xp.float32, copy=False)
@@ -155,114 +115,6 @@ def _preprocess(xp, img, mask=None, gaussian_sigma=None, gaussian_filter=None):
     mean = xp.sum(out * mask_f) / xp.maximum(xp.sum(mask_f), 1.0)
 
     return (out - mean) * mask_f
-
-
-_EPS = 1e-12
-
-
-def register_trs(
-    xp,
-    fft,
-    ndi,
-    fixed,
-    moving,
-    radius=None,
-    estimate_similarity=True,
-    translation_only=False,
-    integer_translation=False,
-    gaussian_sigma=None,
-    radial_bins=256,
-    angular_bins=360,
-    return_registered=False,
-):
-    """
-    Register moving onto fixed.
-
-    Parameters
-    ----------
-    translation_only : bool
-        If True, skip rotation/scale estimation.
-    integer_translation : bool
-        If True, estimate and apply integer shifts only. This is faster and allows xp.roll.
-    gaussian_sigma : float or None
-        If not None, apply gaussian_filter before estimating registration.
-        Typical value: 1.5.
-    """
-    ny, nx = fixed.shape[-2:]
-
-    mask = elliptical_mask(ny, nx, radius, xp) if radius else None
-
-    fixed_f = fixed.astype(xp.float32, copy=False)
-    moving_f = moving.astype(xp.float32, copy=False)
-
-    fixed_e = _preprocess_for_registration(xp, ndi, fixed_f, mask, gaussian_sigma)
-    moving_e = _preprocess_for_registration(xp, ndi, moving_f, mask, gaussian_sigma)
-
-    do_similarity = estimate_similarity and not translation_only
-
-    if do_similarity:
-        angle_deg, scale = estimate_rotation_scale(
-            xp,
-            fft,
-            ndi,
-            fixed_e,
-            moving_e,
-            radial_bins=radial_bins,
-            angular_bins=angular_bins,
-        )
-
-        moving_rs = apply_rotation_scale(xp, ndi, moving_f, angle_deg, scale)
-
-        moving_rs_e = _preprocess_for_registration(
-            xp,
-            ndi,
-            moving_rs,
-            mask,
-            gaussian_sigma,
-        )
-    else:
-        angle_deg = 0.0
-        scale = 1.0
-        moving_rs_e = moving_e
-
-    if integer_translation:
-        shift_y, shift_x = phase_corr_integer(xp, fft, fixed_e, moving_rs_e)
-    else:
-        shift_y, shift_x = phase_corr_subpixel(xp, fft, fixed_e, moving_rs_e)
-
-    if not return_registered:
-        return shift_y, shift_x, angle_deg, scale
-
-    reg = (shift_y, shift_x, angle_deg, scale)
-
-    moving_registered = apply_registration(
-        xp,
-        fft,
-        ndi,
-        moving_f,
-        reg,
-        integer_translation=integer_translation,
-    )
-
-    return shift_y, shift_x, angle_deg, scale, moving_registered
-
-
-def _preprocess_for_registration(xp, ndi, img, mask=None, gaussian_sigma=None):
-    """Convert to float32, optionally smooth, subtract masked mean, and apply mask."""
-    out = img.astype(xp.float32, copy=False)
-
-    if gaussian_sigma is not None and gaussian_sigma > 0:
-        out = ndi.gaussian_filter(out, sigma=gaussian_sigma)
-
-    if mask is None:
-        return out - xp.mean(out)
-
-    # Usually faster and cleaner than out[mask] on GPU because it avoids compaction.
-    mask_f = mask.astype(xp.float32, copy=False)
-    mean = xp.sum(out * mask_f) / xp.maximum(xp.sum(mask_f), 1.0)
-
-    return (out - mean) * mask_f
-
 
 def phase_corr_integer(xp, fft, fixed, moving):
     """Integer-pixel phase-correlation shift estimate."""

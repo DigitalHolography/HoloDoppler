@@ -66,7 +66,7 @@ contrast_low_max_percent: [0.5, 99.5] # Applied only to rendered avi/png/report 
 contrast_gamma: 1.0
 
 # Shack-Hartmann wavefront sensing
-shack_hartmann_autofocus: true  # Enable Shack-Hartmann processing only on the batch defined by registration_ref_first_frame and batch_size and use it for the correction of following batch
+shack_hartmann_autofocus: false  # Enable Shack-Hartmann processing only on the batch defined by registration_ref_first_frame and batch_size and use it for the correction of following batch
 shack_hartmann: false  # Enable Live (every batch) Shack-Hartmann processing
 shack_hartmann_nx_subap: 5  # Number of subapertures in X
 shack_hartmann_ny_subap: 5  # Number of subapertures in Y
