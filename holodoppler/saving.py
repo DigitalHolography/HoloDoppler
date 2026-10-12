@@ -795,7 +795,7 @@ def save_video(
     data: np.ndarray,
     fps: float,
     ffmpeg: str | None = None,
-    codec: str = "utvideo",
+    codec: str = "mjpeg",
     writer: VideoWriter = "imageio",
 ) -> None:
     """Save a video using ImageIO or the FFmpeg command line.
@@ -867,8 +867,9 @@ def save_video_imageio(
         })
     elif codec.lower() == "mjpeg":
         kwargs.update({
-            "pixelformat": "yuvj422p",
+            "pixelformat": "yuv420p",
             "quality": 10,
+            "ffmpeg_params": ["-color_range", "pc"],
         })
 
     with imageio.get_writer(str(path), **kwargs) as video:
@@ -983,7 +984,7 @@ def save_videos(
         for fmt in sorted(formats):
             directory = avi_dir if fmt == "avi" else mp4_dir
             path = directory / f"{name}.{fmt}"
-            codec = "utvideo" if fmt == "avi" else "libx264"
+            codec = "mjpeg" if fmt == "avi" else "libx264"
 
             start = time.time()
             save_video(
