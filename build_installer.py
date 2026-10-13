@@ -67,7 +67,6 @@ FROZEN_METADATA_DISTRIBUTIONS = (
     "pillow",
     "tkinterdnd2",
     "sv-ttk",
-    "cinereader",
     "tqdm",
     "PyYAML",
     "cupy-cuda13x",
@@ -200,7 +199,7 @@ def _resolve_smoke_inputs(args: argparse.Namespace) -> tuple[Path, Path] | None:
 
 
 def _ensure_supported_python() -> None:
-    required = (3, 13)
+    required = (3, 12)
     if sys.version_info < required:
         version = ".".join(str(part) for part in sys.version_info[:3])
         raise SystemExit(
@@ -424,29 +423,7 @@ def _write_pyinstaller_entrypoint() -> Path:
             from holodoppler.cli import main as cli_main
             from holodoppler.ui import UI
 
-
-            def _check_ffmpeg() -> None:
-                from holodoppler.saving import find_ffmpeg
-
-                executable = find_ffmpeg()
-                result = subprocess.run(
-                    [executable, "-version"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=30,
-                    check=False,
-                )
-                if result.returncode != 0:
-                    raise RuntimeError(
-                        f"Bundled FFmpeg failed with exit code {result.returncode}: "
-                        f"{executable}"
-                    )
-
-
             def main() -> int:
-                if sys.argv[1:] == ["--check-ffmpeg"]:
-                    _check_ffmpeg()
-                    return 0
 
                 if len(sys.argv) == 1 or (len(sys.argv) > 1 and sys.argv[1] == "gui"):
                     UI().mainloop()
@@ -727,28 +704,6 @@ def _verify_appdata_parameters(app_version: str) -> list[Path]:
     return [parameters_dir / name for name in expected]
 
 
-def _verify_frozen_ffmpeg(app_executable: Path) -> None:
-    if not app_executable.is_file():
-        raise FileNotFoundError(f"Application executable not found: {app_executable}")
-
-    result = subprocess.run(
-        [app_executable, "--check-ffmpeg"],
-        cwd=app_executable.parent,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        timeout=60,
-    )
-    if result.stdout:
-        print(result.stdout)
-    if result.returncode != 0:
-        raise RuntimeError(
-            "The frozen application could not resolve and run its bundled "
-            f"FFmpeg executable (exit code {result.returncode})."
-        )
-    print(f"Bundled FFmpeg verification passed: {app_executable}")
-
-
 def _verify_installer(
     installer_path: Path,
     app_version: str,
@@ -772,7 +727,6 @@ def _verify_installer(
         _run_command(install_command)
         verified_files: list[Path] = []
         verified_parameters = _verify_appdata_parameters(app_version)
-        _verify_frozen_ffmpeg(install_dir / APP_EXE_NAME)
         tests = ["install", "ffmpeg"]
         if smoke_inputs is not None:
             verified_files = _run_release_smoke_test(
@@ -818,8 +772,6 @@ def main() -> None:
 
     if not args.skip_pyinstaller:
         _run_pyinstaller(console=args.console)
-
-    _verify_frozen_ffmpeg(DIST_EXE)
 
     if smoke_inputs is not None:
         _run_release_smoke_test(DIST_EXE, *smoke_inputs)

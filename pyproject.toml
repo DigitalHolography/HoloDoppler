@@ -31,6 +31,7 @@ dev = [
 build = [
     "build>=1.2",
     "pyinstaller>=6.0",
+    "cupy-cuda13x[ctk]>=14.0.1",
 ]
 
 [tool.setuptools.packages.find]
