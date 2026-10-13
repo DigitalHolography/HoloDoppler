@@ -12,5 +12,6 @@ wheels/
 uv.lock
 
 /debug_outputs
+/temp
 
 .debug_paths.json

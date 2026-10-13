@@ -67,7 +67,6 @@ FROZEN_METADATA_DISTRIBUTIONS = (
     "pillow",
     "tkinterdnd2",
     "sv-ttk",
-    "cinereader",
     "tqdm",
     "PyYAML",
     "cupy-cuda13x",
@@ -200,7 +199,7 @@ def _resolve_smoke_inputs(args: argparse.Namespace) -> tuple[Path, Path] | None:
 
 
 def _ensure_supported_python() -> None:
-    required = (3, 13)
+    required = (3, 12)
     if sys.version_info < required:
         version = ".".join(str(part) for part in sys.version_info[:3])
         raise SystemExit(
@@ -383,6 +382,7 @@ def _write_pyinstaller_entrypoint() -> Path:
 
             import multiprocessing
             import os
+            import subprocess
             import sys
             import traceback
             from pathlib import Path
@@ -424,6 +424,7 @@ def _write_pyinstaller_entrypoint() -> Path:
             from holodoppler.ui import UI
 
             def main() -> int:
+
                 if len(sys.argv) == 1 or (len(sys.argv) > 1 and sys.argv[1] == "gui"):
                     UI().mainloop()
                     return 0
@@ -526,6 +527,17 @@ def _prepare_payload() -> None:
 
     shutil.copytree(DIST_APP_DIR, PAYLOAD_DIR)
     _copy_installer_parameters(PAYLOAD_PARAMETERS_DIR)
+
+    bundled_ffmpeg = sorted(
+        path
+        for path in PAYLOAD_DIR.rglob("ffmpeg*.exe")
+        if "imageio_ffmpeg" in (part.lower() for part in path.parts)
+    )
+    if not bundled_ffmpeg:
+        raise FileNotFoundError(
+            "The installer payload does not contain the imageio-ffmpeg "
+            "executable. Rebuild after installing the project dependencies."
+        )
 
     for extra_file in PAYLOAD_EXTRA_FILES:
         if extra_file.exists():
@@ -715,7 +727,7 @@ def _verify_installer(
         _run_command(install_command)
         verified_files: list[Path] = []
         verified_parameters = _verify_appdata_parameters(app_version)
-        tests = ["install"]
+        tests = ["install", "ffmpeg"]
         if smoke_inputs is not None:
             verified_files = _run_release_smoke_test(
                 install_dir / APP_EXE_NAME,

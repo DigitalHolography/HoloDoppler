@@ -4,19 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "holodoppler"
-<<<<<<< HEAD
-version = "0.11.0"
-description = "HoloDoppler processing and preview tools."
-readme = "README.md"
-license = "GPL-3.0-only"
-requires-python = ">=3.13"
-=======
-version = "1.0"
+version = "1.1"
 description = "HoloDoppler processing and preview tools."
 readme = "README.md"
 requires-python = ">=3.12"
 
->>>>>>> 272c17b8fe113fb3c67734f48f624727c99d8788
 dependencies = [
   "numpy>=2.3.4",
   "scipy>=1.17.0",
@@ -30,12 +22,16 @@ dependencies = [
   "pyyaml",
   "sv-ttk>=2.6.1",
   "pillow>=11.0",
-  "ffmpeg-downloader",
 ]
 
 [project.optional-dependencies]
+dev = [
+    "pytest>=9.1.1",
+]
 build = [
-  "pyinstaller>=6.0",
+    "build>=1.2",
+    "pyinstaller>=6.0",
+    "cupy-cuda13x[ctk]>=14.0.1",
 ]
 
 [tool.setuptools.packages.find]
@@ -46,12 +42,8 @@ include = ["holodoppler*"]
 holodoppler = [
   "ui/assets/*",
   "ui/defaults/*",
+  "parameters/*",
 ]
 
-<<<<<<< HEAD
-[tool.pyinstaller]
-name = "HoloDoppler"
-=======
 [project.scripts]
 holodoppler = "holodoppler.__main__:main"
->>>>>>> 272c17b8fe113fb3c67734f48f624727c99d8788

@@ -1,59 +1,56 @@
 import os
-from concurrent.futures import ThreadPoolExecutor
-import numpy as np
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-import holodoppler.backend as backend
+import numpy as np
 from tqdm import tqdm
 
+import holodoppler.backend as backend
+from holodoppler.file_reader import FileReaderFactory
+from holodoppler.core.filtering import (
+    corner_compensation,
+    filter_2d,
+    fourier_time_transform,
+    frequency_symmetric_filtering,
+    svd_filter,
+)
+from holodoppler.core.moments import moment, moments
+from holodoppler.core.propagation import (
+    angular_spectrum_transform,
+    angular_spectrum_transform_with_phase,
+    fresnel_transform,
+    fresnel_transform_with_phase,
+)
+from holodoppler.core.registration import (
+    apply_ecc_registration,
+    apply_register_images_shifts,
+    register_images_shifts,
+    register_with_ecc,
+)
 from holodoppler.saving import (
     save_outputs,
 )
-
-from holodoppler.propagation import (
-    fresnel_transform,
-    fresnel_transform_with_phase,
-    angular_spectrum_transform,
-    angular_spectrum_transform_with_phase,
-)
-
-from holodoppler.shack_hartmann import (
-    construct_subapertures_fresnel,
-    construct_subapertures_angular,
+from holodoppler.core.shack_hartmann import (
     calculate_displacements,
     calculate_displacements_graph_laplacian,
+    construct_subapertures_angular,
+    construct_subapertures_fresnel,
 )
-
-from holodoppler.zernike import (
-    fit_zernike_fresnel,
-    fit_zernike_angular_spectrum,
-)
-
-from holodoppler.utils import (
+from holodoppler.core.image_utils import (
     gaussian_flatfield,
-    update_from_holo_footer,
-    update_from_cine_metadata,
     resize_frames,
 )
 
-from holodoppler.filtering import (
-    filter_2d,
-    svd_filter,
-    frequency_symmetric_filtering,
-    fourier_time_transform,
-    corner_compensation,
-)
+from holodoppler.config import update_from_cine_metadata, update_from_holo_footer
 
-from holodoppler.moments import moment
-
-from holodoppler.registration import (
-    register_images_shifts,
-    apply_register_images_shifts,
+from holodoppler.core.zernike import (
+    fit_zernike_angular_spectrum,
+    fit_zernike_fresnel,
 )
 
 from holodoppler.file_reader import FileReaderFactory
-
+from holodoppler.core.plots import plot_phase_with_slopes_rgb
 
 def _process_batch(
     parameters,
@@ -416,7 +413,6 @@ def _process_shack_hartmann(
                     "shack_hartmann_zernike_fit_modes"
                 ),
             )
-
         if output_dict is not None:
             output_dict["shack_hartmann_zernike_coefs"] = coefs
             output_dict["shack_hartmann_wavefront_phase"] = phase
@@ -636,6 +632,8 @@ def _process_one_batch(
 
             res["shack_hartmann_zernike_coefs"] = coefs
             res["shack_hartmann_wavefront_phase"] = phase
+
+            res["shack_hartmann_wavefront_color_image"] = plot_phase_with_slopes_rgb(phase.get(),shifts_y.get(),shifts_x.get()) # slower but cool plot
 
             phase_term = xp.exp(-1j * phase)
             phase_term = xp.nan_to_num(
@@ -1197,7 +1195,6 @@ def preview(file_path, parameters):
         output=res_np,
         parameters=parameters,
         custom_relative_path="preview",
-        square=True,
     )
 
     return res_np["M0ff"]

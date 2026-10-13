@@ -4,7 +4,7 @@ Filtering operations: SVD, frequency filtering
 
 from functools import cache
 
-from .utils import elliptical_mask
+from .image_utils import elliptical_mask
 
 import holodoppler.backend as backend
 
@@ -339,7 +339,7 @@ def svd_filter_batched(xp, U_subaps, svd_threshold):
     return (H2 - proj).reshape(ny_s, nx_s, sub_ny, sub_nx, nz)
 
 
-@cache
+@cache # pyright: ignore[reportArgumentType]
 def frequency_symmetric_filtering(
     xp, fft, batch_size, sampling_freq, low_freq, high_freq=None
 ):

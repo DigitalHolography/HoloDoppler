@@ -16,7 +16,7 @@ except Exception:
     ImageTk = None
 
 from holodoppler.cli import preview, process
-from holodoppler.utils import load_config
+from holodoppler.config import load_config
 
 APP_NAME = "HoloDoppler"
 SUPPORTED = {".holo", ".cine", ".txt"}
