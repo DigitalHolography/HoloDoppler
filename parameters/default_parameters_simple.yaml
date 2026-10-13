@@ -60,6 +60,8 @@ corner_compensation: false
 # Image resizing
 square: true
 
+overwrite_option: "erase"
+
 # Image contrast
 contrast: false
 contrast_low_max_percent: [0.5, 99.5] # Applied only to rendered avi/png/report outputs, not raw h5.
