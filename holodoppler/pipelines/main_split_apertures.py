@@ -634,7 +634,7 @@ def _process_shack_hartmann(parameters, frames, output_dict=None):
     return phase_term
 
 
-def preview(file_path, parameters, save_debug=True):
+def preview(file_path, parameters):
     file_reader = FileReaderFactory.create(file_path)
 
     if file_reader.ext == ".holo":
@@ -678,15 +678,14 @@ def preview(file_path, parameters, save_debug=True):
     del res
     cp.get_default_memory_pool().free_all_blocks()
 
-    if save_debug:
-        preview_dir = (
-            _get_default_output_path(file_reader.file_path)
-            / "preview"
-            / "SPLIT_APERTURES"
-        )
-        save_preview_images(res_np, preview_dir)
-        (preview_dir / "h5").mkdir(parents=True, exist_ok=True)
-        _save_h5_2(preview_dir, res_np, parameters)
+    preview_dir = (
+        _get_default_output_path(file_reader.file_path)
+        / "preview"
+        / "SPLIT_APERTURES"
+    )
+    save_preview_images(res_np, preview_dir)
+    (preview_dir / "h5").mkdir(parents=True, exist_ok=True)
+    _save_h5_2(preview_dir, res_np, parameters)
 
     return preview_image_from_results(res_np)
 

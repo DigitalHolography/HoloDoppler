@@ -347,7 +347,7 @@ class UI(BaseTk):
     def _preview_worker(self, path: Path, parameters: dict[str, Any]) -> None:
         self.events.put({"kind": "preview_started", "path": path})
         try:
-            image = preview(str(path), parameters, save_debug=False)
+            image = preview(str(path), parameters)
             self.events.put({"kind": "preview_result", "path": path, "image": image})
         except Exception as exc:
             self.events.put({"kind": "error", "message": str(exc), "traceback": traceback.format_exc()})
