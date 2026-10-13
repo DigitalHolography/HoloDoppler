@@ -1397,7 +1397,7 @@ def save_outputs(
         output,
         fps=fps,
         video_formats=("avi","mp4"),
-        writer="imageio",
+        writer="cmd",
     )
 
     # 2. PNGs.
