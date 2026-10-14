@@ -321,10 +321,7 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
             self.q.put(("status", "Done ヽ(^o^)丿"))
         except Exception as e:
             import traceback
-<<<<<<< HEAD:src/holodoppler/ui.py
-=======
 
->>>>>>> 272c17b8fe113fb3c67734f48f624727c99d8788:holodoppler/ui_simplest.py
             print(traceback.format_exc())
             self.q.put(("err", str(e)))
         finally:
