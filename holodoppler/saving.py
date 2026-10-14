@@ -1427,6 +1427,7 @@ def save_outputs(
                 "moment2",
                 "spectrum_line",
                 "sh_psd",
+                "spectrograms_averaged",
                 "spectrograms"
             ]
 
