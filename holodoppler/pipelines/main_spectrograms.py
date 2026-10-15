@@ -118,7 +118,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     # SVD filtering
     # ------------------------------------------------------------
     holograms_f = svd_filter(
-        holograms,
+        backend.xp, backend.linalg, holograms,
         parameters["svd_threshold"],
         filter_mode=parameters["svd_filter_mode"],
         remove_dc=parameters["svd_remove_dc"],
@@ -589,7 +589,7 @@ def _process_one_batch(
 def _append_numpy_results(output, res):
     for key, value in res.items():
         if key == "sh_psd":
-            value = resize_frames(value,256,256,order=1)
+            value = backend.to_numpy(resize_frames(backend.xp, backend.zoom, value,256,256,order=1))
             n_freq, nny, nnx = value.shape
 
             value = np.concatenate((
@@ -1173,11 +1173,11 @@ def preview(file_path, parameters):
     if parameters.get("square", False):
         res = {
             k: (
-                resize_frames(
+                backend.to_numpy(resize_frames(backend.xp, backend.zoom,
                     v,
                     max(v.shape[-2:]),
                     max(v.shape[-2:]),
-                )
+                ))
                 if v.ndim == 2
                 else v
             )
@@ -1417,11 +1417,11 @@ def process(file_path, parameters, progress_callback=None):
 
         output = {
             key: (
-                resize_frames(
+                backend.to_numpy(resize_frames(backend.xp, backend.zoom,
                     value,
                     max(value.shape[-2:]),
                     max(value.shape[-2:]),
-                )
+                ))
                 if value.ndim == 3
                 else value
             )

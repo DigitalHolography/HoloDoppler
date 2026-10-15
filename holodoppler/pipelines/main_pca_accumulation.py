@@ -1015,11 +1015,11 @@ def preview(file_path, parameters):
     if parameters.get("square", False):
         res = {
             k: (
-                resize_frames(
+                backend.to_numpy(resize_frames(backend.xp, backend.zoom,
                     v,
                     max(v.shape[-2:]),
                     max(v.shape[-2:]),
-                )
+                ))
                 if v.ndim == 2
                 else v
             )
@@ -1256,11 +1256,11 @@ def process(file_path, parameters, progress_callback=None):
 
         output = {
             key: (
-                resize_frames(
+                backend.to_numpy(resize_frames(backend.xp, backend.zoom,
                     value,
                     max(value.shape[-2:]),
                     max(value.shape[-2:]),
-                )
+                ))
                 if value.ndim == 3
                 else value
             )

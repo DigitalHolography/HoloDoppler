@@ -8,7 +8,51 @@ from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor
 
 from .image_utils import elliptical_mask
-from .image_utils import signed_peak, subpixel_parabola
+
+
+def subpixel_parabola(
+    vm,
+    v0,
+    vp,
+):
+    """Refine a peak location using a parabolic fit.
+
+    Returns the subpixel offset relative to ``v0``.
+    """
+    denominator = (
+        vm
+        - 2.0 * v0
+        + vp
+    )
+
+    if abs(float(denominator)) < 1e-12:
+        return 0.0
+
+    return (
+        0.5
+        * float(vm - vp)
+        / float(denominator)
+    )
+
+
+def signed_peak(
+    ky,
+    kx,
+    ny,
+    nx,
+):
+    """Convert FFT peak indices into signed shifts."""
+    if ky > ny // 2:
+        ky -= ny
+
+    if kx > nx // 2:
+        kx -= nx
+
+    return (
+        float(ky),
+        float(kx),
+    )
+
 
 def register_images_shifts(
     xp,
@@ -25,10 +69,10 @@ def register_images_shifts(
 
     if isinstance(radius, (tuple, list)) and len(radius) == 2:
         inner_radius, outer_radius = radius
-        mask = ~elliptical_mask(ny, nx, inner_radius, xp)
-        mask &= elliptical_mask(ny, nx, outer_radius, xp)
+        mask = ~elliptical_mask(xp, ny, nx, inner_radius)
+        mask &= elliptical_mask(xp, ny, nx, outer_radius)
     else:
-        mask = elliptical_mask(ny, nx, radius, xp) if radius else None
+        mask = elliptical_mask(xp, ny, nx, radius) if radius else None
 
     fixed_f = fixed.astype(xp.float32, copy=False)
     moving_f = moving.astype(xp.float32, copy=False)
