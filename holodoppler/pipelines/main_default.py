@@ -198,7 +198,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         axis=(-2, -1),
     )
 
-    if parameters.get("save_spectograms",False) and parameters.get("save_averaged_spectrogram",False):
+    if parameters.get("save_spectograms",False) or parameters.get("save_averaged_spectrogram",False):
         output_dict["sh_psd"] = psd # the power spectrum density
 
     # ------------------------------------------------------------
@@ -690,7 +690,7 @@ def _process_numpy(
 
     for i in tqdm(
         range(num_batch),
-        desc="Processing (NumPy)",
+        desc=f"Processing ({backend._backend.backend_name})",
     ):
         frames = file_reader.read_frames(
             first_frame=(
@@ -1249,6 +1249,7 @@ def preview(file_path, parameters):
 def process(file_path, parameters, progress_callback=None):
     if parameters.get("force_numpy",False):
         backend.set_backend("numpy")
+
     file_reader = get_reader(file_path)
 
     if file_reader.extension == ".holo":
@@ -1368,7 +1369,6 @@ def process(file_path, parameters, progress_callback=None):
     if not backend.is_gpu or parameters.get("use_parallel",False):
 
         n_workers = parameters.get("numpy_num_workers",8)
-
         if n_workers > 0:
 
             output, M0_reg = _process_numpy_parallel(
@@ -1424,6 +1424,8 @@ def process(file_path, parameters, progress_callback=None):
         )
         for key, values in output.items()
     }
+
+    print(output.keys())
 
     if auto_coefs is not None:
         output["shack_hartmann_autofocus_zernike_coefs"] = backend.to_numpy(auto_coefs)
