@@ -87,4 +87,4 @@ spectrogram_resize_order: 1
 spectrogram_frequency_start: 128
 spectrogram_frequency_end: 256
 spectrogram_frequency_binning: 4
-save_averaged_spectrogram: true
+save_averaged_spectrogram: false #this outputs a powerspectrum density averaged over all the batches and registered (with translation only if image_registration is on)
