@@ -11,6 +11,7 @@ from holodoppler.config import (
     update_from_holo_footer,
     validate_main_parameters,
 )
+from holodoppler.core.batching import calculate_batch_indices
 from holodoppler.core.filtering import (
     corner_compensation,
     filter_2d,
@@ -22,7 +23,7 @@ from holodoppler.core.image_utils import (
     gaussian_flatfield,
     resize_frames,
 )
-from holodoppler.core.moments import moment, moments
+from holodoppler.core.moments import moments
 from holodoppler.core.propagation import (
     angular_spectrum_transform,
     angular_spectrum_transform_with_phase,
@@ -49,6 +50,25 @@ from holodoppler.file_reader import get_reader
 from holodoppler.saving import (
     save_outputs,
 )
+
+
+def _frame_stack(frames):
+    """Readers may squeeze a single frame to two dimensions."""
+    return frames[None, ...] if frames.ndim == 2 else frames
+
+
+def _validate_reference_batch(file_reader, first_frame, batch_size, label):
+    try:
+        indices = calculate_batch_indices(
+            first_frame, 0, batch_size, batch_size, file_reader.total_frames
+        )
+        if not indices:
+            raise ValueError("no complete batch fits")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{label} batch (first_frame={first_frame}, batch_size={batch_size}) "
+            f"cannot fit within {file_reader.total_frames} file frames: {exc}"
+        ) from exc
 
 
 def _process_batch(parameters, frames, phase_term=None, output_dict=None):
@@ -170,27 +190,6 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         freqs,
         [0,1,2],
     )
-    # output_dict["M0"] = moment(
-    #     xp,
-    #     psd[idxs],
-    #     freqs,
-    #     0,
-    # )
-
-    # output_dict["M1"] = moment(
-    #     xp,
-    #     psd[idxs],
-    #     freqs,
-    #     1,
-    # )
-
-    # output_dict["M2"] = moment(
-    #     xp,
-    #     psd[idxs],
-    #     freqs,
-    #     2,
-    # )
-
     output_dict["M0ff"] = gaussian_flatfield(
         output_dict["M0"],
         parameters.get("registration_flatfield_gw", 1.0),
@@ -245,7 +244,7 @@ def _process_shack_hartmann(
     xp = backend.xp
     fft = backend.fft
 
-    nt, ny, nx = frames.shape
+    _, ny, nx = frames.shape
     prop_method = parameters["spatial_propagation"]
 
     # ------------------------------------------------------------
@@ -353,7 +352,6 @@ def _process_shack_hartmann(
     # Zernike fit
     # ------------------------------------------------------------
     phase = None
-    coefs = None
 
     if parameters.get("shack_hartmann_zernike_fit", True):
 
@@ -434,6 +432,9 @@ def _get_autofocus_phase_term(parameters, file_reader):
         f"autofocus_batch_size={ref_batch_size}",
     )
 
+    _validate_reference_batch(
+        file_reader, ref_first_frame, ref_batch_size, "Autofocus reference"
+    )
     ref_frames = file_reader.read_frames(
         first_frame=ref_first_frame,
         batch_size=ref_batch_size,
@@ -444,7 +445,7 @@ def _get_autofocus_phase_term(parameters, file_reader):
             "Shack-Hartmann autofocus reference batch is empty."
         )
 
-    ref_frames = backend.to_backend(ref_frames).astype(
+    ref_frames = backend.to_backend(_frame_stack(ref_frames)).astype(
         backend.xp.float32,
         copy=False,
     )
@@ -649,9 +650,7 @@ def _append_numpy_results(output, res, parameters):
 def _process_numpy(
     parameters,
     file_reader,
-    first_frame,
-    num_batch,
-    batch_stride,
+    batch_indices,
     batch_size,
     output,
     M0_reg=None,
@@ -671,14 +670,8 @@ def _process_numpy(
     file_reader :
         Frame reader.
 
-    first_frame : int
-        Index of the first frame.
-
-    num_batch : int
-        Number of batches.
-
-    batch_stride : int
-        Frame stride between batches.
+    batch_indices : range
+        Validated starting indices of complete batches.
 
     batch_size : int
         Number of frames per batch.
@@ -694,20 +687,18 @@ def _process_numpy(
         _process_one_batch().
     """
 
-    for i in tqdm(
-        range(num_batch),
+    num_batch = len(batch_indices)
+    for i, batch_start in enumerate(tqdm(
+        batch_indices,
         desc=f"Processing ({backend._backend.backend_name})",
-    ):
+    )):
         frames = file_reader.read_frames(
-            first_frame=(
-                first_frame
-                + i * batch_stride
-            ),
+            first_frame=batch_start,
             batch_size=batch_size,
         )
 
         # Keep the CPU path explicitly float32.
-        frames = backend.to_backend(frames).astype(
+        frames = backend.to_backend(_frame_stack(frames)).astype(
             backend.xp.float32,
             copy=False,
         )
@@ -789,9 +780,7 @@ def _get_numpy_workers(n_workers=None):
 def _process_numpy_parallel(
     parameters,
     file_reader,
-    first_frame,
-    num_batch,
-    batch_stride,
+    batch_indices,
     batch_size,
     output,
     M0_reg=None,
@@ -838,9 +827,7 @@ def _process_numpy_parallel(
         return _process_numpy(
             parameters=parameters,
             file_reader=file_reader,
-            first_frame=first_frame,
-            num_batch=num_batch,
-            batch_stride=batch_stride,
+            batch_indices=batch_indices,
             batch_size=batch_size,
             output=output,
             M0_reg=M0_reg,
@@ -852,7 +839,9 @@ def _process_numpy_parallel(
         n_workers,
     )
 
-    def process_batch(i):
+    num_batch = len(batch_indices)
+
+    def process_batch(batch_start):
         """
         Read and process one independent batch.
 
@@ -861,15 +850,12 @@ def _process_numpy_parallel(
         """
 
         frames = file_reader.read_frames(
-            first_frame=(
-                first_frame
-                + i * batch_stride
-            ),
+            first_frame=batch_start,
             batch_size=batch_size,
         )
 
         # Match the normal NumPy path.
-        frames = backend.to_backend(frames).astype(
+        frames = backend.to_backend(_frame_stack(frames)).astype(
             backend.xp.float32,
             copy=False,
         )
@@ -898,7 +884,7 @@ def _process_numpy_parallel(
 
         results = executor.map(
             process_batch,
-            range(num_batch),
+            batch_indices,
         )
 
         for completed, res in enumerate(
@@ -937,15 +923,15 @@ def _process_numpy_parallel(
 def _process_cupy(
     parameters,
     file_reader,
-    first_frame,
-    num_batch,
-    batch_stride,
+    batch_indices,
     batch_size,
     output,
     M0_reg=None,
     autofocus_phase_term=None,
     progress_callback=None,
 ):
+    num_batch = len(batch_indices)
+    progress = tqdm(total=num_batch, desc="Processing (GPU)")
     h2d_stream = backend.xp.cuda.Stream(
         non_blocking=True
     )
@@ -964,11 +950,7 @@ def _process_cupy(
     current_idx = 0
     processed_batches = 0
 
-    for i in tqdm(
-        range(
-            num_batch + PREFETCH_DEPTH
-        )
-    ):
+    for i in range(num_batch):
         prefetch_idx = (
             i % PREFETCH_DEPTH
         )
@@ -982,18 +964,13 @@ def _process_cupy(
             with h2d_stream:
 
                 frames = file_reader.read_frames(
-                    first_frame=(
-                        first_frame
-                        + i * batch_stride
-                    ),
+                    first_frame=batch_indices[i],
                     batch_size=batch_size,
                 )
-
-                # KEEP THIS EXACTLY AS IN THE ORIGINAL CODE.
                 d_buffers[
                     prefetch_idx
                 ] = backend.xp.asarray(
-                    frames
+                    _frame_stack(frames)
                 )
 
                 h2d_events[
@@ -1057,6 +1034,7 @@ def _process_cupy(
             )
 
             processed_batches += 1
+            progress.update(1)
             if progress_callback is not None:
                 progress_callback(
                     processed_batches,
@@ -1126,6 +1104,7 @@ def _process_cupy(
         )
 
         processed_batches += 1
+        progress.update(1)
         if progress_callback is not None:
             progress_callback(
                 processed_batches,
@@ -1148,6 +1127,7 @@ def _process_cupy(
         if processed_batches >= num_batch:
             break
 
+    progress.close()
     return output, M0_reg
 
 def preview(file_path, parameters):
@@ -1175,6 +1155,10 @@ def preview(file_path, parameters):
 
     validate_main_parameters(parameters)
 
+    _validate_reference_batch(
+        file_reader, parameters["first_frame"], parameters["batch_size"], "Preview"
+    )
+
     # ------------------------------------------------------------
     # Build autofocus phase once from the configured reference batch
     # ------------------------------------------------------------
@@ -1191,12 +1175,10 @@ def preview(file_path, parameters):
         batch_size=parameters["batch_size"],
     )
 
-    frames = backend.to_backend(frames).astype(
+    frames = backend.to_backend(_frame_stack(frames)).astype(
         backend.xp.float32,
         copy=False,
     )
-
-    res = {}
 
     # If autofocus is active, reuse the reference correction here.
     # Otherwise live Shack-Hartmann is handled by _process_one_batch().
@@ -1285,29 +1267,10 @@ def process(file_path, parameters, progress_callback=None):
         0,
     )
 
-    if end_frame <= 0:
-        end_frame = file_reader.total_frames
-
-    span = end_frame - first_frame
-
-    if span <= 0:
-        return
-
-    # ------------------------------------------------------------
-    # Number of processing batches
-    # ------------------------------------------------------------
-    if batch_stride >= span:
-        num_batch = (
-            1
-            if batch_size <= span
-            else 0
-        )
-    else:
-        num_batch = int(
-            span / batch_stride
-        )
-
-    if num_batch <= 0:
+    batch_indices = calculate_batch_indices(
+        first_frame, end_frame, batch_size, batch_stride, file_reader.total_frames
+    )
+    if not batch_indices:
         return
 
     output = defaultdict(list)
@@ -1323,12 +1286,16 @@ def process(file_path, parameters, progress_callback=None):
             False,
         )
         and (
-            parameters["registration_ref_first_frame"] != 0
+            parameters["registration_ref_first_frame"] != first_frame
             or parameters["registration_ref_batch_size"]
             != parameters["batch_size"]
         )
     ):
 
+        _validate_reference_batch(
+            file_reader, parameters["registration_ref_first_frame"],
+            parameters["registration_ref_batch_size"], "Registration reference",
+        )
         ref_frames = file_reader.read_frames(
             first_frame=parameters[
                 "registration_ref_first_frame"
@@ -1338,7 +1305,7 @@ def process(file_path, parameters, progress_callback=None):
             ],
         )
 
-        ref_frames = backend.to_backend(ref_frames).astype(
+        ref_frames = backend.to_backend(_frame_stack(ref_frames)).astype(
             backend.xp.float32,
             copy=False,
         )
@@ -1380,9 +1347,7 @@ def process(file_path, parameters, progress_callback=None):
             output, M0_reg = _process_numpy_parallel(
                 parameters=parameters,
                 file_reader=file_reader,
-                first_frame=first_frame,
-                num_batch=num_batch,
-                batch_stride=batch_stride,
+                batch_indices=batch_indices,
                 batch_size=batch_size,
                 output=output,
                 M0_reg=M0_reg,
@@ -1396,9 +1361,7 @@ def process(file_path, parameters, progress_callback=None):
             output, M0_reg = _process_numpy(
                 parameters=parameters,
                 file_reader=file_reader,
-                first_frame=first_frame,
-                num_batch=num_batch,
-                batch_stride=batch_stride,
+                batch_indices=batch_indices,
                 batch_size=batch_size,
                 output=output,
                 M0_reg=M0_reg,
@@ -1410,9 +1373,7 @@ def process(file_path, parameters, progress_callback=None):
         output, M0_reg = _process_cupy(
             parameters=parameters,
             file_reader=file_reader,
-            first_frame=first_frame,
-            num_batch=num_batch,
-            batch_stride=batch_stride,
+            batch_indices=batch_indices,
             batch_size=batch_size,
             output=output,
             M0_reg=M0_reg,
