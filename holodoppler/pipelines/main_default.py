@@ -1,8 +1,4 @@
-import os
-from concurrent.futures import ThreadPoolExecutor
-
 import numpy as np
-from tqdm import tqdm
 
 from holodoppler import backend
 from holodoppler.config import (
@@ -11,6 +7,7 @@ from holodoppler.config import (
     validate_main_parameters,
 )
 from holodoppler.core.batching import calculate_batch_indices
+from holodoppler.core.processing import run_batches
 from holodoppler.core.filtering import (
     corner_compensation,
     filter_2d,
@@ -494,7 +491,7 @@ def _get_autofocus_phase_term(parameters, file_reader):
 def _process_one_batch(
     parameters,
     frames,
-    M0_reg=None,
+    registration_ref=None,
     phase_term=None,
 ):
     """
@@ -559,17 +556,17 @@ def _process_one_batch(
     # Image registration
     # ------------------------------------------------------------
     if (
-        M0_reg is None
+        registration_ref is None
         and parameters.get("image_registration", False)
     ):
-        M0_reg = res["M0ff"]
+        registration_ref = res["M0ff"]
 
-    if M0_reg is not None:
+    if registration_ref is not None:
 
         shift_y, shift_x = register_images_shifts(
             backend.xp,
             backend.fft,
-            M0_reg,
+            registration_ref,
             res["M0ff"],
             radius=parameters["registration_radius"],
             sub_pixel=parameters["registration_sub_pixel"],
@@ -596,7 +593,7 @@ def _process_one_batch(
             ]
         )
 
-    return res, M0_reg
+    return res, registration_ref
 
 
 def _store_batch_result(output, key, value, batch_index, num_batches):
@@ -663,488 +660,6 @@ def _append_numpy_results(output, res, parameters, batch_index, num_batches):
         else: 
             _store_batch_result(output, key, value, batch_index, num_batches)
 
-def _process_numpy(
-    parameters,
-    file_reader,
-    batch_indices,
-    batch_size,
-    output,
-    M0_reg=None,
-    autofocus_phase_term=None,
-    progress_callback=None,
-):
-    """
-    Sequential NumPy/CPU processing.
-
-    This is the direct CPU equivalent of the original NumPy path.
-
-    Parameters
-    ----------
-    parameters : dict
-        Processing parameters.
-
-    file_reader :
-        Frame reader.
-
-    batch_indices : range
-        Validated starting indices of complete batches.
-
-    batch_size : int
-        Number of frames per batch.
-
-    output : dict
-        Preallocated output arrays, allocated on the first batch.
-
-    M0_reg : numpy.ndarray or None
-        Registration reference.
-
-    autofocus_phase_term :
-        Optional autofocus phase term passed to
-        _process_one_batch().
-    """
-
-    num_batch = len(batch_indices)
-    for i, batch_start in enumerate(tqdm(
-        batch_indices,
-        desc=f"Processing ({backend._backend.backend_name})",
-    )):
-        frames = file_reader.read_frames(
-            first_frame=batch_start,
-            batch_size=batch_size,
-        )
-
-        # Keep the CPU path explicitly float32.
-        frames = backend.to_backend(_frame_stack(frames)).astype(
-            backend.xp.float32,
-            copy=False,
-        )
-
-        res, M0_reg = _process_one_batch(
-            parameters,
-            frames,
-            M0_reg=M0_reg,
-            phase_term=autofocus_phase_term,
-        )
-
-        _append_numpy_results(
-            output,
-            res,
-            parameters, i, num_batch
-        )
-
-        if progress_callback is not None:
-            progress_callback(i + 1, num_batch, f"Batch {i + 1}/{num_batch}")
-
-        del frames
-        del res
-
-    return output, M0_reg
-
-
-# ============================================================================
-# NumPy / CPU parallel
-# ============================================================================
-
-def _get_numpy_workers(n_workers=None):
-    """
-    Return a safe number of NumPy workers.
-
-    Default:
-        8 workers
-
-    Safety limit:
-        half of the available CPU cores.
-
-    Examples
-    --------
-    4 cores:
-        max 2 workers
-
-    8 cores:
-        max 4 workers
-
-    16 cores:
-        max 8 workers
-
-    32 cores:
-        max 8 workers
-    """
-
-    cpu_count = os.cpu_count() or 1
-
-    # Fail-safe: never use more than half the CPU cores.
-    safe_cpu_limit = max(
-        1,
-        cpu_count // 2,
-    )
-
-    # Requested default.
-    if n_workers is None:
-        n_workers = 8
-
-    n_workers = max(
-        1,
-        int(n_workers),
-    )
-
-    return min(
-        n_workers,
-        safe_cpu_limit,
-    )
-
-
-def _process_numpy_parallel(
-    parameters,
-    file_reader,
-    batch_indices,
-    batch_size,
-    output,
-    M0_reg=None,
-    autofocus_phase_term=None,
-    n_workers=None,
-    progress_callback=None,
-):
-    """
-    Parallel NumPy/CPU processing.
-
-    NumPy batches are processed concurrently using a
-    ThreadPoolExecutor.
-
-    The default number of workers is 8, capped at half
-    of the available CPU cores.
-
-    IMPORTANT
-    ---------
-    Image registration introduces a dependency between batches
-    through M0_reg.
-
-    Therefore, when image_registration=True, this function
-    safely falls back to the sequential NumPy implementation.
-
-    This keeps the behavior of _process_one_batch() unchanged.
-    """
-
-    # ------------------------------------------------------------------
-    # Registration is stateful:
-    #
-    # batch 0 -> establishes M0_reg
-    # batch 1 -> uses M0_reg
-    # batch 2 -> uses M0_reg
-    # ...
-    #
-    # Therefore batches cannot safely be processed independently.
-    # ------------------------------------------------------------------
-    if parameters.get(
-        "image_registration",
-        False,
-    ):
-        # The parallel processing could be done processing M0_reg from the ref batch then using parallel process
-        # but for now fall back on single cpu 
-        return _process_numpy(
-            parameters=parameters,
-            file_reader=file_reader,
-            batch_indices=batch_indices,
-            batch_size=batch_size,
-            output=output,
-            M0_reg=M0_reg,
-            autofocus_phase_term=autofocus_phase_term,
-            progress_callback=progress_callback,
-        )
-
-    n_workers = _get_numpy_workers(
-        n_workers,
-    )
-
-    num_batch = len(batch_indices)
-
-    def process_batch(batch_start):
-        """
-        Read and process one independent batch.
-
-        Since image registration is disabled here, M0_reg does
-        not need to be shared between workers.
-        """
-
-        frames = file_reader.read_frames(
-            first_frame=batch_start,
-            batch_size=batch_size,
-        )
-
-        # Match the normal NumPy path.
-        frames = backend.to_backend(_frame_stack(frames)).astype(
-            backend.xp.float32,
-            copy=False,
-        )
-
-        res, _ = _process_one_batch(
-            parameters,
-            frames,
-            M0_reg=None,
-            phase_term=autofocus_phase_term,
-        )
-
-        del frames
-
-        return res
-
-    # ------------------------------------------------------------------
-    # ThreadPoolExecutor is appropriate here when the expensive work
-    # is performed by NumPy/SciPy operations that release the GIL.
-    #
-    # executor.map() preserves the input order, so results are appended
-    # in exactly the same batch order as the sequential implementation.
-    # ------------------------------------------------------------------
-    with ThreadPoolExecutor(
-        max_workers=n_workers,
-    ) as executor:
-
-        results = executor.map(
-            process_batch,
-            batch_indices,
-        )
-
-        for completed, res in enumerate(
-            tqdm(
-                results,
-                total=num_batch,
-                desc=(
-                    f"Processing "
-                    f"({backend.get_backend_name()}, {n_workers} workers)"
-                ),
-            ),
-            start=1,
-        ):
-            _append_numpy_results(
-                output,
-                res,
-                parameters, completed - 1, num_batch
-            )
-
-            if progress_callback is not None:
-                progress_callback(
-                    completed,
-                    num_batch,
-                    f"Batch {completed}/{num_batch}",
-                )
-
-            del res
-
-    return output, M0_reg
-
-
-# ============================================================================
-# CuPy / GPU
-# ============================================================================
-
-def _process_cupy(
-    parameters,
-    file_reader,
-    batch_indices,
-    batch_size,
-    output,
-    M0_reg=None,
-    autofocus_phase_term=None,
-    progress_callback=None,
-):
-    num_batch = len(batch_indices)
-    progress = tqdm(total=num_batch, desc="Processing (GPU)")
-    h2d_stream = backend.xp.cuda.Stream(
-        non_blocking=True
-    )
-
-    compute_stream = backend.xp.cuda.Stream(
-        non_blocking=True
-    )
-
-    PREFETCH_DEPTH = 4
-
-    d_buffers = [None] * PREFETCH_DEPTH
-    h2d_events = [None] * PREFETCH_DEPTH
-    compute_events = [None] * PREFETCH_DEPTH
-    buffer_ready = [False] * PREFETCH_DEPTH
-
-    current_idx = 0
-    processed_batches = 0
-
-    for i in range(num_batch):
-        prefetch_idx = (
-            i % PREFETCH_DEPTH
-        )
-
-        # ------------------------------------------------------------
-        # Prefetch next batch to GPU
-        # ------------------------------------------------------------
-
-        if i < num_batch:
-
-            with h2d_stream:
-
-                frames = file_reader.read_frames(
-                    first_frame=batch_indices[i],
-                    batch_size=batch_size,
-                )
-                d_buffers[
-                    prefetch_idx
-                ] = backend.xp.asarray(
-                    _frame_stack(frames)
-                )
-
-                h2d_events[
-                    prefetch_idx
-                ] = backend.xp.cuda.Event()
-
-                h2d_events[
-                    prefetch_idx
-                ].record(
-                    h2d_stream
-                )
-
-                buffer_ready[
-                    prefetch_idx
-                ] = True
-
-        # ------------------------------------------------------------
-        # Process ready batches
-        # ------------------------------------------------------------
-
-        while (
-            buffer_ready[current_idx]
-            and current_idx != prefetch_idx
-        ):
-
-            h2d_events[
-                current_idx
-            ].synchronize()
-
-            with compute_stream:
-
-                d_current = d_buffers[
-                    current_idx
-                ]
-
-                res, M0_reg = _process_one_batch(
-                    parameters,
-                    d_current,
-                    M0_reg=M0_reg,
-                    phase_term=autofocus_phase_term,
-                )
-
-                compute_events[
-                    current_idx
-                ] = backend.xp.cuda.Event()
-
-                compute_events[
-                    current_idx
-                ].record(
-                    compute_stream
-                )
-
-            compute_events[
-                current_idx
-            ].synchronize()
-
-            _append_numpy_results(
-                output,
-                res,
-                parameters, processed_batches, num_batch
-            )
-
-            processed_batches += 1
-            progress.update(1)
-            if progress_callback is not None:
-                progress_callback(
-                    processed_batches,
-                    num_batch,
-                    f"Batch {processed_batches}/{num_batch}",
-                )
-
-            buffer_ready[
-                current_idx
-            ] = False
-
-            d_buffers[
-                current_idx
-            ] = None
-
-            current_idx = (
-                current_idx + 1
-            ) % PREFETCH_DEPTH
-
-            if processed_batches >= num_batch:
-                break
-
-        if processed_batches >= num_batch:
-            break
-
-    # ------------------------------------------------------------
-    # Flush remaining prefetched batches
-    # ------------------------------------------------------------
-
-    while buffer_ready[current_idx]:
-
-        h2d_events[
-            current_idx
-        ].synchronize()
-
-        with compute_stream:
-
-            d_current = d_buffers[
-                current_idx
-            ]
-
-            res, M0_reg = _process_one_batch(
-                parameters,
-                d_current,
-                M0_reg=M0_reg,
-                phase_term=autofocus_phase_term,
-            )
-
-            compute_events[
-                current_idx
-            ] = backend.xp.cuda.Event()
-
-            compute_events[
-                current_idx
-            ].record(
-                compute_stream
-            )
-
-        compute_events[
-            current_idx
-        ].synchronize()
-
-        _append_numpy_results(
-            output,
-            res,
-            parameters, processed_batches, num_batch
-        )
-
-        processed_batches += 1
-        progress.update(1)
-        if progress_callback is not None:
-            progress_callback(
-                processed_batches,
-                num_batch,
-                f"Batch {processed_batches}/{num_batch}",
-            )
-
-        buffer_ready[
-            current_idx
-        ] = False
-
-        d_buffers[
-            current_idx
-        ] = None
-
-        current_idx = (
-            current_idx + 1
-        ) % PREFETCH_DEPTH
-
-        if processed_batches >= num_batch:
-            break
-
-    progress.close()
-    return output, M0_reg
 
 def preview(file_path, parameters):
     if parameters.get("force_numpy",False):
@@ -1201,7 +716,7 @@ def preview(file_path, parameters):
     res, _ = _process_one_batch(
         parameters,
         frames,
-        M0_reg=None,
+        registration_ref=None,
         phase_term=autofocus_phase_term,
     )
 
@@ -1291,7 +806,7 @@ def process(file_path, parameters, progress_callback=None):
 
     output = {}
 
-    M0_reg = None
+    registration_ref = None
 
     # ------------------------------------------------------------
     # Build the registration reference once
@@ -1329,11 +844,11 @@ def process(file_path, parameters, progress_callback=None):
         ref_res, _ = _process_one_batch(
             parameters,
             ref_frames,
-            M0_reg=None,
+            registration_ref=None,
             phase_term=None,
         )
 
-        M0_reg = ref_res["M0ff"].copy()
+        registration_ref = ref_res["M0ff"].copy()
 
         del ref_frames
         del ref_res
@@ -1352,50 +867,22 @@ def process(file_path, parameters, progress_callback=None):
         file_reader,
     )
 
-    # ------------------------------------------------------------
-    # NumPy / CPU path
-    # ------------------------------------------------------------
-    if not backend.is_gpu or parameters.get("use_parallel",False):
-
-        n_workers = parameters.get("numpy_num_workers",8)
-        if n_workers > 0:
-
-            output, M0_reg = _process_numpy_parallel(
-                parameters=parameters,
-                file_reader=file_reader,
-                batch_indices=batch_indices,
-                batch_size=batch_size,
-                output=output,
-                M0_reg=M0_reg,
-                autofocus_phase_term=autofocus_phase_term,
-                n_workers=n_workers,
-                progress_callback=progress_callback,
-            )
-
-        else:
-
-            output, M0_reg = _process_numpy(
-                parameters=parameters,
-                file_reader=file_reader,
-                batch_indices=batch_indices,
-                batch_size=batch_size,
-                output=output,
-                M0_reg=M0_reg,
-                autofocus_phase_term=autofocus_phase_term,
-                progress_callback=progress_callback,
-            )
-    else:
-
-        output, M0_reg = _process_cupy(
-            parameters=parameters,
-            file_reader=file_reader,
-            batch_indices=batch_indices,
-            batch_size=batch_size,
-            output=output,
-            M0_reg=M0_reg,
-            autofocus_phase_term=autofocus_phase_term,
-            progress_callback=progress_callback,
+    def process_batch(frames, reference):
+        return _process_one_batch(
+            parameters, frames, registration_ref=reference,
+            phase_term=autofocus_phase_term,
         )
+
+    def consume_result(index, result):
+        _append_numpy_results(output, result, parameters, index, len(batch_indices))
+
+    registration_ref = run_batches(
+        file_reader, batch_indices, batch_size, process_batch, consume_result,
+        registration_ref=registration_ref,
+        registration_enabled=parameters.get("image_registration", False),
+        workers=parameters.get("numpy_num_workers", 8),
+        progress_callback=progress_callback,
+    )
 
     print(output.keys())
 
