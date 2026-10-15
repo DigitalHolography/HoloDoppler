@@ -8,7 +8,7 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 
-PARAMETER_PATH = Path(r"./parameters/default_parameters_simple.yaml")
+PARAMETER_PATH = Path(r"./parameters/default_parameters_default.yaml")
 
 REFERENCE_PATH = Path(
     r"F:\ZAC\260113_AUZ0752_5_HD_1\raw\260113_AUZ0752_5_HD_1_output.h5"

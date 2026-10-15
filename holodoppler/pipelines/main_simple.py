@@ -585,11 +585,56 @@ def _process_one_batch(
     return res, M0_reg
 
 
-def _append_numpy_results(output, res):
+def _append_numpy_results(output, res, parameters):
+    
     for key, value in res.items():
-        output[key].append(
-            backend.to_numpy(value)
-        )
+        if key == "sh_psd" and parameters.get("save_averaged_spectrogram",False):
+            if len(output[key]) > 0:
+                output["spectrograms_averaged"]=[output[key][0]+backend.to_numpy(value)]
+            else:
+                output["spectrograms_averaged"]=[backend.to_numpy(value)]
+
+        if key == "sh_psd" and parameters.get("save_spectograms",False):
+            # Spatial resizing
+            resize_shape = parameters.get("spectrogram_resize_shape", (256, 256))
+            resize_order = parameters.get("spectrogram_resize_order", 1)
+
+            value = resize_frames(value, *resize_shape, order=resize_order)
+
+            n_freq, nny, nnx = value.shape
+
+            frequency_start = parameters.get("spectrogram_frequency_start", 0.0)
+            frequency_end = parameters.get("spectrogram_frequency_end", 0.25)
+
+            start_idx = int(n_freq * frequency_start)
+            end_idx = int(n_freq * frequency_end)
+
+            value = np.concatenate(
+                (
+                    value[:end_idx],
+                    value[start_idx + n_freq // 2 :],
+                ),
+                axis=0,
+            )
+
+            # Frequency binning
+            frequency_binning = parameters.get("spectrogram_frequency_binning", 4)
+
+            n_freq = value.shape[0]
+            value = value.reshape(
+                n_freq // frequency_binning,
+                frequency_binning,
+                nny,
+                nnx,
+            ).mean(axis=1)
+
+            output["spectrograms"].append(
+                backend.to_numpy(value)
+            )
+        else: 
+            output[key].append(
+                backend.to_numpy(value)
+            )
 
 def _process_numpy(
     parameters,
@@ -667,6 +712,7 @@ def _process_numpy(
         _append_numpy_results(
             output,
             res,
+            parameters
         )
 
         if progress_callback is not None:
@@ -859,6 +905,7 @@ def _process_numpy_parallel(
             _append_numpy_results(
                 output,
                 res,
+                parameters
             )
 
             if progress_callback is not None:
@@ -996,6 +1043,7 @@ def _process_cupy(
             _append_numpy_results(
                 output,
                 res,
+                parameters
             )
 
             processed_batches += 1
@@ -1064,6 +1112,7 @@ def _process_cupy(
         _append_numpy_results(
             output,
             res,
+            parameters
         )
 
         processed_batches += 1

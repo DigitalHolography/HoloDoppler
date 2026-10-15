@@ -1,4 +1,4 @@
-pipeline_name: "simple"
+pipeline_name: "default"
 
 # optional backend management
 force_numpy: true # forces the use of numpy

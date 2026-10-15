@@ -1397,7 +1397,7 @@ def save_outputs(
         output,
         fps=fps,
         video_formats=("avi","mp4"),
-        writer="cmd",
+        writer="imageio",
     )
 
     # 2. PNGs.
@@ -1427,6 +1427,7 @@ def save_outputs(
                 "moment2",
                 "spectrum_line",
                 "sh_psd",
+                "averaged_spectrogram",
                 "spectrograms"
             ]
 

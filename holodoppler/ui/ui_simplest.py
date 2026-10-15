@@ -20,7 +20,7 @@ from holodoppler.config import load_config
 
 APP_NAME = "HoloDoppler"
 SUPPORTED = {".holo", ".cine", ".txt"}
-DEFAULT_CONFIG = Path("./parameters/default_parameters_simple.yaml")
+DEFAULT_CONFIG = Path("./parameters/default_parameters_default.yaml")
 
 # ------------------------------------------------------------------
 # DND availability check – root window will inherit from TkinterDnD.Tk if present

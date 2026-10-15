@@ -5,7 +5,7 @@ Propagation kernels (Fresnel and Angular Spectrum)
 from functools import cache
 from .image_utils import pad_array_centrally
 
-
+@cache
 def ensure_yx_pixel_pitch(pixel_pitch):
     if isinstance(pixel_pitch, (int, float)):
         return (float(pixel_pitch), float(pixel_pitch))
@@ -28,7 +28,7 @@ def build_fresnel_kernel_in(
     # if isinstance(pixel_pitch, (float, int)):
     #     pixel_pitch = (pixel_pitch, pixel_pitch) Removed for perf
 
-    ppy, ppx = pixel_pitch
+    ppy, ppx = ensure_yx_pixel_pitch(pixel_pitch)
     # print(ppy, type(ppy))
 
     y = (xp.arange(0, ny) - xp.round(ny / 2)) * ppy
@@ -59,7 +59,7 @@ def build_fresnel_kernel_out(xp, z, pixel_pitch, wavelength, ny, nx, zero_paddin
     # if isinstance(pixel_pitch, (float, int)):
     #     pixel_pitch = (pixel_pitch, pixel_pitch) Removed for perf
 
-    ppy, ppx = pixel_pitch
+    ppy, ppx = ensure_yx_pixel_pitch(pixel_pitch)
 
     fx = xp.fft.fftfreq(nx, d=ppx)
     fx = xp.fft.fftshift(fx)
@@ -87,7 +87,7 @@ def build_angular_kernel(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=No
     # if isinstance(pixel_pitch, (float, int)):
     #     pixel_pitch = (pixel_pitch, pixel_pitch) Removed for perf
 
-    ppy, ppx = pixel_pitch
+    ppy, ppx = ensure_yx_pixel_pitch(pixel_pitch)
 
     du = 1.0 / (nx * ppx)
     dv = 1.0 / (ny * ppy)

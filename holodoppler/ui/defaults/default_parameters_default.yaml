@@ -1,6 +1,7 @@
-pipeline_name: "simple"
+pipeline_name: "default"
 
 # optional backend management
+force_numpy: false
 use_parallel: true # use parallel workers cores or not (cupy or numpy)
 numpy_num_workers: 8 # in numpy mode, the number of parallel workers to be used
 
@@ -43,14 +44,14 @@ frequency_bands:
 registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
 
 # Image registration Live 
-image_registration: false
+image_registration: true
 registration_ref_first_frame: 0
 registration_ref_batch_size: 512
 registration_radius: 0.8
 registration_sub_pixel: true
 
 # Advanced Image registration
-image_registration_with_ecc: true #uses the first computed frame as reference
+image_registration_with_ecc: false #uses the first computed frame as reference
 registration_ecc_radius: 0.8
 registration_ecc_min_threshold: 0.7
 
@@ -61,11 +62,6 @@ corner_compensation: false
 square: true
 
 overwrite_option: "erase"
-
-# Image contrast
-contrast: false
-contrast_low_max_percent: [0.5, 99.5] # Applied only to rendered avi/png/report outputs, not raw h5.
-contrast_gamma: 1.0
 
 # Shack-Hartmann wavefront sensing
 shack_hartmann_autofocus: false  # Enable Shack-Hartmann processing only on the batch defined by registration_ref_first_frame and batch_size and use it for the correction of following batch
@@ -79,3 +75,12 @@ shack_hartmann_shifts_pixel_range_threshold: 1000.0 # Max displacement accepted 
 shack_hartmann_graph_laplacian: true  # Use graph Laplacian method
 shack_hartmann_zernike_fit: true # Other option is shack_hartmann_southwell_integration but not really implemented yet because it is not stable
 shack_hartmann_zernike_fit_modes: [4,5,6]  # Number of the Zernike modes to use in the fit in Null ordering
+
+#spectrograms
+save_spectograms: true
+spectrogram_resize_shape: [128, 128]
+spectrogram_resize_order: 1
+spectrogram_frequency_start: 128
+spectrogram_frequency_end: 256
+spectrogram_frequency_binning: 4
+save_averaged_spectrogram: true #this outputs a powerspectrum density averaged over all the batches and registered (with translation only if image_registration is on)

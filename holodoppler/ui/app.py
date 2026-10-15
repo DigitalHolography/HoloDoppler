@@ -27,7 +27,7 @@ from .constants import APP_NAME
 from .file_selection import expand_input_paths
 from .image_utils import load_photo
 from .minimal import MinimalView
-from .paths import logo_path
+from .paths import logo_path, get_package_version
 from .settings_store import DEFAULT_WINDOW_MINSIZES, SettingsStore
 from .theme import apply_theme
 
@@ -38,7 +38,7 @@ BaseTk = TkinterDnD.Tk if DND_AVAILABLE else tk.Tk
 class UI(BaseTk):
     def __init__(self) -> None:
         super().__init__()
-        self.title(APP_NAME)
+        self.title(APP_NAME + get_package_version())
 
         self.store = SettingsStore()
         self.store.initialize()
