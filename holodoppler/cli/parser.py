@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union  # noqa: UP035
 
-DEFAULT_PARAMETERS_PATH = Path("parameters/default_parameters_simple.yaml")
+DEFAULT_PARAMETERS_PATH = Path("parameters/default_parameters_default.yaml")
 DEBUG_CONFIG_FILENAME = ".debug_paths.json"
 GUI_COMMAND = "gui"
 

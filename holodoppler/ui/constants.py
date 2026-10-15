@@ -3,7 +3,7 @@ from __future__ import annotations
 APP_NAME = "HoloDoppler"
 APPDATA_SLUG = "holodopplerpython"
 
-DEFAULT_PARAMETERS_NAME = "default_parameters_simple.yaml"
+DEFAULT_PARAMETERS_NAME = "default_parameters_default.yaml"
 LOADED_PARAMETERS_NAME = "loaded_parameters.json"
 APP_SETTINGS_NAME = "app_settings.json"
 
