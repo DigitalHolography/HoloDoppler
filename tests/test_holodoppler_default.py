@@ -16,6 +16,9 @@ TEST_ROOT = PROJECT_ROOT / "temp"
 HOLO_PATH = TEST_ROOT / "test.holo"
 PARAMS_PATH = TEST_ROOT / "tmp.yaml"
 OUTPUT_PATH = TEST_ROOT / "test" / "test_HD" / "h5" / "test_HD_output.h5"
+OUTPUT_PREVIEW_PATH = TEST_ROOT / "test" / "test_HD" / "preview" / "h5" / "preview_output.h5"
+
+PIPELINE_LIST = ["default", "sliding_shack_hartmann", "pca_accumulation", "lsci"]
 
 
 def _create_params_file() -> None:
@@ -26,7 +29,7 @@ def _create_params_file() -> None:
     PARAMS_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     params = {
-        "pipeline_name": "simple",
+        "pipeline_name": "default",
         # optional backend management
         "use_parallel": True,  # use parallel workers cores or not (cupy or numpy)
         "numpy_num_workers": 8,  # in numpy mode, the number of parallel workers to be used
@@ -75,13 +78,6 @@ def _create_params_file() -> None:
         "corner_compensation": False,
         # Image resizing
         "square": True,
-        # Image contrast
-        "contrast": False,
-        "contrast_low_max_percent": [
-            0.5,
-            99.5,
-        ],  # Applied only to rendered avi/png/report outputs, not raw h5.
-        "contrast_gamma": 1.0,
         # Shack-Hartmann wavefront sensing
         "shack_hartmann_autofocus": True,  # Enable Shack-Hartmann processing only on the batch defined by registration_ref_first_frame and batch_size and use it for the correction of following batch
         "shack_hartmann": False,  # Enable Live (every batch) Shack-Hartmann processing
@@ -192,6 +188,70 @@ def test_process_cli_creates_expected_h5(cli_test_data: tuple[Path, Path]) -> No
             "/moment0",
             "/moment1",
             "/moment2",
+        )
+
+        for dataset_path in required_datasets:
+            assert dataset_path in h5, (
+                f"Missing required dataset {dataset_path} "
+                f"in {OUTPUT_PATH}. "
+                f"Available top-level entries: {list(h5.keys())}"
+            )
+
+            dataset = h5[dataset_path]
+
+            assert dataset.size > 0, (
+                f"Dataset {dataset_path} exists but is empty."
+            )
+
+
+def test_preview_cli_creates_expected_h5(cli_test_data: tuple[Path, Path]) -> None:
+    """Test:
+
+        holodoppler process "test.holo" "params.yaml"
+
+    and verify that the expected HDF5 datasets are produced.
+    """
+    holo_path, params_path = cli_test_data
+
+    # Remove an old result so a stale HDF5 file cannot make the test pass.
+    if OUTPUT_PREVIEW_PATH.exists():
+        OUTPUT_PREVIEW_PATH.unlink()
+
+    # The command intentionally uses the same relative paths as a user would
+    # use from the temporary test directory.
+    result = subprocess.run(
+        [
+            "holodoppler",
+            "preview",
+            holo_path.name,
+            params_path.name,
+        ],
+        cwd=TEST_ROOT,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, (
+        "holodoppler process failed.\n"
+        f"command: holodoppler process "
+        f'"{holo_path.name}" "{params_path.name}"\n\n'
+        f"stdout:\n{result.stdout}\n\n"
+        f"stderr:\n{result.stderr}"
+    )
+
+    assert OUTPUT_PREVIEW_PATH.exists(), (
+        "holodoppler process completed successfully, "
+        f"but expected output was not created:\n{OUTPUT_PREVIEW_PATH}\n\n"
+        f"stdout:\n{result.stdout}\n\n"
+        f"stderr:\n{result.stderr}"
+    )
+
+    with h5py.File(OUTPUT_PREVIEW_PATH, "r") as h5:
+        required_datasets = (
+            "/moment0ff",
+            "/moment0",
+            "/moment1",
+            "/moment2"
         )
 
         for dataset_path in required_datasets:

@@ -1231,6 +1231,11 @@ def preview(file_path, parameters):
 
     backend.clear_gpu_memory()
 
+    res_np["moment0"] = res_np.pop("M0")
+    res_np["moment0ff"] = res_np.pop("M0ff")
+    res_np["moment1"] = res_np.pop("M1")
+    res_np["moment2"] = res_np.pop("M2")
+
     save_outputs(
         file_reader=file_reader,
         output=res_np,
@@ -1238,7 +1243,7 @@ def preview(file_path, parameters):
         custom_relative_path="preview",
     )
 
-    return res_np["M0ff"]
+    return res_np["moment0ff"]
 
 
 def process(file_path, parameters, progress_callback=None):

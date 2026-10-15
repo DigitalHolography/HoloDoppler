@@ -10,6 +10,18 @@ source ./.venv/Scripts/activate
 python -m pip install -e .
 ```
 
+or 
+
+```bash
+uv sync
+```
+
+or (if cuda is not installed separately)
+
+```bash
+uv sync --all-extras
+```
+
 ## 2. Run the CLI Examples
 
 ### Preview
@@ -23,18 +35,6 @@ holodoppler preview "D:\path\to\holo.holo" "./parameters/default_parameters_debu
 ```bash
 holodoppler process "D:\path\to\holo.holo" "./parameters/default_parameters_debug.json"
 ```
-
-### Debug And Profile
-
-```bash
-holodoppler process "D:\path\to\holo.holo" "./parameters/default_parameters_debug.json" --debug --tictoc
-```
-
-```bash
-holodoppler preview "D:\path\to\holo.holo" "./parameters/default_parameters_debug.json" --debug --tictoc
-```
-
-The `--debug` provides more output visually and `--tictoc` provides information about processing time.
 
 ### Run the GUI
 
@@ -63,9 +63,13 @@ python -m pip install -e .[build]
 python build_installer.py
 ```
 
-The installer build script must run under Python 3.13 or newer.
-The installer build uses the bundled UI defaults from
-`holodoppler/ui/defaults/` and verifies they match `parameters/*.json`,
-`parameters/*.yaml`, and `parameters/*.yml`.
-Use `python build_installer.py --verify-installer` to run the installer smoke
-verification when Inno Setup is available.
+or 
+
+```bash
+uv sync --all-extras
+uv run build_installer.py
+```
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 only. See [LICENSE](LICENSE).
