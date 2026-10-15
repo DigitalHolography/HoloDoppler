@@ -6,7 +6,11 @@ import numpy as np
 from tqdm import tqdm
 
 from holodoppler import backend
-from holodoppler.config import update_from_cine_metadata, update_from_holo_footer
+from holodoppler.config import (
+    update_from_cine_metadata,
+    update_from_holo_footer,
+    validate_main_parameters,
+)
 from holodoppler.core.filtering import (
     corner_compensation,
     filter_2d,
@@ -1169,7 +1173,7 @@ def preview(file_path, parameters):
             file_reader.header
         )
 
-    print("parameters : ", parameters)
+    validate_main_parameters(parameters)
 
     # ------------------------------------------------------------
     # Build autofocus phase once from the configured reference batch
@@ -1270,7 +1274,7 @@ def process(file_path, parameters, progress_callback=None):
             file_reader.header
         )
 
-    print("parameters : ", parameters)
+    validate_main_parameters(parameters)
 
     batch_size = parameters["batch_size"]
     batch_stride = parameters["batch_stride"]
