@@ -1,5 +1,4 @@
 import os
-from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -163,6 +162,11 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         )
     else:
         spectrum_f = holograms_f
+    del holograms_f
+
+    psd = xp.abs(spectrum_f)**2
+    del spectrum_f
+    xp.square(psd, out=psd)
 
     # ------------------------------------------------------------
     # Frequency filtering
@@ -176,8 +180,6 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         parameters.get("high_freq"),
     )
 
-    psd = xp.abs(spectrum_f) ** 2
-
     if parameters.get("corner_compensation", False):
         psd = corner_compensation(xp, psd)
 
@@ -190,12 +192,6 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         freqs,
         [0,1,2],
     )
-    output_dict["M0ff"] = gaussian_flatfield(
-        output_dict["M0"],
-        parameters.get("registration_flatfield_gw", 1.0),
-        backend.gaussian_filter,
-    )
-
     output_dict["spectrum_line"] = xp.mean(
         psd,
         axis=(-2, -1),
@@ -223,6 +219,14 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             psd[idxs_band],
             axis=0,
         )
+
+    del psd
+
+    output_dict["M0ff"] = gaussian_flatfield(
+        output_dict["M0"],
+        parameters.get("registration_flatfield_gw", 1.0),
+        backend.gaussian_filter,
+    )
 
     return output_dict
 
@@ -595,15 +599,29 @@ def _process_one_batch(
     return res, M0_reg
 
 
-def _append_numpy_results(output, res, parameters):
+def _store_batch_result(output, key, value, batch_index, num_batches):
+    """Allocate each output once, using its first batch's shape and dtype."""
+    value = backend.to_numpy(value)
+    if key not in output:
+        output[key] = np.empty((num_batches, *value.shape), dtype=value.dtype)
+    if output[key].shape[1:] != value.shape:
+        raise ValueError(
+            f"Output {key!r} changed shape from {output[key].shape[1:]} "
+            f"to {value.shape} at batch {batch_index}."
+        )
+    output[key][batch_index] = value
+
+
+def _append_numpy_results(output, res, parameters, batch_index, num_batches):
     for key, value in res.items():
         
         if key == "sh_psd":
             if parameters.get("save_averaged_spectrogram",False):
-                if len(output["averaged_spectrogram"]) > 0:
-                    output["averaged_spectrogram"]=[output["averaged_spectrogram"][0]+backend.to_numpy(value)]
+                spectrum = backend.to_numpy(value)
+                if "averaged_spectrogram" in output:
+                    output["averaged_spectrogram"] += spectrum
                 else:
-                    output["averaged_spectrogram"]=[backend.to_numpy(value)]
+                    output["averaged_spectrogram"] = spectrum.copy()
 
             if parameters.get("save_spectograms",False):
                 # Spatial resizing
@@ -639,13 +657,11 @@ def _append_numpy_results(output, res, parameters):
                     nnx,
                 ).mean(axis=1)
 
-                output["spectrograms"].append(
-                    backend.to_numpy(value)
+                _store_batch_result(
+                    output, "spectrograms", value, batch_index, num_batches
                 )
         else: 
-            output[key].append(
-                backend.to_numpy(value)
-            )
+            _store_batch_result(output, key, value, batch_index, num_batches)
 
 def _process_numpy(
     parameters,
@@ -676,8 +692,8 @@ def _process_numpy(
     batch_size : int
         Number of frames per batch.
 
-    output : defaultdict(list)
-        Output accumulator.
+    output : dict
+        Preallocated output arrays, allocated on the first batch.
 
     M0_reg : numpy.ndarray or None
         Registration reference.
@@ -713,7 +729,7 @@ def _process_numpy(
         _append_numpy_results(
             output,
             res,
-            parameters
+            parameters, i, num_batch
         )
 
         if progress_callback is not None:
@@ -901,7 +917,7 @@ def _process_numpy_parallel(
             _append_numpy_results(
                 output,
                 res,
-                parameters
+                parameters, completed - 1, num_batch
             )
 
             if progress_callback is not None:
@@ -1030,7 +1046,7 @@ def _process_cupy(
             _append_numpy_results(
                 output,
                 res,
-                parameters
+                parameters, processed_batches, num_batch
             )
 
             processed_batches += 1
@@ -1100,7 +1116,7 @@ def _process_cupy(
         _append_numpy_results(
             output,
             res,
-            parameters
+            parameters, processed_batches, num_batch
         )
 
         processed_batches += 1
@@ -1273,7 +1289,7 @@ def process(file_path, parameters, progress_callback=None):
     if not batch_indices:
         return
 
-    output = defaultdict(list)
+    output = {}
 
     M0_reg = None
 
@@ -1381,24 +1397,13 @@ def process(file_path, parameters, progress_callback=None):
             progress_callback=progress_callback,
         )
 
-    # ------------------------------------------------------------
-    # Stack outputs
-    # ------------------------------------------------------------
-    output = {
-        key: np.stack(
-            values,
-            axis=0,
-        )
-        for key, values in output.items()
-    }
-
     print(output.keys())
 
     if auto_coefs is not None:
         output["shack_hartmann_autofocus_zernike_coefs"] = backend.to_numpy(auto_coefs)
 
     if "averaged_spectrogram" in output:
-        output["averaged_spectrogram"] = np.squeeze(output["averaged_spectrogram"]) # pop the first dim for sh_ag since it specifically isnt a signal in time
+        output["averaged_spectrogram"] = np.squeeze(output["averaged_spectrogram"]) # This aggregate has no batch axis.
 
     # ------------------------------------------------------------
     # ECC Image Registration at the end
