@@ -30,6 +30,16 @@ def validate_main_parameters(parameters):
             f"Parameter 'numpy_num_workers' must be an integer; got {value!r} ({type(value).__name__})."
         )
 
+    value = parameters.get("cupy_async", True)
+    if not isinstance(value, bool):
+        raise TypeError("Parameter 'cupy_async' must be a boolean.")
+
+    value = parameters.get("cupy_prefetch_depth", 4)
+    if not isinstance(value, Integral) or isinstance(value, bool):
+        raise TypeError("Parameter 'cupy_prefetch_depth' must be an integer.")
+    if value < 1:
+        raise ValueError("Parameter 'cupy_prefetch_depth' must be at least one.")
+
     value = parameters.get("batch_size", 256)
     if not (isinstance(value, Integral) and not isinstance(value, bool)):
         raise TypeError(

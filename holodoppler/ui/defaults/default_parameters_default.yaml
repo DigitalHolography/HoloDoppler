@@ -5,6 +5,10 @@ force_numpy: false
 use_parallel: true # use parallel workers cores or not (cupy or numpy)
 numpy_num_workers: 8 # in numpy mode, the number of parallel workers to be used
 
+# GPU pipeline: overlap reading, uploads, computation, and downloads.
+cupy_async: true
+cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM.
+
 # Core parameters
 batch_size: 256
 first_frame: 0

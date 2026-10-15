@@ -609,55 +609,41 @@ def _store_batch_result(output, key, value, batch_index, num_batches):
     output[key][batch_index] = value
 
 
+def _prepare_batch_results(res, parameters):
+    """Finish backend operations before the scheduler downloads results."""
+    res = dict(res)
+    if "sh_psd" in res:
+        if parameters.get("save_spectograms", False):
+            shape = parameters.get("spectrogram_resize_shape", (256, 256))
+            order = parameters.get("spectrogram_resize_order", 1)
+            res["spectrograms"] = resize_frames(
+                backend.xp, backend.zoom, res["sh_psd"], *shape, order=order
+            )
+        if not parameters.get("save_averaged_spectrogram", False):
+            del res["sh_psd"]
+    return res
+
+
 def _append_numpy_results(output, res, parameters, batch_index, num_batches):
     for key, value in res.items():
-        
         if key == "sh_psd":
-            if parameters.get("save_averaged_spectrogram",False):
-                spectrum = backend.to_numpy(value)
-                if "averaged_spectrogram" in output:
-                    output["averaged_spectrogram"] += spectrum
-                else:
-                    output["averaged_spectrogram"] = spectrum.copy()
-
-            if parameters.get("save_spectograms",False):
-                # Spatial resizing
-                resize_shape = parameters.get("spectrogram_resize_shape", (256, 256))
-                resize_order = parameters.get("spectrogram_resize_order", 1)
-
-                value = backend.to_numpy(resize_frames(backend.xp, backend.zoom, value, *resize_shape, order=resize_order))
-
-                n_freq, nny, nnx = value.shape
-
-                frequency_start = parameters.get("spectrogram_frequency_start", 0.0)
-                frequency_end = parameters.get("spectrogram_frequency_end", 0.25)
-
-                start_idx = int(n_freq * frequency_start)
-                end_idx = int(n_freq * frequency_end)
-
-                value = np.concatenate(
-                    (
-                        value[:end_idx],
-                        value[start_idx + n_freq // 2 :],
-                    ),
-                    axis=0,
-                )
-
-                # Frequency binning
-                frequency_binning = parameters.get("spectrogram_frequency_binning", 4)
-
-                n_freq = value.shape[0]
-                value = value.reshape(
-                    n_freq // frequency_binning,
-                    frequency_binning,
-                    nny,
-                    nnx,
-                ).mean(axis=1)
-
-                _store_batch_result(
-                    output, "spectrograms", value, batch_index, num_batches
-                )
-        else: 
+            spectrum = backend.to_numpy(value)
+            if "averaged_spectrogram" in output:
+                output["averaged_spectrogram"] += spectrum
+            else:
+                output["averaged_spectrogram"] = spectrum.copy()
+        elif key == "spectrograms":
+            value = backend.to_numpy(value)
+            n_freq, nny, nnx = value.shape
+            start_idx = int(n_freq * parameters.get("spectrogram_frequency_start", 0.0))
+            end_idx = int(n_freq * parameters.get("spectrogram_frequency_end", 0.25))
+            value = np.concatenate(
+                (value[:end_idx], value[start_idx + n_freq // 2 :]), axis=0
+            )
+            binning = parameters.get("spectrogram_frequency_binning", 4)
+            value = value.reshape(value.shape[0] // binning, binning, nny, nnx).mean(axis=1)
+            _store_batch_result(output, key, value, batch_index, num_batches)
+        else:
             _store_batch_result(output, key, value, batch_index, num_batches)
 
 
@@ -881,6 +867,9 @@ def process(file_path, parameters, progress_callback=None):
         registration_ref=registration_ref,
         registration_enabled=parameters.get("image_registration", False),
         workers=parameters.get("numpy_num_workers", 8),
+        cupy_async=parameters.get("cupy_async", True),
+        cupy_prefetch_depth=parameters.get("cupy_prefetch_depth", 4),
+        prepare_result=lambda result: _prepare_batch_results(result, parameters),
         progress_callback=progress_callback,
     )
 
