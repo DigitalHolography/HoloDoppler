@@ -407,7 +407,7 @@ def _get_autofocus_phase_term(parameters, file_reader):
 
     Reference batch:
         start = registration_ref_first_frame
-        size  = batch_size
+        size  = shack_hartmann_autofocus_batch_size (defaults to batch_size)
 
     Returns
     -------
@@ -419,14 +419,16 @@ def _get_autofocus_phase_term(parameters, file_reader):
     if not parameters.get("shack_hartmann_autofocus", False):
         return None, None
 
-    print(
-        "Running Shack-Hartmann autofocus from reference batch:",
-        f"first_frame={parameters['registration_ref_first_frame']},",
-        f"batch_size={parameters['batch_size']}",
+    ref_first_frame = parameters["registration_ref_first_frame"]
+    ref_batch_size = parameters.get(
+        "shack_hartmann_autofocus_batch_size", parameters["batch_size"]
     )
 
-    ref_first_frame = parameters["registration_ref_first_frame"]
-    ref_batch_size = parameters["batch_size"]
+    print(
+        "Running Shack-Hartmann autofocus from reference batch:",
+        f"first_frame={ref_first_frame},",
+        f"autofocus_batch_size={ref_batch_size}",
+    )
 
     ref_frames = file_reader.read_frames(
         first_frame=ref_first_frame,
