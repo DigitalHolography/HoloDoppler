@@ -11,8 +11,12 @@ from .parser import (
     parse_args,
 )
 from holodoppler.execution import PipelineMode, preview, process, run_batch
-from holodoppler.logger import configure_logging, logger
+from holodoppler.logger import configure_logging, get_logger
+
 from holodoppler.paths import default_parameters_path
+
+
+logger = get_logger(__name__)
 
 
 EXIT_SUCCESS = 0

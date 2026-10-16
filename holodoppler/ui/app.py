@@ -18,7 +18,8 @@ except ImportError:
     TkinterDnD = None
 
 from holodoppler.execution import preview, run_batch
-from holodoppler.logger import configure_logging, logger
+from holodoppler.logger import configure_logging, get_logger
+
 from holodoppler.get_version import get_version
 
 from .advanced import AdvancedView
@@ -28,6 +29,9 @@ from .image_utils import load_photo, logo_path
 from .minimal import MinimalView
 from .settings_store import DEFAULT_WINDOW_MINSIZES, SettingsStore
 from .theme import apply_theme
+
+
+logger = get_logger(__name__)
 
 
 BaseTk = TkinterDnD.Tk if DND_AVAILABLE else tk.Tk

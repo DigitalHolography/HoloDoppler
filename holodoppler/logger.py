@@ -2,9 +2,6 @@
 
 import logging
 import sys
-from collections.abc import Mapping
-from dataclasses import fields, is_dataclass
-from pprint import pformat
 
 logger = logging.getLogger("holodoppler")
 logger.setLevel(logging.INFO)
@@ -13,7 +10,10 @@ logger.propagate = False
 
 class _Formatter(logging.Formatter):
     def format(self, record):
-        prefix = f"{self.formatTime(record, '%H:%M:%S')} [{record.levelname.lower()}] "
+        prefix = (
+            f"{self.formatTime(record, '%Y-%m-%d %H:%M:%S')} "
+            f"[{record.levelname.lower()}] [{record.name}] "
+        )
         message = record.getMessage()
         if record.exc_info:
             message += "\n" + self.formatException(record.exc_info)
@@ -27,32 +27,9 @@ def configure_logging() -> None:
         logger.addHandler(handler)
 
 
-def log_mapping(label, values, *, level=logging.INFO) -> None:
-    """Render dictionaries and metadata dataclasses without copying their data."""
-    lines = [f"{label}:"]
-
-    def as_mapping(value):
-        if is_dataclass(value) and not isinstance(value, type):
-            return {field.name: getattr(value, field.name) for field in fields(value)}
-        return value
-
-    def append(mapping, indent):
-        for key, value in mapping.items():
-            value = as_mapping(value)
-            if isinstance(value, Mapping):
-                lines.append(f"{' ' * indent}{key}:")
-                append(value, indent + 2)
-            else:
-                rendered = pformat(value, sort_dicts=False).splitlines()
-                lines.append(f"{' ' * indent}{key}: {rendered[0]}")
-                lines.extend(' ' * (indent + 2) + line for line in rendered[1:])
-
-    values = as_mapping(values)
-    if isinstance(values, Mapping):
-        append(values, 2)
-    else:
-        lines.extend("  " + line for line in pformat(values, sort_dicts=False).splitlines())
-    logger.log(level, "\n".join(lines))
+def get_logger(name):
+    """Return a module logger using the shared application handlers."""
+    return logging.getLogger(name)
 
 
 configure_logging()

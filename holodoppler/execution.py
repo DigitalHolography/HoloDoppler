@@ -5,13 +5,15 @@ Callers own their parameters. Pipelines must not mutate supplied mappings.
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Callable, Optional, Union
 
 from holodoppler.config import load_config
-from holodoppler.logger import logger, log_mapping
+from holodoppler.logger import get_logger
 from holodoppler.pipelines import pipelines
 
 PREVIEW_PREFIX = "preview_"
+logger = get_logger(__name__)
 
 
 class PipelineMode(str, Enum):
@@ -70,8 +72,9 @@ def _run_pipeline(
 
         raise ValueError(error_msg)
 
-    logger.info("%s: %s", mode.value.capitalize(), file_path)
-    log_mapping("Parameters", parameters)
+    started = perf_counter()
+    logger.info("Starting %s: file=%s, pipeline=%s", mode.value,
+                Path(file_path).expanduser().resolve(), pipeline_name)
 
     def on_warning(code, message):
         logger.warning("%s: %s", code, message)
@@ -84,7 +87,8 @@ def _run_pipeline(
         progress_callback=progress_callback,
         warning_callback=on_warning,
     )
-    logger.info("%s complete: %s", mode.value.capitalize(), file_path)
+    logger.info("%s complete: file=%s, elapsed=%.3fs", mode.value.capitalize(),
+                Path(file_path).expanduser().resolve(), perf_counter() - started)
     return result
 
 

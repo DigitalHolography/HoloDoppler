@@ -14,7 +14,7 @@ from holodoppler import execution, paths
 from holodoppler.cli import command
 from holodoppler.cli.parser import parse_args
 from holodoppler.config.resolver import update_from_cine_metadata, update_from_holo_footer
-from holodoppler.logger import _Formatter, configure_logging, log_mapping, logger
+from holodoppler.logger import _Formatter, configure_logging, logger
 
 
 @pytest.fixture
@@ -42,7 +42,8 @@ def test_dispatch_forwards_original_parameters_and_callbacks(monkeypatch, captur
     assert execution.process(Path("input.holo"), parameters, progress, warning) is result
     progress.assert_called_once_with(1, 2, "batch")
     warning.assert_called_once_with("code", "message")
-    assert "[warning] code: message" in captured_log.getvalue()
+    assert "[warning] [holodoppler.execution] code: message" in captured_log.getvalue()
+    assert f"Starting process: file={Path('input.holo').resolve()}" in captured_log.getvalue()
 
 
 def test_preview_and_unknown_pipeline(monkeypatch):
@@ -110,28 +111,21 @@ def test_metadata_resolution_does_not_leak_between_files():
 
 
 def test_structured_logging_levels_and_tracebacks(captured_log):
-    from dataclasses import dataclass
-
-    @dataclass
-    class Metadata:
-        camera: dict
-
     handlers = list(logger.handlers)
     configure_logging()
     configure_logging()
     assert logger.handlers == handlers
-    log_mapping("Metadata", {"camera": {"fps": 100}, "shape": (2, 3)})
-    log_mapping("Header", Metadata(camera={"fps": 200}))
+    logger.info("Metadata: %s", {"camera": {"fps": 100}, "shape": (2, 3)})
     logger.warning("Careful")
     try:
         raise ValueError("failure")
     except ValueError:
         logger.error("Failed", exc_info=True)
     lines = captured_log.getvalue().splitlines()
-    assert all(re.match(r"\d{2}:\d{2}:\d{2} \[(info|warning|error)\] ", line) for line in lines)
-    assert any("[info]     fps: 100" in line for line in lines)
-    assert any("[info]     fps: 200" in line for line in lines)
-    assert any("[error] Traceback" in line for line in lines)
+    assert all(re.match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \[(info|warning|error)\] \[holodoppler\] ", line) for line in lines)
+    assert sum("Metadata:" in line for line in lines) == 1
+    assert any("Metadata: {'camera': {'fps': 100}, 'shape': (2, 3)}" in line for line in lines)
+    assert any("[error] [holodoppler] Traceback" in line for line in lines)
 
 
 def test_windowed_logging(monkeypatch):
@@ -315,3 +309,83 @@ def test_packaging_uses_canonical_profiles(monkeypatch, tmp_path):
     data_arg = command_line[command_line.index("--add-data") + 1]
     assert str(build_installer.PARAMETERS_DIR) in data_arg
     assert data_arg.endswith("parameters")
+
+
+@pytest.mark.parametrize("gpu", [False, True])
+@pytest.mark.parametrize("fail", [False, True])
+def test_processing_summaries_surround_bar(monkeypatch, captured_log, gpu, fail):
+    import numpy as np
+    from tqdm import tqdm
+    from holodoppler import backend
+    from holodoppler.core import processing
+
+    monkeypatch.setattr(backend, "is_gpu", gpu)
+    monkeypatch.setattr(backend, "get_backend_name", lambda: "cupy" if gpu else "numpy")
+    monkeypatch.setattr(backend, "to_backend", np.asarray)
+    monkeypatch.setattr(backend, "xp", np)
+    monkeypatch.setattr(processing, "tqdm", lambda **kwargs: tqdm(file=captured_log, **kwargs))
+    times = iter([10.0, 12.5])
+    monkeypatch.setattr(processing, "perf_counter", lambda: next(times))
+
+    def process(frames, reference):
+        if fail and frames[0, 0, 0] == 1:
+            raise ValueError("compute failed")
+        return {"value": frames}, reference
+
+    def gpu_batches(reader, indices, size, process_batch, consume, reference, prepare, depth):
+        # Exercise the async branch and its early return without requiring CUDA.
+        consume(0, {"value": np.ones((1, 2, 2))})
+        if fail:
+            raise ValueError("compute failed")
+        consume(1, {"value": np.ones((1, 2, 2))})
+        return reference
+
+    monkeypatch.setattr(processing, "_run_cupy_batches", gpu_batches)
+    reader = SimpleNamespace(file_path=Path("input.holo"),
+                             read_frames=lambda **kwargs: np.full((1, 2, 2), kwargs["first_frame"]))
+
+    def run():
+        processing.run_batches(reader, [0, 1], 1, process, lambda *args: None)
+
+    if fail:
+        with pytest.raises(ValueError, match="compute failed"):
+            run()
+    else:
+        run()
+    output = captured_log.getvalue()
+    status = "failed" if fail else "complete"
+    assert output.index("Starting batch processing") < output.index("Processing (")
+    assert output.rindex("Processing (") < output.index(f"Batch processing {status}:")
+    assert "elapsed=2.500s" in output
+    assert f"completed={1 if fail else 2}/2" in output
+    assert "[holodoppler.core.processing]" in output
+
+
+def test_saving_uses_module_logger(tmp_path, captured_log, capsys):
+    import json
+    import numpy as np
+    import h5py
+    import yaml
+    from holodoppler import saving
+
+    saving.save_json(tmp_path / "params.json", {"batch_size": 4})
+    saving.save_yaml(tmp_path / "params.yaml", {"batch_size": 4})
+    file = saving.save_h5(tmp_path, {"moment0": np.ones((2, 2))}, git_commit="test")
+    assert json.loads((tmp_path / "params.json").read_text()) == {"batch_size": 4}
+    assert yaml.safe_load((tmp_path / "params.yaml").read_text()) == {"batch_size": 4}
+    with h5py.File(file) as saved:
+        np.testing.assert_array_equal(saved["moment0"], np.ones((2, 2)))
+    output = captured_log.getvalue()
+    assert "[info] [holodoppler.saving] Saved JSON:" in output
+    assert "[info] [holodoppler.saving] Saved YAML:" in output
+    assert "[info] [holodoppler.saving] H5 saved:" in output
+    assert capsys.readouterr().out == ""
+
+
+def test_saving_errors_use_error_level(tmp_path, captured_log, monkeypatch):
+    import numpy as np
+    from holodoppler import saving
+
+    monkeypatch.setattr(saving, "save_image_png", Mock(side_effect=OSError("disk full")))
+    saving.save_pngs(tmp_path, {"moment0": np.ones((2, 2))})
+    assert "[error] [holodoppler.saving] Failed to save PNG moment0: disk full" in captured_log.getvalue()

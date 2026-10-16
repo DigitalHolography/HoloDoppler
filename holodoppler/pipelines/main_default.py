@@ -1,4 +1,5 @@
-from holodoppler.logger import logger, log_mapping
+from holodoppler.logger import get_logger
+
 import numpy as np
 
 from holodoppler import backend
@@ -48,6 +49,9 @@ from holodoppler.file_reader import get_reader
 from holodoppler.saving import (
     save_outputs,
 )
+
+
+logger = get_logger(__name__)
 
 
 def _frame_stack(frames):
@@ -670,7 +674,7 @@ def preview(file_path, parameters):
     logger.info("Loading preview: %s", file_path)
 
     if file_reader.extension == ".holo":
-        log_mapping("File metadata", file_reader.header)
+        logger.info("File metadata: %s", vars(file_reader.header))
 
         parameters = update_from_holo_footer(
             parameters,
@@ -678,7 +682,7 @@ def preview(file_path, parameters):
         )
 
     if file_reader.extension == ".cine":
-        log_mapping("File metadata", file_reader.header)
+        logger.info("File metadata: %s", vars(file_reader.header))
 
         parameters = update_from_cine_metadata(
             parameters,
@@ -776,7 +780,7 @@ def process(file_path, parameters, progress_callback=None):
     file_reader = get_reader(file_path)
 
     if file_reader.extension == ".holo":
-        log_mapping("File metadata", file_reader.header)
+        logger.info("File metadata: %s", vars(file_reader.header))
 
         parameters = update_from_holo_footer(
             parameters,
@@ -784,7 +788,7 @@ def process(file_path, parameters, progress_callback=None):
         )
 
     if file_reader.extension == ".cine":
-        log_mapping("File metadata", file_reader.header)
+        logger.info("File metadata: %s", vars(file_reader.header))
 
         parameters = update_from_cine_metadata(
             parameters,
@@ -893,7 +897,7 @@ def process(file_path, parameters, progress_callback=None):
         progress_callback=progress_callback,
     )
 
-    log_mapping("Output datasets", {key: value.shape for key, value in output.items()})
+    logger.info("Output datasets: %s", {key: value.shape for key, value in output.items()})
 
     if auto_coefs is not None:
         output["shack_hartmann_autofocus_zernike_coefs"] = backend.to_numpy(auto_coefs)

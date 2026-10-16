@@ -1,4 +1,6 @@
-from holodoppler.logger import logger
+from holodoppler.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def update_from_holo_footer(

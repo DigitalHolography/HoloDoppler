@@ -2,7 +2,9 @@
 
 from numbers import Integral, Real
 
-from holodoppler.logger import log_mapping
+from holodoppler.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def validate_main_parameters(parameters):
@@ -390,5 +392,5 @@ def validate_main_parameters(parameters):
             f"Parameter 'save_averaged_spectrogram' must be a boolean; got {value!r} ({type(value).__name__})."
         )
 
-    log_mapping("Resolved parameters", parameters)
+    logger.info("Resolved parameters: %s", parameters)
     return parameters

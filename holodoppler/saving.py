@@ -19,8 +19,11 @@ import yaml
 from PIL import Image
 
 from holodoppler.get_version import get_version
+from holodoppler.logger import get_logger
 from holodoppler.core.image_utils import resize_frames
 
+
+logger = get_logger(__name__)
 
 def ensure_directory(path: Path) -> Path:
     """Create a directory and report useful Windows filesystem diagnostics."""
@@ -31,16 +34,12 @@ def ensure_directory(path: Path) -> Path:
     except OSError as exc:
         absolute_path = path.resolve(strict=False)
 
-        print("\n[ensure_directory] FAILED")
-        print(f"Requested path : {path}")
-        print(f"Absolute path  : {absolute_path}")
-        print(f"Current cwd    : {Path.cwd()}")
-        print(f"Exists         : {absolute_path.exists()}")
-        print(f"Is directory   : {absolute_path.is_dir()}")
-        print(f"Is file        : {absolute_path.is_file()}")
-        print(f"Parent         : {absolute_path.parent}")
-        print(f"Parent exists  : {absolute_path.parent.exists()}")
-        print(f"Exception      : {exc!r}")
+        logger.error("Cannot create output directory: %s", {
+            "path": path, "absolute_path": absolute_path, "cwd": Path.cwd(),
+            "exists": absolute_path.exists(), "is_directory": absolute_path.is_dir(),
+            "is_file": absolute_path.is_file(), "parent": absolute_path.parent,
+            "parent_exists": absolute_path.parent.exists(), "error": str(exc),
+        })
 
         raise
 
@@ -431,10 +430,10 @@ def save_pngs(
             else:
                 continue
 
-            print(f"Saved PNG: {name}")
+            logger.info("Saved PNG: %s", path)
 
         except Exception as exc:
-            print(f"Failed to save PNG {name}: {exc}")
+            logger.error(f"Failed to save PNG {name}: {exc}")
 
 
 # ============================================================================
@@ -535,6 +534,7 @@ def save_json(path: Path, value: Any) -> None:
             indent=4,
             ensure_ascii=False,
         )
+    logger.info("Saved JSON: %s", path)
 
 
 def save_yaml(path: Path, value: Any) -> None:
@@ -551,6 +551,7 @@ def save_yaml(path: Path, value: Any) -> None:
             sort_keys=False,
             allow_unicode=True,
         )
+    logger.info("Saved YAML: %s", path)
 
 def save_json_and_yaml(json_path: Path, yaml_path: Path, value: Any) -> None:
     """Save a Python object as YAML and JSON."""
@@ -585,7 +586,7 @@ def save_h5(
 
     selected = None if save_only_list is None else set(save_only_list)
 
-    print(f"Saving H5: {h5_path}")
+    logger.info(f"Saving H5: {h5_path}")
 
     with h5py.File(h5_path, "w") as h5:
 
@@ -642,7 +643,7 @@ def save_h5(
 
     size_gb = h5_path.stat().st_size / (1024**3)
 
-    print(
+    logger.info(
         f"H5 saved: {h5_path} "
         f"({size_gb:.2f} GB)"
     )
@@ -684,6 +685,7 @@ def save_version_files(target_dir: Path) -> None:
         f"Version: {version}\n",
         encoding="utf-8",
     )
+    logger.info("Saved version files: %s, %s", target_dir / "version.txt", target_dir / "git_version.txt")
 
 
 def save_metadata(
@@ -763,9 +765,9 @@ def save_csv_outputs(
         try:
             path = csv_dir / f"{name}.csv"
             save_csv(path, value)
-            print(f"Saved CSV: {path}")
+            logger.info(f"Saved CSV: {path}")
         except Exception as exc:
-            print(f"Failed to save CSV {name}: {exc}")
+            logger.error(f"Failed to save CSV {name}: {exc}")
 
 def create_directories(
     target_dir: Path,
@@ -1072,7 +1074,7 @@ def save_videos(
 
     ffmpeg = find_ffmpeg() if writer == "cmd" else None
     if ffmpeg:
-        print(f"Using FFmpeg: {ffmpeg}")
+        logger.info(f"Using FFmpeg: {ffmpeg}")
 
     for name, value in data_map.items():
         if value is None or not isinstance(value, np.ndarray):
@@ -1096,7 +1098,7 @@ def save_videos(
                 codec=codec,
                 writer=writer,
             )
-            print(
+            logger.info(
                 f"Saved video: {path} "
                 f"({time.time() - start:.1f}s)"
             )
@@ -1140,7 +1142,7 @@ def save_videos_parallel(
     ffmpeg = find_ffmpeg() if writer == "cmd" else None
 
     if ffmpeg:
-        print(f"Using FFmpeg: {ffmpeg}")
+        logger.info(f"Using FFmpeg: {ffmpeg}")
 
     def save_one_video(
         name: str,
@@ -1184,10 +1186,10 @@ def save_videos_parallel(
             jobs.append((name, value, fmt))
 
     if not jobs:
-        print("No videos to save.")
+        logger.info("No videos to save.")
         return
 
-    print(
+    logger.info(
         f"Saving {len(jobs)} video(s) "
         f"using {min(max_workers, len(jobs))} workers..."
     )
@@ -1212,20 +1214,20 @@ def save_videos_parallel(
             try:
                 path, elapsed = future.result()
 
-                print(
+                logger.info(
                     f"Saved video: {path} "
                     f"({elapsed:.1f}s)"
                 )
 
             except Exception as exc:
                 errors.append((name, fmt, exc))
-                print(
+                logger.error(
                     f"Failed to save {name}.{fmt}: {exc}"
                 )
 
     elapsed_total = time.perf_counter() - start_total
 
-    print(
+    logger.info(
         f"Video saving completed in {elapsed_total:.1f}s "
         f"({len(jobs) - len(errors)}/{len(jobs)} successful)"
     )
@@ -1328,7 +1330,7 @@ def save_outputs(
     custom_relative_path:
         Path relative to the default *_HD output directory.
     """
-    start_time = time.time()
+    start_time = time.perf_counter()
     parameters = parameters or {}
 
     default_path = get_default_output_path(file_reader.file_path)
@@ -1384,7 +1386,7 @@ def save_outputs(
 
     create_directories(target_dir)
 
-    print(f"Saving output bundle to: {target_dir}")
+    logger.info("Saving output bundle: file=%s, directory=%s", file_reader.file_path, target_dir)
 
     # FPS.
     fps = calculate_fps(
@@ -1448,5 +1450,5 @@ def save_outputs(
             git_commit=get_git_version(),
         )
 
-    print(f"Saving completed in {time.time() - start_time:.1f} seconds")
+    logger.info("Saving complete: directory=%s, elapsed=%.3fs", target_dir, time.perf_counter() - start_time)
     return target_dir

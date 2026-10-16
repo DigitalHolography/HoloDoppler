@@ -2,14 +2,49 @@
 
 import os
 import sys
+import logging
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from numbers import Integral
+from time import perf_counter
 
 import numpy as np
 from tqdm import tqdm
 
 from holodoppler import backend
+from holodoppler.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+@contextmanager
+def _processing_progress(file_reader, total, batch_size, workers, cupy_async, depth):
+    """Keep start/end summaries outside the progress bar, including on failure."""
+    file_path = getattr(file_reader, "file_path", "unknown")
+    backend_name = backend.get_backend_name()
+    logger.info(
+        "Starting batch processing: file=%s, backend=%s, batches=%s, batch_size=%s, "
+        "workers=%s, cupy_async=%s, prefetch_depth=%s",
+        file_path, backend_name, total, batch_size, workers,
+        cupy_async if backend.is_gpu else False, depth if backend.is_gpu and cupy_async else 0,
+    )
+    started = perf_counter()
+    failed = True
+    progress = None
+    try:
+        with tqdm(total=total, desc=f"Processing ({backend_name})") as progress:
+            yield progress
+        failed = False
+    finally:
+        completed = progress.n if progress is not None else 0
+        elapsed = perf_counter() - started
+        logger.log(
+            logging.ERROR if failed else logging.INFO,
+            "Batch processing %s: file=%s, backend=%s, completed=%s/%s, elapsed=%.3fs, %.2f batches/s",
+            "failed" if failed else "complete", file_path, backend_name,
+            completed, total, elapsed, completed / elapsed if elapsed else 0,
+        )
 
 
 def _worker_count(workers):
@@ -164,6 +199,8 @@ def run_batches(
         raise ValueError("cupy_prefetch_depth must be at least one")
     total = len(batch_indices)
     if not total:
+        logger.info("No complete batches to process: file=%s, batch_size=%s",
+                    getattr(file_reader, "file_path", "unknown"), batch_size)
         return registration_ref
     workers = 0 if backend.is_gpu else _worker_count(workers)
     starts = iter(batch_indices)
@@ -185,7 +222,7 @@ def run_batches(
             if backend.is_gpu:
                 backend.xp.cuda.get_current_stream().synchronize()
 
-    with tqdm(total=total, desc=f"Processing ({backend.get_backend_name()})") as progress:
+    with _processing_progress(file_reader, total, batch_size, workers, cupy_async, cupy_prefetch_depth) as progress:
         def consume(index, result):
             consume_result(index, result)
             progress.update(1)

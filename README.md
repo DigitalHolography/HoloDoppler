@@ -86,8 +86,16 @@ User data lives in `%APPDATA%/HoloDoppler/<version>` on Windows and
 `~/.local/share/HoloDoppler/<version>`). Existing `holodopplerpython` data is
 copied when the new directory does not exist.
 
-Execution and default-pipeline console messages use `HH:MM:SS [info] message`,
-with `[warning]` and `[error]` levels and indented parameter/metadata fields.
+Execution, default-pipeline, and saving messages use
+`YYYY-MM-DD HH:MM:SS [info] [holodoppler.module] message`, with `[warning]`
+and `[error]` levels. Each parameter/metadata dictionary occupies one condensed
+record. Batch processing logs its settings before the progress bar and its
+completed batch count and elapsed time afterward, including on failure.
 Pass `--tracebacks` to `process` or `preview` to include exception tracebacks.
 Batch processing continues after failed files and returns a failure exit code
 if any file failed. UI Stop takes effect after the current file.
+
+`parameters/loaded_parameters.json` in user data stores the UI's working
+parameters, including edits not saved to a named profile. Windowed executables
+redirect their console streams to `logs/runtime.log`. The current source does
+not create a separate `execution.log`; older builds may have left one behind.
