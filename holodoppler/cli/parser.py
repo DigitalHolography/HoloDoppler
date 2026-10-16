@@ -4,7 +4,9 @@ import argparse
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union  # noqa: UP035
 
-DEFAULT_PARAMETERS_PATH = Path("parameters/default_parameters_default.yaml")
+from holodoppler.paths import DEFAULT_PARAMETERS_NAME, app_settings_dir
+
+DEFAULT_PARAMETERS_PATH = app_settings_dir() / "parameters" / DEFAULT_PARAMETERS_NAME
 DEBUG_CONFIG_FILENAME = ".debug_paths.json"
 GUI_COMMAND = "gui"
 
@@ -72,7 +74,7 @@ def _parse_dynamic_options(
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     """Add options shared by preview and process."""
     parser.add_argument(
-        "--verbose",
+        "--tracebacks",
         action="store_true",
         help="Print the full traceback in case of error.",
     )
@@ -194,7 +196,7 @@ def parse_args(
     args.dynamic_options = dynamic_options
 
     # In batch mode, a single positional argument is the config file.
-    if args.batch is not None and args.config is None and args.filepath is not None:
+    if getattr(args, "batch", None) is not None and args.config is None and args.filepath is not None:
         args.config = args.filepath
         args.filepath = None
 

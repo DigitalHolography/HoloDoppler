@@ -1,110 +1,22 @@
 """HoloDoppler command-line execution module."""
 
 import json
-import sys
-from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional
 
 from holodoppler.config import load_config
 from .parser import (
-    DEFAULT_PARAMETERS_PATH,
     DEBUG_CONFIG_FILENAME,
     GUI_COMMAND,
     parse_args,
 )
-from holodoppler.pipelines import pipelines
+from holodoppler.execution import PipelineMode, preview, process, run_batch
+from holodoppler.logger import configure_logging, logger
+from holodoppler.paths import default_parameters_path
 
-
-PREVIEW_PREFIX = "preview_"
 
 EXIT_SUCCESS = 0
 EXIT_FAILURE = 1
-
-
-class PipelineMode(str, Enum):
-    """Application pipeline modes."""
-
-    PREVIEW = "preview"
-    PROCESS = "process"
-
-
-def _run_pipeline(
-    file_path: Path,
-    parameters: Union[dict, Path, str],
-    mode: PipelineMode,
-    *,
-    progress_callback=None,
-    warning_callback=None,
-) -> Any:
-    """Execute a pipeline with the given parameters."""
-    if not isinstance(parameters, dict):
-        parameters = load_config(parameters)
-
-    if "pipeline_name" not in parameters:
-        raise ValueError(
-            "Parameters should have a 'pipeline_name' field. "
-            f"Available pipeline names: {list(pipelines.keys())}"
-        )
-
-    if mode == PipelineMode.PREVIEW:
-        pipeline_name = f"{PREVIEW_PREFIX}{parameters['pipeline_name']}"
-    else:
-        pipeline_name = parameters["pipeline_name"]
-
-    pipeline_func: Optional[Callable] = pipelines.get(pipeline_name)
-
-    if pipeline_func is None:
-        available_pipelines = [
-            name for name in pipelines if not name.startswith(PREVIEW_PREFIX)
-        ]
-        preview_pipelines = [
-            name[len(PREVIEW_PREFIX):]
-            for name in pipelines
-            if name.startswith(PREVIEW_PREFIX)
-        ]
-
-        if mode == PipelineMode.PREVIEW:
-            error_msg = (
-                f"Unknown preview pipeline: '{pipeline_name}'.\n"
-                f"Available preview pipelines: {preview_pipelines}\n"
-                f"Available process pipelines: {available_pipelines}"
-            )
-        else:
-            error_msg = (
-                f"Unknown pipeline: '{pipeline_name}'.\n"
-                f"Available pipelines: {available_pipelines}"
-            )
-
-        raise ValueError(error_msg)
-
-    return pipeline_func(
-        file_path,
-        parameters,
-        progress_callback=progress_callback,
-        warning_callback=warning_callback,
-    )
-
-
-def preview(file_path: Path, parameters: Union[dict, Path, str]) -> Any:
-    """Run the preview pipeline."""
-    return _run_pipeline(file_path, parameters, PipelineMode.PREVIEW)
-
-
-def process(
-    file_path: Path,
-    parameters: Union[dict, Path, str],
-    progress_callback: Optional[Callable[[int, int, str], None]] = None,
-    warning_callback: Optional[Callable[[str, str], None]] = None,
-) -> Any:
-    """Run the process pipeline."""
-    return _run_pipeline(
-        file_path,
-        parameters,
-        PipelineMode.PROCESS,
-        progress_callback=progress_callback,
-        warning_callback=warning_callback,
-    )
 
 
 def _load_debug_config() -> Dict[str, str]:
@@ -118,7 +30,7 @@ def _load_debug_config() -> Dict[str, str]:
         with debug_paths_file.open("r", encoding="utf-8") as file:
             return json.load(file)
     except (json.JSONDecodeError, OSError) as exc:
-        print(f"Warning: Could not load debug config: {exc}", file=sys.stderr)
+        logger.warning("Could not load debug config: %s", exc)
         return {}
 
 
@@ -150,12 +62,7 @@ def _resolve_config_path(provided_path: Optional[Path]) -> Path:
             raise SystemExit(f"Error: Config file does not exist: {provided_path}")
         return provided_path
 
-    if DEFAULT_PARAMETERS_PATH.is_file():
-        return DEFAULT_PARAMETERS_PATH
-
-    raise SystemExit(
-        f"Error: No config file provided and {DEFAULT_PARAMETERS_PATH} not found."
-    )
+    return default_parameters_path()
 
 
 def _read_batch_file(batch_file: Path) -> List[Path]:
@@ -173,10 +80,9 @@ def _read_batch_file(batch_file: Path) -> List[Path]:
                 path = Path(line).expanduser().resolve()
 
                 if not path.is_file():
-                    print(
-                        f"Warning: Line {line_num} in batch file "
+                    logger.warning(
+                        f"Line {line_num} in batch file "
                         f"'{batch_file}': File does not exist: {path}. Skipping.",
-                        file=sys.stderr,
                     )
                     continue
 
@@ -200,42 +106,8 @@ def _batch_process(
     mode: PipelineMode,
 ) -> int:
     """Process multiple files and return a failure exit code if any fail."""
-    success_count = 0
-    errors: List[Tuple[Path, str]] = []
-    total = len(file_paths)
-
-    for idx, file_path in enumerate(file_paths, 1):
-        print(f"Processing file {idx}/{total}: {file_path.name}")
-
-        try:
-            result = _run_pipeline(file_path, parameters.copy(), mode)
-
-            if result is not None:
-                print(
-                    f"✓ Completed: {file_path.name} "
-                    f"(result: {type(result).__name__})"
-                )
-            else:
-                print(f"✓ Completed: {file_path.name} (no result)")
-
-            success_count += 1
-
-        except Exception as exc:
-            errors.append((file_path, str(exc)))
-            print(f"✗ Failed: {file_path.name} - {exc}", file=sys.stderr)
-
-    print(f"\n{'=' * 50}")
-    print(f"Batch processing complete ({mode.value} mode):")
-    print(f"  Total files: {total}")
-    print(f"  Successful:  {success_count}")
-    print(f"  Failed:      {len(errors)}")
-
-    if errors:
-        print("\nFailed files:")
-        for path, error in errors:
-            print(f"  - {path.name}: {error}")
-
-    return EXIT_FAILURE if errors else EXIT_SUCCESS
+    summary = run_batch(file_paths, parameters, mode)
+    return EXIT_FAILURE if summary.errors else EXIT_SUCCESS
 
 
 def _apply_cli_overrides(parameters: dict, args) -> dict:
@@ -258,6 +130,8 @@ def _apply_cli_overrides(parameters: dict, args) -> dict:
 
 def main(argv: Optional[List[str]] = None) -> int:
     """CLI entry point."""
+    configure_logging()
+    args = None
     try:
         args = parse_args(argv)
 
@@ -271,7 +145,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         parameters = _apply_cli_overrides(load_config(config_path), args)
 
         if args.batch is not None:
-            print(f"Batch mode activated. Reading files from: {args.batch}")
+            logger.info("Reading batch files from: %s", args.batch)
 
             mode = (
                 PipelineMode.PREVIEW
@@ -280,41 +154,25 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
 
             file_paths = _read_batch_file(args.batch)
-            return _batch_process(file_paths, parameters, mode)
+            summary = run_batch(file_paths, parameters, mode, tracebacks=args.tracebacks)
+            return EXIT_FAILURE if summary.errors else EXIT_SUCCESS
 
         input_path = _resolve_input_path(args.filepath)
 
         if args.command == "preview":
-            result = preview(input_path, parameters)
-            action = "Preview"
+            preview(input_path, parameters)
         else:
-            result = process(input_path, parameters)
-            action = "Process"
-
-        if result is not None:
-            print(f"{action} completed successfully. Result type: {type(result).__name__}")
-        else:
-            print(f"{action} completed successfully (no result returned)")
+            process(input_path, parameters)
 
         return EXIT_SUCCESS
 
     except SystemExit:
         raise
     except KeyboardInterrupt:
-        print("\nOperation cancelled by user.", file=sys.stderr)
+        logger.warning("Operation cancelled by user.")
         return EXIT_FAILURE
     except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-
-        # Verbose traceback is handled below by the CLI wrapper if needed.
-        import traceback
-
-        if argv is None:
-            argv = sys.argv[1:]
-
-        if "--verbose" in argv:
-            traceback.print_exc(file=sys.stderr)
-
+        logger.error("%s", exc, exc_info=bool(args and args.tracebacks))
         return EXIT_FAILURE
 
 

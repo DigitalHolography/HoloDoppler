@@ -41,9 +41,10 @@ include = ["holodoppler*"]
 [tool.setuptools.package-data]
 holodoppler = [
   "ui/assets/*",
-  "ui/defaults/*",
-  "parameters/*",
 ]
 
 [project.scripts]
 holodoppler = "holodoppler.__main__:main"
+
+[tool.setuptools.data-files]
+"share/HoloDoppler/parameters" = ["parameters/*.yaml"]

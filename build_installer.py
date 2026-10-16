@@ -12,16 +12,15 @@ import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
 
+from holodoppler.paths import APPDATA_SLUG
 
 APP_NAME = "HoloDoppler"
 APP_EXE_NAME = f"{APP_NAME}.exe"
 APP_PUBLISHER = "HoloDoppler"
-APPDATA_SLUG = "holodopplerpython"
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 PACKAGE_DIR = PROJECT_ROOT / "holodoppler"
 PARAMETERS_DIR = PROJECT_ROOT / "parameters"
-DEFAULTS_DIR = PACKAGE_DIR / "ui" / "defaults"
 APP_ICON_SOURCE = PACKAGE_DIR / "ui" / "assets" / "logo.png"
 PYPROJECT_FILE = PROJECT_ROOT / "pyproject.toml"
 VERSION_FILE = PROJECT_ROOT / "version_holodoppler.txt"
@@ -277,34 +276,22 @@ def _ensure_icon() -> Path:
 
 
 def _parameter_preset_files() -> list[Path]:
-    if not DEFAULTS_DIR.is_dir():
-        raise FileNotFoundError(f"Bundled defaults directory not found: {DEFAULTS_DIR}")
+    if not PARAMETERS_DIR.is_dir():
+        raise FileNotFoundError(f"Bundled defaults directory not found: {PARAMETERS_DIR}")
 
-    files = _parameter_files_in(DEFAULTS_DIR)
+    files = _parameter_files_in(PARAMETERS_DIR)
     if not files:
-        raise FileNotFoundError(f"No bundled parameter files found in {DEFAULTS_DIR}")
+        raise FileNotFoundError(f"No bundled parameter files found in {PARAMETERS_DIR}")
     return files
 
 
 def _validate_parameter_presets() -> None:
-    if not PARAMETERS_DIR.is_dir():
-        return
-
-    bundled_by_name = {path.name: path for path in _parameter_preset_files()}
-    repository_files = _parameter_files_in(PARAMETERS_DIR)
-    missing = [path.name for path in repository_files if path.name not in bundled_by_name]
-    mismatched = [
-        path.name
-        for path in repository_files
-        if path.name in bundled_by_name and _read_parameter_file(path) != _read_parameter_file(bundled_by_name[path.name])
-    ]
-    if missing or mismatched:
-        details = []
-        if missing:
-            details.append("missing from holodoppler/ui/defaults: " + ", ".join(missing))
-        if mismatched:
-            details.append("different from parameters/: " + ", ".join(mismatched))
-        raise RuntimeError("Bundled parameter presets are not in sync: " + "; ".join(details))
+    files = _parameter_preset_files()
+    if not any(path.name == "default_parameters_default.yaml" for path in files):
+        raise FileNotFoundError("Missing default_parameters_default.yaml in parameters/")
+    for path in files:
+        if not isinstance(_read_parameter_file(path), dict):
+            raise ValueError(f"Parameter preset must contain an object: {path}")
 
 
 def _copy_parameter_presets(target_dir: Path) -> None:
@@ -381,11 +368,7 @@ def _write_pyinstaller_entrypoint() -> Path:
             from __future__ import annotations
 
             import multiprocessing
-            import os
-            import subprocess
             import sys
-            import traceback
-            from pathlib import Path
 
             _stdio_log = None
 
@@ -400,14 +383,9 @@ def _write_pyinstaller_entrypoint() -> Path:
                 if _stream_is_writable(sys.stdout) and _stream_is_writable(sys.stderr):
                     return
 
-                try:
-                    from importlib.metadata import version
-                    app_version = version("holodoppler")
-                except Exception:
-                    app_version = "dev"
-
-                appdata = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
-                log_dir = appdata / "holodopplerpython" / app_version / "logs"
+                from holodoppler.paths import app_settings_dir, initialize_parameters
+                initialize_parameters()
+                log_dir = app_settings_dir() / "logs"
                 log_dir.mkdir(parents=True, exist_ok=True)
                 _stdio_log = (log_dir / "runtime.log").open("a", encoding="utf-8", buffering=1)
                 _stdio_log.write("\\n--- HoloDoppler runtime started ---\\n")
@@ -420,16 +398,12 @@ def _write_pyinstaller_entrypoint() -> Path:
 
             _configure_standard_streams()
 
-            from holodoppler.cli import main as cli_main
-            from holodoppler.ui import UI
+            from holodoppler.__main__ import main as application_main
+            from holodoppler.paths import initialize_parameters
 
             def main() -> int:
-
-                if len(sys.argv) == 1 or (len(sys.argv) > 1 and sys.argv[1] == "gui"):
-                    UI().mainloop()
-                    return 0
-
-                return cli_main()
+                initialize_parameters()
+                return application_main()
 
             if __name__ == "__main__":
                 multiprocessing.freeze_support()
@@ -437,16 +411,10 @@ def _write_pyinstaller_entrypoint() -> Path:
                     raise SystemExit(main())
                 except SystemExit:
                     raise
-                except Exception:
-                    details = traceback.format_exc()
-                    if sys.stderr is not None:
-                        print(details, file=sys.stderr)
-                    if len(sys.argv) > 1:
-                        Path.cwd().joinpath("holodoppler-error.log").write_text(
-                            details, encoding="utf-8"
-                        )
-                        raise SystemExit(1)
-                    raise
+                except Exception as exc:
+                    from holodoppler.logger import logger
+                    logger.error("%s", exc, exc_info="--tracebacks" in sys.argv)
+                    raise SystemExit(1)
             """
         ).lstrip(),
         encoding="utf-8",
@@ -484,6 +452,8 @@ def _run_pyinstaller(console: bool) -> None:
         "--runtime-hook",
         CUDA_RUNTIME_HOOK,
     ]
+
+    command.extend(["--add-data", f"{PARAMETERS_DIR}{os.pathsep}parameters"])
 
     for hidden_import in FROZEN_HIDDEN_IMPORTS:
         command.extend(["--hidden-import", hidden_import])
@@ -605,14 +575,8 @@ def _write_inno_script(app_version: str) -> Path:
         [Tasks]
         Name: "desktopicon"; Description: "{{cm:CreateDesktopIcon}}"; GroupDescription: "{{cm:AdditionalIcons}}"
 
-        [Dirs]
-        Name: "{{userappdata}}\\{{#AppDataSlug}}\\{{#AppVersion}}"; Flags: uninsneveruninstall
-        Name: "{{userappdata}}\\{{#AppDataSlug}}\\{{#AppVersion}}\\logs"; Flags: uninsneveruninstall
-        Name: "{{userappdata}}\\{{#AppDataSlug}}\\{{#AppVersion}}\\parameters"; Flags: uninsneveruninstall
-
         [Files]
         Source: "{{#PayloadDir}}\\*"; DestDir: "{{app}}"; Flags: ignoreversion recursesubdirs createallsubdirs
-        Source: "{{#ParametersDir}}\\*"; DestDir: "{{userappdata}}\\{{#AppDataSlug}}\\{{#AppVersion}}\\parameters"; Flags: ignoreversion onlyifdoesntexist recursesubdirs createallsubdirs uninsneveruninstall
 
         [Icons]
         Name: "{{autoprograms}}\\{{#AppShortcutName}}"; Filename: "{{app}}\\{{#AppExeName}}"; WorkingDir: "{{app}}"; IconFilename: "{{app}}\\{{#AppExeName}}"
@@ -698,7 +662,7 @@ def _verify_appdata_parameters(app_version: str) -> list[Path]:
     missing = [name for name in expected if not (parameters_dir / name).is_file()]
     if missing:
         raise RuntimeError(
-            "Installer did not seed the expected AppData parameter files:\n"
+            "Application did not seed the expected AppData parameter files:\n"
             + "\n".join(str(parameters_dir / name) for name in missing)
         )
     return [parameters_dir / name for name in expected]
@@ -726,6 +690,7 @@ def _verify_installer(
     try:
         _run_command(install_command)
         verified_files: list[Path] = []
+        _run_command([install_dir / APP_EXE_NAME, "--help"])
         verified_parameters = _verify_appdata_parameters(app_version)
         tests = ["install", "ffmpeg"]
         if smoke_inputs is not None:

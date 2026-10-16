@@ -1,3 +1,6 @@
+from holodoppler.logger import logger
+
+
 def update_from_holo_footer(
     parameters,
     holofooter,
@@ -9,6 +12,7 @@ def update_from_holo_footer(
 
     The original function name is retained for compatibility.
     """
+    parameters = dict(parameters)
     if holofooter is None:
         return parameters
 
@@ -59,7 +63,7 @@ def update_from_holo_footer(
                 ] = "AngularSpectrum"
 
             else:
-                print(
+                logger.warning(
                     "Couldn't parse spatial transform name "
                     "in HoloVibes footer "
                     f"({holovibes_transform!r}); "
@@ -127,7 +131,7 @@ def update_from_holo_footer(
         TypeError,
         ValueError,
     ) as exc:
-        print(
+        logger.warning(
             f"Issue from HoloVibes footer: {exc}"
         )
 
@@ -139,6 +143,8 @@ def update_from_cine_metadata(
         parameters,
         metadata
     ):
+
+    parameters = dict(parameters)
 
     # ------------------------------------------------------------------
     # Pixel pitch
@@ -190,14 +196,14 @@ def resolve_metadata(parameters, file_reader):
     Parameters
     ----------
     parameters:
-        Processing parameters. Mutated in place and returned.
+        Processing parameters. Never modified.
     file_reader:
         An open reader; its ``extension`` selects the metadata source.
 
     Returns
     -------
     dict
-        The same parameters mapping.
+        A mapping with resolved metadata values.
     """
     extension = getattr(file_reader, "extension", None)
 

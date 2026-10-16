@@ -8,8 +8,9 @@ from typing import Any
 
 import yaml
 
-from .constants import APP_SETTINGS_NAME, DEFAULT_PARAMETERS_NAME, LOADED_PARAMETERS_NAME
-from .paths import app_settings_dir, bundled_defaults_dir, get_package_version, legacy_app_settings_dir, repository_parameters_dir
+from holodoppler.paths import APP_SETTINGS_NAME, DEFAULT_PARAMETERS_NAME, LOADED_PARAMETERS_NAME
+from holodoppler.paths import app_settings_dir, initialize_parameters
+from holodoppler.get_version import get_version
 
 
 PARAMETER_SUFFIXES = (".json", ".yaml", ".yml")
@@ -36,9 +37,7 @@ class SettingsStore:
         self.loaded_parameters_path = self.parameters_dir / LOADED_PARAMETERS_NAME
 
     def initialize(self) -> None:
-        self._migrate_legacy_current_version()
-        self.parameters_dir.mkdir(parents=True, exist_ok=True)
-        self._seed_default_parameters()
+        self.parameters_dir = initialize_parameters()
         self._write_version_file()
 
         state = self.load_state()
@@ -51,7 +50,7 @@ class SettingsStore:
         state.setdefault("active_tab", "minimal")
         state["active_tab"] = _normalized_tab_name(state["active_tab"])
         state["window_geometries"] = self._normalized_window_geometries(state)
-        state["app_version"] = get_package_version()
+        state["app_version"] = get_version()
         self.save_state(state)
 
     def load_state(self) -> dict[str, Any]:
@@ -87,17 +86,13 @@ class SettingsStore:
         return self.selected_parameters_path().name
 
     def load_current_parameters(self) -> dict[str, Any]:
-        return _with_spectral_cube_defaults(
-            _read_parameter_object(self.loaded_parameters_path)
-        )
+        return _read_parameter_object(self.loaded_parameters_path)
 
     def load_selected_parameters(self) -> dict[str, Any]:
-        return _with_spectral_cube_defaults(
-            _read_parameter_object(self.selected_parameters_path())
-        )
+        return _read_parameter_object(self.selected_parameters_path())
 
     def load_parameters(self, path: Path) -> dict[str, Any]:
-        return _with_spectral_cube_defaults(_read_parameter_object(path))
+        return _read_parameter_object(path)
 
     def select_parameters(self, path: Path) -> Path:
         parameter_path = self._copy_into_appdata(path) if not self._is_in_parameters_dir(path) else path
@@ -197,7 +192,7 @@ class SettingsStore:
 
     def _default_state(self) -> dict[str, Any]:
         return {
-            "app_version": get_package_version(),
+            "app_version": get_version(),
             "theme": "dark",
             "selected_parameters_path": str(self._default_parameters_path()),
             "loaded_parameters_path": str(self.loaded_parameters_path),
@@ -209,13 +204,6 @@ class SettingsStore:
             "recent_inputs": [],
         }
 
-    def _migrate_legacy_current_version(self) -> None:
-        legacy_dir = legacy_app_settings_dir()
-        if self.base_dir.exists() or not legacy_dir.exists() or legacy_dir == self.base_dir:
-            return
-        self.base_dir.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(legacy_dir, self.base_dir)
-
     def _normalized_selected_parameters_path(self, state: dict[str, Any]) -> Path:
         previous_default = state.get("default_parameters_name")
         previous_default_name = previous_default if isinstance(previous_default, str) else LEGACY_DEFAULT_PARAMETERS_NAME
@@ -226,9 +214,6 @@ class SettingsStore:
             selected_path = Path(raw_path)
             if should_migrate_default and selected_path.name == previous_default_name:
                 return self._default_parameters_path()
-            if self._is_preset_parameters_path(selected_path):
-                return selected_path
-
             candidate = self.parameters_dir / selected_path.name
             if should_migrate_default and candidate.name == previous_default_name:
                 return self._default_parameters_path()
@@ -246,22 +231,11 @@ class SettingsStore:
 
         return self._default_parameters_path()
 
-    def _seed_default_parameters(self) -> None:
-        for source_path in self._default_parameter_sources():
-            target_path = self.parameters_dir / source_path.name
-            if not target_path.exists():
-                shutil.copy2(source_path, target_path)
-
     def _default_parameters_path(self) -> Path:
         preferred = self.parameters_dir / DEFAULT_PARAMETERS_NAME
-        if preferred.is_file():
-            return preferred
-        files = self.parameter_files()
-        if files:
-            return files[0]
-        fallback = self.parameters_dir / DEFAULT_PARAMETERS_NAME
-        self._write_parameters(fallback, {})
-        return fallback
+        if not preferred.is_file():
+            raise FileNotFoundError(f"Default parameters not found: {preferred}")
+        return preferred
 
     def _ensure_loaded_parameters(self, source_path: Path) -> None:
         if self.loaded_parameters_path.is_file():
@@ -270,10 +244,7 @@ class SettingsStore:
                 return
             except ValueError:
                 pass
-        if source_path.is_file():
-            self._write_parameters(self.loaded_parameters_path, _read_parameter_object(source_path))
-        else:
-            self._write_parameters(self.loaded_parameters_path, {})
+        self._write_parameters(self.loaded_parameters_path, _read_parameter_object(source_path))
 
     @staticmethod
     def _normalized_window_geometries(state: dict[str, Any]) -> dict[str, str]:
@@ -284,18 +255,6 @@ class SettingsStore:
             raw_geometry = geometries.get(tab_name)
             normalized[tab_name] = raw_geometry if isinstance(raw_geometry, str) and _is_geometry_string(raw_geometry) else default_geometry
         return normalized
-
-    def _default_parameter_sources(self) -> list[Path]:
-        sources: list[Path] = []
-        seen_names: set[str] = set()
-        for directory in (repository_parameters_dir(), bundled_defaults_dir()):
-            if not directory.is_dir():
-                continue
-            for path in _iter_parameter_files(directory):
-                if path.name not in seen_names:
-                    sources.append(path)
-                    seen_names.add(path.name)
-        return sources
 
     def _copy_into_appdata(self, path: Path) -> Path:
         source_path = path.expanduser().resolve()
@@ -312,14 +271,14 @@ class SettingsStore:
         state["selected_parameters_path"] = str(selected_path)
         state["loaded_parameters_path"] = str(self.loaded_parameters_path)
         state["current_parameters_path"] = str(self.loaded_parameters_path)
-        state["app_version"] = get_package_version()
+        state["app_version"] = get_version()
         self.save_state(state)
 
     def _update_loaded_parameter(self) -> None:
         state = self.load_state()
         state["loaded_parameters_path"] = str(self.loaded_parameters_path)
         state["current_parameters_path"] = str(self.loaded_parameters_path)
-        state["app_version"] = get_package_version()
+        state["app_version"] = get_version()
         self.save_state(state)
 
     def _is_preset_parameters_path(self, path: Path) -> bool:
@@ -338,7 +297,7 @@ class SettingsStore:
         return True
 
     def _write_version_file(self) -> None:
-        (self.base_dir / "version.txt").write_text(get_package_version(), encoding="utf-8")
+        (self.base_dir / "version.txt").write_text(get_version(), encoding="utf-8")
 
     @staticmethod
     def _write_parameters(path: Path, data: dict[str, Any]) -> None:
@@ -367,14 +326,6 @@ def _read_parameter_object(path: Path) -> dict[str, Any]:
         raise ValueError(f"Invalid parameter file {path}: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"Parameter file must contain an object: {path}")
-    return data
-
-
-def _with_spectral_cube_defaults(data: dict[str, Any]) -> dict[str, Any]:
-    """Expose the default auxiliary pipeline controls in every main profile."""
-    if data.get("pipeline_name") != "spectral_cube":
-        data.setdefault("spectral_cube_enabled", True)
-        data.setdefault("spectral_cube_settings", {})
     return data
 
 

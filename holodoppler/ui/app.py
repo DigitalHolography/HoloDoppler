@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import copy
 import queue
 import threading
-import traceback
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -20,14 +17,15 @@ except ImportError:
     DND_FILES = "DND_Files"
     TkinterDnD = None
 
-from holodoppler.cli import preview, process
+from holodoppler.execution import preview, run_batch
+from holodoppler.logger import configure_logging, logger
+from holodoppler.get_version import get_version
 
 from .advanced import AdvancedView
-from .constants import APP_NAME
+from holodoppler.paths import APP_NAME
 from .file_selection import expand_input_paths
-from .image_utils import load_photo
+from .image_utils import load_photo, logo_path
 from .minimal import MinimalView
-from .paths import logo_path, get_package_version
 from .settings_store import DEFAULT_WINDOW_MINSIZES, SettingsStore
 from .theme import apply_theme
 
@@ -37,8 +35,9 @@ BaseTk = TkinterDnD.Tk if DND_AVAILABLE else tk.Tk
 
 class UI(BaseTk):
     def __init__(self) -> None:
+        configure_logging()
         super().__init__()
-        self.title(APP_NAME + get_package_version())
+        self.title(APP_NAME + get_version())
 
         self.store = SettingsStore()
         self.store.initialize()
@@ -110,11 +109,7 @@ class UI(BaseTk):
             messagebox.showinfo("Run", "Drop a folder or load a .holo, .cine, or .txt input list first.", parent=self)
             return
 
-        try:
-            parameters = copy.deepcopy(self.session_parameters)
-        except Exception as exc:
-            messagebox.showerror("Settings", str(exc), parent=self)
-            return
+        parameters = self.session_parameters
 
         self.stop_event.clear()
         self._start_worker(
@@ -131,11 +126,7 @@ class UI(BaseTk):
     def preview_path(self, path: Path) -> None:
         if self._busy():
             return
-        try:
-            parameters = copy.deepcopy(self.session_parameters)
-        except Exception as exc:
-            messagebox.showerror("Settings", str(exc), parent=self)
-            return
+        parameters = self.session_parameters
         self._start_worker(
             kind="preview",
             target=self._preview_worker,
@@ -150,7 +141,7 @@ class UI(BaseTk):
         except Exception as exc:
             messagebox.showerror("Settings", str(exc), parent=self)
             return
-        self.session_parameters = copy.deepcopy(data)
+        self.session_parameters = data
         self.advanced.refresh_parameter_choices(load_selected=True)
         self.minimal.set_parameter_label(self.store.current_parameters_label())
         self._set_status(f"Loaded settings: {selected_path.name}")
@@ -163,7 +154,7 @@ class UI(BaseTk):
         except Exception as exc:
             messagebox.showerror("Settings", str(exc), parent=self)
             return
-        self.session_parameters = copy.deepcopy(data)
+        self.session_parameters = data
         self.advanced.refresh_parameter_choices(load_selected=True)
         self.minimal.set_parameter_label(self.store.current_parameters_label())
         self._set_status(f"Imported and loaded settings: {imported_path.name}")
@@ -174,7 +165,7 @@ class UI(BaseTk):
         except Exception as exc:
             messagebox.showerror("Settings", str(exc), parent=self)
             return
-        self.session_parameters = copy.deepcopy(data)
+        self.session_parameters = data
         self._set_status(status_message or f"Loaded settings: {self.store.current_parameters_label()}")
 
     def save_current_parameters(self, data: dict[str, Any]) -> None:
@@ -184,7 +175,7 @@ class UI(BaseTk):
         except Exception as exc:
             messagebox.showerror("Settings", str(exc), parent=self)
             return
-        self.session_parameters = copy.deepcopy(data)
+        self.session_parameters = data
         self.advanced.refresh_parameter_choices(load_selected=True)
         self.minimal.set_parameter_label(self.store.current_parameters_label())
         self._set_status(f"Saved settings: {saved_path.name}")
@@ -196,7 +187,7 @@ class UI(BaseTk):
         except Exception as exc:
             messagebox.showerror("Settings", str(exc), parent=self)
             return
-        self.session_parameters = copy.deepcopy(data)
+        self.session_parameters = data
         self.advanced.refresh_parameter_choices(load_selected=True)
         self.minimal.set_parameter_label(self.store.current_parameters_label())
         self._set_status(f"Saved settings: {saved_path.name}")
@@ -238,79 +229,38 @@ class UI(BaseTk):
         self._sync_views()
 
     def _process_worker(self, paths: list[Path], parameters: dict[str, Any]) -> None:
-        total_files = len(paths)
         pulse_not_detected_paths: list[Path] = []
-        self.events.put({"kind": "process_started", "total": total_files})
+        self.events.put({"kind": "process_started", "total": len(paths)})
+
+        def on_progress(completed, total, message=""):
+            self.events.put(dict(kind="file_progress", completed=completed,
+                                 total=total, message=message))
+
+        def on_event(event):
+            if event["kind"] == "batch_progress" and event["pulse_not_detected"]:
+                pulse_not_detected_paths.append(paths[event["completed"] - 1])
+            self.events.put(event)
+
+        def on_result(path, result):
+            self.events.put(dict(kind="processed_preview", path=path,
+                                 image=self._first_m0_frame(result)))
+            on_progress(1, 1, "File complete")
+
         try:
-            for index, path in enumerate(paths, start=1):
-                if self.stop_event.is_set():
-                    self.events.put({"kind": "status", "message": "Stopped"})
-                    break
-
-                self.events.put({"kind": "file_started", "index": index, "total": total_files, "path": path})
-
-                def on_progress(completed: int, total: int, message: str = "") -> None:
-                    self.events.put(
-                        {
-                            "kind": "file_progress",
-                            "completed": completed,
-                            "total": total,
-                            "message": message,
-                        }
-                    )
-
-                pulse_not_detected = False
-
-                def on_warning(code: str, _message: str) -> None:
-                    nonlocal pulse_not_detected
-                    if code == "cardiac_pulse_not_detected":
-                        pulse_not_detected = True
-
-                results = process(
-                    str(path),
-                    copy.deepcopy(parameters),
-                    progress_callback=on_progress,
-                    warning_callback=on_warning,
-                )
-                if pulse_not_detected:
-                    pulse_not_detected_paths.append(path)
-                image = self._first_m0_frame(results)
-                del results
-                self.events.put({"kind": "processed_preview", "path": path, "image": image})
-                completion_message = (
-                    "File complete (pulse not detected)"
-                    if pulse_not_detected
-                    else "File complete"
-                )
-                self.events.put(
-                    {
-                        "kind": "file_progress",
-                        "completed": 1,
-                        "total": 1,
-                        "message": completion_message,
-                    }
-                )
-                self.events.put(
-                    {
-                        "kind": "batch_progress",
-                        "completed": index,
-                        "total": total_files,
-                        "pulse_not_detected": pulse_not_detected,
-                    }
-                )
-
+            summary = run_batch(paths, parameters, progress_callback=on_progress,
+                                event_callback=on_event, result_callback=on_result,
+                                should_stop=self.stop_event.is_set)
+            if pulse_not_detected_paths:
+                self.events.put(dict(kind="pulse_detection_summary", paths=pulse_not_detected_paths))
+            if summary.errors:
+                self.events.put(dict(kind="batch_failed", errors=summary.errors,
+                                     stopped=summary.stopped))
             else:
-                if pulse_not_detected_paths:
-                    self.events.put(
-                        {
-                            "kind": "pulse_detection_summary",
-                            "paths": pulse_not_detected_paths,
-                        }
-                    )
-                else:
-                    self.events.put({"kind": "status", "message": "Processing complete"})
+                message = "Stopped" if summary.stopped else "Processing complete"
+                self.events.put(dict(kind="status", message=message))
         except Exception as exc:
-            self.events.put({"kind": "error", "message": str(exc), "traceback": traceback.format_exc()})
+            logger.error("%s", exc)
+            self.events.put(dict(kind="error", message=str(exc)))
         finally:
             self.events.put({"kind": "worker_done"})
 
@@ -350,7 +300,8 @@ class UI(BaseTk):
             image = preview(str(path), parameters)
             self.events.put({"kind": "preview_result", "path": path, "image": image})
         except Exception as exc:
-            self.events.put({"kind": "error", "message": str(exc), "traceback": traceback.format_exc()})
+            logger.error("%s", exc)
+            self.events.put({"kind": "error", "message": str(exc)})
         finally:
             self.events.put({"kind": "worker_done"})
 
@@ -386,7 +337,9 @@ class UI(BaseTk):
             completed = int(event["completed"])
             total = int(event["total"])
             self.minimal.set_batch_progress(completed, total)
-            if event.get("pulse_not_detected", False):
+            if event.get("failed", False):
+                self.advanced.set_file_failed(completed)
+            elif event.get("pulse_not_detected", False):
                 self.advanced.set_file_pulse_not_detected(completed)
             else:
                 self.advanced.set_file_completed(completed)
@@ -413,31 +366,19 @@ class UI(BaseTk):
                 "All other results, including long-time spectrograms, were saved.",
                 parent=self,
             )
+        elif kind == "file_failed":
+            self._set_status(f"Failed: {event['path'].name}")
+        elif kind == "batch_failed":
+            self._set_status("Stopped with errors" if event["stopped"] else "Processing complete with errors")
+            details = "\n".join(f"{path.name}: {message}" for path, message in event["errors"])
+            messagebox.showerror(APP_NAME, f"Failed files:\n\n{details}", parent=self)
         elif kind == "error":
-            log_path = self._write_error_log(str(event.get("traceback", "")))
             self._set_status("Error")
-            message = str(event.get("message", "Unknown error"))
-            if log_path is not None:
-                message = f"{message}\n\nLog: {log_path}"
-            messagebox.showerror("HoloDoppler", message, parent=self)
+            messagebox.showerror(APP_NAME, str(event.get("message", "Unknown error")), parent=self)
         elif kind == "worker_done":
             self.worker = None
             self.worker_kind = None
             self._sync_views()
-
-    def _write_error_log(self, details: str) -> Path | None:
-        if not details:
-            return None
-        try:
-            log_dir = self.store.base_dir / "logs"
-            log_dir.mkdir(parents=True, exist_ok=True)
-            log_path = log_dir / "ui-errors.log"
-            timestamp = datetime.now().isoformat(timespec="seconds")
-            with log_path.open("a", encoding="utf-8") as file:
-                file.write(f"\n[{timestamp}]\n{details}\n")
-            return log_path
-        except OSError:
-            return None
 
     def _sync_views(self) -> None:
         busy = self._busy()

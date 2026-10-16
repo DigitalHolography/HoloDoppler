@@ -73,3 +73,21 @@ uv run build_installer.py
 ## License
 
 This project is licensed under the GNU General Public License v3.0 only. See [LICENSE](LICENSE).
+
+### Default profiles and logging
+
+Both the CLI and UI seed editable parameter profiles from `parameters/` on first
+use. Missing profiles are copied without overwriting existing files. The default
+profile is `default_parameters_default.yaml`; an explicit CLI configuration takes
+precedence. The UI also remembers its selected profile and working edits.
+
+User data lives in `%APPDATA%/HoloDoppler/<version>` on Windows and
+`$XDG_DATA_HOME/HoloDoppler/<version>` on Linux (by default,
+`~/.local/share/HoloDoppler/<version>`). Existing `holodopplerpython` data is
+copied when the new directory does not exist.
+
+Execution and default-pipeline console messages use `HH:MM:SS [info] message`,
+with `[warning]` and `[error]` levels and indented parameter/metadata fields.
+Pass `--tracebacks` to `process` or `preview` to include exception tracebacks.
+Batch processing continues after failed files and returns a failure exit code
+if any file failed. UI Stop takes effect after the current file.

@@ -70,3 +70,8 @@ def array_to_photo_image(
         image = image.convert("RGB")
     image.thumbnail(max_size, Image.Resampling.LANCZOS)
     return ImageTk.PhotoImage(image, master=master)
+
+
+def logo_path() -> Path | None:
+    path = Path(__file__).resolve().parent / "assets" / "logo.png"
+    return path if path.is_file() else None

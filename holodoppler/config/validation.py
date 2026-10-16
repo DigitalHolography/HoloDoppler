@@ -2,6 +2,8 @@
 
 from numbers import Integral, Real
 
+from holodoppler.logger import log_mapping
+
 
 def validate_main_parameters(parameters):
     """Check each main-pipeline parameter after metadata resolution without mutation."""
@@ -388,5 +390,5 @@ def validate_main_parameters(parameters):
             f"Parameter 'save_averaged_spectrogram' must be a boolean; got {value!r} ({type(value).__name__})."
         )
 
-    print("parameters : ", parameters)
+    log_mapping("Resolved parameters", parameters)
     return parameters

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .constants import SUPPORTED_INPUT_EXTENSIONS, SUPPORTED_LIST_EXTENSIONS
+from holodoppler.paths import SUPPORTED_INPUT_EXTENSIONS, SUPPORTED_LIST_EXTENSIONS
 
 
 @dataclass(frozen=True)

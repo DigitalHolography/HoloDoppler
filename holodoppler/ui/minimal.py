@@ -5,7 +5,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 
-from .constants import APP_NAME
+from holodoppler.paths import APP_NAME
 
 
 class MinimalView(ttk.Frame):
