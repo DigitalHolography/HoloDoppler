@@ -8,7 +8,7 @@ from PIL import Image
 import pytest
 import yaml
 
-from holodoppler import backend
+from holodoppler import backend, saving
 from holodoppler.pipelines import main_default
 
 
@@ -37,7 +37,7 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus):
     )
     frames = np.ones((4, 12, 18), dtype=np.float32)
     reader = SimpleNamespace(
-        extension=".raw", total_frames=12,
+        extension=".raw", total_frames=12, file_path=tmp_path / "input.raw",
         read_frames=Mock(side_effect=lambda **kwargs: frames.copy()),
     )
     monkeypatch.setattr(main_default, "get_reader", lambda path: reader)
@@ -68,17 +68,28 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus):
 
     monkeypatch.setattr(main_default, "_process_one_batch", process_batch)
     bundles = []
+    monkeypatch.setattr(saving, "save_metadata", lambda *args, **kwargs: None)
+    monkeypatch.setattr(saving, "save_version_files", lambda *args: None)
+    monkeypatch.setattr(saving, "get_git_version", lambda: "test")
+    video_writer = Mock()
+    monkeypatch.setattr(saving, "save_video", video_writer)
 
     def save_bundle(**kwargs):
         bundles.append(kwargs["output"])
         assert not list(tmp_path.rglob("*.png"))
-        return tmp_path / kwargs.get("custom_relative_path", "")
+        target = tmp_path / kwargs.get("custom_relative_path", "")
+        return saving.save_outputs(
+            file_reader=kwargs["file_reader"], output=kwargs["output"],
+            parameters=kwargs["parameters"], custom_path=target,
+        )
 
     monkeypatch.setattr(main_default, "save_outputs", save_bundle)
     getattr(main_default, entrypoint)("input.raw", parameters)
 
     assert len(corrections) == (1 if entrypoint == "preview" else 3)
-    pngs = list(tmp_path.rglob("*.png"))
+    plot_key = "shack_hartmann_autofocus_wavefront_color_image"
+    pngs = list(tmp_path.rglob(f"{plot_key}.png"))
+    assert all(plot_key not in str(call.args[0]) for call in video_writer.call_args_list)
     if autofocus:
         render.assert_called_once()
         for actual, expected in zip(render.call_args.args, (phase, shifts_y, shifts_x)):
@@ -97,4 +108,13 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus):
     else:
         render.assert_not_called()
         assert corrections == [None] * len(corrections)
+        assert plot_key not in bundles[0]
         assert not pngs
+
+
+@pytest.mark.parametrize("shape, expected", [
+    ((12, 18), False), ((12, 18, 3), False), ((12, 18, 4), False),
+    ((5, 12, 18), True), ((5, 12, 18, 3), True),
+])
+def test_still_images_are_not_encoded_as_videos(shape, expected):
+    assert saving.is_video(np.zeros(shape, dtype=np.uint8)) == expected

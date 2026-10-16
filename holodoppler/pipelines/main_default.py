@@ -46,7 +46,6 @@ from holodoppler.core.zernike import (
 from holodoppler.file_reader import get_reader
 from holodoppler.saving import (
     save_outputs,
-    save_pngs,
 )
 
 
@@ -234,7 +233,7 @@ def _process_shack_hartmann(
     parameters,
     frames,
     output_dict=None,
-    autofocus_diagnostics=None,
+    diagnostics=None,
 ):
     """
     Compute Shack-Hartmann displacements and fit the Zernike wavefront.
@@ -393,8 +392,8 @@ def _process_shack_hartmann(
     if phase is None:
         return None
 
-    if autofocus_diagnostics is not None:
-        autofocus_diagnostics["shack_hartmann_autofocus_wavefront_color_image"] = (
+    if diagnostics is not None:
+        diagnostics["shack_hartmann_autofocus_wavefront_color_image"] = (
             plot_phase_with_slopes_rgb(
                 backend.to_numpy(phase),
                 backend.to_numpy(shifts_y),
@@ -485,7 +484,7 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None):
         parameters,
         ref_frames,
         output_dict=autofocus_result,
-        autofocus_diagnostics=diagnostics,
+        diagnostics=diagnostics,
     )
 
     coefs = autofocus_result.get("shack_hartmann_zernike_coefs")
@@ -759,13 +758,13 @@ def preview(file_path, parameters):
     res_np["moment1"] = res_np.pop("M1")
     res_np["moment2"] = res_np.pop("M2")
 
-    target_dir = save_outputs(
+    res_np.update(autofocus_diagnostics)
+    save_outputs(
         file_reader=file_reader,
         output=res_np,
         parameters=parameters,
         custom_relative_path="preview",
     )
-    save_pngs(target_dir, autofocus_diagnostics)
 
     return res_np["moment0ff"]
 
@@ -954,9 +953,9 @@ def process(file_path, parameters, progress_callback=None):
     output["moment1"] = output.pop("M1")
     output["moment2"] = output.pop("M2")
 
-    target_dir = save_outputs(
+    output.update(autofocus_diagnostics)
+    save_outputs(
         file_reader=file_reader,
         output=output,
         parameters=parameters,
     )
-    save_pngs(target_dir, autofocus_diagnostics)
