@@ -20,6 +20,7 @@ from holodoppler.core.image_utils import (
     resize_frames,
 )
 from holodoppler.core.moments import moments
+from holodoppler.core.plots import plot_phase_with_slopes_rgb
 from holodoppler.core.propagation import (
     angular_spectrum_transform,
     angular_spectrum_transform_with_phase,
@@ -45,6 +46,7 @@ from holodoppler.core.zernike import (
 from holodoppler.file_reader import get_reader
 from holodoppler.saving import (
     save_outputs,
+    save_pngs,
 )
 
 
@@ -232,6 +234,7 @@ def _process_shack_hartmann(
     parameters,
     frames,
     output_dict=None,
+    autofocus_diagnostics=None,
 ):
     """
     Compute Shack-Hartmann displacements and fit the Zernike wavefront.
@@ -390,6 +393,15 @@ def _process_shack_hartmann(
     if phase is None:
         return None
 
+    if autofocus_diagnostics is not None:
+        autofocus_diagnostics["shack_hartmann_autofocus_wavefront_color_image"] = (
+            plot_phase_with_slopes_rgb(
+                backend.to_numpy(phase),
+                backend.to_numpy(shifts_y),
+                backend.to_numpy(shifts_x),
+            )
+        )
+
     # ------------------------------------------------------------
     # Convert phase to correction term
     # This is the fixed wavefront correction that will be reused
@@ -403,10 +415,13 @@ def _process_shack_hartmann(
     )
 
 
-def _get_autofocus_phase_term(parameters, file_reader):
+def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None):
     """
     Compute the Shack-Hartmann autofocus correction once from
     the configured reference batch.
+
+    When diagnostics is supplied, populate it with an RGB phase-and-shifts
+    image, kept separate from the normal batch outputs.
 
     Reference batch:
         start = registration_ref_first_frame
@@ -470,6 +485,7 @@ def _get_autofocus_phase_term(parameters, file_reader):
         parameters,
         ref_frames,
         output_dict=autofocus_result,
+        autofocus_diagnostics=diagnostics,
     )
 
     coefs = autofocus_result.get("shack_hartmann_zernike_coefs")
@@ -679,9 +695,11 @@ def preview(file_path, parameters):
     # ------------------------------------------------------------
     # Build autofocus phase once from the configured reference batch
     # ------------------------------------------------------------
+    autofocus_diagnostics = {}
     autofocus_phase_term, auto_coefs = _get_autofocus_phase_term(
         parameters,
         file_reader,
+        diagnostics=autofocus_diagnostics,
     )
 
     # ------------------------------------------------------------
@@ -741,12 +759,13 @@ def preview(file_path, parameters):
     res_np["moment1"] = res_np.pop("M1")
     res_np["moment2"] = res_np.pop("M2")
 
-    save_outputs(
+    target_dir = save_outputs(
         file_reader=file_reader,
         output=res_np,
         parameters=parameters,
         custom_relative_path="preview",
     )
+    save_pngs(target_dir, autofocus_diagnostics)
 
     return res_np["moment0ff"]
 
@@ -848,9 +867,11 @@ def process(file_path, parameters, progress_callback=None):
     # The returned phase_term is kept alive and passed to every
     # processed batch below.
     # ------------------------------------------------------------
+    autofocus_diagnostics = {}
     autofocus_phase_term, auto_coefs = _get_autofocus_phase_term(
         parameters,
         file_reader,
+        diagnostics=autofocus_diagnostics,
     )
 
     def process_batch(frames, reference):
@@ -933,8 +954,9 @@ def process(file_path, parameters, progress_callback=None):
     output["moment1"] = output.pop("M1")
     output["moment2"] = output.pop("M2")
 
-    save_outputs(
+    target_dir = save_outputs(
         file_reader=file_reader,
         output=output,
         parameters=parameters,
     )
+    save_pngs(target_dir, autofocus_diagnostics)
