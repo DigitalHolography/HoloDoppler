@@ -215,7 +215,7 @@ def is_video(data: np.ndarray) -> bool:
 
     A 3-D array whose final dimension is 3 or 4 is interpreted as an image.
     """
-    return is_grayscale_video(data) or is_color_video(data)
+    return not is_image(data) and (is_grayscale_video(data) or is_color_video(data))
 
 
 def validate_video(data: np.ndarray) -> np.ndarray:

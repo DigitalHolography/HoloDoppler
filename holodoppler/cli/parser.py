@@ -27,7 +27,14 @@ def _convert_dynamic_value(value: str) -> Union[int, float, str]:
     try:
         return float(value)
     except ValueError:
-        return value
+        pass
+
+    # if its a bool string
+    if value.lower() == "true" or value.lower() == "True":
+        return True
+    if value.lower() == "false" or value.lower() == "False":
+        return False
+    return value # else if if some other string
 
 
 def _parse_dynamic_options(

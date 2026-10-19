@@ -156,7 +156,7 @@ def calculate_displacements(
     moving_stack = U_subaps.reshape(ny_s * nx_s, Ny, Nx)
 
     if mask_disk_ratio is not None:
-        mask = elliptical_mask(Ny, Nx, mask_disk_ratio, xp)
+        mask = elliptical_mask(xp, Ny, Nx, mask_disk_ratio)
 
         ref_masked = ref * mask
         moving_masked = moving_stack * mask

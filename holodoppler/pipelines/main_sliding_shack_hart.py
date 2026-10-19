@@ -143,7 +143,7 @@ def _process_batch(
     # ------------------------------------------------------------------
     if parameters.get("svd_filtering", True):
         holograms_f = svd_filter(
-            holograms,
+            backend.xp, backend.linalg, holograms,
             parameters["svd_threshold"],
             filter_mode=parameters["svd_filter_mode"],
             remove_dc=parameters["svd_remove_dc"],
@@ -1164,11 +1164,11 @@ def preview(file_path, parameters):
             if value.ndim == 2:
                 max_size = max(value.shape[-2:])
 
-                squared_res[key] = resize_frames(
+                squared_res[key] = backend.to_numpy(resize_frames(backend.xp, backend.zoom,
                     value,
                     max_size,
                     max_size,
-                )
+                ))
             else:
                 squared_res[key] = value
 
@@ -1374,11 +1374,11 @@ def process(file_path, parameters, progress_callback=None):
     if parameters.get("square", False):
         output = {
             key: (
-                resize_frames(
+                backend.to_numpy(resize_frames(backend.xp, backend.zoom,
                     value,
                     max(value.shape[-2:]),
                     max(value.shape[-2:]),
-                )
+                ))
                 if value.ndim == 3
                 else value
             )

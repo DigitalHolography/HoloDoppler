@@ -5,6 +5,10 @@ force_numpy: false
 use_parallel: true # use parallel workers cores or not (cupy or numpy)
 numpy_num_workers: 8 # in numpy mode, the number of parallel workers to be used
 
+# GPU pipeline: overlap reading, uploads, computation, and downloads.
+cupy_async: true
+cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM.
+
 # Core parameters
 batch_size: 256
 first_frame: 0
@@ -64,7 +68,8 @@ square: true
 overwrite_option: "erase"
 
 # Shack-Hartmann wavefront sensing
-shack_hartmann_autofocus: false  # Enable Shack-Hartmann processing only on the batch defined by registration_ref_first_frame and batch_size and use it for the correction of following batch
+shack_hartmann_autofocus: true  # Compute correction once using registration_ref_first_frame and shack_hartmann_autofocus_batch_size, then reuse it for following batches
+shack_hartmann_autofocus_batch_size: 256  # Number of frames used to compute the autofocus correction
 shack_hartmann: false  # Enable Live (every batch) Shack-Hartmann processing
 shack_hartmann_nx_subap: 5  # Number of subapertures in X
 shack_hartmann_ny_subap: 5  # Number of subapertures in Y
@@ -80,7 +85,7 @@ shack_hartmann_zernike_fit_modes: [4,5,6]  # Number of the Zernike modes to use 
 save_spectograms: true
 spectrogram_resize_shape: [128, 128]
 spectrogram_resize_order: 1
-spectrogram_frequency_start: 128
-spectrogram_frequency_end: 256
+spectrogram_frequency_start: 0
+spectrogram_frequency_end: 0.5
 spectrogram_frequency_binning: 4
 save_averaged_spectrogram: true #this outputs a powerspectrum density averaged over all the batches and registered (with translation only if image_registration is on)

@@ -6,15 +6,13 @@ from functools import cache
 
 from .image_utils import elliptical_mask
 
-import holodoppler.backend as backend
-
 
 def filter_2d(xp, fft, frames, filter2d_low):
     _, ny, nx = frames.shape
 
     F = fft.fft2(frames)
 
-    mask = elliptical_mask(ny, nx, filter2d_low, xp)
+    mask = elliptical_mask(xp, ny, nx, filter2d_low)
 
     # import matplotlib.pyplot as plt
     # plt.imshow(fft.fftshift(~mask).get())
@@ -29,6 +27,8 @@ def filter_2d(xp, fft, frames, filter2d_low):
 
 
 def svd_filter(
+    xp,
+    linalg,
     H,
     svd_threshold,
     filter_mode="number_of_values",
@@ -43,6 +43,10 @@ def svd_filter(
 
     Parameters
     ----------
+    xp : module
+        Array module.
+    linalg : module
+        Linear algebra module providing eigh.
     H : array
         Input complex data, shape (Nt, Ny, Nx).
 
@@ -86,8 +90,6 @@ def svd_filter(
             return H, None, None, None, None, None, None
         return H
 
-    xp = backend.xp
-
     # ------------------------------------------------------------------
     # Remove DC
     # ------------------------------------------------------------------
@@ -130,10 +132,10 @@ def svd_filter(
     # ------------------------------------------------------------------
     # Hermitian eigendecomposition
     #
-    # backend.linalg should map to the appropriate implementation:
+    # The supplied linalg module selects the appropriate implementation:
     # NumPy/SciPy on CPU, CuPy on GPU.
     # ------------------------------------------------------------------
-    S, V = backend.linalg.eigh(cov)
+    S, V = linalg.eigh(cov)
 
     # eigh returns ascending eigenvalues.
     #
@@ -378,7 +380,7 @@ def corner_compensation(xp, psd):
     n_freqs, ny, nx = psd.shape
 
     # Create the mask
-    disk = elliptical_mask(ny, nx, 1.2, xp)
+    disk = elliptical_mask(xp, ny, nx, 1.2)
     mask_3d = xp.tile(~disk, (n_freqs, 1, 1))
 
     # Create masked PSD for outside region

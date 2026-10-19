@@ -1,289 +1,639 @@
-"""GPU-friendly speckle metrics for holodoppler .holo / .cine readers.
 
-Each saved metric has shape (T, H, W), including preview (T=1).
-The temporal window is causal, and uses available frames during warm-up.
+"""Ultra-low-memory LSCI: flow indices only.
 
-Parameters (all optional):
-    lsci_enable_spatial=True         Compute local spatial contrast.
-    lsci_enable_temporal=True        Compute per-pixel temporal contrast.
-    lsci_enable_spatiotemporal=True  Compute contrast over space AND time.
-                                      Independent of the two switches above.
-    lsci_nbh_s=5                     Odd spatial window side length.
-    lsci_nbh_t=40                    Temporal window length in frames.
-    lsci_boundary_mode='reflect'    scipy.ndimage boundary handling.
-    lsci_boundary_cval=0.0          Value outside image when mode='constant'.
-    lsci_eps=1e-6                   Prevent division by near-zero mean.
-    lsci_flow_eps=1e-4              Floor on K^2 for inverse contrast.
-    lsci_save_raw=True              Save raw input intensity frames.
-    lsci_save_mean=True             Save neighborhood mean outputs.
-    lsci_save_std=True              Save neighborhood std outputs.
-    lsci_save_variance=True         Save neighborhood variance outputs.
-    lsci_save_flow_index=True       Save inverse-squared-contrast proxies.
-    lsci_save_cv_aliases=False      Save redundant *_coefficient_of_variation.
-    lsci_output_dtype='float32'     Saved array dtype: float32 or float64.
-    lsci_prime_temporal=True        In process(), read up to N-1 earlier
-                                    frames to prime the temporal window.
-    force_numpy=False               Select CPU backend instead of CuPy.
-    first_frame=0                   Inclusive frame index.
-    end_frame=0                     Exclusive frame index, 0 means EOF.
+- Never stores raw video or full-resolution frame history.
+- Resizes each frame immediately (default: 4x smaller per dimension).
+- Temporal history stored as uint8 on disk, not RAM.
+- Processes one frame at a time.
+- Writes only requested flow indices directly to disk.
+- Uses float32 working arrays.
+- Supports CPU and CuPy GPU processing.
 
-Output keys (only enabled groups and requested auxiliary metrics are emitted):
-    raw_frame                       Raw input intensity.
-    spatial_lsci                    2D local K = std(I) / abs(mean(I)).
-    spatial_mean                    Mean intensity in the spatial window.
-    spatial_std                     Population std in the spatial window.
-    spatial_variance                Population variance in spatial window.
-    spatial_flow_index              1/max(spatial_lsci**2, flow_eps).
-    temporal_lsci                   Causal per-pixel K over recent frames.
-    temporal_mean                   Per-pixel temporal average intensity.
-    temporal_std                    Per-pixel temporal population std.
-    temporal_variance               Per-pixel temporal population variance.
-    temporal_flow_index             1/max(temporal_lsci**2, flow_eps).
-    spatiotemporal_lsci             K across spatial pixels AND time frames.
-    spatiotemporal_mean             Joint spatial + temporal mean intensity.
-    spatiotemporal_std              Joint spatial + temporal population std.
-    spatiotemporal_variance         Joint spatial + temporal variance.
-    spatiotemporal_flow_index       1/max(spatiotemporal_lsci**2, flow_eps).
-    *_coefficient_of_variation      Optional duplicates of spatial/temporal K.
+Output:
+    spatial_flow_index.npy
+    temporal_flow_index.npy
+    spatiotemporal_flow_index.npy
 
-Contrast-based flow indices are qualitative proxies, not calibrated flow.
+Set lsci_resize_factor=0.25 for 16x fewer pixels.
+Set lsci_history_dtype="float16" for better temporal precision.
 """
 
-from collections import defaultdict, deque
+import tempfile
+from pathlib import Path
 
 import numpy as np
+from numpy.lib.format import open_memmap
+from scipy.ndimage import zoom
 from tqdm import tqdm
 
 from holodoppler import backend
-from holodoppler.config import update_from_cine_metadata, update_from_holo_footer
+from holodoppler.config import (
+    update_from_cine_metadata,
+    update_from_holo_footer,
+)
 from holodoppler.file_reader import get_reader
-from holodoppler.saving import save_outputs
 
 
-def _uniform_filter():
-    if backend.xp.__name__.startswith("cupy"):
-        from cupyx.scipy.ndimage import uniform_filter
-    else:
-        from scipy.ndimage import uniform_filter
-    return uniform_filter
-
-
-def _read_frame(reader, index):
-    """Accept either (H,W) or (1,H,W) returned by reader.read_frames."""
-    frame = reader.read_frames(first_frame=index, batch_size=1)
-    if frame.ndim == 3 and frame.shape[0] == 1:
-        frame = frame[0]
-    if frame.ndim != 2:
-        raise ValueError(f"Expected (H,W) or (1,H,W), got {frame.shape}")
-    return backend.to_backend(frame).astype(backend.xp.float32, copy=False)
-
-
-def _check_settings(p):
-    ns = int(p.get("lsci_nbh_s", 5))
-    nt = int(p.get("lsci_nbh_t", 40))
-    if ns < 1 or ns % 2 != 1:
-        raise ValueError("lsci_nbh_s must be a positive odd integer")
-    if nt < 1:
-        raise ValueError("lsci_nbh_t must be a positive integer")
-    if float(p.get("lsci_eps", 1e-6)) <= 0:
-        raise ValueError("lsci_eps must be positive")
-    if float(p.get("lsci_flow_eps", 1e-4)) <= 0:
-        raise ValueError("lsci_flow_eps must be positive")
-    if p.get("lsci_output_dtype", "float32") not in ("float32", "float64"):
-        raise ValueError("lsci_output_dtype must be 'float32' or 'float64'")
-    return ns, nt
-
-
-class SpeckleAccumulator:
-    """Streaming array-backend LSCI; no per-pixel Python loops.
-
-    Disabled contrast families incur no filtering/rolling-state work unless
-    needed by the independent spatiotemporal calculation.
-    Uses population variance (ddof=0) and a causal temporal window.
-    """
-
-    def __init__(self, parameters):
-        p = parameters
-        self.xp = backend.xp
-        self.ns, self.nt = _check_settings(p)
-        self.spatial = bool(p.get("lsci_enable_spatial", True))
-        self.temporal = bool(p.get("lsci_enable_temporal", True))
-        self.joint = bool(p.get("lsci_enable_spatiotemporal", True))
-        self.keep_raw = bool(p.get("lsci_save_raw", True))
-        self.save_mean = bool(p.get("lsci_save_mean", True))
-        self.save_std = bool(p.get("lsci_save_std", True))
-        self.save_var = bool(p.get("lsci_save_variance", True))
-        self.save_flow = bool(p.get("lsci_save_flow_index", True))
-        self.save_aliases = bool(p.get("lsci_save_cv_aliases", False))
-        self.eps = float(p.get("lsci_eps", 1e-6))
-        self.flow_eps = float(p.get("lsci_flow_eps", 1e-4))
-        self.mode = p.get("lsci_boundary_mode", "reflect")
-        self.cval = float(p.get("lsci_boundary_cval", 0.0))
-        self.use_time = self.temporal or self.joint
-        self.filter2d = _uniform_filter() if self.spatial or self.joint else None
-        self.window = deque()
-        self.sum_t = None
-        self.sum2_t = None
-        self.image_shape = None
-
-    def _spatial_mean(self, x):
-        if self.ns == 1:
-            return x
-        return self.filter2d(x, size=(self.ns, self.ns),
-                             mode=self.mode, cval=self.cval)
-
-    def _calculate(self, mean, second_moment):
-        xp = self.xp
-        variance = xp.maximum(second_moment - mean * mean, 0)
-        std = xp.sqrt(variance)
-        # xp.where still evaluates both branches; safe denominator avoids NaNs.
-        safe_mean = xp.maximum(xp.abs(mean), self.eps)
-        contrast = xp.where(xp.abs(mean) > self.eps, std / safe_mean, 0)
-        return contrast, mean, std, variance
-
-    def _emit(self, out, prefix, stats):
-        k, mean, std, var = stats
-        out[prefix + "_lsci"] = k  # Speckle contrast K = std / |mean|.
-        if self.save_mean:
-            out[prefix + "_mean"] = mean  # Window-averaged intensity.
-        if self.save_std:
-            out[prefix + "_std"] = std  # Population standard deviation.
-        if self.save_var:
-            out[prefix + "_variance"] = var  # Population intensity variance.
-        if self.save_flow:
-            # Relative inverse squared contrast; not calibrated perfusion.
-            out[prefix + "_flow_index"] = 1.0 / self.xp.maximum(k * k, self.flow_eps)
-        if self.save_aliases and prefix in ("spatial", "temporal"):
-            # Coefficient of variation is identically the reported LSCI K.
-            out[prefix + "_coefficient_of_variation"] = k
-
-    def add(self, frame):
-        xp = self.xp
-        x = backend.to_backend(frame).astype(xp.float32, copy=False)
-        if x.ndim != 2:
-            raise ValueError(f"Expected 2D raw frame, received shape {x.shape}")
-        if self.image_shape is None:
-            self.image_shape = x.shape
-        elif x.shape != self.image_shape:
-            raise ValueError(f"Image dimensions changed: {self.image_shape} -> {x.shape}")
-
-        out = {}
-        if self.keep_raw:
-            out["raw_frame"] = x  # Sensor intensity of the current frame.
-
-        if self.spatial:
-            # Moments within the (ns x ns) neighborhood of this frame.
-            s_mean = self._spatial_mean(x)
-            s_mean2 = self._spatial_mean(x * x)
-            self._emit(out, "spatial", self._calculate(s_mean, s_mean2))
-
-        if self.use_time:
-            # O(H*W) rolling sums, independent of temporal window length.
-            if self.sum_t is None:
-                self.sum_t = xp.zeros_like(x)
-                self.sum2_t = xp.zeros_like(x)
-            if len(self.window) >= self.nt:
-                old = self.window.popleft()
-                self.sum_t -= old
-                self.sum2_t -= old * old
-            self.window.append(x.copy())
-            self.sum_t += x
-            self.sum2_t += x * x
-            n = len(self.window)
-            t_mean = self.sum_t / n
-            t_mean2 = self.sum2_t / n
-
-            if self.temporal:
-                # Per-pixel contrast using the last <= nt frames.
-                self._emit(out, "temporal", self._calculate(t_mean, t_mean2))
-
-            if self.joint:
-                # Joint moments over all pixels in local space-time window.
-                st_mean = self._spatial_mean(t_mean)
-                st_mean2 = self._spatial_mean(t_mean2)
-                self._emit(out, "spatiotemporal",
-                           self._calculate(st_mean, st_mean2))
-        return out
-
-
-def _prepare_reader(file_path, parameters):
+def _prepare(file_path, parameters):
     p = dict(parameters)
-    if p.get("force_numpy", False):
+
+    if p.get("force_numpy", True):
         backend.set_backend("numpy")
+
     reader = get_reader(file_path)
+
     if reader.extension == ".holo":
         p = update_from_holo_footer(p, reader.footer)
     elif reader.extension == ".cine":
         p = update_from_cine_metadata(p, reader.header)
-    _check_settings(p)
+
     return reader, p
 
 
-def _append_results(output, result, dtype):
-    # Move each frame's outputs to host; GPU history stays bounded by nt frames.
-    for key, value in result.items():
-        output[key].append(np.asarray(backend.to_numpy(value), dtype=dtype))
+def _read_small(reader, index, factor):
+    frame = reader.read_frames(
+        first_frame=index,
+        batch_size=1,
+    )
+
+    if frame.ndim == 3:
+        frame = frame[0]
+
+    if frame.ndim != 2:
+        raise ValueError("Expected a 2D intensity frame")
+
+    # Transfer only one frame, then downsample immediately.
+    frame = np.asarray(backend.to_numpy(frame))
+
+    if factor < 1:
+        if factor <= 0:
+            raise ValueError("Resize factor must be positive")
+
+        # Strided downsampling avoids a full-resolution float copy.
+        step = max(1, round(1.0 / factor))
+        frame = frame[::step, ::step]
+
+    return np.asarray(frame, dtype=np.float32)
 
 
-def _stack_results(output):
-    return {key: np.stack(values, axis=0) for key, values in output.items()}
+class LowMemoryFlow:
+    def __init__(self, parameters, directory):
+        p = parameters
+
+        self.xp = backend.xp
+        self.directory = Path(directory)
+
+        self.ns = int(p.get("lsci_nbh_s", 5))
+        self.nt = int(p.get("lsci_nbh_t", 40))
+
+        self.spatial = bool(p.get("lsci_enable_spatial", True))
+        self.temporal = bool(p.get("lsci_enable_temporal", True))
+        self.joint = bool(
+            p.get("lsci_enable_spatiotemporal", True)
+        )
+
+        self.use_time = self.temporal or self.joint
+
+        self.eps = float(p.get("lsci_eps", 1e-6))
+        self.flow_eps = float(p.get("lsci_flow_eps", 1e-4))
+
+        self.mode = p.get("lsci_boundary_mode", "reflect")
+        self.cval = float(p.get("lsci_boundary_cval", 0.0))
+
+        if self.ns < 1 or self.ns % 2 != 1:
+            raise ValueError("Spatial window must be positive and odd")
+        if self.nt < 1:
+            raise ValueError("Temporal window must be positive")
+
+        if self.spatial or self.joint:
+            if self.xp.__name__.startswith("cupy"):
+                from cupyx.scipy.ndimage import uniform_filter
+            else:
+                from scipy.ndimage import uniform_filter
+
+            self.filter = uniform_filter
+
+        self.history_dtype = np.dtype(
+            p.get("lsci_history_dtype", "uint8")
+        )
+
+        if self.history_dtype not in (
+            np.dtype("uint8"),
+            np.dtype("float16"),
+        ):
+            raise ValueError("History must be uint8 or float16")
+
+        self.shape = None
+        self.history = None
+        self.sum_t = None
+        self.sum2_t = None
+
+        self.count = 0
+        self.pos = 0
+
+        # Fixed quantization scale for uint8 history.
+        # 255 maps to the intensity maximum.
+        self.max_intensity = float(
+            p.get("lsci_max_intensity", 65535.0)
+        )
+
+        if self.max_intensity <= 0:
+            raise ValueError("lsci_max_intensity must be positive")
+
+        self.scale = self.max_intensity / 255.0
+
+    def _initialize(self, shape):
+        xp = self.xp
+        self.shape = shape
+
+        if not self.use_time:
+            return
+
+        self.sum_t = xp.zeros(shape, dtype=xp.float32)
+        self.sum2_t = xp.zeros(shape, dtype=xp.float32)
+
+        # Disk-backed ring buffer; does not scale RAM with nt.
+        self.history = np.memmap(
+            self.directory / "history.dat",
+            mode="w+",
+            dtype=self.history_dtype,
+            shape=(self.nt, *shape),
+        )
+
+    def _spatial(self, x):
+        if self.ns == 1:
+            return x
+
+        return self.filter(
+            x,
+            size=self.ns,
+            mode=self.mode,
+            cval=self.cval,
+        )
+
+    def _flow(self, mean, mean2):
+        xp = self.xp
+
+        # Direct inverse contrast: mean² / variance.
+        variance = xp.maximum(
+            mean2 - mean * mean, 0.0
+        )
+
+        mean_abs = xp.abs(mean)
+        mean_sq = mean * mean
+
+        k2 = variance / xp.maximum(
+            mean_sq, self.eps * self.eps
+        )
+
+        k2 = xp.where(mean_abs > self.eps, k2, 0.0)
+
+        return 1.0 / xp.maximum(k2, self.flow_eps)
+
+    def _encode(self, frame):
+        if self.history_dtype == np.uint8:
+            return np.clip(
+                np.rint(frame / self.scale), 0, 255
+            ).astype(np.uint8)
+
+        return frame.astype(np.float16)
+
+    def _decode(self, frame):
+        x = self.xp.asarray(frame, dtype=self.xp.float32)
+
+        if self.history_dtype == np.uint8:
+            x *= self.scale
+
+        return x
+
+    def add(self, frame, emit=True):
+        xp = self.xp
+
+        if self.shape is None:
+            self._initialize(frame.shape)
+
+        if frame.shape != self.shape:
+            raise ValueError("Frame shape changed")
+
+        output = {}
+
+        x = xp.asarray(frame, dtype=xp.float32)
+
+        if self.spatial and emit:
+            mean = self._spatial(x)
+            mean2 = self._spatial(x * x)
+
+            output["spatial_flow_index"] = self._flow(
+                mean, mean2
+            )
+
+            del mean, mean2
+
+        if not self.use_time:
+            return output
+
+        # Quantize new frame before updating temporal statistics.
+        # This keeps subtraction consistent with stored history.
+        encoded = self._encode(frame)
+        xq = self._decode(encoded)
+
+        if self.count == self.nt:
+            old = self._decode(self.history[self.pos])
+
+            self.sum_t -= old
+            self.sum2_t -= old * old
+
+            del old
+        else:
+            self.count += 1
+
+        self.sum_t += xq
+        self.sum2_t += xq * xq
+
+        self.history[self.pos] = encoded
+        self.pos = (self.pos + 1) % self.nt
+
+        del encoded, xq
+
+        if not emit:
+            return output
+
+        inv_n = np.float32(1.0 / self.count)
+
+        mean_t = self.sum_t * inv_n
+        mean2_t = self.sum2_t * inv_n
+
+        if self.temporal:
+            output["temporal_flow_index"] = self._flow(
+                mean_t, mean2_t
+            )
+
+        if self.joint:
+            mean_st = self._spatial(mean_t)
+            mean2_st = self._spatial(mean2_t)
+
+            output["spatiotemporal_flow_index"] = self._flow(
+                mean_st, mean2_st
+            )
+
+        return output
 
 
-def _prime(calculator, reader, start, first):
-    """Include preceding frames when temporal contrast is enabled."""
-    if not calculator.use_time:
-        return
-    for idx in range(max(0, first - calculator.nt + 1), first):
-        calculator.add(_read_frame(reader, idx))
+def _keys(p):
+    keys = []
+
+    if p.get("lsci_enable_spatial", True):
+        keys.append("spatial_flow_index")
+
+    if p.get("lsci_enable_temporal", True):
+        keys.append("temporal_flow_index")
+
+    if p.get("lsci_enable_spatiotemporal", True):
+        keys.append("spatiotemporal_flow_index")
+
+    if not keys:
+        raise ValueError("No flow index enabled")
+
+    return keys
+
+import cv2
+from PIL import Image
+from pathlib import Path
+import numpy as np
+from tqdm import tqdm
+import tempfile
+
+from holodoppler import backend
+
+
+
+class FlowWriter:
+    """Low-memory PNG/MJPEG writer with adaptive CLAHE contrast."""
+
+    def __init__(self, file_path, parameters, fps=30.0):
+        p = parameters
+
+        self.save_png = bool(p.get("lsci_save_png", True))
+        self.save_avi = bool(p.get("lsci_save_avi", True))
+
+        self.fps = float(p.get("lsci_output_fps", fps))
+        if not np.isfinite(self.fps) or self.fps <= 0:
+            self.fps = 30.0
+
+        self.jpeg_quality = int(p.get("lsci_mjpeg_quality", 90))
+
+        # Adaptive contrast settings.
+        self.use_clahe = bool(p.get("lsci_adaptive_contrast", True))
+        self.clip_limit = float(p.get("lsci_clahe_clip", 2.0))
+        self.tile_size = max(1, int(p.get("lsci_clahe_tile", 8)))
+
+        self.clahe = (
+            cv2.createCLAHE(
+                clipLimit=self.clip_limit,
+                tileGridSize=(self.tile_size, self.tile_size),
+            )
+            if self.use_clahe
+            else None
+        )
+
+        # Robust per-frame percentile normalization.
+        self.low_percentile = float(
+            p.get("lsci_contrast_low_percentile", 1.0)
+        )
+        self.high_percentile = float(
+            p.get("lsci_contrast_high_percentile", 99.0)
+        )
+
+        if not (
+            0 <= self.low_percentile
+            < self.high_percentile <= 100
+        ):
+            raise ValueError("Invalid contrast percentiles")
+
+        source = Path(file_path)
+        self.root = source.parent / source.stem
+        self.png_dir = self.root / "png"
+        self.avi_dir = self.root / "avi"
+
+        if self.save_png:
+            self.png_dir.mkdir(parents=True, exist_ok=True)
+
+        if self.save_avi:
+            self.avi_dir.mkdir(parents=True, exist_ok=True)
+
+        self.writers = {}
+
+    def _normalize(self, array):
+        """Adaptive contrast using percentiles followed by CLAHE."""
+
+        x = np.asarray(
+            backend.to_numpy(array),
+            dtype=np.float32,
+        )
+
+        if x.ndim != 2:
+            raise ValueError("Expected 2D flow-index frame")
+
+        # Handle NaN/Inf without changing the input.
+        x = np.nan_to_num(
+            x,
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+            copy=True,
+        )
+
+        # Robust scaling reduces the impact of outliers.
+        lo, hi = np.percentile(
+            x,
+            [
+                self.low_percentile,
+                self.high_percentile,
+            ],
+        )
+
+        if hi <= lo + 1e-8:
+            image = np.zeros(x.shape, dtype=np.uint8)
+        else:
+            x -= np.float32(lo)
+            x *= np.float32(255.0 / (hi - lo))
+            np.clip(x, 0, 255, out=x)
+            image = x.astype(np.uint8)
+
+        del x
+
+        # Local adaptive histogram equalization.
+        if self.clahe is not None:
+            image = self.clahe.apply(image)
+
+        return image
+
+    def _get_writer(self, key, width, height):
+        if key in self.writers:
+            return self.writers[key]
+
+        path = self.avi_dir / f"{key}.avi"
+
+        writer = cv2.VideoWriter(
+            str(path),
+            cv2.VideoWriter_fourcc(*"MJPG"),
+            self.fps,
+            (width, height),
+            isColor=False,
+        )
+
+        if not writer.isOpened():
+            raise RuntimeError(f"Cannot create AVI: {path}")
+
+        writer.set(
+            cv2.VIDEOWRITER_PROP_QUALITY,
+            self.jpeg_quality,
+        )
+
+        self.writers[key] = writer
+        return writer
+
+    def write(self, result, frame_index):
+        for key, value in result.items():
+            if not key.endswith("_flow_index"):
+                continue
+
+            image = self._normalize(value)
+            height, width = image.shape
+
+            if self.save_png:
+                path = (
+                    self.png_dir
+                    / f"{key}_{frame_index:06d}.png"
+                )
+
+                Image.fromarray(image).save(
+                    str(path),
+                    format="PNG",
+                    compress_level=1,
+                )
+
+            if self.save_avi:
+                writer = self._get_writer(
+                    key, width, height
+                )
+                writer.write(np.ascontiguousarray(image))
+
+            del image
+
+    def close(self):
+        for writer in self.writers.values():
+            writer.release()
+
+        self.writers.clear()
+
+
+
+def _run(
+    file_path,
+    parameters,
+    preview_mode=False,
+    progress_callback=None,
+):
+    reader, p = _prepare(file_path, parameters)
+
+    factor = float(p.get("lsci_resize_factor", 0.25))
+
+    if not 0 < factor <= 1:
+        raise ValueError(
+            "lsci_resize_factor must be in (0, 1]"
+        )
+
+    first = int(p.get("first_frame", 0))
+    end = int(p.get("end_frame", 0))
+
+    if end <= 0:
+        end = reader.total_frames
+
+    if not 0 <= first < end <= reader.total_frames:
+        raise ValueError("Invalid frame range")
+
+    if preview_mode:
+        end = first + 1
+
+    keys = _keys(p)
+    total = end - first
+
+    # Use original acquisition FPS when available.
+    fps = p.get("fps", p.get("frame_rate", 30.0))
+
+    with tempfile.TemporaryDirectory(
+        prefix="lsci_history_"
+    ) as tempdir:
+
+        calculator = LowMemoryFlow(p, tempdir)
+
+        writer = FlowWriter(
+            file_path=file_path,
+            parameters={
+                **p,
+                "lsci_save_avi": (
+                    p.get("lsci_save_avi", True)
+                    and not preview_mode
+                ),
+            },
+            fps=fps,
+        )
+
+        try:
+            # Prime rolling statistics without writing frames.
+            if (
+                p.get("lsci_prime_temporal", True)
+                and calculator.use_time
+            ):
+                start = max(
+                    0,
+                    first - calculator.nt + 1,
+                )
+
+                for idx in range(start, first):
+                    frame = _read_small(
+                        reader, idx, factor
+                    )
+                    calculator.add(frame, emit=False)
+                    del frame
+
+            # One-frame-at-a-time processing and saving.
+            for i in tqdm(
+                range(total),
+                desc="Flow index",
+            ):
+                frame_index = first + i
+
+                frame = _read_small(
+                    reader,
+                    frame_index,
+                    factor,
+                )
+
+                result = calculator.add(frame)
+
+                # Only flow indices are saved.
+                writer.write(
+                    result=result,
+                    frame_index=frame_index,
+                )
+
+                del result, frame
+
+                if progress_callback is not None:
+                    progress_callback((i + 1) / total)
+
+        finally:
+            writer.close()
+            calculator.history = None
+
+    return str(writer.root)
 
 
 def preview(file_path, parameters):
-    reader, p = _prepare_reader(file_path, parameters)
-    first = int(p.get("first_frame", 0))
-    if not 0 <= first < reader.total_frames:
-        raise ValueError("first_frame outside the file")
-    calc = SpeckleAccumulator(p)
-    if p.get("lsci_prime_temporal", True):
-        _prime(calc, reader, 0, first)
-    result = calc.add(_read_frame(reader, first))
-    dtype = np.dtype(p.get("lsci_output_dtype", "float32"))
-    output = {k: np.asarray(backend.to_numpy(v), dtype=dtype)[None, ...]
-              for k, v in result.items()}
-    if not output:
-        raise ValueError("No outputs enabled; enable a metric or lsci_save_raw")
-    save_outputs(file_reader=reader, output=output, parameters=p,
-                 custom_relative_path="preview")
-    # Preserve the original API (array rather than dict).
-    return output.get("raw_frame", next(iter(output.values())))
+    return _run(
+        file_path,
+        parameters,
+        preview_mode=True,
+    )
 
 
-def process(file_path, parameters, progress_callback=None):
-    reader, p = _prepare_reader(file_path, parameters)
-    first = int(p.get("first_frame", 0))
-    end = int(p.get("end_frame", 0))
-    if end <= 0:
-        end = reader.total_frames
-    if not 0 <= first <= end <= reader.total_frames:
-        raise ValueError("Expected 0 <= first_frame <= end_frame <= total_frames")
-    if first == end:
-        return {}
+def process(
+    file_path,
+    parameters,
+    progress_callback=None,
+):
+    return _run(
+        file_path,
+        parameters,
+        preview_mode=False,
+        progress_callback=progress_callback,
+    )
 
-    calc = SpeckleAccumulator(p)
-    if p.get("lsci_prime_temporal", True):
-        _prime(calc, reader, 0, first)
 
-    output = defaultdict(list)
-    dtype = np.dtype(p.get("lsci_output_dtype", "float32"))
-    total = end - first
-    for index in tqdm(range(total), desc="LSCI processing"):
-        # Use the current frame index, not the undefined `i`.
-        frame = _read_frame(reader, first + index)
-        _append_results(output, calc.add(frame), dtype)
-        if progress_callback is not None:
-            progress_callback((index + 1) / total)
+# Example low-memory settings:
+#
+# parameters = {
+#     "force_numpy": True,
+#     "lsci_resize_factor": 0.25,
+#     "lsci_nbh_s": 5,
+#     "lsci_nbh_t": 40,
+#     "lsci_history_dtype": "uint8",
+#     "lsci_max_intensity": 65535.0,
+#
+#     "lsci_enable_spatial": False,
+#     "lsci_enable_temporal": False,
+#     "lsci_enable_spatiotemporal": True,
+#
+#     "lsci_save_png": True,
+#     "lsci_save_avi": True,
+#     "lsci_mjpeg_quality": 90,
+#     "lsci_output_fps": 30,
+#
+#     "lsci_display_min": 0.0,
+#     "lsci_display_max": 1000.0,
+# }
 
-    if not output:
-        raise ValueError("No outputs enabled; enable a metric or lsci_save_raw")
-    stacked = _stack_results(output)
-    save_outputs(file_reader=reader, output=stacked, parameters=p)
-    return stacked
+
+
+# Recommended low-RAM configuration:
+#
+# parameters = {
+#     "force_numpy": True,
+#     "lsci_resize_factor": 0.25,
+#     "lsci_nbh_s": 5,
+#     "lsci_nbh_t": 40,
+#     "lsci_history_dtype": "uint8",
+#     "lsci_max_intensity": 65535.0,
+#     "lsci_output_dtype": "float32",
+#     "lsci_enable_spatial": False,
+#     "lsci_enable_temporal": False,
+#     "lsci_enable_spatiotemporal": True,
+#     "lsci_prime_temporal": True,
+#     "lsci_output_dir": "lsci_flow_output",
+# }
+#
+# Note: uint8 history approximates temporal statistics.
+# Set lsci_history_dtype="float16" for better precision,
+# or lsci_resize_factor=0.125 for even lower memory.

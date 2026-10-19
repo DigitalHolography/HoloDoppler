@@ -8,7 +8,7 @@ pipeline_name: "lsci"
 batch_size: 1
 first_frame: 0
 batch_stride: 1
-end_frame: 10  # -1 means process all frames
+end_frame: -1  # -1 means process all frames
 
 #lsci
 # Enable/disable calculations independently
@@ -17,7 +17,7 @@ end_frame: 10  # -1 means process all frames
 "lsci_enable_spatiotemporal": False
 
 # Neighborhoods
-"lsci_nbh_s": 35
+"lsci_nbh_s": 15
 "lsci_nbh_t": 40
 
 # Spatial boundary behavior
@@ -31,10 +31,10 @@ end_frame: 10  # -1 means process all frames
 # Output selection
 "lsci_save_raw": True
 "lsci_save_mean": False
-"lsci_save_std": False
-"lsci_save_variance": False
-"lsci_save_flow_index": False
-"lsci_save_cv_aliases": False
+"lsci_save_std": True
+"lsci_save_variance": True
+"lsci_save_flow_index": True
+"lsci_save_cv_aliases": True
 
 # Processing
 "lsci_output_dtype": "float32"

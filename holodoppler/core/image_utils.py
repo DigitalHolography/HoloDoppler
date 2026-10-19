@@ -1,17 +1,10 @@
-import json
 from functools import cache
-from pathlib import Path
-from typing import Any, Mapping
 
-import numpy as np
-import yaml
-
-import holodoppler.backend as backend
 
 def gaussian_flatfield(
     array,
     gaussian_width,
-    gaussian_filter_func=None,
+    gaussian_filter_func,
 ):
     """Apply Gaussian flat-field correction.
 
@@ -22,12 +15,8 @@ def gaussian_flatfield(
     gaussian_width:
         Gaussian filter width.
     gaussian_filter_func:
-        Optional filtering function. If omitted, the active backend's
-        Gaussian filter is used.
+        Gaussian filtering callable for the supplied array type.
     """
-    if gaussian_filter_func is None:
-        gaussian_filter_func = backend.gaussian_filter
-
     blurred = gaussian_filter_func(
         array,
         gaussian_width,
@@ -37,14 +26,20 @@ def gaussian_flatfield(
 
 
 def temporal_gaussian_filter(
+    xp,
+    gaussian_filter_func,
     arr,
     sigma,
     axis=0,
 ):
-    """Apply a 1D Gaussian filter along the temporal axis.
+    """Apply a temporal Gaussian filter using explicit array and filter dependencies.
 
     Parameters
     ----------
+    xp:
+        Array module.
+    gaussian_filter_func:
+        Gaussian filtering callable for the supplied array type.
     arr:
         Input array.
     sigma:
@@ -55,12 +50,12 @@ def temporal_gaussian_filter(
     if sigma == 0:
         return arr
 
-    arr = backend.to_backend(
+    arr = xp.asarray(
         arr,
     )
 
-    return backend.xp.asarray(
-        backend.gaussian_filter(
+    return xp.asarray(
+        gaussian_filter_func(
             arr,
             sigma=[
                 sigma if i == axis else 0
@@ -77,42 +72,28 @@ def temporal_gaussian_filter(
 
 @cache
 def elliptical_mask(
+    xp,
     ny,
     nx,
     radius_frac,
-    xp = None
 ):
     """Create an elliptical boolean mask.
 
-    The result is generated using the currently selected backend.
-
     Parameters
     ----------
+    xp:
+        Array module, included in the cache key.
     ny, nx:
         Mask dimensions.
     radius_frac:
         Fraction of the image radius occupied by the ellipse.
-    xp: 
-        Optional module to use, default is backend.
 
     Returns
     -------
     array
-        Boolean mask on the active backend.
-
-    Notes
-    -----
-    The result is cached. Changing the backend after a mask has been
-    generated can therefore return a mask created by the previous backend.
-
-    For long-running applications that switch backend dynamically, call:
-
-        elliptical_mask.cache_clear()
+        Cached boolean mask on the supplied array backend. Treat as read-only.
     """
 
-    if xp is None:
-        xp = backend.xp
-        
     radius_frac = max(
         0.0,
         min(1.0, float(radius_frac)),
@@ -150,13 +131,16 @@ def elliptical_mask(
 
 
 def pad_array_centrally(
+    xp,
     arr,
     new_shape,
 ):
-    """Pad the final two dimensions centrally.
+    """Pad the final two dimensions centrally using the supplied array module.
 
     Parameters
     ----------
+    xp:
+        Array module.
     arr:
         Input array.
     new_shape:
@@ -165,9 +149,9 @@ def pad_array_centrally(
     Returns
     -------
     array
-        Centrally padded array on the active backend.
+        Centrally padded array on the supplied array backend.
     """
-    arr = backend.to_backend(arr)
+    arr = xp.asarray(arr)
 
     if isinstance(new_shape, int):
         new_shape = (
@@ -209,7 +193,7 @@ def pad_array_centrally(
         pad_x1,
     )
 
-    return backend.xp.pad(
+    return xp.pad(
         arr,
         pad_width,
         mode="constant",
@@ -276,16 +260,24 @@ def crop_array_centrally(
     ]
 
 def resize_frames(
+    xp,
+    zoom_func,
     video_frames,
     new_height,
     new_width,
     *,
     order=3,
 ):
-    """Resize an image or stack of images.
+    """Resize an image or stack on ``xp`` using ``zoom_func``.
+
+    The returned array stays on the supplied array backend.
 
     Parameters
     ----------
+    xp:
+        Array module.
+    zoom_func:
+        Zoom callable for the supplied array type.
     video_frames:
         Image with shape ``(height, width)`` or a stack of images
         with shape ``(n_frames, height, width)``.
@@ -307,7 +299,7 @@ def resize_frames(
         ``(n_frames, height, width)``.
     """
 
-    video_frames = backend.to_backend(video_frames)
+    video_frames = xp.asarray(video_frames)
 
     was_2d = video_frames.ndim == 2
 
@@ -329,60 +321,13 @@ def resize_frames(
         new_width / width,
     )
 
-    resized = backend.zoom(
+    resized = zoom_func(
         video_frames,
         zoom_factors,
         order=order,
     )
 
-    resized = backend.to_numpy(resized)
-
     if was_2d:
         return resized[0]
 
     return resized
-
-
-
-def subpixel_parabola(
-    vm,
-    v0,
-    vp,
-):
-    """Refine a peak location using a parabolic fit.
-
-    Returns the subpixel offset relative to ``v0``.
-    """
-    denominator = (
-        vm
-        - 2.0 * v0
-        + vp
-    )
-
-    if abs(float(denominator)) < 1e-12:
-        return 0.0
-
-    return (
-        0.5
-        * float(vm - vp)
-        / float(denominator)
-    )
-
-
-def signed_peak(
-    ky,
-    kx,
-    ny,
-    nx,
-):
-    """Convert FFT peak indices into signed shifts."""
-    if ky > ny // 2:
-        ky -= ny
-
-    if kx > nx // 2:
-        kx -= nx
-
-    return (
-        float(ky),
-        float(kx),
-    )

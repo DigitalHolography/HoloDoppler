@@ -255,7 +255,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     for qname, U_q in U_quadrants.items():
         U_q_filt[qname] = svd_filter(
             xp,
-            U_q,
+            xp.linalg, U_q,
             parameters["svd_threshold"],
             filter_mode=parameters["svd_filter_mode"],
             remove_dc=parameters["svd_remove_dc"],
@@ -265,7 +265,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
 
     U_main = svd_filter(
         xp,
-        U_main,
+        xp.linalg, U_main,
         parameters["svd_threshold"],
         filter_mode=parameters["svd_filter_mode"],
         remove_dc=parameters["svd_remove_dc"],
@@ -513,14 +513,14 @@ def _process_shack_hartmann(parameters, frames, output_dict=None):
         radius = parameters.get("shack_hartmann_radius", None)
         if isinstance(radius, tuple):
             r1, r2 = radius
-            mask1 = elliptical_mask(Ny, Nx, r1, cp)
-            mask2 = elliptical_mask(Ny, Nx, r2, cp)
+            mask1 = elliptical_mask(cp, Ny, Nx, r1)
+            mask2 = elliptical_mask(cp, Ny, Nx, r2)
             mask = mask1 & mask2
         else:
             if radius is None:
                 mask = None
             else:
-                mask = elliptical_mask(Ny, Nx, radius, cp)
+                mask = elliptical_mask(cp, Ny, Nx, radius)
 
         shifts_y, shifts_x = calculate_displacements_graph_laplacian(
             cp,

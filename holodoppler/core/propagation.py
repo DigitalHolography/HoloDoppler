@@ -47,7 +47,7 @@ def build_fresnel_kernel_in(
         )
 
     if zero_padding:
-        kernel = pad_array_centrally(kernel, zero_padding, xp)
+        kernel = pad_array_centrally(xp, kernel, zero_padding)
 
     return kernel[xp.newaxis, :, :].astype(xp.complex64)
 
@@ -75,7 +75,7 @@ def build_fresnel_kernel_out(xp, z, pixel_pitch, wavelength, ny, nx, zero_paddin
     ).astype(xp.complex64)
 
     if zero_padding:
-        kernel = pad_array_centrally(kernel, zero_padding, xp)
+        kernel = pad_array_centrally(xp, kernel, zero_padding)
 
     return kernel[xp.newaxis, :, :].astype(xp.complex64)
 
@@ -104,7 +104,7 @@ def build_angular_kernel(xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=No
     )
 
     if zero_padding:
-        kernel = pad_array_centrally(kernel, zero_padding, xp)
+        kernel = pad_array_centrally(xp, kernel, zero_padding)
 
     return kernel[xp.newaxis, :, :].astype(xp.complex64)
 
@@ -129,7 +129,7 @@ def fresnel_transform(
 
     if zero_padding:
 
-        frames = pad_array_centrally(frames, zero_padding, xp)
+        frames = pad_array_centrally(xp, frames, zero_padding)
 
     result = fft.fftshift(
         fft.fft2(frames * kernel_in, axes=(-1, -2), norm="ortho"), axes=(-1, -2)
@@ -166,7 +166,7 @@ def fresnel_transform_with_phase(
 
     if zero_padding:
         ny, nx = frames.shape[-2:]
-        frames = pad_array_centrally(frames, zero_padding, xp)
+        frames = pad_array_centrally(xp, frames, zero_padding)
     result = fft.fftshift(
         fft.fft2(frames * kernel_in * phase_term, axes=(-1, -2), norm="ortho"),
         axes=(-1, -2),
@@ -194,7 +194,7 @@ def angular_spectrum_transform(
 
     if zero_padding:
 
-        frames = pad_array_centrally(frames, zero_padding, xp)
+        frames = pad_array_centrally(xp, frames, zero_padding)
 
     tmp = fft.fft2(frames, axes=(-1, -2), norm="ortho")
     tmp = tmp * fft.fftshift(kernel, axes=(-1, -2))
@@ -225,7 +225,7 @@ def angular_spectrum_transform_with_phase(
 
     if zero_padding:
 
-        frames = pad_array_centrally(frames, zero_padding, xp)
+        frames = pad_array_centrally(xp, frames, zero_padding)
 
     return fft.ifft2(
         fft.fft2(frames, axes=(-1, -2), norm="ortho")
