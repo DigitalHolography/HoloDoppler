@@ -29,7 +29,7 @@ filter2d: false
 filter2d_low: 0.03
 
 # SVD filtering
-svd_threshold: 39
+svd_threshold: 24
 svd_filter_mode: "number_of_values"  # Options: "number_of_values", "amplitude_threshold"
 svd_remove_dc: true
 
