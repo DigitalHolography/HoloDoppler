@@ -364,16 +364,24 @@ def validate_main_parameters(parameters):
             f"Parameter 'spectrogram_resize_order' must be an integer; got {value!r} ({type(value).__name__})."
         )
 
-    value = parameters.get("spectrogram_frequency_start", 128)
+    value = parameters.get("spectrogram_frequency_start", 0)
     if not (isinstance(value, Real) and not isinstance(value, bool)):
         raise TypeError(
             f"Parameter 'spectrogram_frequency_start' must be a real number; got {value!r} ({type(value).__name__})."
         )
+    if not 0 <= value <= 1:
+        raise ValueError(
+            f"Parameter 'spectrogram_frequency_start' must be between 0 and 1; got {value!r}."
+        )
 
-    value = parameters.get("spectrogram_frequency_end", 256)
+    value = parameters.get("spectrogram_frequency_end", 0.5)
     if not (isinstance(value, Real) and not isinstance(value, bool)):
         raise TypeError(
             f"Parameter 'spectrogram_frequency_end' must be a real number; got {value!r} ({type(value).__name__})."
+        )
+    if not 0 <= value <= 1:
+        raise ValueError(
+            f"Parameter 'spectrogram_frequency_end' must be between 0 and 1; got {value!r}."
         )
 
     value = parameters.get("spectrogram_frequency_binning", 4)

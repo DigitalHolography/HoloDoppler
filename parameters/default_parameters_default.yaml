@@ -85,7 +85,7 @@ shack_hartmann_zernike_fit_modes: [4,5,6]  # Number of the Zernike modes to use 
 save_spectograms: true
 spectrogram_resize_shape: [128, 128]
 spectrogram_resize_order: 1
-spectrogram_frequency_start: 128
-spectrogram_frequency_end: 256
+spectrogram_frequency_start: 0
+spectrogram_frequency_end: 0.5
 spectrogram_frequency_binning: 4
 save_averaged_spectrogram: true #this outputs a powerspectrum density averaged over all the batches and registered (with translation only if image_registration is on)

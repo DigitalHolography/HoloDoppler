@@ -651,7 +651,7 @@ def _append_numpy_results(output, res, parameters, batch_index, num_batches):
             value = backend.to_numpy(value)
             n_freq, nny, nnx = value.shape
             start_idx = int(n_freq * parameters.get("spectrogram_frequency_start", 0.0))
-            end_idx = int(n_freq * parameters.get("spectrogram_frequency_end", 0.25))
+            end_idx = int(n_freq * parameters.get("spectrogram_frequency_end", 0.5))
             value = np.concatenate(
                 (value[:end_idx], value[start_idx + n_freq // 2 :]), axis=0
             )
