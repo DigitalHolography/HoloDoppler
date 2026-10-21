@@ -12,6 +12,10 @@ def validate_main_parameters(parameters):
             f"Parameter 'pipeline_name' must be a string; got {value!r} ({type(value).__name__})."
         )
 
+    value = parameters.get("live_saving", True)
+    if not isinstance(value, bool):
+        raise TypeError("Parameter 'live_saving' must be a boolean.")
+
     value = parameters.get("force_numpy", False)
     if not (isinstance(value, bool)):
         raise TypeError(

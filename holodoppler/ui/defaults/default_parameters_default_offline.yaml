@@ -1,9 +1,11 @@
 pipeline_name: "default"
 
+
 # optional backend management
 force_numpy: true # forces the use of numpy
 use_parallel: true # use parallel workers cores or not (cupy or numpy)
 numpy_num_workers: 8 # in numpy mode, the number of parallel workers to be used
+live_saving: true # false saves all outputs after processing; ECC still buffers when true.
 
 # Core parameters
 batch_size: 256

@@ -1,5 +1,7 @@
 pipeline_name: "default"
 
+live_saving: true # false saves all outputs after processing; ECC still buffers when true.
+
 # optional backend management
 force_numpy: false
 use_parallel: true # use parallel workers cores or not (cupy or numpy)

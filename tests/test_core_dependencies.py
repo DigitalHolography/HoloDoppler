@@ -133,7 +133,8 @@ def test_default_pipeline_processing_and_spectrogram_resize():
     assert result['M0'].shape == (4, 6)
     assert all(np.isfinite(value).all() for value in result.values())
     output = {}
-    main_default._append_numpy_results(output, result, params, 0, 1)
+    prepared = main_default._prepare_batch_results(result, params)
+    main_default._append_numpy_results(output, prepared, params, 0, 1)
     assert output['spectrograms'].shape == (1, 4, 4, 4)
     assert isinstance(output['spectrograms'], np.ndarray)
 

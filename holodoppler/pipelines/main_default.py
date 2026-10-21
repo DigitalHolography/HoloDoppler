@@ -45,6 +45,7 @@ from holodoppler.core.zernike import (
 )
 from holodoppler.file_reader import get_reader
 from holodoppler.saving import (
+    OutputClass,
     save_outputs,
 )
 
@@ -808,6 +809,20 @@ def process(file_path, parameters, progress_callback=None):
     if not batch_indices:
         return
 
+    if parameters.get("live_saving", True):
+        with OutputClass(file_reader, parameters) as destination:
+            _process_to_output(file_reader, parameters, batch_indices,
+                               destination, progress_callback)
+    else:
+        _process_to_output(file_reader, parameters, batch_indices,
+                           None, progress_callback)
+
+
+def _process_to_output(file_reader, parameters, batch_indices, destination,
+                       progress_callback):
+    batch_size = parameters["batch_size"]
+    first_frame = parameters["first_frame"]
+    buffered = destination is None or parameters.get("image_registration_with_ecc", False)
     output = {}
 
     registration_ref = None
@@ -880,7 +895,25 @@ def process(file_path, parameters, progress_callback=None):
         )
 
     def consume_result(index, result):
-        _append_numpy_results(output, result, parameters, index, len(batch_indices))
+        if buffered:
+            _append_numpy_results(output, result, parameters, index, len(batch_indices))
+            return
+        # Reuse spectrogram preparation on a single batch, then discard it.
+        current = {}
+        _append_numpy_results(current, result, parameters, 0, 1)
+        for key, value in current.items():
+            if key == "averaged_spectrogram":
+                if key in output:
+                    output[key] += value
+                else:
+                    output[key] = value
+            else:
+                value = value[0]
+                if parameters.get("square", False) and value.ndim == 2:
+                    size = max(value.shape)
+                    value = backend.to_numpy(resize_frames(
+                        backend.xp, backend.zoom, value, size, size))
+                destination.add(_output_name(key), value, index)
 
     registration_ref = run_batches(
         file_reader, batch_indices, batch_size, process_batch, consume_result,
@@ -948,14 +981,27 @@ def process(file_path, parameters, progress_callback=None):
     # ------------------------------------------------------------
     # Renaming for compatibility with Doppler View
     # ------------------------------------------------------------
-    output["moment0"] = output.pop("M0")
-    output["moment0ff"] = output.pop("M0ff")
-    output["moment1"] = output.pop("M1")
-    output["moment2"] = output.pop("M2")
+    for key in list(output):
+        renamed = _output_name(key)
+        if renamed != key:
+            output[renamed] = output.pop(key)
 
-    output.update(autofocus_diagnostics)
-    save_outputs(
-        file_reader=file_reader,
-        output=output,
-        parameters=parameters,
-    )
+    if destination is None:
+        output.update(autofocus_diagnostics)
+        save_outputs(file_reader=file_reader, output=output, parameters=parameters)
+        return
+
+    static_names = {"averaged_spectrogram", "shack_hartmann_autofocus_zernike_coefs"}
+    for key, value in output.items():
+        if buffered and key not in static_names:
+            for t, frame in enumerate(value):
+                destination.add(key, frame, t)
+        else:
+            destination.write_static(key, value)
+    for key, value in autofocus_diagnostics.items():
+        destination.write_static(key, value)
+
+
+def _output_name(name):
+    return {"M0": "moment0", "M0ff": "moment0ff",
+            "M1": "moment1", "M2": "moment2"}.get(name, name)
