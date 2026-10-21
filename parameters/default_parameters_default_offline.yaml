@@ -7,14 +7,14 @@ numpy_num_workers: 8 # in numpy mode, the number of parallel workers to be used
 
 # Core parameters
 skip_every: 1 # Read every Nth frame; batch sizes count selected frames, strides use source frames.
-batch_size: 256
+batch_size: 512
 first_frame: 0
-batch_stride: 256
+batch_stride: 512
 end_frame: -1  # -1 means process all frames
 
 # Propagation parameters
 spatial_propagation: "Fresnel"  # Options: "Fresnel" or "AngularSpectrum"
-z: 1.15  # Propagation distance in meters
+z: 1.13  # Propagation distance in meters
 wavelength: 852.0e-9  # Wavelength in meters
 pixel_pitch: "use_metadata" # Pixel pitch in meters [y, x]
 
@@ -26,7 +26,7 @@ filter2d: false
 filter2d_low: 0.03
 
 # SVD filtering
-svd_threshold: 8
+svd_threshold: 16
 svd_filter_mode: "number_of_values"  # Options: "number_of_values", "amplitude_threshold"
 svd_remove_dc: true
 
@@ -49,14 +49,14 @@ frequency_bands:
 registration_flatfield_gw: 35.0  # Gaussian width for flatfield normalization
 
 # Image registration Live 
-image_registration: false
+image_registration: true
 registration_ref_first_frame: 0
 registration_ref_batch_size: 512
 registration_radius: 0.8
 registration_sub_pixel: true
 
 # Advanced Image registration
-image_registration_with_ecc: true #uses the first computed frame as reference
+image_registration_with_ecc: false #uses the first computed frame as reference
 registration_ecc_radius: 0.8
 
 # Corner compensation
@@ -71,7 +71,8 @@ contrast_low_max_percent: [0.5, 99.5] # Applied only to rendered avi/png/report 
 contrast_gamma: 1.0
 
 # Shack-Hartmann wavefront sensing
-shack_hartmann_autofocus: true  # Enable Shack-Hartmann processing only on the batch defined by registration_ref_first_frame and batch_size and use it for the correction of following batch
+shack_hartmann_autofocus: false  # Enable Shack-Hartmann processing only on the batch defined by registration_ref_first_frame and batch_size and use it for the correction of following batch
+shack_hartmann_autofocus_batch_size: 512  # Number of frames used to compute the autofocus correction
 shack_hartmann: false  # Enable Live (every batch) Shack-Hartmann processing
 shack_hartmann_nx_subap: 5  # Number of subapertures in X
 shack_hartmann_ny_subap: 5  # Number of subapertures in Y

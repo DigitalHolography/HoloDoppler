@@ -1334,6 +1334,9 @@ def save_outputs(
     default_path = get_default_output_path(file_reader.file_path)
 
     # Resolve output path.
+
+    if custom_path is None:
+        custom_path = parameters.get("custom_path")
     if custom_path is not None and custom_relative_path is not None:
         raise ValueError(
             "custom_path and custom_relative_path cannot be used together"
@@ -1343,8 +1346,10 @@ def save_outputs(
         target_dir = Path(custom_path).expanduser()
         if not target_dir.is_absolute():
             raise ValueError("custom_path must be an absolute path")
-
-    elif custom_relative_path is not None:
+            
+    if custom_relative_path is None:
+        custom_relative_path = parameters.get("custom_relative_path")
+    if custom_relative_path is not None:
         relative_path = Path(custom_relative_path)
         if relative_path.is_absolute():
             raise ValueError("custom_relative_path must be relative")
