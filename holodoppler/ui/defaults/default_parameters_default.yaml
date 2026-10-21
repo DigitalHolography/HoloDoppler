@@ -10,6 +10,7 @@ cupy_async: true
 cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM.
 
 # Core parameters
+skip_every: 1 # Read every Nth frame; batch sizes count selected frames, strides use source frames.
 batch_size: 256
 first_frame: 0
 batch_stride: 256

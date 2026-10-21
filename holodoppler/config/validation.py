@@ -6,6 +6,13 @@ from numbers import Integral, Real
 def validate_main_parameters(parameters):
     """Check each main-pipeline parameter after metadata resolution without mutation."""
 
+    value = parameters.get("skip_every")
+    if value is not None:
+        if isinstance(value, bool) or not isinstance(value, Integral):
+            raise TypeError("skip_every must be an integer or None")
+        if value <= 0:
+            raise ValueError("skip_every must be positive")
+
     value = parameters.get("pipeline_name", 'default')
     if not (isinstance(value, str)):
         raise TypeError(

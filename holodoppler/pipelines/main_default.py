@@ -54,10 +54,10 @@ def _frame_stack(frames):
     return frames[None, ...] if frames.ndim == 2 else frames
 
 
-def _validate_reference_batch(file_reader, first_frame, batch_size, label):
+def _validate_reference_batch(file_reader, first_frame, batch_size, label, skip_every=None):
     try:
         indices = calculate_batch_indices(
-            first_frame, 0, batch_size, batch_size, file_reader.total_frames
+            first_frame, 0, batch_size, batch_size, file_reader.total_frames, skip_every=skip_every
         )
         if not indices:
             raise ValueError("no complete batch fits")
@@ -173,7 +173,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         xp,
         fft,
         nt_sub,
-        parameters["sampling_freq"],
+        parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
         parameters["low_freq"],
         parameters.get("high_freq"),
     )
@@ -208,7 +208,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             xp,
             fft,
             nt_sub,
-            parameters["sampling_freq"],
+            parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
             f1,
             f2,
         )
@@ -263,7 +263,7 @@ def _process_shack_hartmann(
             parameters["pixel_pitch"],
             parameters["low_freq"],
             parameters.get("high_freq"),
-            parameters["sampling_freq"],
+            parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
             frames.shape[0],
             parameters["shack_hartmann_nx_subap"],
             parameters["shack_hartmann_ny_subap"],
@@ -280,7 +280,7 @@ def _process_shack_hartmann(
             parameters["pixel_pitch"],
             parameters["low_freq"],
             parameters.get("high_freq"),
-            parameters["sampling_freq"],
+            parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
             frames.shape[0],
             parameters["shack_hartmann_nx_subap"],
             parameters["shack_hartmann_ny_subap"],
@@ -448,11 +448,12 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None):
     )
 
     _validate_reference_batch(
-        file_reader, ref_first_frame, ref_batch_size, "Autofocus reference"
+        file_reader, ref_first_frame, ref_batch_size, "Autofocus reference", parameters.get("skip_every")
     )
     ref_frames = file_reader.read_frames(
         first_frame=ref_first_frame,
         batch_size=ref_batch_size,
+        skip_every=parameters.get("skip_every"),
     )
 
     if ref_frames.shape[0] == 0:
@@ -688,7 +689,7 @@ def preview(file_path, parameters):
     validate_main_parameters(parameters)
 
     _validate_reference_batch(
-        file_reader, parameters["first_frame"], parameters["batch_size"], "Preview"
+        file_reader, parameters["first_frame"], parameters["batch_size"], "Preview", parameters.get("skip_every")
     )
 
     # ------------------------------------------------------------
@@ -707,6 +708,7 @@ def preview(file_path, parameters):
     frames = file_reader.read_frames(
         first_frame=parameters["first_frame"],
         batch_size=parameters["batch_size"],
+        skip_every=parameters.get("skip_every"),
     )
 
     frames = backend.to_backend(_frame_stack(frames)).astype(
@@ -803,7 +805,8 @@ def process(file_path, parameters, progress_callback=None):
     )
 
     batch_indices = calculate_batch_indices(
-        first_frame, end_frame, batch_size, batch_stride, file_reader.total_frames
+        first_frame, end_frame, batch_size, batch_stride, file_reader.total_frames,
+        skip_every=parameters.get("skip_every"),
     )
     if not batch_indices:
         return
@@ -829,7 +832,7 @@ def process(file_path, parameters, progress_callback=None):
 
         _validate_reference_batch(
             file_reader, parameters["registration_ref_first_frame"],
-            parameters["registration_ref_batch_size"], "Registration reference",
+            parameters["registration_ref_batch_size"], "Registration reference", parameters.get("skip_every"),
         )
         ref_frames = file_reader.read_frames(
             first_frame=parameters[
@@ -838,6 +841,7 @@ def process(file_path, parameters, progress_callback=None):
             batch_size=parameters[
                 "registration_ref_batch_size"
             ],
+            skip_every=parameters.get("skip_every"),
         )
 
         ref_frames = backend.to_backend(_frame_stack(ref_frames)).astype(
@@ -884,6 +888,7 @@ def process(file_path, parameters, progress_callback=None):
 
     registration_ref = run_batches(
         file_reader, batch_indices, batch_size, process_batch, consume_result,
+        skip_every=parameters.get("skip_every"),
         registration_ref=registration_ref,
         registration_enabled=parameters.get("image_registration", False),
         workers=parameters.get("numpy_num_workers", 8),

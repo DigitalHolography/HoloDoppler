@@ -27,7 +27,7 @@ def _pinned_array(shape, dtype):
 
 def _run_cupy_batches(
     file_reader, batch_indices, batch_size, process_batch, consume,
-    registration_ref, prepare_result, depth,
+    registration_ref, prepare_result, depth, read_options,
 ):
     """Bound all admitted batches, including queued reads, by ``depth``.
 
@@ -53,7 +53,7 @@ def _run_cupy_batches(
         slots.append({
             "index": index,
             "read": executor.submit(
-                file_reader.read_frames, first_frame=start, batch_size=batch_size
+                file_reader.read_frames, first_frame=start, batch_size=batch_size, **read_options
             ),
         })
         return True
@@ -145,6 +145,7 @@ def run_batches(
     cupy_async=True,
     cupy_prefetch_depth=4,
     prepare_result=None,
+    skip_every=None,
 ):
     """Process complete batches and consume results in input order.
 
@@ -162,6 +163,7 @@ def run_batches(
         raise TypeError("cupy_prefetch_depth must be an integer")
     if cupy_prefetch_depth < 1:
         raise ValueError("cupy_prefetch_depth must be at least one")
+    read_options = {} if skip_every is None else {"skip_every": skip_every}
     total = len(batch_indices)
     if not total:
         return registration_ref
@@ -169,7 +171,7 @@ def run_batches(
     starts = iter(batch_indices)
 
     def execute(start, reference):
-        frames = file_reader.read_frames(first_frame=start, batch_size=batch_size)
+        frames = file_reader.read_frames(first_frame=start, batch_size=batch_size, **read_options)
         if frames.ndim == 2:
             frames = frames[None, ...]
         frames = backend.to_backend(frames)
@@ -196,7 +198,7 @@ def run_batches(
         if backend.is_gpu and cupy_async:
             return _run_cupy_batches(
                 file_reader, batch_indices, batch_size, process_batch, consume,
-                registration_ref, prepare_result, cupy_prefetch_depth,
+                registration_ref, prepare_result, cupy_prefetch_depth, read_options,
             )
 
         completed = 0
