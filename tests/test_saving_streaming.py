@@ -195,6 +195,8 @@ def test_pipeline_streaming_and_ecc_order(tmp_path, monkeypatch, ecc):
     destination = Mock()
     calls = []
     destination.add.side_effect = lambda name, value, t: calls.append((name, value.copy(), t))
+    destination.add_batch.side_effect = lambda outputs, t: [
+        destination.add(name, value, t) for name, value in outputs.items()]
 
     def batches(reader, indices, batch_size, process, consume, **kwargs):
         for t in range(2):
@@ -220,7 +222,8 @@ def test_pipeline_streaming_and_ecc_order(tmp_path, monkeypatch, ecc):
 
 @pytest.mark.parametrize("ecc", [False, True])
 @pytest.mark.parametrize("live_saving", [True, False, None])
-def test_default_process_h5_with_square_and_spectrograms(tmp_path, monkeypatch, ecc, live_saving):
+@pytest.mark.parametrize("workers", [0, 2])
+def test_default_process_h5_with_square_and_spectrograms(tmp_path, monkeypatch, ecc, live_saving, workers):
     from holodoppler import backend
     import yaml
     from pathlib import Path
@@ -246,7 +249,7 @@ def test_default_process_h5_with_square_and_spectrograms(tmp_path, monkeypatch, 
         pixel_pitch=(1e-6, 1e-6), z=0.1, sampling_freq=1000,
         low_freq=0, high_freq=400, svd_threshold=1, registration_flatfield_gw=1,
         frequency_bands=[[0, 400]], spectrogram_resize_shape=[6, 8],
-        spectrogram_frequency_binning=2, square=True)
+        spectrogram_frequency_binning=2, square=True, num_saving_workers=workers)
     if live_saving is None:
         params.pop("live_saving", None)
     else:
@@ -258,6 +261,8 @@ def test_default_process_h5_with_square_and_spectrograms(tmp_path, monkeypatch, 
     main_default.process(reader.file_path, params)
     assert streaming_output.call_count == (0 if live_saving is False else 1)
     assert bundle_output.call_count == (1 if live_saving is False else 0)
+    if live_saving is False:
+        assert bundle_output.call_args.kwargs["num_saving_workers"] == workers
     target = saving.get_default_output_path(reader.file_path)
     with h5py.File(target / "h5" / f"{target.name}_output.h5") as h5:
         assert h5["moment0"].shape == (2, 18, 18)

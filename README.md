@@ -56,6 +56,31 @@ holodoppler process --batch "path/to/files.txt" "./parameters/default_parameters
 
 Give a `.txt` file with one `.holo` or `.cine` path per line.
 
+### Saving workers in the default pipeline
+
+```yaml
+live_saving: true
+num_saving_workers: 0
+saving_queue_depth: null
+```
+
+Set `num_saving_workers` to a positive integer to overlap live saving with
+processing. Zero keeps saving synchronous. `saving_queue_depth` limits outstanding
+batches, including active writes; `null` uses twice the worker count. Processing
+waits when the queue is full, and completion waits for all accepted writes.
+The same worker count controls end-of-run saving when `live_saving: false` and
+preview exports. ECC still buffers its inputs before saving corrected results.
+Worker count controls saving threads; codec settings and output values stay the same.
+
+Compare worker counts on your machine using real encoders and simulated processing:
+
+```bash
+python scripts/benchmark_saving.py --workers 0 1 4 --frames 32 --size 256
+```
+
+The benchmark reports processing/submission time, final drain time, total time,
+and peak queued batches. More workers can increase contention; compare total time.
+
 ### Build the Windows Installer
 
 ```bash

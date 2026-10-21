@@ -15,7 +15,7 @@ from holodoppler import backend
 def _worker_count(workers):
     if workers is None:
         workers = 8
-    return min(max(0, int(workers)), max(1, (os.cpu_count() or 1) // 2))
+    return min(max(0, int(workers)), max(1, (os.cpu_count() or 1) -2 ))
 
 
 def _pinned_array(shape, dtype):

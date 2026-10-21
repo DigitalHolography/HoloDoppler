@@ -765,6 +765,8 @@ def preview(file_path, parameters):
         output=res_np,
         parameters=parameters,
         custom_relative_path="preview",
+        num_saving_workers=parameters.get("num_saving_workers", 0),
+        saving_queue_depth=parameters.get("saving_queue_depth"),
     )
 
     return res_np["moment0ff"]
@@ -901,6 +903,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
         # Reuse spectrogram preparation on a single batch, then discard it.
         current = {}
         _append_numpy_results(current, result, parameters, 0, 1)
+        to_save = {}
         for key, value in current.items():
             if key == "averaged_spectrogram":
                 if key in output:
@@ -913,7 +916,8 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
                     size = max(value.shape)
                     value = backend.to_numpy(resize_frames(
                         backend.xp, backend.zoom, value, size, size))
-                destination.add(_output_name(key), value, index)
+                to_save[_output_name(key)] = value
+        destination.add_batch(to_save, index)
 
     registration_ref = run_batches(
         file_reader, batch_indices, batch_size, process_batch, consume_result,
@@ -988,15 +992,18 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
 
     if destination is None:
         output.update(autofocus_diagnostics)
-        save_outputs(file_reader=file_reader, output=output, parameters=parameters)
+        save_outputs(file_reader=file_reader, output=output, parameters=parameters,
+                     num_saving_workers=parameters.get("num_saving_workers", 0),
+                     saving_queue_depth=parameters.get("saving_queue_depth"))
         return
 
     static_names = {"averaged_spectrogram", "shack_hartmann_autofocus_zernike_coefs"}
+    if buffered:
+        temporal = {key: value for key, value in output.items() if key not in static_names}
+        for t in range(len(batch_indices)):
+            destination.add_batch({key: value[t] for key, value in temporal.items()}, t)
     for key, value in output.items():
-        if buffered and key not in static_names:
-            for t, frame in enumerate(value):
-                destination.add(key, frame, t)
-        else:
+        if not buffered or key in static_names:
             destination.write_static(key, value)
     for key, value in autofocus_diagnostics.items():
         destination.write_static(key, value)

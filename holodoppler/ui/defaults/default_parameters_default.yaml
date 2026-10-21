@@ -1,6 +1,8 @@
 pipeline_name: "default"
 
 live_saving: true # false saves all outputs after processing; ECC still buffers when true.
+num_saving_workers: 0 # 0 saves synchronously; positive values use background saving threads.
+saving_queue_depth: null # Outstanding batches/jobs, including active writes; null = twice the worker count.
 
 # optional backend management
 force_numpy: false

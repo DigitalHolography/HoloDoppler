@@ -6,6 +6,8 @@ force_numpy: true # forces the use of numpy
 use_parallel: true # use parallel workers cores or not (cupy or numpy)
 numpy_num_workers: 8 # in numpy mode, the number of parallel workers to be used
 live_saving: true # false saves all outputs after processing; ECC still buffers when true.
+num_saving_workers: 0 # 0 saves synchronously; positive values use background saving threads.
+saving_queue_depth: null # Outstanding batches/jobs, including active writes; null = twice the worker count.
 
 # Core parameters
 batch_size: 256
