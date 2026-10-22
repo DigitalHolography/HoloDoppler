@@ -381,72 +381,12 @@ def _write_pyinstaller_entrypoint() -> Path:
             from __future__ import annotations
 
             import multiprocessing
-            import os
-            import subprocess
-            import sys
-            import traceback
-            from pathlib import Path
-
-            _stdio_log = None
-
-
-            def _stream_is_writable(stream: object) -> bool:
-                return stream is not None and hasattr(stream, "write")
-
-
-            def _configure_standard_streams() -> None:
-                global _stdio_log
-
-                if _stream_is_writable(sys.stdout) and _stream_is_writable(sys.stderr):
-                    return
-
-                try:
-                    from importlib.metadata import version
-                    app_version = version("holodoppler")
-                except Exception:
-                    app_version = "dev"
-
-                appdata = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
-                log_dir = appdata / "holodopplerpython" / app_version / "logs"
-                log_dir.mkdir(parents=True, exist_ok=True)
-                _stdio_log = (log_dir / "runtime.log").open("a", encoding="utf-8", buffering=1)
-                _stdio_log.write("\\n--- HoloDoppler runtime started ---\\n")
-
-                if not _stream_is_writable(sys.stdout):
-                    sys.stdout = _stdio_log
-                if not _stream_is_writable(sys.stderr):
-                    sys.stderr = _stdio_log
-
-
-            _configure_standard_streams()
-
-            from holodoppler.cli import main as cli_main
-            from holodoppler.ui import UI
-
-            def main() -> int:
-
-                if len(sys.argv) == 1 or (len(sys.argv) > 1 and sys.argv[1] == "gui"):
-                    UI().mainloop()
-                    return 0
-
-                return cli_main()
 
             if __name__ == "__main__":
                 multiprocessing.freeze_support()
-                try:
-                    raise SystemExit(main())
-                except SystemExit:
-                    raise
-                except Exception:
-                    details = traceback.format_exc()
-                    if sys.stderr is not None:
-                        print(details, file=sys.stderr)
-                    if len(sys.argv) > 1:
-                        Path.cwd().joinpath("holodoppler-error.log").write_text(
-                            details, encoding="utf-8"
-                        )
-                        raise SystemExit(1)
-                    raise
+                from holodoppler.__main__ import main
+
+                raise SystemExit(main())
             """
         ).lstrip(),
         encoding="utf-8",

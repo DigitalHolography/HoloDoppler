@@ -17,6 +17,7 @@ except Exception:
 
 from holodoppler.cli import preview, process
 from holodoppler.config import load_config
+from holodoppler.logging import configure_logging, logger
 
 APP_NAME = "HoloDoppler"
 SUPPORTED = {".holo", ".cine", ".txt"}
@@ -36,6 +37,7 @@ except ImportError:
 
 class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
     def __init__(self):
+        configure_logging()
         super().__init__()
         self.title(APP_NAME)
         self.geometry("800x720")
@@ -261,9 +263,7 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
             img = preview(str(path), params)
             self.q.put(("img", img))
         except Exception as e:
-            import traceback
-
-            traceback.print_exc()
+            logger.exception("Preview failed: %s", path)
             self.q.put(("err", str(e)))
         finally:
             self.q.put(("done", None))
@@ -316,19 +316,18 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
                     self.q.put(("status", "Stopped"))
                     return
                 self.q.put(("status", f"Processing {i}/{len(self.paths)}"))
-                print(f"Processing {p} with parameters:")
+                logger.info("Processing %s", p)
                 process(str(p), params)
             self.q.put(("status", "Done ヽ(^o^)丿"))
         except Exception as e:
-            import traceback
-
-            print(traceback.format_exc())
+            logger.exception("Processing failed")
             self.q.put(("err", str(e)))
         finally:
             self.q.put(("done", None))
 
     def stop_work(self):
         self.stop.set()
+        logger.info("Stopping after current file")
         self.status_var.set("Stopping after current file...")
 
     # ------------------------------------------------------------------
@@ -364,8 +363,8 @@ class UI(TkinterDnD.Tk if DND_AVAILABLE else tk.Tk):
             self.drop_target_register("DND_Files")
             self.dnd_bind("<<Drop>>", self._on_drop)
             self.status_var.set("Ready – drop .holo/.cine/.txt anywhere")
-        except Exception as e:
-            print(f"DND registration error: {e}")
+        except Exception:
+            logger.exception("Could not initialize drag and drop")
             self.status_var.set("Drag & drop failed to initialize")
 
     def _on_drop(self, e):

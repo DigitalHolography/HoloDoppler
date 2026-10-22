@@ -1,6 +1,7 @@
 import numpy as np
 
 from holodoppler import backend
+from holodoppler.logging import logger
 from holodoppler.config import (
     update_from_cine_metadata,
     update_from_holo_footer,
@@ -441,10 +442,9 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None):
         "shack_hartmann_autofocus_batch_size", parameters["batch_size"]
     )
 
-    print(
-        "Running Shack-Hartmann autofocus from reference batch:",
-        f"first_frame={ref_first_frame},",
-        f"autofocus_batch_size={ref_batch_size}",
+    logger.info(
+        "Running Shack-Hartmann autofocus from reference batch: first_frame=%s, autofocus_batch_size=%s",
+        ref_first_frame, ref_batch_size,
     )
 
     _validate_reference_batch(
@@ -498,7 +498,7 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None):
             "correction was produced."
         )
 
-    print("Shack-Hartmann autofocus phase correction computed.")
+    logger.info("Shack-Hartmann autofocus phase correction computed.")
 
     return phase_term, coefs
 
@@ -667,10 +667,10 @@ def preview(file_path, parameters):
         backend.set_backend("numpy")
     file_reader = get_reader(file_path)
 
-    print("previewing file :", file_path)
+    logger.debug("Preview input: %s", file_path)
 
     if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
 
         parameters = update_from_holo_footer(
             parameters,
@@ -678,7 +678,7 @@ def preview(file_path, parameters):
         )
 
     if file_reader.extension == ".cine":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
 
         parameters = update_from_cine_metadata(
             parameters,
@@ -776,7 +776,7 @@ def process(file_path, parameters, progress_callback=None):
     file_reader = get_reader(file_path)
 
     if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
 
         parameters = update_from_holo_footer(
             parameters,
@@ -784,7 +784,7 @@ def process(file_path, parameters, progress_callback=None):
         )
 
     if file_reader.extension == ".cine":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
 
         parameters = update_from_cine_metadata(
             parameters,
@@ -893,7 +893,7 @@ def process(file_path, parameters, progress_callback=None):
         progress_callback=progress_callback,
     )
 
-    print(output.keys())
+    logger.debug("Output keys: %s", output.keys())
 
     if auto_coefs is not None:
         output["shack_hartmann_autofocus_zernike_coefs"] = backend.to_numpy(auto_coefs)
@@ -906,9 +906,7 @@ def process(file_path, parameters, progress_callback=None):
     # ------------------------------------------------------------
 
     if parameters.get("image_registration_with_ecc", False):
-        print(
-            "Running Registration ECC algo:"
-        )
+        logger.info("Running Registration ECC algo:")
         registration_ecc = register_with_ecc(output["M0ff"],radius=parameters.get("registration_ecc_radius",0.8),iterations=300,eps=1e-6, progress_callback=progress_callback, ecc_min_threshold=parameters.get("registration_ecc_min_threshold",0.7))
 
 
@@ -917,9 +915,7 @@ def process(file_path, parameters, progress_callback=None):
                 output[key] = apply_ecc_registration(output[key], registration_ecc, background="mean")
 
         output["registration_ecc"] = registration_ecc
-        print(
-            "Registration calculated."
-        )
+        logger.info("Registration calculated.")
 
 
     # ------------------------------------------------------------

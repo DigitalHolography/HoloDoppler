@@ -1,3 +1,5 @@
+from holodoppler.logging import logger
+
 from holodoppler.saving import (
     save_preview_images,
     preview_image_from_results,
@@ -638,12 +640,12 @@ def preview(file_path, parameters):
     file_reader = FileReaderFactory.create(file_path)
 
     if file_reader.ext == ".holo":
-        print("file header :", file_reader.file_header)
+        logger.debug("File header: %s", file_reader.file_header)
         parameters = update_from_footer(parameters, file_reader.file_footer)
 
     if file_reader.ext == ".cine":
-        print("file header :", file_reader.metadata)
-    print("parameters : ", parameters)
+        logger.debug("File header: %s", file_reader.metadata)
+    logger.debug("Parameters: %s", parameters)
 
     batch_size = parameters["batch_size"]
     first_frame = parameters["first_frame"]
@@ -696,11 +698,11 @@ def process(file_path, parameters, progress_callback=None):
     file_reader = FileReaderFactory.create(file_path)
 
     if file_reader.ext == ".holo":
-        print("file header :", file_reader.file_header)
+        logger.debug("File header: %s", file_reader.file_header)
         parameters = update_from_footer(parameters, file_reader.file_footer)
 
     if file_reader.ext == ".cine":
-        print("file header :", file_reader.metadata)
+        logger.debug("File header: %s", file_reader.metadata)
 
     # print("parameters : ", parameters)
 
@@ -746,7 +748,7 @@ def process(file_path, parameters, progress_callback=None):
         res = {}
         _process_batch(parameters, frames, phase_term=phase_term, output_dict=res)
         M0_reg = res["M0ff"].copy()
-        print(res.keys())
+        logger.debug("Output keys: %s", res.keys())
         del frames, phase_term  # Memory footprint reduction
         res.clear()
         del res

@@ -1,12 +1,12 @@
 """HoloDoppler command-line execution module."""
 
 import json
-import sys
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from holodoppler.config import load_config
+from holodoppler.logging import configure_logging, logger
 from .parser import (
     DEFAULT_PARAMETERS_PATH,
     DEBUG_CONFIG_FILENAME,
@@ -38,6 +38,9 @@ def _run_pipeline(
     warning_callback=None,
 ) -> Any:
     """Execute a pipeline with the given parameters."""
+    configure_logging()
+    action = "Preview" if mode == PipelineMode.PREVIEW else "Processing"
+    logger.info("%s started: %s", action, file_path)
     if not isinstance(parameters, dict):
         parameters = load_config(parameters)
 
@@ -78,12 +81,16 @@ def _run_pipeline(
 
         raise ValueError(error_msg)
 
-    return pipeline_func(
+    logger.debug("Using pipeline: %s", pipeline_name)
+    result = pipeline_func(
         file_path,
         parameters,
         progress_callback=progress_callback,
         warning_callback=warning_callback,
     )
+    logger.info("%s complete: %s", action, file_path)
+    logger.debug("Pipeline result type: %s", type(result).__name__)
+    return result
 
 
 def preview(file_path: Path, parameters: Union[dict, Path, str]) -> Any:
@@ -118,7 +125,7 @@ def _load_debug_config() -> Dict[str, str]:
         with debug_paths_file.open("r", encoding="utf-8") as file:
             return json.load(file)
     except (json.JSONDecodeError, OSError) as exc:
-        print(f"Warning: Could not load debug config: {exc}", file=sys.stderr)
+        logger.warning("Could not load debug config: %s", exc)
         return {}
 
 
@@ -173,10 +180,9 @@ def _read_batch_file(batch_file: Path) -> List[Path]:
                 path = Path(line).expanduser().resolve()
 
                 if not path.is_file():
-                    print(
-                        f"Warning: Line {line_num} in batch file "
-                        f"'{batch_file}': File does not exist: {path}. Skipping.",
-                        file=sys.stderr,
+                    logger.warning(
+                        "Line %s in batch file '%s': File does not exist: %s. Skipping.",
+                        line_num, batch_file, path,
                     )
                     continue
 
@@ -205,35 +211,23 @@ def _batch_process(
     total = len(file_paths)
 
     for idx, file_path in enumerate(file_paths, 1):
-        print(f"Processing file {idx}/{total}: {file_path.name}")
+        logger.info("Processing file %s/%s: %s", idx, total, file_path.name)
 
         try:
-            result = _run_pipeline(file_path, parameters.copy(), mode)
-
-            if result is not None:
-                print(
-                    f"✓ Completed: {file_path.name} "
-                    f"(result: {type(result).__name__})"
-                )
-            else:
-                print(f"✓ Completed: {file_path.name} (no result)")
-
+            _run_pipeline(file_path, parameters.copy(), mode)
             success_count += 1
 
         except Exception as exc:
             errors.append((file_path, str(exc)))
-            print(f"✗ Failed: {file_path.name} - {exc}", file=sys.stderr)
+            logger.exception("Failed: %s", file_path.name)
 
-    print(f"\n{'=' * 50}")
-    print(f"Batch processing complete ({mode.value} mode):")
-    print(f"  Total files: {total}")
-    print(f"  Successful:  {success_count}")
-    print(f"  Failed:      {len(errors)}")
+    logger.info(
+        "Batch processing complete (%s mode): %s total, %s successful, %s failed",
+        mode.value, total, success_count, len(errors),
+    )
 
     if errors:
-        print("\nFailed files:")
-        for path, error in errors:
-            print(f"  - {path.name}: {error}")
+        logger.error("Failed files: %s", ", ".join(path.name for path, _error in errors))
 
     return EXIT_FAILURE if errors else EXIT_SUCCESS
 
@@ -258,6 +252,7 @@ def _apply_cli_overrides(parameters: dict, args) -> dict:
 
 def main(argv: Optional[List[str]] = None) -> int:
     """CLI entry point."""
+    configure_logging()
     try:
         args = parse_args(argv)
 
@@ -271,7 +266,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         parameters = _apply_cli_overrides(load_config(config_path), args)
 
         if args.batch is not None:
-            print(f"Batch mode activated. Reading files from: {args.batch}")
+            logger.info("Batch mode activated. Reading files from: %s", args.batch)
 
             mode = (
                 PipelineMode.PREVIEW
@@ -285,36 +280,22 @@ def main(argv: Optional[List[str]] = None) -> int:
         input_path = _resolve_input_path(args.filepath)
 
         if args.command == "preview":
-            result = preview(input_path, parameters)
-            action = "Preview"
+            preview(input_path, parameters)
         else:
-            result = process(input_path, parameters)
-            action = "Process"
-
-        if result is not None:
-            print(f"{action} completed successfully. Result type: {type(result).__name__}")
-        else:
-            print(f"{action} completed successfully (no result returned)")
+            process(input_path, parameters)
 
         return EXIT_SUCCESS
 
-    except SystemExit:
+    except SystemExit as exc:
+        if isinstance(exc.code, str):
+            logger.error("%s", exc.code)
+            return EXIT_FAILURE
         raise
     except KeyboardInterrupt:
-        print("\nOperation cancelled by user.", file=sys.stderr)
+        logger.warning("Operation cancelled by user.")
         return EXIT_FAILURE
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-
-        # Verbose traceback is handled below by the CLI wrapper if needed.
-        import traceback
-
-        if argv is None:
-            argv = sys.argv[1:]
-
-        if "--verbose" in argv:
-            traceback.print_exc(file=sys.stderr)
-
+    except Exception:
+        logger.exception("Operation failed")
         return EXIT_FAILURE
 
 

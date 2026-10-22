@@ -4,6 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
+
+from holodoppler.logging import logger
 from tqdm import tqdm
 
 import holodoppler.backend as backend
@@ -739,10 +741,9 @@ def _get_autofocus_phase_term(parameters, file_reader):
         parameters["batch_size"],
     )
 
-    print(
-        "Running Shack-Hartmann autofocus from reference batch:",
-        f"first_frame={ref_first_frame},",
-        f"batch_size={ref_batch_size}",
+    logger.info(
+        "Running Shack-Hartmann autofocus from reference batch: first_frame=%s, batch_size=%s",
+        ref_first_frame, ref_batch_size,
     )
 
     ref_frames = file_reader.read_frames(
@@ -788,7 +789,7 @@ def _get_autofocus_phase_term(parameters, file_reader):
             "correction was produced."
         )
 
-    print("Shack-Hartmann autofocus phase correction computed.")
+    logger.info("Shack-Hartmann autofocus phase correction computed.")
     return phase_term, coefs
 
 
@@ -1102,13 +1103,13 @@ def preview(file_path, parameters):
 
     file_reader = FileReaderFactory.create(file_path)
 
-    print("previewing file :", file_path)
+    logger.debug("Preview input: %s", file_path)
 
     # ------------------------------------------------------------------
     # File metadata
     # ------------------------------------------------------------------
     if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
 
         parameters = update_from_holo_footer(
             parameters,
@@ -1116,14 +1117,14 @@ def preview(file_path, parameters):
         )
 
     if file_reader.extension == ".cine":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
 
         parameters = update_from_cine_metadata(
             parameters,
             file_reader.header
         )
 
-    print("parameters : ", parameters)
+    logger.debug("Parameters: %s", parameters)
 
     # ------------------------------------------------------------------
     # Read preview frames
@@ -1208,21 +1209,21 @@ def process(file_path, parameters, progress_callback=None):
     file_reader = FileReaderFactory.create(file_path)
 
     if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
         parameters = update_from_holo_footer(
             parameters,
             file_reader.footer,
         )
 
     if file_reader.extension == ".cine":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
 
         parameters = update_from_cine_metadata(
             parameters,
             file_reader.header
         )
 
-    print("parameters : ", parameters)
+    logger.debug("Parameters: %s", parameters)
 
     batch_size = parameters["batch_size"]
     batch_stride = parameters["batch_stride"]
