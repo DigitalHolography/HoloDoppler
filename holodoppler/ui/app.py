@@ -6,7 +6,7 @@ import threading
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -28,16 +28,56 @@ from .file_selection import expand_input_paths
 from .image_utils import load_photo
 from .minimal import MinimalView
 from .paths import logo_path, get_package_version
-from .settings_store import DEFAULT_WINDOW_MINSIZES, SettingsStore
+from .settings_store import SettingsStore
 from .theme import apply_theme
 
 
 BaseTk = TkinterDnD.Tk if DND_AVAILABLE else tk.Tk
 
+_WINDOW_MINSIZES = {
+    "minimal": (640, 500),
+    "advanced": (980, 640),
+}
+
+
+class _ModeNotebook(ttk.Notebook):
+    def __init__(self, master: tk.Misc) -> None:
+        super().__init__(master)
+        self.before_select: Callable[[int], None] | None = None
+        # Tk maps the selected page before <<NotebookTabChanged>> is handled.
+        # Intercept the widget command so mouse, keyboard and Python selections
+        # all resize the window before that first layout.
+        self._original_command = self._w + "_original"
+        self.tk.call("rename", self._w, self._original_command)
+        before_select = self._register(self._before_tab_select)
+        # Keep widget errors in Tcl: theme palette updates deliberately catch
+        # unsupported options. Python forwarding leaves a pending exception.
+        self.tk.call(
+            "interp", "alias", "", self._w, "", "apply",
+            (("original", "before_select", "args"), """
+                if {[llength $args] == 2 && [lindex $args 0] eq "select"} {
+                    set index [$original index [lindex $args 1]]
+                    set current [$original index current]
+                    if {$index != $current && [$original tab $index -state] eq "normal"} {
+                        $before_select $index
+                    }
+                }
+                tailcall $original {*}$args
+            """),
+            self._original_command, before_select,
+        )
+        self._tclCommands.append(self._w)
+
+    def _before_tab_select(self, index: str) -> None:
+        if self.before_select is not None:
+            self.before_select(int(index))
+
 
 class UI(BaseTk):
     def __init__(self) -> None:
         super().__init__()
+        self.withdraw()
+        self.attributes("-alpha", 0.0)
         self.title(APP_NAME + get_package_version())
 
         self.store = SettingsStore()
@@ -60,10 +100,13 @@ class UI(BaseTk):
         self.poll_after_id: str | None = None
 
         self._build()
-        self._apply_window_state(self.active_tab_name)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._register_drop_targets()
         self._sync_views()
+        self._preload_views()
+        self.notebook.before_select = lambda index: self._apply_window_size("advanced" if index == 1 else "minimal")
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+        self.attributes("-alpha", 1.0)
         self.poll_after_id = self.after(60, self._poll_events)
 
     def open_inputs_dialog(self) -> None:
@@ -205,7 +248,7 @@ class UI(BaseTk):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
 
-        self.notebook = ttk.Notebook(self)
+        self.notebook = _ModeNotebook(self)
         self.notebook.grid(row=0, column=0, sticky="nsew")
 
         self.minimal = MinimalView(self.notebook, self)
@@ -213,7 +256,34 @@ class UI(BaseTk):
         self.notebook.add(self.minimal, text="Minimal")
         self.notebook.add(self.advanced, text="Advanced")
         self.notebook.select(1 if self.active_tab_name == "advanced" else 0)
-        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+
+    def _preload_views(self) -> None:
+        # Map every page while transparent so Tk finishes its first layout
+        # before the user can see it. A withdrawn window does not map children.
+        self.update_idletasks()
+        self.notebook.configure(width=self.minimal.winfo_reqwidth(), height=self.minimal.winfo_reqheight())
+        self.update_idletasks()
+        for tab_name, view in (("minimal", self.minimal), ("advanced", self.advanced)):
+            self.notebook.select(view)
+            self._apply_window_size(tab_name)
+            self.deiconify()
+            self.update()
+            self._preload_notebooks(view)
+
+        self.notebook.select(self.advanced if self.active_tab_name == "advanced" else self.minimal)
+        self._apply_window_size(self.active_tab_name)
+        self.update()
+
+    def _preload_notebooks(self, parent: tk.Misc) -> None:
+        for child in parent.winfo_children():
+            if isinstance(child, ttk.Notebook):
+                selected = child.select()
+                for page in child.tabs():
+                    child.select(page)
+                    self.update()
+                child.select(selected)
+                self.update()
+            self._preload_notebooks(child)
 
     def _register_drop_targets(self) -> None:
         if not DND_AVAILABLE:
@@ -460,21 +530,34 @@ class UI(BaseTk):
         if new_tab == self.active_tab_name:
             return
 
-        self.store.save_window_geometry(self.active_tab_name, self.geometry())
         self.active_tab_name = new_tab
         self.store.save_active_tab(new_tab)
-        self._apply_window_state(new_tab)
 
     def _current_tab_name(self) -> str:
         return "advanced" if self.notebook.index("current") == 1 else "minimal"
 
-    def _apply_window_state(self, tab_name: str) -> None:
-        width, height = DEFAULT_WINDOW_MINSIZES.get(tab_name, DEFAULT_WINDOW_MINSIZES["minimal"])
-        self.minsize(width, height)
-        self.geometry(self.store.window_geometry(tab_name))
+    def _apply_window_size(self, tab_name: str) -> None:
+        view = self.advanced if tab_name == "advanced" else self.minimal
+        # Notebook normally requests the largest of all its pages. Use only
+        # this mode's content so the advanced controls do not enlarge minimal.
+        chrome_width = self.notebook.winfo_reqwidth() - int(self.notebook.cget("width"))
+        chrome_height = self.notebook.winfo_reqheight() - int(self.notebook.cget("height"))
+        content_width, content_height = view.winfo_reqwidth(), view.winfo_reqheight()
+        self.notebook.configure(width=content_width, height=content_height)
+
+        available_width = max(1, self.winfo_screenwidth() - 40)
+        available_height = max(1, self.winfo_screenheight() - 80)
+        min_width, min_height = _WINDOW_MINSIZES[tab_name]
+        min_width = min(min_width, available_width)
+        min_height = min(min_height, available_height)
+        width = min(max(content_width + chrome_width, min_width), available_width)
+        height = min(max(content_height + chrome_height, min_height), available_height)
+        self.minsize(min_width, min_height)
+        self.geometry(f"{width}x{height}")
+        self.update_idletasks()
 
     def _on_close(self) -> None:
-        self.store.save_window_state(self.active_tab_name, self.geometry())
+        self.store.save_active_tab(self.active_tab_name)
         if self.poll_after_id is not None:
             try:
                 self.after_cancel(self.poll_after_id)
