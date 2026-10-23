@@ -18,16 +18,17 @@
 
     readers/ unified FileReader class and sub HoloFileReader and CineFileReader classes (done)
 
-- remove the sh_avg pipeline and spectrograms as they now fall into default (done)
-
 - remove the parameters contrast everywhere (its not used)
 
 - ui/ and logger
-    merge the ui/ into the rest of the app especially for the logging system into Appdata (difficult)
-    rename the appdata slug holodopplerpython to HoloDoppler
     fix ui jittering when switching between minimal and advanced panels
 
 - default pipeline improvements:
-    - always use parameters.get(...) defaults
+    make autofocus faster in numpy only mode (single thread for the shack hartmann is really slow)
+    make a registration more relyable based on sub batches of 64 frames accumulated (goal better registration on edge cases)
+    make an averaging pipeline implementing a sliding average for all the outputs (goal less rendered image noise)
+    implement a welch option to estimate the psd more relyably working on sub batches with optionnal widowing with less frequency resolution
 
-    - add a plot image of the computed autofocus shifts and phase_map :)
+    in general work on execution speed and memory efficiency
+
+- improve the shack hartmann pipeline with more parameters espcecially work on an efficient sliding shack hartmann sub apertures implementation.
