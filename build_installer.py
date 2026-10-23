@@ -10,6 +10,7 @@ import sys
 import textwrap
 import tomllib
 from datetime import datetime, timezone
+from importlib.metadata import version
 from pathlib import Path
 
 
@@ -17,6 +18,7 @@ APP_NAME = "HoloDoppler"
 APP_EXE_NAME = f"{APP_NAME}.exe"
 APP_PUBLISHER = "HoloDoppler"
 APPDATA_SLUG = "HoloDoppler"
+APP_ID_SUFFIX = "7C3E24DA-5E1F-4E4E-91F1-91D62A0F1B18"
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 PACKAGE_DIR = PROJECT_ROOT / "holodoppler"
@@ -35,6 +37,7 @@ GENERATED_ENTRYPOINT = BUILD_DIR / "_pyinstaller_holodoppler_entry.py"
 GENERATED_ISS_FILE = BUILD_DIR / f"{APP_NAME}.iss"
 GENERATED_ICON_FILE = BUILD_DIR / "holodoppler.ico"
 CUDA_RUNTIME_HOOK = PROJECT_ROOT / "packaging" / "pyi_rth_cuda.py"
+PYINSTALLER_HOOKS_DIR = PROJECT_ROOT / "packaging" / "hooks"
 
 INSTALLER_OUTPUT_DIR = DIST_DIR
 DIST_APP_DIR = DIST_DIR / APP_NAME
@@ -85,48 +88,42 @@ FROZEN_HIDDEN_IMPORTS = (
     "matplotlib.backends.backend_agg",
     "matplotlib.backends.backend_pdf",
     "matplotlib.backends.backend_tkagg",
-    "scipy._external.array_api_compat.numpy.fft",
 )
 
 FROZEN_SUBMODULE_COLLECTIONS = (
+    # Pipelines are discovered dynamically. CuPy also imports compiled kernels
+    # and cupyx modules dynamically, so keep its complete runtime surface.
     "holodoppler",
     "cupy",
     "cupyx",
     "cupy_backends",
-    "scipy",
-    "h5py",
-    "imageio",
-    "imageio_ffmpeg",
-    "cv2",
-    "cinereader",
-    "tkinterdnd2",
-    "sv_ttk",
-    "PIL",
-    "matplotlib",
-    "yaml",
 )
 
+# Standard PyInstaller hooks collect the required data, plugins and DLLs for
+# scipy, matplotlib, h5py, Pillow, OpenCV, imageio, sv_ttk and tkinterdnd2.
+# Blanket submodule collection bypasses those hooks' filtering and pulls in
+# tests and optional dependencies from the build machine.
 FROZEN_DATA_COLLECTIONS = (
     "holodoppler",
     "cupy",
-    "matplotlib",
-    "tkinterdnd2",
-    "sv_ttk",
-    "PIL",
-    "imageio",
-    "imageio_ffmpeg",
 )
 
 FROZEN_BINARY_COLLECTIONS = (
     "cupy",
-    "cv2",
-    "h5py",
-    "imageio_ffmpeg",
-    "scipy",
 )
 
 FROZEN_ALL_COLLECTIONS = (
     "nvidia",
+)
+
+# Optional adapters in scientific/plotting libraries otherwise pull these in
+# when they happen to be installed. The app operates on NumPy/CuPy arrays;
+# its GPU kernels compile through CUDA NVRTC, not Numba/LLVM.
+FROZEN_EXCLUDES = (
+    "dask",
+    "pandas",
+    "numba",
+    "llvmlite",
 )
 
 
@@ -137,7 +134,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skip-pyinstaller",
         action="store_true",
-        help="Reuse dist/HoloDoppler.exe instead of rebuilding it with PyInstaller.",
+        help="Reuse dist/HoloDoppler/ instead of rebuilding it with PyInstaller.",
     )
     parser.add_argument(
         "--skip-inno",
@@ -155,6 +152,11 @@ def _parse_args() -> argparse.Namespace:
         help="Build the executable with a visible console window.",
     )
     parser.add_argument(
+        "--verify-payload",
+        action="store_true",
+        help="Exercise CPU/GPU processing, GUI resources and exports in the frozen app.",
+    )
+    parser.add_argument(
         "--verify-installer",
         action="store_true",
         help="Install the generated setup silently, optionally run smoke tests, then uninstall it.",
@@ -167,7 +169,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--smoke-parameters",
         type=Path,
-        help="Parameter JSON used with --smoke-holo for preview/process smoke tests.",
+        help="Parameter YAML/JSON used with --smoke-holo for preview/process smoke tests.",
     )
     return parser.parse_args()
 
@@ -358,9 +360,14 @@ def _write_pyinstaller_entrypoint() -> Path:
             from __future__ import annotations
 
             import multiprocessing
+            import sys
 
             if __name__ == "__main__":
                 multiprocessing.freeze_support()
+                if len(sys.argv) == 3 and sys.argv[1] == "--self-test":
+                    from holodoppler._frozen_smoke import main
+
+                    raise SystemExit(main(sys.argv[2]))
                 from holodoppler.__main__ import main
 
                 raise SystemExit(main())
@@ -400,6 +407,11 @@ def _run_pyinstaller(console: bool) -> None:
         icon_file,
         "--runtime-hook",
         CUDA_RUNTIME_HOOK,
+        "--additional-hooks-dir",
+        PYINSTALLER_HOOKS_DIR,
+        # Native CUDA/scientific DLLs must not depend on whether UPX happens
+        # to be installed on the build machine. Inno compresses the download.
+        "--noupx",
     ]
 
     for source_path in _parameter_preset_files():
@@ -422,6 +434,9 @@ def _run_pyinstaller(console: bool) -> None:
 
     for distribution in FROZEN_METADATA_DISTRIBUTIONS:
         command.extend(["--copy-metadata", distribution])
+
+    for module in FROZEN_EXCLUDES:
+        command.extend(["--exclude-module", module])
 
     if console:
         command.append("--console")
@@ -501,7 +516,7 @@ def _write_inno_script(app_version: str) -> Path:
         #define AppIcon "{_iss_string(icon_file)}"
 
         [Setup]
-        AppId={{#AppBaseName}}-{{#AppVersion}}-7C3E24DA-5E1F-4E4E-91F1-91D62A0F1B18
+        AppId={{#AppBaseName}}-{{#AppVersion}}-{APP_ID_SUFFIX}
         AppName={{#AppShortcutName}}
         AppVersion={{#AppVersion}}
         AppVerName={{#AppShortcutName}}
@@ -511,7 +526,8 @@ def _write_inno_script(app_version: str) -> Path:
         DisableProgramGroupPage=yes
         OutputDir={{#OutputDir}}
         OutputBaseFilename={{#AppBaseName}}-setup-{{#AppVersion}}
-        Compression=lzma2
+        Compression=lzma2/ultra64
+        LZMAUseSeparateProcess=yes
         SolidCompression=yes
         WizardStyle=modern
         PrivilegesRequired=lowest
@@ -559,6 +575,69 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _write_size_report(app_version: str, installer_path: Path | None = None) -> Path:
+    """Make unexpected dependency/size growth visible after every build."""
+    groups: dict[str, int] = {}
+    files = []
+    for path in PAYLOAD_DIR.rglob("*"):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(PAYLOAD_DIR)
+        size = path.stat().st_size
+        files.append((relative.as_posix(), size))
+        parts = relative.parts
+        group = parts[1] if parts[0] == "_internal" and len(parts) > 1 else parts[0]
+        groups[group] = groups.get(group, 0) + size
+
+    report = {
+        "app_version": app_version,
+        "python": sys.version.split()[0],
+        "distributions": {
+            name: version(name) for name in FROZEN_METADATA_DISTRIBUTIONS
+        },
+        "payload_bytes": sum(size for _, size in files),
+        "payload_file_count": len(files),
+        "package_bytes": dict(sorted(groups.items(), key=lambda item: (-item[1], item[0]))),
+        "largest_files": [
+            {"path": name, "bytes": size}
+            for name, size in sorted(files, key=lambda item: (-item[1], item[0]))[:20]
+        ],
+    }
+    if installer_path is not None:
+        report["installer"] = installer_path.name
+        report["installer_bytes"] = installer_path.stat().st_size
+        report["installer_sha256"] = _sha256(installer_path)
+    output = DIST_DIR / f"{APP_NAME}-setup-{app_version}.size.json"
+    output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(f"Payload: {report['payload_bytes'] / 1024**2:.1f} MiB ({len(files)} files)")
+    if installer_path is not None:
+        print(f"Installer: {report['installer_bytes'] / 1024**2:.1f} MiB")
+    print(f"Size report: {output}")
+    return output
+
+
+def _verify_frozen_app(executable: Path, report: Path) -> dict:
+    """Test actual operations; a file named ffmpeg.exe is not proof it works."""
+    report.unlink(missing_ok=True)
+    result = subprocess.run(
+        [str(executable), "--self-test", str(report)],
+        cwd=executable.parent,
+        capture_output=True,
+        text=True,
+        timeout=240,
+    )
+    if not report.is_file():
+        raise RuntimeError(
+            f"Frozen application did not write its verification report: {report}\n"
+            f"{result.stdout or ''}{result.stderr or ''}"
+        )
+    checks = json.loads(report.read_text(encoding="utf-8"))
+    if result.returncode != 0 or checks.get("ok") is not True:
+        raise RuntimeError(f"Frozen application verification failed:\n{json.dumps(checks, indent=2)}")
+    print(f"Frozen application verification passed. Report: {report}")
+    return checks
+
+
 def _run_release_smoke_test(
     executable: Path,
     source_holo: Path,
@@ -597,11 +676,15 @@ def _run_release_smoke_test(
 
     output_dir = SMOKE_WORK_DIR / sample.stem / f"{sample.stem}_HD"
     expected = [
-        SMOKE_WORK_DIR / "debug_outputs" / "debug_M0.png",
-        output_dir / "h5" / f"{output_dir.name}.h5",
+        output_dir / "preview" / "h5" / "preview_output.h5",
+        output_dir / "h5" / f"{output_dir.name}_output.h5",
         output_dir / "json" / "parameters_holodoppler.json",
-        output_dir / "png" / "moment_0.png",
     ]
+    # Different pipelines emit different image names (moment0, contrast, ...).
+    pngs = sorted((output_dir / "png").glob("*.png"))
+    if not pngs:
+        raise RuntimeError(f"Release smoke test did not create any PNG images in {output_dir / 'png'}")
+    expected.extend(pngs)
     missing = [path for path in expected if not path.is_file() or path.stat().st_size == 0]
     if missing:
         raise RuntimeError(
@@ -624,11 +707,38 @@ def _verify_appdata_parameters(app_version: str) -> list[Path]:
     return [parameters_dir / name for name in expected]
 
 
+def _ensure_verification_target_available(app_version: str) -> None:
+    """A temporary /DIR still shares the real release's uninstall identity."""
+    if os.name != "nt":
+        return
+    import winreg
+
+    key_name = (
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\"
+        f"{APP_NAME}-{app_version}-{APP_ID_SUFFIX}_is1"
+    )
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        for view in (winreg.KEY_WOW64_32KEY, winreg.KEY_WOW64_64KEY):
+            try:
+                key = winreg.OpenKey(hive, key_name, 0, winreg.KEY_READ | view)
+            except FileNotFoundError:
+                continue
+            with key:
+                raise RuntimeError(
+                    f"{APP_NAME} {app_version} is already installed. Installer verification "
+                    "would replace its uninstall registration. Use --verify-payload, "
+                    "or uninstall that version before using --verify-installer."
+                )
+
+
 def _verify_installer(
     installer_path: Path,
     app_version: str,
     smoke_inputs: tuple[Path, Path] | None,
 ) -> None:
+    _ensure_verification_target_available(app_version)
+    report = DIST_DIR / "release-verification.txt"
+    report.unlink(missing_ok=True)
     _remove_path(SMOKE_INSTALL_DIR)
     SMOKE_INSTALL_DIR.mkdir(parents=True)
     install_dir = SMOKE_INSTALL_DIR / app_version
@@ -645,9 +755,15 @@ def _verify_installer(
 
     try:
         _run_command(install_command)
+        self_test = _verify_frozen_app(
+            install_dir / APP_EXE_NAME, DIST_DIR / "release-self-test.json"
+        )
         verified_files: list[Path] = []
         verified_parameters = _verify_appdata_parameters(app_version)
-        tests = ["install", "ffmpeg"]
+        tests = ["install", *(
+            name for name, check in self_test["checks"].items()
+            if check["status"] == "passed"
+        )]
         if smoke_inputs is not None:
             verified_files = _run_release_smoke_test(
                 install_dir / APP_EXE_NAME,
@@ -655,7 +771,6 @@ def _verify_installer(
             )
             tests.extend(["preview", "process"])
 
-        report = DIST_DIR / "release-verification.txt"
         report.write_text(
             "\n".join(
                 [
@@ -685,13 +800,20 @@ def _verify_installer(
 def main() -> None:
     args = _parse_args()
     _ensure_supported_python()
+    if args.skip_inno and args.verify_installer:
+        raise SystemExit("--verify-installer cannot be used with --skip-inno; use --verify-payload.")
 
     app_version = _read_version()
+    if args.verify_installer:
+        _ensure_verification_target_available(app_version)
     smoke_inputs = _resolve_smoke_inputs(args)
     iscc_path = None if args.skip_inno else _find_iscc(args.iscc)
 
     if not args.skip_pyinstaller:
         _run_pyinstaller(console=args.console)
+
+    if args.verify_payload:
+        _verify_frozen_app(DIST_EXE, DIST_DIR / "payload-verification.json")
 
     if smoke_inputs is not None:
         _run_release_smoke_test(DIST_EXE, *smoke_inputs)
@@ -699,12 +821,14 @@ def main() -> None:
     _prepare_payload()
 
     if args.skip_inno:
+        _write_size_report(app_version)
         print(f"Installer payload staged at {PAYLOAD_DIR}")
         return
 
     _run_inno_setup(iscc_path, app_version)
 
     installer_name = INSTALLER_OUTPUT_DIR / f"{APP_NAME}-setup-{app_version}.exe"
+    _write_size_report(app_version, installer_name)
     if args.verify_installer:
         _verify_installer(installer_name, app_version, smoke_inputs)
     print(f"Installer created at {installer_name}")

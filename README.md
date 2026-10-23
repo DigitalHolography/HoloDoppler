@@ -103,9 +103,38 @@ python build_installer.py
 or 
 
 ```bash
-uv sync --all-extras
+uv sync --extra build
 uv run build_installer.py
 ```
+
+The build uses PyInstaller's package hooks to include runtime dependencies and
+plugins without collecting entire scientific test suites. CUDA libraries,
+CuPy kernels/headers, FFmpeg, all processing pipelines, and GUI resources remain
+bundled, so users do not need a separate CUDA toolkit installation. A compatible
+NVIDIA driver is required for GPU processing.
+
+The installer uses solid LZMA2 `ultra64` compression. This takes more time and
+memory to build (about 742 MB for compression, 64 MB for decompression), but the
+installed app runs from normal, uncompressed files. Each build writes a
+`dist/HoloDoppler-setup-<version>.size.json` report with package sizes and build
+dependency versions.
+
+Verify the frozen app's CPU/GPU operations, plotting, GUI resources, HDF5, images,
+and video encoding before packaging it:
+
+```bash
+uv run build_installer.py --verify-payload
+```
+
+Use `--verify-installer` to silently install the generated installer, run those
+checks on the installed app, check seeded parameter presets, and uninstall the
+test installation. If the same version is already installed, use
+`--verify-payload`; installer verification stops before touching that installation.
+GPU checks run when a compatible GPU/driver is available;
+missing CUDA DLLs or failed kernel compilation fail verification. Reports are
+written to `dist/payload-verification.json` and `dist/release-self-test.json`.
+For an additional preview/process check on a recording, pass both
+`--smoke-holo <file.holo>` and `--smoke-parameters <preset.yaml>`.
 
 ### Application Logs
 

@@ -30,7 +30,8 @@ dev = [
 ]
 build = [
     "build>=1.2",
-    "pyinstaller>=6.0",
+    "pyinstaller>=6.21",
+    "pyinstaller-hooks-contrib>=2026.6",
     "cupy-cuda13x[ctk]>=14.0.1",
 ]
 advanced = [
