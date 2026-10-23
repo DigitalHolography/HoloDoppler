@@ -7,6 +7,7 @@ from holodoppler.config import (
     validate_main_parameters,
 )
 from holodoppler.core.batching import calculate_batch_indices
+from holodoppler.core.doppler_images import directional, finish_doppler_images
 from holodoppler.core.filtering import (
     corner_compensation,
     filter_2d,
@@ -150,6 +151,15 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         spectrum_f = holograms_f
     del holograms_f
 
+    if parameters.get("directional_Doppler_image", False):
+        band = parameters.get("directional_Doppler_frequency_band") or (
+            parameters["low_freq"], parameters.get("high_freq"))
+        output_dict["_directional_Doppler_pos"], output_dict["_directional_Doppler_neg"] = directional(
+            xp, backend.gaussian_filter, spectrum_f, *band,
+            parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
+            parameters.get("directional_Doppler_gaussian_width", 35.),
+        )
+
     psd = xp.abs(spectrum_f)
     del spectrum_f
     xp.square(psd, out=psd)
@@ -182,6 +192,13 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         psd,
         axis=(-2, -1),
     )
+
+    if parameters.get("color_Doppler_image", False):
+        for name, default in (("low", [3000, 9000]), ("high", [9000, 18000])):
+            band = parameters.get(f"color_Doppler_{name}_frequency_band", default)
+            mask, _ = frequency_symmetric_filtering(
+                xp, fft, nt_sub, parameters["sampling_freq"] / (parameters.get("skip_every") or 1), *band)
+            output_dict[f"_color_Doppler_{name}"] = xp.sum(psd[mask], axis=0)
 
     if parameters.get("save_spectograms",False) or parameters.get("save_averaged_spectrogram",False):
         output_dict["sh_psd"] = psd # the power spectrum density
@@ -579,7 +596,8 @@ def _process_one_batch(
 
             if (
                 key in {"M0ff", "M0", "M1", "M2", "sh_psd"}
-                or "band_" in key
+                or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
+                           "_directional_Doppler_pos", "_directional_Doppler_neg"}
             ):
                 res[key] = apply_register_images_shifts(
                     backend.xp,
@@ -736,6 +754,7 @@ def preview(file_path, parameters):
         k: backend.to_numpy(v)
         for k, v in res.items()
     }
+    finish_doppler_images(res_np, np, parameters)
 
     del res
     del autofocus_phase_term
@@ -906,7 +925,9 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
                     size = max(value.shape)
                     value = backend.to_numpy(resize_frames(
                         backend.xp, backend.zoom, value, size, size))
-                to_save[_output_name(key)] = value
+                to_save[key] = value
+        finish_doppler_images(to_save, np, parameters)
+        to_save = {_output_name(key): value for key, value in to_save.items()}
         destination.add_batch(to_save, index)
 
     registration_ref = run_batches(
@@ -939,7 +960,8 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
 
 
         for key in output :
-            if key in {"M0ff", "M0", "M1", "M2"} or "band_" in key :
+            if key in {"M0ff", "M0", "M1", "M2"} or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
+                           "_directional_Doppler_pos", "_directional_Doppler_neg"}:
                 output[key] = apply_ecc_registration(output[key], registration_ecc, background="mean")
 
         output["registration_ecc"] = registration_ecc
@@ -963,6 +985,8 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
             )
             for key, value in output.items()
         }
+
+    finish_doppler_images(output, np, parameters)
 
     # The fixed autofocus correction is no longer needed.
     del autofocus_phase_term

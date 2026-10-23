@@ -1,6 +1,7 @@
 """Parameter checks for the default processing pipeline."""
 
 from numbers import Integral, Real
+from math import isfinite
 
 from holodoppler.logging import logger
 
@@ -421,6 +422,37 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'save_averaged_spectrogram' must be a boolean; got {value!r} ({type(value).__name__})."
         )
+
+    for key in ("color_Doppler_image", "color_Doppler_use_lab", "directional_Doppler_image"):
+        if not isinstance(parameters.get(key, False), bool):
+            raise TypeError(f"{key} must be a boolean")
+    if parameters.get("color_Doppler_image", False) or parameters.get("directional_Doppler_image", False):
+        if parameters.get("temporal_transformation") != "FourierTransform":
+            raise ValueError("Doppler images require temporal_transformation='FourierTransform'")
+        for key, default in (
+            ("color_Doppler_low_frequency_band", [3000, 9000]),
+            ("color_Doppler_high_frequency_band", [9000, 18000]),
+            ("directional_Doppler_frequency_band", None),
+        ):
+            enabled = parameters.get("color_Doppler_image" if key.startswith("color_") else "directional_Doppler_image", False)
+            if not enabled:
+                continue
+            band = parameters.get(key, default)
+            if band is None and key == "directional_Doppler_frequency_band":
+                continue
+            if (not isinstance(band, (tuple, list)) or len(band) != 2
+                    or any(isinstance(v, bool) or not isinstance(v, Real) or not isfinite(v) for v in band)
+                    or not 0 <= band[0] < band[1]):
+                raise ValueError(f"{key} must be [low, high] with finite frequencies and 0 <= low < high")
+        if parameters.get("directional_Doppler_image", False):
+            hues = parameters.get("directional_Doppler_hues", [1., .66])
+            if (not isinstance(hues, (tuple, list)) or len(hues) != 2
+                    or any(isinstance(v, bool) or not isinstance(v, Real)
+                           or not isfinite(v) or not 0 <= v <= 1 for v in hues)):
+                raise ValueError("directional_Doppler_hues must contain two finite hue values in [0, 1]")
+            width = parameters.get("directional_Doppler_gaussian_width", 35.)
+            if isinstance(width, bool) or not isinstance(width, Real) or not isfinite(width) or width < 0:
+                raise ValueError("directional_Doppler_gaussian_width must be finite and nonnegative")
 
     logger.debug("Parameters: %s", parameters)
     return parameters

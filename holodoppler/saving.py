@@ -104,6 +104,9 @@ def normalize_float_array_to_uint8(data: np.ndarray) -> np.ndarray:
     if data.dtype == np.uint16:
         return (data.astype(np.float32) / 65535.0 * 255.0).astype(np.uint8)
 
+    floating_rgb = (np.issubdtype(data.dtype, np.floating) and data.ndim in (3, 4)
+                    and data.shape[-1] in (3, 4))
+
     data = np.nan_to_num(
         data,
         nan=0.0,
@@ -113,6 +116,10 @@ def normalize_float_array_to_uint8(data: np.ndarray) -> np.ndarray:
 
     if data.size == 0:
         return np.zeros_like(data, dtype=np.uint8)
+
+    if floating_rgb:
+        # Floating RGB already has an absolute display range; preserve its colors.
+        return np.rint(data * 255).clip(0, 255).astype(np.uint8)
 
     minimum = float(data.min())
     maximum = float(data.max())
@@ -263,7 +270,10 @@ def average_video(data: np.ndarray) -> np.ndarray:
     """
     data = validate_video(data)
 
-    average = np.mean(data, axis=0)
+    average = np.mean(data, axis=0, dtype=np.float64)
+
+    if data.dtype == np.uint8 and is_color_video(data):
+        return np.rint(average).clip(0, 255).astype(np.uint8)
 
     return cast_png_data(average)
 
@@ -1529,7 +1539,8 @@ class OutputClass:
     def _h5_selected(name):
         return (name in {"moment0ff", "moment0", "moment1", "moment2",
                         "spectrum_line", "sh_psd", "averaged_spectrogram",
-                        "spectrograms", "PROJ", "PROJff", "QSum_M0", "J0_M0"}
+                        "spectrograms", "PROJ", "PROJff", "QSum_M0", "J0_M0",
+                        "color_Doppler_image", "directional_Doppler_image"}
                 or name.startswith(("NW_", "NE_", "SW_", "SE_", "NWxSE_", "NExSW_"))
                 or name.endswith("_flow_index") or "band_" in name or is_csv_output(name))
 
@@ -1647,6 +1658,9 @@ class OutputClass:
             low, high = state["range"]
             if value.dtype == np.uint8:
                 frame = value
+            elif (np.issubdtype(value.dtype, np.floating) and value.ndim == 3
+                  and value.shape[-1] in (3, 4)):
+                frame = np.rint(clean * 255).clip(0, 255).astype(np.uint8)
             elif value.dtype == np.uint16:
                 frame = (clean / 65535. * 255.).astype(np.uint8)
             elif high > low:
@@ -1702,8 +1716,11 @@ class OutputClass:
                         errors.append(exc)
             if finalize and "sum" in state and state["count"]:
                 try:
+                    average = state["sum"] / state["count"]
+                    if state["dtype"] == np.uint8 and average.ndim == 3:
+                        average = np.rint(average).clip(0, 255).astype(np.uint8)
                     save_png(self.target_dir / "png" / f"{name}.png",
-                             state["sum"] / state["count"])
+                             average)
                 except Exception as exc:
                     errors.append(exc)
         if self._h5 is not None:

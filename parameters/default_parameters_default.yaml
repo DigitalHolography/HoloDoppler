@@ -82,6 +82,16 @@ shack_hartmann_graph_laplacian: true # Use graph Laplacian method
 shack_hartmann_zernike_fit: true # Other option is shack_hartmann_southwell_integration but not really implemented yet because it is not stable
 shack_hartmann_zernike_fit_modes: [4,5,6] # Number of the Zernike modes to use in the fit in Null ordering
 
+# Doppler images
+color_Doppler_image: true # Save color Doppler video and its temporal-average PNG.
+color_Doppler_use_lab: false # false: decorrelation stretch of [high, low, low]; true: Lab composite using M0 lightness.
+color_Doppler_low_frequency_band: [3000, 9000] # Symmetric low-frequency power band in Hz.
+color_Doppler_high_frequency_band: [9000, 18000] # Symmetric high-frequency power band in Hz.
+directional_Doppler_image: true # Save HSV directional Doppler video and its temporal-average PNG.
+directional_Doppler_frequency_band: null # null uses [low_freq, high_freq]; otherwise [low, high] in Hz.
+directional_Doppler_gaussian_width: 35.0 # Gaussian flatfield sigma in pixels; 0 disables smoothing.
+directional_Doppler_hues: [1.0, 0.66] # [positive, negative] HSV hues; red / blue (default).
+
 #spectrograms
 save_spectograms: true
 spectrogram_resize_shape: [128, 128]
