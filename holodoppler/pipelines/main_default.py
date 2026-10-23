@@ -162,7 +162,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         spectrum_f = holograms_f
     del holograms_f
 
-    psd = xp.abs(spectrum_f)**2
+    psd = xp.abs(spectrum_f)
     del spectrum_f
     xp.square(psd, out=psd)
 
