@@ -744,7 +744,7 @@ def preview(file_path, parameters):
                     max(v.shape[-2:]),
                     max(v.shape[-2:]),
                 ))
-                if v.ndim == 2
+                if v.ndim == 2 or (k == "sh_psd" and v.ndim == 3)
                 else v
             )
             for k, v in res.items()
