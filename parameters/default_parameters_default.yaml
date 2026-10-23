@@ -3,13 +3,13 @@ pipeline_name: "default"
 # optional backend management
 force_numpy: false # force the use of numpy (cpu cores only)
 use_parallel: true # use parallel workers cores or not (numpy)
-numpy_num_workers: 8 # the number of parallel workers to be used (numpy)
+numpy_num_workers: 16 # the number of parallel workers to be used (numpy)
 cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and downloads. (cupy)
 cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM. (cupy)
 # saving management
 live_saving: true # false saves all outputs after processing; ECC still buffers when true.
 overwrite_option: "erase"
-num_saving_workers: 0
+num_saving_workers: 2
 saving_queue_depth: null # Outstanding batches/jobs, including active writes; null = twice the worker count.
 
 # Core parameters
@@ -43,7 +43,7 @@ high_freq: 18300 # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
 
 # Frequency bands for different cutoffs of the psd in Hz. It will give the average of the psd in the symmetric frequency range
 frequency_bands:
-  - [3000, 4000]
+  - [3000, 6000]
   - [9000, 18000]
 
 # Image registration
