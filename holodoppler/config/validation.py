@@ -19,6 +19,23 @@ def validate_main_parameters(parameters):
             f"Parameter 'pipeline_name' must be a string; got {value!r} ({type(value).__name__})."
         )
 
+    value = parameters.get("live_saving", True)
+    if not isinstance(value, bool):
+        raise TypeError("Parameter 'live_saving' must be a boolean.")
+
+    value = parameters.get("num_saving_workers", 0)
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        raise TypeError("Parameter 'num_saving_workers' must be an integer.")
+    if value < 0:
+        raise ValueError("Parameter 'num_saving_workers' must be nonnegative.")
+
+    value = parameters.get("saving_queue_depth")
+    if value is not None:
+        if isinstance(value, bool) or not isinstance(value, Integral):
+            raise TypeError("Parameter 'saving_queue_depth' must be an integer or null.")
+        if value < 1:
+            raise ValueError("Parameter 'saving_queue_depth' must be positive.")
+
     value = parameters.get("force_numpy", False)
     if not (isinstance(value, bool)):
         raise TypeError(

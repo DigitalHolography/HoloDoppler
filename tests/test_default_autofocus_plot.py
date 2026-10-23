@@ -85,6 +85,19 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every)
         )
 
     monkeypatch.setattr(main_default, "save_outputs", save_bundle)
+    # Process streams through OutputClass; preview still saves a complete bundle.
+    if entrypoint == "process":
+        class RecordingOutput(saving.OutputClass):
+            def __init__(self, file_reader, parameters):
+                super().__init__(file_reader, parameters, custom_path=tmp_path)
+                bundles.append({})
+
+            def write_static(self, name, value):
+                bundles[0][name] = value
+                super().write_static(name, value)
+
+        monkeypatch.setattr(main_default, "OutputClass", RecordingOutput)
+        monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
     getattr(main_default, entrypoint)("input.raw", parameters)
 
     assert len(corrections) == (1 if entrypoint == "preview" else (3 if skip_every == 1 else 2))
