@@ -5,7 +5,6 @@ Propagation kernels (Fresnel and Angular Spectrum)
 from functools import cache
 from .image_utils import pad_array_centrally
 
-@cache
 def ensure_yx_pixel_pitch(pixel_pitch):
     if isinstance(pixel_pitch, (int, float)):
         return (float(pixel_pitch), float(pixel_pitch))

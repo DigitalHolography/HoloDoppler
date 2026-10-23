@@ -237,8 +237,8 @@ def test_default_process_h5_with_square_and_spectrograms(tmp_path, monkeypatch, 
     monkeypatch.setattr(main_default, "save_outputs", bundle_output)
     frames = np.random.default_rng(11).random((16, 12, 18)).astype(np.float32)
     reader = SimpleNamespace(file_path=tmp_path / "input.raw", extension=".raw",
-        total_frames=16, read_frames=lambda first_frame, batch_size:
-        frames[first_frame:first_frame + batch_size].copy())
+        total_frames=16, read_frames=lambda first_frame, batch_size, skip_every=None:
+        frames[first_frame:first_frame + batch_size * (skip_every or 1):skip_every or 1].copy())
     monkeypatch.setattr(main_default, "get_reader", lambda path: reader)
     params = yaml.safe_load((Path(__file__).resolve().parents[1] /
         "parameters/default_parameters_default.yaml").read_text())

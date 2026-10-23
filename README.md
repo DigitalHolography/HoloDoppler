@@ -24,16 +24,55 @@ uv sync --all-extras
 
 ## 2. Run the CLI Examples
 
+### Processing pipelines
+
+Available pipeline names are `default`, `lsci`, `pca_accumulation`,
+`sliding_shack_hartmann`, and `split_apertures`. Each supports preview and
+processing with the profiles in `parameters/`. The `sh_avg`, `spectrograms`, and
+`simple` pipelines have been removed; existing profiles selecting them must be
+updated explicitly. The default pipeline still supports `save_spectograms`
+(existing spelling) and `save_averaged_spectrogram`.
+
+All pipelines use the shared readers, validated frame ranges, ordered batch
+runner, and output bundle writer. `live_saving: true` streams results;
+`live_saving: false` saves the buffered results after processing. ECC requires
+buffering. `num_saving_workers` and `saving_queue_depth` control saving overlap.
+`numpy_num_workers`, `cupy_async`, and `cupy_prefetch_depth` control execution;
+LSCI and sliding wavefront history run in order without CPU workers.
+`skip_every` selects frames within a batch; `batch_stride` selects successive
+batch starts, and `end_frame` is exclusive. Only complete input batches run.
+
+PCA `accumulation` now averages consecutive registered projections into one
+output frame, including the final partial group. Preview averages the first
+available group. Image dimensions stay unchanged. Saved metadata includes
+`output_frame_stride` and `output_fps` for grouped output. When acquisition
+frequency is unavailable, the rate is the standard display rate divided by
+`accumulation`; an explicitly supplied `output_fps` sets the ungrouped rate.
+
+LSCI uses `batch_size` as its temporal window and always sets
+`lsci_nbh_t = batch_size = batch_stride`. If `batch_size` is omitted, it uses
+`lsci_nbh_t` (default 40). Every complete batch processes all selected frames
+and emits one result at its final frame: temporal and spatiotemporal flow use
+the full batch window; spatial flow uses that final frame. There is no
+pre-batch priming, and incomplete final batches are skipped. Downsampling and
+disk-backed temporal history are retained. LSCI saves the standard output bundle, including HDF5 datasets
+named `spatial_flow_index`, `temporal_flow_index`, and
+`spatiotemporal_flow_index` when enabled. Replace old `lsci_save_*`,
+`lsci_output_fps`, and CLAHE rendering options with the common saving/rendering
+options (`output_fps` sets video playback rate). Existing saved user profiles
+are not rewritten automatically. LSCI preview returns the first enabled flow
+index image.
+
 ### Preview
 
 ```bash
-holodoppler preview "D:\path\to\holo.holo" "./parameters/default_parameters_debug.json"
+holodoppler preview "D:\path\to\holo.holo" "./parameters/default_parameters_default.yaml"
 ```
 
 ### Process
 
 ```bash
-holodoppler process "D:\path\to\holo.holo" "./parameters/default_parameters_debug.json"
+holodoppler process "D:\path\to\holo.holo" "./parameters/default_parameters_default.yaml"
 ```
 
 ### Run the GUI

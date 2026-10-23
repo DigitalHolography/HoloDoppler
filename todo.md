@@ -4,21 +4,21 @@
     move holodoppler/ to src/
 
 - code base structure wanted : 
-    execution/ -> runner.py  and context.py (progress bar) and backend.py -> cupy numpy switch depending on what is available on the machine
-    saving/ -> saving format and writer functions
+    execution/ -> runner.py  and context.py (progress bar) and backend.py -> cupy numpy switch depending on what is available on the machine (done)
+    saving/ -> saving format and writer functions (done)
     config/ -> config class 
     ui/
-    logger.py -> init logger
-    get_version.py -> soft version and git version
+    logger.py -> init logger(done)
+    get_version.py -> soft version and git version(done)
 
-    pipelines/ -> pipeline definitions calling into core/ and saving/ and config/
+    pipelines/ -> pipeline definitions calling into core/ and saving/ and config/(done)
 
-    __main__.py
-    __init__.py
+    __main__.py(done)
+    __init__.py(done)
 
-    readers/ unified FileReader class and sub HoloFileReader and CineFileReader classes
+    readers/ unified FileReader class and sub HoloFileReader and CineFileReader classes (done)
 
-- remove the sh_avg pipeline and spectrograms as the now fall into default
+- remove the sh_avg pipeline and spectrograms as they now fall into default (done)
 
 - remove the parameters contrast everywhere (its not used)
 

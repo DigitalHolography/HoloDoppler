@@ -51,23 +51,9 @@ from holodoppler.saving import (
 )
 
 
-def _frame_stack(frames):
-    """Readers may squeeze a single frame to two dimensions."""
-    return frames[None, ...] if frames.ndim == 2 else frames
-
-
-def _validate_reference_batch(file_reader, first_frame, batch_size, label, skip_every=None):
-    try:
-        indices = calculate_batch_indices(
-            first_frame, 0, batch_size, batch_size, file_reader.total_frames, skip_every=skip_every
-        )
-        if not indices:
-            raise ValueError("no complete batch fits")
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            f"{label} batch (first_frame={first_frame}, batch_size={batch_size}) "
-            f"cannot fit within {file_reader.total_frames} file frames: {exc}"
-        ) from exc
+from holodoppler.core.pipeline import (
+    frame_stack as _frame_stack, validate_reference_batch as _validate_reference_batch,
+)
 
 
 def _process_batch(parameters, frames, phase_term=None, output_dict=None):

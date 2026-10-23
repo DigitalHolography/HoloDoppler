@@ -1298,7 +1298,12 @@ def calculate_fps(
 ) -> float:
     """Calculate output FPS with safe fallbacks."""
 
-    return default_fps # TODO change but 144Hz is to fast to display anyway
+    # Existing profiles keep the historical display rate. Pipelines that change
+    # temporal cadence can supply an explicit rate without changing other videos.
+    value = (parameters or {}).get("output_fps", default_fps)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value) or value <= 0:
+        raise ValueError("output_fps must be a finite positive number")
+    return float(value)
 
 
 # ============================================================================
@@ -1522,9 +1527,11 @@ class OutputClass:
 
     @staticmethod
     def _h5_selected(name):
-        return name in {"moment0ff", "moment0", "moment1", "moment2",
+        return (name in {"moment0ff", "moment0", "moment1", "moment2",
                         "spectrum_line", "sh_psd", "averaged_spectrogram",
-                        "spectrograms"} or "band_" in name or is_csv_output(name)
+                        "spectrograms", "PROJ", "PROJff", "QSum_M0", "J0_M0"}
+                or name.startswith(("NW_", "NE_", "SW_", "SE_", "NWxSE_", "NExSW_"))
+                or name.endswith("_flow_index") or "band_" in name or is_csv_output(name))
 
     @staticmethod
     def _h5_value(value):
@@ -1793,25 +1800,7 @@ def save_outputs(
 
     # 6. HDF5.
     if save_to_h5:
-        h5_names = [
-                "moment0ff",
-                "moment0",
-                "moment1",
-                "moment2",
-                "spectrum_line",
-                "sh_psd",
-                "averaged_spectrogram",
-                "spectrograms"
-            ]
-
-        # Include all band_* and automatically selected CSV outputs.
-        for name in output:
-            if (
-                "band_" in name
-                or "coefs" in name.lower()
-                or "registration" in name.lower()
-            ) and name not in h5_names:
-                h5_names.append(name)
+        h5_names = [name for name in output if OutputClass._h5_selected(name)]
 
         save_h5(
             target_dir,
