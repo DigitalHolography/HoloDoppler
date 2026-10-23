@@ -34,16 +34,14 @@ build = [
     "cupy-cuda13x[ctk]>=14.0.1",
 ]
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["holodoppler*"]
+[tool.setuptools.package-dir]
+"holodoppler.parameters" = "parameters"
 
 [tool.setuptools.package-data]
 holodoppler = [
   "ui/assets/*",
-  "ui/defaults/*",
-  "parameters/*",
 ]
+"holodoppler.parameters" = ["*.yaml", "*.yml", "*.json"]
 
 [project.scripts]
 holodoppler = "holodoppler.__main__:main"

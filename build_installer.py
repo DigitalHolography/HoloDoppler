@@ -16,12 +16,11 @@ from pathlib import Path
 APP_NAME = "HoloDoppler"
 APP_EXE_NAME = f"{APP_NAME}.exe"
 APP_PUBLISHER = "HoloDoppler"
-APPDATA_SLUG = "holodopplerpython"
+APPDATA_SLUG = "HoloDoppler"
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 PACKAGE_DIR = PROJECT_ROOT / "holodoppler"
 PARAMETERS_DIR = PROJECT_ROOT / "parameters"
-DEFAULTS_DIR = PACKAGE_DIR / "ui" / "defaults"
 APP_ICON_SOURCE = PACKAGE_DIR / "ui" / "assets" / "logo.png"
 PYPROJECT_FILE = PROJECT_ROOT / "pyproject.toml"
 VERSION_FILE = PROJECT_ROOT / "version_holodoppler.txt"
@@ -277,50 +276,28 @@ def _ensure_icon() -> Path:
 
 
 def _parameter_preset_files() -> list[Path]:
-    if not DEFAULTS_DIR.is_dir():
-        raise FileNotFoundError(f"Bundled defaults directory not found: {DEFAULTS_DIR}")
-
-    files = _parameter_files_in(DEFAULTS_DIR)
+    if not PARAMETERS_DIR.is_dir():
+        raise FileNotFoundError(f"Parameters directory not found: {PARAMETERS_DIR}")
+    files = _parameter_files_in(PARAMETERS_DIR)
     if not files:
-        raise FileNotFoundError(f"No bundled parameter files found in {DEFAULTS_DIR}")
+        raise FileNotFoundError(f"No parameter presets found in {PARAMETERS_DIR}")
     return files
 
 
 def _validate_parameter_presets() -> None:
-    if not PARAMETERS_DIR.is_dir():
-        return
-
-    bundled_by_name = {path.name: path for path in _parameter_preset_files()}
-    repository_files = _parameter_files_in(PARAMETERS_DIR)
-    missing = [path.name for path in repository_files if path.name not in bundled_by_name]
-    mismatched = [
-        path.name
-        for path in repository_files
-        if path.name in bundled_by_name and _read_parameter_file(path) != _read_parameter_file(bundled_by_name[path.name])
-    ]
-    if missing or mismatched:
-        details = []
-        if missing:
-            details.append("missing from holodoppler/ui/defaults: " + ", ".join(missing))
-        if mismatched:
-            details.append("different from parameters/: " + ", ".join(mismatched))
-        raise RuntimeError("Bundled parameter presets are not in sync: " + "; ".join(details))
+    files = _parameter_preset_files()
+    if not any(path.name == "default_parameters_default.yaml" for path in files):
+        raise FileNotFoundError(f"Default parameter preset not found in {PARAMETERS_DIR}")
+    for path in files:
+        if not isinstance(_read_parameter_file(path), dict):
+            raise ValueError(f"Parameter preset must contain an object: {path}")
 
 
 def _copy_parameter_presets(target_dir: Path) -> None:
+    sources = _parameter_preset_files()
     target_dir.mkdir(parents=True, exist_ok=True)
-    for source_path in _parameter_preset_files():
+    for source_path in sources:
         shutil.copy2(source_path, target_dir / source_path.name)
-
-
-def _copy_installer_parameters(target_dir: Path) -> None:
-    if PARAMETERS_DIR.is_dir():
-        if target_dir.exists():
-            shutil.rmtree(target_dir)
-        shutil.copytree(PARAMETERS_DIR, target_dir)
-        return
-
-    _copy_parameter_presets(target_dir)
 
 
 def _parameter_files_in(directory: Path) -> list[Path]:
@@ -425,6 +402,9 @@ def _run_pyinstaller(console: bool) -> None:
         CUDA_RUNTIME_HOOK,
     ]
 
+    for source_path in _parameter_preset_files():
+        command.extend(["--add-data", f"{source_path}{os.pathsep}parameters"])
+
     for hidden_import in FROZEN_HIDDEN_IMPORTS:
         command.extend(["--hidden-import", hidden_import])
 
@@ -466,7 +446,7 @@ def _prepare_payload() -> None:
         shutil.rmtree(PAYLOAD_DIR)
 
     shutil.copytree(DIST_APP_DIR, PAYLOAD_DIR)
-    _copy_installer_parameters(PAYLOAD_PARAMETERS_DIR)
+    _copy_parameter_presets(PAYLOAD_PARAMETERS_DIR)
 
     bundled_ffmpeg = sorted(
         path
@@ -634,7 +614,7 @@ def _run_release_smoke_test(
 def _verify_appdata_parameters(app_version: str) -> list[Path]:
     appdata = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
     parameters_dir = appdata / APPDATA_SLUG / app_version / "parameters"
-    expected = sorted(path.name for path in PARAMETERS_DIR.iterdir() if path.is_file())
+    expected = sorted(path.name for path in _parameter_preset_files())
     missing = [name for name in expected if not (parameters_dir / name).is_file()]
     if missing:
         raise RuntimeError(

@@ -9,7 +9,7 @@ from typing import Any
 import yaml
 
 from .constants import APP_SETTINGS_NAME, DEFAULT_PARAMETERS_NAME, LOADED_PARAMETERS_NAME
-from .paths import app_settings_dir, bundled_defaults_dir, get_package_version, legacy_app_settings_dir, repository_parameters_dir
+from .paths import app_settings_dir, get_package_version, legacy_app_settings_dir, parameters_dir
 
 
 PARAMETER_SUFFIXES = (".json", ".yaml", ".yml")
@@ -235,16 +235,7 @@ class SettingsStore:
             self._write_parameters(self.loaded_parameters_path, {})
 
     def _default_parameter_sources(self) -> list[Path]:
-        sources: list[Path] = []
-        seen_names: set[str] = set()
-        for directory in (repository_parameters_dir(), bundled_defaults_dir()):
-            if not directory.is_dir():
-                continue
-            for path in _iter_parameter_files(directory):
-                if path.name not in seen_names:
-                    sources.append(path)
-                    seen_names.add(path.name)
-        return sources
+        return _iter_parameter_files(parameters_dir())
 
     def _copy_into_appdata(self, path: Path) -> Path:
         source_path = path.expanduser().resolve()

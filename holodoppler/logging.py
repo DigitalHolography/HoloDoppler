@@ -58,7 +58,7 @@ def get_log_path() -> Path:
     except (OSError, ValueError, ImportError):
         app_version = "dev"
     version_dir = re.sub(r"[^A-Za-z0-9_.-]+", "_", app_version).strip("._") or "dev"
-    return base_dir / "holodopplerpython" / version_dir / "logs" / "holodoppler.log"
+    return base_dir / "HoloDoppler" / version_dir / "logs" / "holodoppler.log"
 
 
 def _stream_is_writable(stream: object) -> bool:

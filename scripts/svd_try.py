@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 center = True          # subtract temporal mean
 n_modes = 6            # number of modes to display
 
-DATA_PATH = r"/data/Lourds/langevin/data/AUZOS.holo"
+DATA_PATH = r"Y:\260113_IOP_BP\260113_FIY0713.holo"
 
 from holodoppler.file_reader import FileReaderFactory
 

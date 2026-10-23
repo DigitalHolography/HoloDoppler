@@ -43,11 +43,10 @@ def test_worker_settings_in_all_default_templates():
     import yaml
 
     root = Path(__file__).resolve().parents[1]
-    for folder in ("parameters", "holodoppler/ui/defaults"):
-        for name in ("default_parameters_default.yaml", "default_parameters_default_offline.yaml"):
-            params = yaml.safe_load((root / folder / name).read_text())
-            assert params["num_saving_workers"] == 0
-            assert params["saving_queue_depth"] is None
+    for name in ("default_parameters_default.yaml", "default_parameters_default_offline.yaml"):
+        params = yaml.safe_load((root / "parameters" / name).read_text())
+        assert params["num_saving_workers"] == 0
+        assert params["saving_queue_depth"] is None
 
 
 def test_workers_overlap_and_capacity_precedes_copying():

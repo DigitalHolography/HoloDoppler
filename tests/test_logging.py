@@ -245,7 +245,7 @@ def test_log_path_uses_version_and_does_not_import_gui(isolated_logging, monkeyp
     # Check the path before configuration, with no dependency on UI paths.
     monkeypatch.setattr(app_logging, "get_version", lambda: "0.7.1")
     path = app_logging.get_log_path()
-    assert path.parts[-4:] == ("holodopplerpython", "0.7.1", "logs", "holodoppler.log")
+    assert path.parts[-4:] == ("HoloDoppler", "0.7.1", "logs", "holodoppler.log")
     subprocess.run(
         [
             sys.executable,

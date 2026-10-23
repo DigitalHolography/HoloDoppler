@@ -6,7 +6,7 @@ import sys
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-from .constants import APPDATA_SLUG
+from .constants import APPDATA_SLUG, DEFAULT_PARAMETERS_NAME
 
 
 def project_root() -> Path:
@@ -51,12 +51,20 @@ def legacy_app_settings_dir() -> Path:
     return appdata_root() / APPDATA_SLUG / "current_version"
 
 
-def repository_parameters_dir() -> Path:
-    return project_root() / "parameters"
-
-
-def bundled_defaults_dir() -> Path:
-    return Path(__file__).resolve().parent / "defaults"
+def parameters_dir() -> Path:
+    """Locate presets from the checkout, installed package, or frozen application."""
+    if getattr(sys, "frozen", False):
+        candidates = [Path(sys.executable).resolve().parent / "parameters"]
+        bundle = Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+        candidates.extend((bundle / "parameters", bundle / "holodoppler" / "parameters"))
+    else:
+        package = Path(__file__).resolve().parents[1]
+        candidates = [package.parent / "parameters", package / "parameters"]
+    for candidate in candidates:
+        if (candidate / DEFAULT_PARAMETERS_NAME).is_file():
+            return candidate
+    raise FileNotFoundError("Parameter presets not found. Expected parameters/ in: "
+                            + ", ".join(str(path) for path in candidates))
 
 
 def logo_path() -> Path | None:

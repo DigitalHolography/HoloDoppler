@@ -33,6 +33,13 @@ processing with the profiles in `parameters/`. The `sh_avg`, `spectrograms`, and
 updated explicitly. The default pipeline still supports `save_spectograms`
 (existing spelling) and `save_averaged_spectrogram`.
 
+`parameters/` is the single source for preset files. Edit presets there;
+wheel/source distributions and `build_installer.py` package those files
+automatically. The UI reads the checkout presets during development and the
+packaged presets after installation, independently of the working directory.
+First launch copies missing presets into AppData; existing user profiles are
+preserved. There is no second preset folder to keep synchronized.
+
 All pipelines use the shared readers, validated frame ranges, ordered batch
 runner, and output bundle writer. `live_saving: true` streams results;
 `live_saving: false` saves the buffered results after processing. ECC requires
@@ -93,7 +100,7 @@ CLI, GUI, source runs, and the Windows executable use the same logger and log
 format. All `DEBUG`, `INFO`, `WARNING`, and `ERROR` messages are saved to:
 
 ```text
-%APPDATA%\holodopplerpython\<version>\logs\holodoppler.log
+%APPDATA%\HoloDoppler\<version>\logs\holodoppler.log
 ```
 
 The file rotates at 5 MiB and keeps three backups. CLI runs also show the same

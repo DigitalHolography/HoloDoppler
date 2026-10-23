@@ -209,10 +209,12 @@ def test_all_pipelines_use_main_validation(tmp_path, monkeypatch, name, changes,
         pipeline.prepare_input(reader.file_path, parameters(name, **changes))
 
 
-def test_bundled_profiles_match_sources():
-    for path in (ROOT / "parameters").glob("*.yaml"):
-        assert yaml.safe_load(path.read_text()) == yaml.safe_load(
-            (ROOT / "holodoppler/ui/defaults" / path.name).read_text())
+def test_ui_uses_canonical_presets():
+    from holodoppler.ui.paths import parameters_dir
+    from holodoppler.ui.settings_store import SettingsStore
+    assert parameters_dir() == ROOT / "parameters"
+    assert SettingsStore()._default_parameter_sources() == sorted(
+        (ROOT / "parameters").glob("*.yaml"), key=lambda path: path.name.lower())
 
 
 def test_profiles_follow_default_order_and_comments():
