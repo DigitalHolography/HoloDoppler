@@ -7,7 +7,7 @@ from holodoppler.config import (
     validate_main_parameters,
 )
 from holodoppler.core.batching import calculate_batch_indices
-from holodoppler.core.processing import run_batches
+from holodoppler.core.doppler_images import directional, finish_doppler_images
 from holodoppler.core.filtering import (
     corner_compensation,
     filter_2d,
@@ -21,6 +21,7 @@ from holodoppler.core.image_utils import (
 )
 from holodoppler.core.moments import moments
 from holodoppler.core.plots import plot_phase_with_slopes_rgb
+from holodoppler.core.processing import run_batches
 from holodoppler.core.propagation import (
     angular_spectrum_transform,
     angular_spectrum_transform_with_phase,
@@ -44,28 +45,16 @@ from holodoppler.core.zernike import (
     fit_zernike_fresnel,
 )
 from holodoppler.file_reader import get_reader
+from holodoppler.logging import logger
 from holodoppler.saving import (
+    OutputClass,
     save_outputs,
 )
 
 
-def _frame_stack(frames):
-    """Readers may squeeze a single frame to two dimensions."""
-    return frames[None, ...] if frames.ndim == 2 else frames
-
-
-def _validate_reference_batch(file_reader, first_frame, batch_size, label):
-    try:
-        indices = calculate_batch_indices(
-            first_frame, 0, batch_size, batch_size, file_reader.total_frames
-        )
-        if not indices:
-            raise ValueError("no complete batch fits")
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            f"{label} batch (first_frame={first_frame}, batch_size={batch_size}) "
-            f"cannot fit within {file_reader.total_frames} file frames: {exc}"
-        ) from exc
+from holodoppler.core.pipeline import (
+    frame_stack as _frame_stack, validate_reference_batch as _validate_reference_batch,
+)
 
 
 def _process_batch(parameters, frames, phase_term=None, output_dict=None):
@@ -162,6 +151,15 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         spectrum_f = holograms_f
     del holograms_f
 
+    if parameters.get("directional_Doppler_image", False):
+        band = parameters.get("directional_Doppler_frequency_band") or (
+            parameters["low_freq"], parameters.get("high_freq"))
+        output_dict["_directional_Doppler_pos"], output_dict["_directional_Doppler_neg"] = directional(
+            xp, backend.gaussian_filter, spectrum_f, *band,
+            parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
+            parameters.get("directional_Doppler_gaussian_width", 35.),
+        )
+
     psd = xp.abs(spectrum_f)
     del spectrum_f
     xp.square(psd, out=psd)
@@ -173,7 +171,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         xp,
         fft,
         nt_sub,
-        parameters["sampling_freq"],
+        parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
         parameters["low_freq"],
         parameters.get("high_freq"),
     )
@@ -195,6 +193,13 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         axis=(-2, -1),
     )
 
+    if parameters.get("color_Doppler_image", False):
+        for name, default in (("low", [3000, 9000]), ("high", [9000, 18000])):
+            band = parameters.get(f"color_Doppler_{name}_frequency_band", default)
+            mask, _ = frequency_symmetric_filtering(
+                xp, fft, nt_sub, parameters["sampling_freq"] / (parameters.get("skip_every") or 1), *band)
+            output_dict[f"_color_Doppler_{name}"] = xp.sum(psd[mask], axis=0)
+
     if parameters.get("save_spectograms",False) or parameters.get("save_averaged_spectrogram",False):
         output_dict["sh_psd"] = psd # the power spectrum density
 
@@ -208,7 +213,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             xp,
             fft,
             nt_sub,
-            parameters["sampling_freq"],
+            parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
             f1,
             f2,
         )
@@ -263,7 +268,7 @@ def _process_shack_hartmann(
             parameters["pixel_pitch"],
             parameters["low_freq"],
             parameters.get("high_freq"),
-            parameters["sampling_freq"],
+            parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
             frames.shape[0],
             parameters["shack_hartmann_nx_subap"],
             parameters["shack_hartmann_ny_subap"],
@@ -280,7 +285,7 @@ def _process_shack_hartmann(
             parameters["pixel_pitch"],
             parameters["low_freq"],
             parameters.get("high_freq"),
-            parameters["sampling_freq"],
+            parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
             frames.shape[0],
             parameters["shack_hartmann_nx_subap"],
             parameters["shack_hartmann_ny_subap"],
@@ -441,18 +446,18 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None):
         "shack_hartmann_autofocus_batch_size", parameters["batch_size"]
     )
 
-    print(
-        "Running Shack-Hartmann autofocus from reference batch:",
-        f"first_frame={ref_first_frame},",
-        f"autofocus_batch_size={ref_batch_size}",
+    logger.info(
+        "Running Shack-Hartmann autofocus from reference batch: first_frame=%s, autofocus_batch_size=%s",
+        ref_first_frame, ref_batch_size,
     )
 
     _validate_reference_batch(
-        file_reader, ref_first_frame, ref_batch_size, "Autofocus reference"
+        file_reader, ref_first_frame, ref_batch_size, "Autofocus reference", parameters.get("skip_every")
     )
     ref_frames = file_reader.read_frames(
         first_frame=ref_first_frame,
         batch_size=ref_batch_size,
+        skip_every=parameters.get("skip_every"),
     )
 
     if ref_frames.shape[0] == 0:
@@ -498,7 +503,7 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None):
             "correction was produced."
         )
 
-    print("Shack-Hartmann autofocus phase correction computed.")
+    logger.info("Shack-Hartmann autofocus phase correction computed.")
 
     return phase_term, coefs
 
@@ -591,7 +596,8 @@ def _process_one_batch(
 
             if (
                 key in {"M0ff", "M0", "M1", "M2", "sh_psd"}
-                or "band_" in key
+                or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
+                           "_directional_Doppler_pos", "_directional_Doppler_neg"}
             ):
                 res[key] = apply_register_images_shifts(
                     backend.xp,
@@ -667,10 +673,10 @@ def preview(file_path, parameters):
         backend.set_backend("numpy")
     file_reader = get_reader(file_path)
 
-    print("previewing file :", file_path)
+    logger.debug("Preview input: %s", file_path)
 
     if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
 
         parameters = update_from_holo_footer(
             parameters,
@@ -678,7 +684,7 @@ def preview(file_path, parameters):
         )
 
     if file_reader.extension == ".cine":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
 
         parameters = update_from_cine_metadata(
             parameters,
@@ -688,7 +694,7 @@ def preview(file_path, parameters):
     validate_main_parameters(parameters)
 
     _validate_reference_batch(
-        file_reader, parameters["first_frame"], parameters["batch_size"], "Preview"
+        file_reader, parameters["first_frame"], parameters["batch_size"], "Preview", parameters.get("skip_every")
     )
 
     # ------------------------------------------------------------
@@ -707,6 +713,7 @@ def preview(file_path, parameters):
     frames = file_reader.read_frames(
         first_frame=parameters["first_frame"],
         batch_size=parameters["batch_size"],
+        skip_every=parameters.get("skip_every"),
     )
 
     frames = backend.to_backend(_frame_stack(frames)).astype(
@@ -737,7 +744,7 @@ def preview(file_path, parameters):
                     max(v.shape[-2:]),
                     max(v.shape[-2:]),
                 ))
-                if v.ndim == 2
+                if v.ndim == 2 or (k == "sh_psd" and v.ndim == 3)
                 else v
             )
             for k, v in res.items()
@@ -747,6 +754,7 @@ def preview(file_path, parameters):
         k: backend.to_numpy(v)
         for k, v in res.items()
     }
+    finish_doppler_images(res_np, np, parameters)
 
     del res
     del autofocus_phase_term
@@ -764,6 +772,8 @@ def preview(file_path, parameters):
         output=res_np,
         parameters=parameters,
         custom_relative_path="preview",
+        num_saving_workers=parameters.get("num_saving_workers", 0),
+        saving_queue_depth=parameters.get("saving_queue_depth"),
     )
 
     return res_np["moment0ff"]
@@ -776,7 +786,7 @@ def process(file_path, parameters, progress_callback=None):
     file_reader = get_reader(file_path)
 
     if file_reader.extension == ".holo":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
 
         parameters = update_from_holo_footer(
             parameters,
@@ -784,7 +794,7 @@ def process(file_path, parameters, progress_callback=None):
         )
 
     if file_reader.extension == ".cine":
-        print("file header :", file_reader.header)
+        logger.debug("File header: %s", file_reader.header)
 
         parameters = update_from_cine_metadata(
             parameters,
@@ -803,11 +813,26 @@ def process(file_path, parameters, progress_callback=None):
     )
 
     batch_indices = calculate_batch_indices(
-        first_frame, end_frame, batch_size, batch_stride, file_reader.total_frames
+        first_frame, end_frame, batch_size, batch_stride, file_reader.total_frames,
+        skip_every=parameters.get("skip_every"),
     )
     if not batch_indices:
         return
 
+    if parameters.get("live_saving", True):
+        with OutputClass(file_reader, parameters) as destination:
+            _process_to_output(file_reader, parameters, batch_indices,
+                               destination, progress_callback)
+    else:
+        _process_to_output(file_reader, parameters, batch_indices,
+                           None, progress_callback)
+
+
+def _process_to_output(file_reader, parameters, batch_indices, destination,
+                       progress_callback):
+    batch_size = parameters["batch_size"]
+    first_frame = parameters["first_frame"]
+    buffered = destination is None or parameters.get("image_registration_with_ecc", False)
     output = {}
 
     registration_ref = None
@@ -829,7 +854,7 @@ def process(file_path, parameters, progress_callback=None):
 
         _validate_reference_batch(
             file_reader, parameters["registration_ref_first_frame"],
-            parameters["registration_ref_batch_size"], "Registration reference",
+            parameters["registration_ref_batch_size"], "Registration reference", parameters.get("skip_every"),
         )
         ref_frames = file_reader.read_frames(
             first_frame=parameters[
@@ -838,6 +863,7 @@ def process(file_path, parameters, progress_callback=None):
             batch_size=parameters[
                 "registration_ref_batch_size"
             ],
+            skip_every=parameters.get("skip_every"),
         )
 
         ref_frames = backend.to_backend(_frame_stack(ref_frames)).astype(
@@ -880,10 +906,33 @@ def process(file_path, parameters, progress_callback=None):
         )
 
     def consume_result(index, result):
-        _append_numpy_results(output, result, parameters, index, len(batch_indices))
+        if buffered:
+            _append_numpy_results(output, result, parameters, index, len(batch_indices))
+            return
+        # Reuse spectrogram preparation on a single batch, then discard it.
+        current = {}
+        _append_numpy_results(current, result, parameters, 0, 1)
+        to_save = {}
+        for key, value in current.items():
+            if key == "averaged_spectrogram":
+                if key in output:
+                    output[key] += value
+                else:
+                    output[key] = value
+            else:
+                value = value[0]
+                if parameters.get("square", False) and value.ndim == 2:
+                    size = max(value.shape)
+                    value = backend.to_numpy(resize_frames(
+                        backend.xp, backend.zoom, value, size, size))
+                to_save[key] = value
+        finish_doppler_images(to_save, np, parameters)
+        to_save = {_output_name(key): value for key, value in to_save.items()}
+        destination.add_batch(to_save, index)
 
     registration_ref = run_batches(
         file_reader, batch_indices, batch_size, process_batch, consume_result,
+        skip_every=parameters.get("skip_every"),
         registration_ref=registration_ref,
         registration_enabled=parameters.get("image_registration", False),
         workers=parameters.get("numpy_num_workers", 8),
@@ -893,7 +942,7 @@ def process(file_path, parameters, progress_callback=None):
         progress_callback=progress_callback,
     )
 
-    print(output.keys())
+    logger.debug("Output keys: %s", output.keys())
 
     if auto_coefs is not None:
         output["shack_hartmann_autofocus_zernike_coefs"] = backend.to_numpy(auto_coefs)
@@ -906,20 +955,17 @@ def process(file_path, parameters, progress_callback=None):
     # ------------------------------------------------------------
 
     if parameters.get("image_registration_with_ecc", False):
-        print(
-            "Running Registration ECC algo:"
-        )
+        logger.info("Running Registration ECC algo:")
         registration_ecc = register_with_ecc(output["M0ff"],radius=parameters.get("registration_ecc_radius",0.8),iterations=300,eps=1e-6, progress_callback=progress_callback, ecc_min_threshold=parameters.get("registration_ecc_min_threshold",0.7))
 
 
         for key in output :
-            if key in {"M0ff", "M0", "M1", "M2"} or "band_" in key :
+            if key in {"M0ff", "M0", "M1", "M2"} or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
+                           "_directional_Doppler_pos", "_directional_Doppler_neg"}:
                 output[key] = apply_ecc_registration(output[key], registration_ecc, background="mean")
 
         output["registration_ecc"] = registration_ecc
-        print(
-            "Registration calculated."
-        )
+        logger.info("Registration calculated.")
 
 
     # ------------------------------------------------------------
@@ -940,6 +986,8 @@ def process(file_path, parameters, progress_callback=None):
             for key, value in output.items()
         }
 
+    finish_doppler_images(output, np, parameters)
+
     # The fixed autofocus correction is no longer needed.
     del autofocus_phase_term
 
@@ -948,14 +996,30 @@ def process(file_path, parameters, progress_callback=None):
     # ------------------------------------------------------------
     # Renaming for compatibility with Doppler View
     # ------------------------------------------------------------
-    output["moment0"] = output.pop("M0")
-    output["moment0ff"] = output.pop("M0ff")
-    output["moment1"] = output.pop("M1")
-    output["moment2"] = output.pop("M2")
+    for key in list(output):
+        renamed = _output_name(key)
+        if renamed != key:
+            output[renamed] = output.pop(key)
 
-    output.update(autofocus_diagnostics)
-    save_outputs(
-        file_reader=file_reader,
-        output=output,
-        parameters=parameters,
-    )
+    if destination is None:
+        output.update(autofocus_diagnostics)
+        save_outputs(file_reader=file_reader, output=output, parameters=parameters,
+                     num_saving_workers=parameters.get("num_saving_workers", 0),
+                     saving_queue_depth=parameters.get("saving_queue_depth"))
+        return
+
+    static_names = {"averaged_spectrogram", "shack_hartmann_autofocus_zernike_coefs"}
+    if buffered:
+        temporal = {key: value for key, value in output.items() if key not in static_names}
+        for t in range(len(batch_indices)):
+            destination.add_batch({key: value[t] for key, value in temporal.items()}, t)
+    for key, value in output.items():
+        if not buffered or key in static_names:
+            destination.write_static(key, value)
+    for key, value in autofocus_diagnostics.items():
+        destination.write_static(key, value)
+
+
+def _output_name(name):
+    return {"M0": "moment0", "M0ff": "moment0ff",
+            "M1": "moment1", "M2": "moment2"}.get(name, name)

@@ -20,9 +20,9 @@ import matplotlib.pyplot as plt
 # PARAMETERS
 # ------------------------------------------------------------
 center = True          # subtract temporal mean
-n_modes = 6            # number of modes to display
+n_modes = 10            # number of modes to display
 
-DATA_PATH = r"/data/Lourds/langevin/data/AUZOS.holo"
+DATA_PATH = r"Y:\260113_IOP_BP\260113_FIY0713.holo"
 
 from holodoppler.file_reader import FileReaderFactory
 
@@ -39,6 +39,8 @@ X = data.reshape(nt, ny * nx).T      # (pixels, time)
 
 if center:
     mean_field = X.mean(axis=1, keepdims=True)
+    X -= mean_field
+    mean_field = X.mean(axis=0, keepdims=True)
     X -= mean_field
 
 print("Snapshot matrix :", X.shape)

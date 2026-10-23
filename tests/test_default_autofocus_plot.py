@@ -12,9 +12,10 @@ from holodoppler import backend, saving
 from holodoppler.pipelines import main_default
 
 
+@pytest.mark.parametrize("skip_every", [1, 2])
 @pytest.mark.parametrize("entrypoint", ["preview", "process"])
 @pytest.mark.parametrize("autofocus", [True, False])
-def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus):
+def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every):
     numpy_backend = backend.BackendManager("numpy")
     for name in ("xp", "fft", "zoom", "is_gpu"):
         monkeypatch.setattr(backend, name, getattr(numpy_backend, name))
@@ -26,7 +27,7 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus):
     defaults = Path(__file__).resolve().parents[1] / "parameters/default_parameters_default.yaml"
     parameters = yaml.safe_load(defaults.read_text(encoding="utf-8"))
     parameters.update(
-        batch_size=4, batch_stride=4, first_frame=0, end_frame=-1,
+        skip_every=skip_every, batch_size=4, batch_stride=4, first_frame=0, end_frame=-1,
         registration_ref_first_frame=0, shack_hartmann_autofocus_batch_size=4,
         shack_hartmann_autofocus=autofocus, spatial_propagation="Fresnel",
         pixel_pitch=[1e-6, 1e-6], wavelength=852e-9, z=0.1,
@@ -84,9 +85,23 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus):
         )
 
     monkeypatch.setattr(main_default, "save_outputs", save_bundle)
+    # Process streams through OutputClass; preview still saves a complete bundle.
+    if entrypoint == "process":
+        class RecordingOutput(saving.OutputClass):
+            def __init__(self, file_reader, parameters):
+                super().__init__(file_reader, parameters, custom_path=tmp_path)
+                bundles.append({})
+
+            def write_static(self, name, value):
+                bundles[0][name] = value
+                super().write_static(name, value)
+
+        monkeypatch.setattr(main_default, "OutputClass", RecordingOutput)
+        monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
     getattr(main_default, entrypoint)("input.raw", parameters)
 
-    assert len(corrections) == (1 if entrypoint == "preview" else 3)
+    assert len(corrections) == (1 if entrypoint == "preview" else (3 if skip_every == 1 else 2))
+    assert all(call.kwargs["skip_every"] == skip_every for call in reader.read_frames.call_args_list)
     plot_key = "shack_hartmann_autofocus_wavefront_color_image"
     pngs = list(tmp_path.rglob(f"{plot_key}.png"))
     assert all(plot_key not in str(call.args[0]) for call in video_writer.call_args_list)
@@ -118,3 +133,10 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus):
 ])
 def test_still_images_are_not_encoded_as_videos(shape, expected):
     assert saving.is_video(np.zeros(shape, dtype=np.uint8)) == expected
+
+
+def test_skipped_batch_bounds():
+    from holodoppler.core.batching import calculate_batch_indices
+
+    assert list(calculate_batch_indices(0, -1, 4, 4, 12, skip_every=2)) == [0, 4]
+    assert list(calculate_batch_indices(0, 6, 4, 4, 12, skip_every=2)) == []

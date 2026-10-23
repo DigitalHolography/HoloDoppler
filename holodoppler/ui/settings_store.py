@@ -9,23 +9,12 @@ from typing import Any
 import yaml
 
 from .constants import APP_SETTINGS_NAME, DEFAULT_PARAMETERS_NAME, LOADED_PARAMETERS_NAME
-from .paths import app_settings_dir, bundled_defaults_dir, get_package_version, legacy_app_settings_dir, repository_parameters_dir
+from .paths import app_settings_dir, get_package_version, legacy_app_settings_dir, parameters_dir
 
 
 PARAMETER_SUFFIXES = (".json", ".yaml", ".yml")
 EXCLUDED_PARAMETER_NAMES = {"current_parameters.json", LOADED_PARAMETERS_NAME}
 LEGACY_DEFAULT_PARAMETERS_NAME = "default_parameters_sliding_shack_hart.yaml"
-
-
-DEFAULT_WINDOW_GEOMETRIES = {
-    "minimal": "720x560",
-    "advanced": "1160x780",
-}
-
-DEFAULT_WINDOW_MINSIZES = {
-    "minimal": (640, 500),
-    "advanced": (980, 640),
-}
 
 
 class SettingsStore:
@@ -50,7 +39,6 @@ class SettingsStore:
         state["default_parameters_name"] = DEFAULT_PARAMETERS_NAME
         state.setdefault("active_tab", "minimal")
         state["active_tab"] = _normalized_tab_name(state["active_tab"])
-        state["window_geometries"] = self._normalized_window_geometries(state)
         state["app_version"] = get_package_version()
         self.save_state(state)
 
@@ -65,6 +53,8 @@ class SettingsStore:
 
     def save_state(self, state: dict[str, Any]) -> None:
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        state = state.copy()
+        state.pop("window_geometries", None)
         self.settings_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
     def parameter_files(self) -> list[Path]:
@@ -87,17 +77,13 @@ class SettingsStore:
         return self.selected_parameters_path().name
 
     def load_current_parameters(self) -> dict[str, Any]:
-        return _with_spectral_cube_defaults(
-            _read_parameter_object(self.loaded_parameters_path)
-        )
+        return _read_parameter_object(self.loaded_parameters_path)
 
     def load_selected_parameters(self) -> dict[str, Any]:
-        return _with_spectral_cube_defaults(
-            _read_parameter_object(self.selected_parameters_path())
-        )
+        return _read_parameter_object(self.selected_parameters_path())
 
     def load_parameters(self, path: Path) -> dict[str, Any]:
-        return _with_spectral_cube_defaults(_read_parameter_object(path))
+        return _read_parameter_object(path)
 
     def select_parameters(self, path: Path) -> Path:
         parameter_path = self._copy_into_appdata(path) if not self._is_in_parameters_dir(path) else path
@@ -169,32 +155,6 @@ class SettingsStore:
         state["active_tab"] = _normalized_tab_name(tab_name)
         self.save_state(state)
 
-    def window_geometry(self, tab_name: str) -> str:
-        tab = _normalized_tab_name(tab_name)
-        state = self.load_state()
-        geometries = self._normalized_window_geometries(state)
-        return geometries[tab]
-
-    def save_window_geometry(self, tab_name: str, geometry: str) -> None:
-        tab = _normalized_tab_name(tab_name)
-        if not _is_geometry_string(geometry):
-            return
-        state = self.load_state()
-        geometries = self._normalized_window_geometries(state)
-        geometries[tab] = geometry
-        state["window_geometries"] = geometries
-        self.save_state(state)
-
-    def save_window_state(self, tab_name: str, geometry: str) -> None:
-        state = self.load_state()
-        tab = _normalized_tab_name(tab_name)
-        state["active_tab"] = tab
-        geometries = self._normalized_window_geometries(state)
-        if _is_geometry_string(geometry):
-            geometries[tab] = geometry
-        state["window_geometries"] = geometries
-        self.save_state(state)
-
     def _default_state(self) -> dict[str, Any]:
         return {
             "app_version": get_package_version(),
@@ -204,7 +164,6 @@ class SettingsStore:
             "current_parameters_path": str(self.loaded_parameters_path),
             "default_parameters_name": DEFAULT_PARAMETERS_NAME,
             "active_tab": "minimal",
-            "window_geometries": DEFAULT_WINDOW_GEOMETRIES.copy(),
             "last_input_dir": str(Path.home()),
             "recent_inputs": [],
         }
@@ -275,27 +234,8 @@ class SettingsStore:
         else:
             self._write_parameters(self.loaded_parameters_path, {})
 
-    @staticmethod
-    def _normalized_window_geometries(state: dict[str, Any]) -> dict[str, str]:
-        raw_geometries = state.get("window_geometries")
-        geometries = raw_geometries if isinstance(raw_geometries, dict) else {}
-        normalized = DEFAULT_WINDOW_GEOMETRIES.copy()
-        for tab_name, default_geometry in DEFAULT_WINDOW_GEOMETRIES.items():
-            raw_geometry = geometries.get(tab_name)
-            normalized[tab_name] = raw_geometry if isinstance(raw_geometry, str) and _is_geometry_string(raw_geometry) else default_geometry
-        return normalized
-
     def _default_parameter_sources(self) -> list[Path]:
-        sources: list[Path] = []
-        seen_names: set[str] = set()
-        for directory in (repository_parameters_dir(), bundled_defaults_dir()):
-            if not directory.is_dir():
-                continue
-            for path in _iter_parameter_files(directory):
-                if path.name not in seen_names:
-                    sources.append(path)
-                    seen_names.add(path.name)
-        return sources
+        return _iter_parameter_files(parameters_dir())
 
     def _copy_into_appdata(self, path: Path) -> Path:
         source_path = path.expanduser().resolve()
@@ -370,14 +310,6 @@ def _read_parameter_object(path: Path) -> dict[str, Any]:
     return data
 
 
-def _with_spectral_cube_defaults(data: dict[str, Any]) -> dict[str, Any]:
-    """Expose the default auxiliary pipeline controls in every main profile."""
-    if data.get("pipeline_name") != "spectral_cube":
-        data.setdefault("spectral_cube_enabled", True)
-        data.setdefault("spectral_cube_settings", {})
-    return data
-
-
 def _safe_parameter_filename(name: str) -> str:
     stripped = name.strip()
     if not stripped:
@@ -390,8 +322,4 @@ def _safe_parameter_filename(name: str) -> str:
 
 
 def _normalized_tab_name(tab_name: Any) -> str:
-    return tab_name if tab_name in DEFAULT_WINDOW_GEOMETRIES else "minimal"
-
-
-def _is_geometry_string(value: str) -> bool:
-    return re.fullmatch(r"\d+x\d+(?:[+-]\d+[+-]\d+)?", value) is not None
+    return tab_name if isinstance(tab_name, str) and tab_name in {"minimal", "advanced"} else "minimal"

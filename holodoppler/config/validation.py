@@ -1,16 +1,43 @@
 """Parameter checks for the default processing pipeline."""
 
 from numbers import Integral, Real
+from math import isfinite
+
+from holodoppler.logging import logger
 
 
 def validate_main_parameters(parameters):
     """Check each main-pipeline parameter after metadata resolution without mutation."""
+
+    value = parameters.get("skip_every")
+    if value is not None:
+        if isinstance(value, bool) or not isinstance(value, Integral):
+            raise TypeError("skip_every must be an integer or None")
+        if value <= 0:
+            raise ValueError("skip_every must be positive")
 
     value = parameters.get("pipeline_name", 'default')
     if not (isinstance(value, str)):
         raise TypeError(
             f"Parameter 'pipeline_name' must be a string; got {value!r} ({type(value).__name__})."
         )
+
+    value = parameters.get("live_saving", True)
+    if not isinstance(value, bool):
+        raise TypeError("Parameter 'live_saving' must be a boolean.")
+
+    value = parameters.get("num_saving_workers", 0)
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        raise TypeError("Parameter 'num_saving_workers' must be an integer.")
+    if value < 0:
+        raise ValueError("Parameter 'num_saving_workers' must be nonnegative.")
+
+    value = parameters.get("saving_queue_depth")
+    if value is not None:
+        if isinstance(value, bool) or not isinstance(value, Integral):
+            raise TypeError("Parameter 'saving_queue_depth' must be an integer or null.")
+        if value < 1:
+            raise ValueError("Parameter 'saving_queue_depth' must be positive.")
 
     value = parameters.get("force_numpy", False)
     if not (isinstance(value, bool)):
@@ -369,9 +396,9 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'spectrogram_frequency_start' must be a real number; got {value!r} ({type(value).__name__})."
         )
-    if not 0 <= value <= 1:
+    if not 0 <= value <= 0.5:
         raise ValueError(
-            f"Parameter 'spectrogram_frequency_start' must be between 0 and 1; got {value!r}."
+            f"Parameter 'spectrogram_frequency_start' must be between 0 and 0.5; got {value!r}."
         )
 
     value = parameters.get("spectrogram_frequency_end", 0.5)
@@ -379,9 +406,9 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'spectrogram_frequency_end' must be a real number; got {value!r} ({type(value).__name__})."
         )
-    if not 0 <= value <= 1:
+    if not 0 <= value <= 0.5:
         raise ValueError(
-            f"Parameter 'spectrogram_frequency_end' must be between 0 and 1; got {value!r}."
+            f"Parameter 'spectrogram_frequency_end' must be between 0 and 0.5; got {value!r}."
         )
 
     value = parameters.get("spectrogram_frequency_binning", 4)
@@ -396,5 +423,36 @@ def validate_main_parameters(parameters):
             f"Parameter 'save_averaged_spectrogram' must be a boolean; got {value!r} ({type(value).__name__})."
         )
 
-    print("parameters : ", parameters)
+    for key in ("color_Doppler_image", "color_Doppler_use_lab", "directional_Doppler_image"):
+        if not isinstance(parameters.get(key, False), bool):
+            raise TypeError(f"{key} must be a boolean")
+    if parameters.get("color_Doppler_image", False) or parameters.get("directional_Doppler_image", False):
+        if parameters.get("temporal_transformation") != "FourierTransform":
+            raise ValueError("Doppler images require temporal_transformation='FourierTransform'")
+        for key, default in (
+            ("color_Doppler_low_frequency_band", [3000, 9000]),
+            ("color_Doppler_high_frequency_band", [9000, 18000]),
+            ("directional_Doppler_frequency_band", None),
+        ):
+            enabled = parameters.get("color_Doppler_image" if key.startswith("color_") else "directional_Doppler_image", False)
+            if not enabled:
+                continue
+            band = parameters.get(key, default)
+            if band is None and key == "directional_Doppler_frequency_band":
+                continue
+            if (not isinstance(band, (tuple, list)) or len(band) != 2
+                    or any(isinstance(v, bool) or not isinstance(v, Real) or not isfinite(v) for v in band)
+                    or not 0 <= band[0] < band[1]):
+                raise ValueError(f"{key} must be [low, high] with finite frequencies and 0 <= low < high")
+        if parameters.get("directional_Doppler_image", False):
+            hues = parameters.get("directional_Doppler_hues", [1., .66])
+            if (not isinstance(hues, (tuple, list)) or len(hues) != 2
+                    or any(isinstance(v, bool) or not isinstance(v, Real)
+                           or not isfinite(v) or not 0 <= v <= 1 for v in hues)):
+                raise ValueError("directional_Doppler_hues must contain two finite hue values in [0, 1]")
+            width = parameters.get("directional_Doppler_gaussian_width", 35.)
+            if isinstance(width, bool) or not isinstance(width, Real) or not isfinite(width) or width < 0:
+                raise ValueError("directional_Doppler_gaussian_width must be finite and nonnegative")
+
+    logger.debug("Parameters: %s", parameters)
     return parameters

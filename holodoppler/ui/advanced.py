@@ -244,7 +244,9 @@ class AdvancedView(ttk.Frame):
         self.run_button = ttk.Button(toolbar, text="Run", command=self.controller.run_processing, style="Accent.TButton")
         self.run_button.grid(row=0, column=2, padx=(0, 6))
         self.stop_button = ttk.Button(toolbar, text="Stop", command=self.controller.stop_processing, state="disabled")
-        self.stop_button.grid(row=0, column=3, padx=(0, 18))
+        self.stop_button.grid(row=0, column=3, padx=(0, 6))
+        self.log_button = ttk.Button(toolbar, text="Logs", command=self.controller.toggle_logs)
+        self.log_button.grid(row=0, column=4, padx=(0, 18))
         ttk.Label(toolbar, textvariable=self.status_var, style="Muted.TLabel").grid(row=0, column=6, sticky="e")
 
         notebook = ttk.Notebook(self)

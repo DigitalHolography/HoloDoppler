@@ -7,9 +7,14 @@ import os
 import re
 import subprocess
 import time
+import tempfile
+from queue import Queue
+from threading import Condition, Lock, Thread
+from numbers import Integral
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import deque
 from typing import Iterable, Any
 
 import h5py
@@ -20,6 +25,7 @@ from PIL import Image
 
 from holodoppler.get_version import get_version
 from holodoppler.core.image_utils import resize_frames
+from holodoppler.logging import logger
 
 
 def ensure_directory(path: Path) -> Path:
@@ -31,16 +37,13 @@ def ensure_directory(path: Path) -> Path:
     except OSError as exc:
         absolute_path = path.resolve(strict=False)
 
-        print("\n[ensure_directory] FAILED")
-        print(f"Requested path : {path}")
-        print(f"Absolute path  : {absolute_path}")
-        print(f"Current cwd    : {Path.cwd()}")
-        print(f"Exists         : {absolute_path.exists()}")
-        print(f"Is directory   : {absolute_path.is_dir()}")
-        print(f"Is file        : {absolute_path.is_file()}")
-        print(f"Parent         : {absolute_path.parent}")
-        print(f"Parent exists  : {absolute_path.parent.exists()}")
-        print(f"Exception      : {exc!r}")
+        logger.debug(
+            "Could not create directory %s (absolute=%s, cwd=%s, exists=%s, "
+            "is_directory=%s, is_file=%s, parent=%s, parent_exists=%s): %s",
+            path, absolute_path, Path.cwd(), absolute_path.exists(),
+            absolute_path.is_dir(), absolute_path.is_file(),
+            absolute_path.parent, absolute_path.parent.exists(), exc,
+        )
 
         raise
 
@@ -101,6 +104,9 @@ def normalize_float_array_to_uint8(data: np.ndarray) -> np.ndarray:
     if data.dtype == np.uint16:
         return (data.astype(np.float32) / 65535.0 * 255.0).astype(np.uint8)
 
+    floating_rgb = (np.issubdtype(data.dtype, np.floating) and data.ndim in (3, 4)
+                    and data.shape[-1] in (3, 4))
+
     data = np.nan_to_num(
         data,
         nan=0.0,
@@ -110,6 +116,10 @@ def normalize_float_array_to_uint8(data: np.ndarray) -> np.ndarray:
 
     if data.size == 0:
         return np.zeros_like(data, dtype=np.uint8)
+
+    if floating_rgb:
+        # Floating RGB already has an absolute display range; preserve its colors.
+        return np.rint(data * 255).clip(0, 255).astype(np.uint8)
 
     minimum = float(data.min())
     maximum = float(data.max())
@@ -260,7 +270,10 @@ def average_video(data: np.ndarray) -> np.ndarray:
     """
     data = validate_video(data)
 
-    average = np.mean(data, axis=0)
+    average = np.mean(data, axis=0, dtype=np.float64)
+
+    if data.dtype == np.uint8 and is_color_video(data):
+        return np.rint(average).clip(0, 255).astype(np.uint8)
 
     return cast_png_data(average)
 
@@ -431,10 +444,10 @@ def save_pngs(
             else:
                 continue
 
-            print(f"Saved PNG: {name}")
+            logger.info(f"Saved PNG: {name}")
 
         except Exception as exc:
-            print(f"Failed to save PNG {name}: {exc}")
+            logger.exception(f"Failed to save PNG {name}: {exc}")
 
 
 # ============================================================================
@@ -585,7 +598,7 @@ def save_h5(
 
     selected = None if save_only_list is None else set(save_only_list)
 
-    print(f"Saving H5: {h5_path}")
+    logger.info(f"Saving H5: {h5_path}")
 
     with h5py.File(h5_path, "w") as h5:
 
@@ -642,10 +655,7 @@ def save_h5(
 
     size_gb = h5_path.stat().st_size / (1024**3)
 
-    print(
-        f"H5 saved: {h5_path} "
-        f"({size_gb:.2f} GB)"
-    )
+    logger.info("H5 saved: %s (%.2f GB)", h5_path, size_gb)
 
     return h5_path
 
@@ -763,9 +773,9 @@ def save_csv_outputs(
         try:
             path = csv_dir / f"{name}.csv"
             save_csv(path, value)
-            print(f"Saved CSV: {path}")
+            logger.info(f"Saved CSV: {path}")
         except Exception as exc:
-            print(f"Failed to save CSV {name}: {exc}")
+            logger.exception(f"Failed to save CSV {name}: {exc}")
 
 def create_directories(
     target_dir: Path,
@@ -776,6 +786,7 @@ def create_directories(
     subdirectories = [
         "png",
         "avi",
+        "mp4",
         "json",
         "csv",
         "yaml",
@@ -1072,7 +1083,7 @@ def save_videos(
 
     ffmpeg = find_ffmpeg() if writer == "cmd" else None
     if ffmpeg:
-        print(f"Using FFmpeg: {ffmpeg}")
+        logger.debug(f"Using FFmpeg: {ffmpeg}")
 
     for name, value in data_map.items():
         if value is None or not isinstance(value, np.ndarray):
@@ -1096,10 +1107,7 @@ def save_videos(
                 codec=codec,
                 writer=writer,
             )
-            print(
-                f"Saved video: {path} "
-                f"({time.time() - start:.1f}s)"
-            )
+            logger.info("Saved video: %s (%.1fs)", path, time.time() - start)
 
 def save_videos_parallel(
     target_dir: Path,
@@ -1140,7 +1148,7 @@ def save_videos_parallel(
     ffmpeg = find_ffmpeg() if writer == "cmd" else None
 
     if ffmpeg:
-        print(f"Using FFmpeg: {ffmpeg}")
+        logger.debug(f"Using FFmpeg: {ffmpeg}")
 
     def save_one_video(
         name: str,
@@ -1184,12 +1192,12 @@ def save_videos_parallel(
             jobs.append((name, value, fmt))
 
     if not jobs:
-        print("No videos to save.")
+        logger.info("No videos to save.")
         return
 
-    print(
-        f"Saving {len(jobs)} video(s) "
-        f"using {min(max_workers, len(jobs))} workers..."
+    logger.info(
+        "Saving %s video(s) using %s workers...",
+        len(jobs), min(max_workers, len(jobs)),
     )
 
     start_total = time.perf_counter()
@@ -1212,22 +1220,17 @@ def save_videos_parallel(
             try:
                 path, elapsed = future.result()
 
-                print(
-                    f"Saved video: {path} "
-                    f"({elapsed:.1f}s)"
-                )
+                logger.info("Saved video: %s (%.1fs)", path, elapsed)
 
             except Exception as exc:
                 errors.append((name, fmt, exc))
-                print(
-                    f"Failed to save {name}.{fmt}: {exc}"
-                )
+                logger.exception(f"Failed to save {name}.{fmt}: {exc}")
 
     elapsed_total = time.perf_counter() - start_total
 
-    print(
-        f"Video saving completed in {elapsed_total:.1f}s "
-        f"({len(jobs) - len(errors)}/{len(jobs)} successful)"
+    logger.info(
+        "Video saving completed in %.1fs (%s/%s successful)",
+        elapsed_total, len(jobs) - len(errors), len(jobs),
     )
 
     if errors:
@@ -1305,12 +1308,439 @@ def calculate_fps(
 ) -> float:
     """Calculate output FPS with safe fallbacks."""
 
-    return default_fps # TODO change but 144Hz is to fast to display anyway
+    # Existing profiles keep the historical display rate. Pipelines that change
+    # temporal cadence can supply an explicit rate without changing other videos.
+    value = (parameters or {}).get("output_fps", default_fps)
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value) or value <= 0:
+        raise ValueError("output_fps must be a finite positive number")
+    return float(value)
 
 
 # ============================================================================
 # Bundle saving
 # ============================================================================
+
+def _prepare_output_directory(file_reader, parameters, custom_path, custom_relative_path):
+    """Resolve and prepare a destination once, before any writers are opened."""
+    if custom_path is not None and custom_relative_path is not None:
+        raise ValueError("custom_path and custom_relative_path cannot be used together")
+    default_path = get_default_output_path(file_reader.file_path)
+    if custom_path is None:
+        custom_path = parameters.get("custom_path")
+    if custom_path is not None:
+        target = Path(custom_path).expanduser()
+        if not target.is_absolute():
+            raise ValueError("custom_path must be an absolute path")
+    else:
+        if custom_relative_path is None:
+            custom_relative_path = parameters.get("custom_relative_path")
+        relative = Path(custom_relative_path or "")
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError("custom_relative_path must stay within the output directory")
+        target = default_path / relative
+    option = parameters.get("overwrite_option", "overwrite")
+    if option not in {"overwrite", "erase", "archive_old"}:
+        raise ValueError(f"Unknown overwrite_option: {option}")
+    if target.exists():
+        if option == "archive_old":
+            archive = ensure_directory(target.parent / "archive")
+            destination = archive / target.name
+            number = 1
+            while destination.exists():
+                destination = archive / f"{target.name} (#{number})"
+                number += 1
+            shutil.move(str(target), str(destination))
+        elif option == "erase":
+            if target.is_dir():
+                shutil.rmtree(target)
+            else:
+                target.unlink()
+    create_directories(target)
+    for directory in [target, *(target / name for name in
+                      ("avi", "mp4", "h5", "png", "csv", "json", "yaml"))]:
+        with tempfile.TemporaryFile(dir=directory) as probe:
+            probe.write(b"HoloDoppler")
+            probe.flush()
+    return target
+
+
+def _saving_options(num_saving_workers, saving_queue_depth):
+    if isinstance(num_saving_workers, bool) or not isinstance(num_saving_workers, Integral):
+        raise TypeError("Parameter 'num_saving_workers' must be an integer.")
+    if num_saving_workers < 0:
+        raise ValueError("Parameter 'num_saving_workers' must be nonnegative.")
+    if saving_queue_depth is not None:
+        if isinstance(saving_queue_depth, bool) or not isinstance(saving_queue_depth, Integral):
+            raise TypeError("Parameter 'saving_queue_depth' must be an integer or null.")
+        if saving_queue_depth < 1:
+            raise ValueError("Parameter 'saving_queue_depth' must be positive.")
+    return num_saving_workers, saving_queue_depth or max(1, 2 * num_saving_workers)
+
+
+class _SavingScheduler:
+    """Bound whole submissions and keep each output on a single FIFO worker.
+
+    Producers submit factories so capacity is acquired before arrays are copied.
+    Workers never wait for other workers or close the resources they share.
+    """
+
+    def __init__(self, workers, depth):
+        self._condition = Condition()
+        self._queues = [Queue() for _ in range(workers)]
+        self._lanes = {}
+        self._pending = 0
+        self.peak_pending = 0
+        self.depth = depth
+        self._error = None
+        self._stopping = False
+        self._cancelled = False
+        self._threads = []
+        try:
+            for index, queue in enumerate(self._queues):
+                thread = Thread(target=self._work, args=(queue,), name=f"Saving-{index}")
+                thread.start()
+                self._threads.append(thread)
+        except BaseException:
+            self.close(cancel=True)
+            raise
+
+    def _check(self):
+        if self._error is not None:
+            raise self._error
+        if self._stopping:
+            raise RuntimeError("Saving scheduler is closed")
+
+    def submit(self, make_jobs):
+        with self._condition:
+            while self._pending >= self.depth:
+                self._check()
+                self._condition.wait()
+            self._check()
+            self._pending += 1
+            try:
+                jobs = make_jobs()
+                groups = {}
+                for name, callback, args in jobs:
+                    if name not in self._lanes:
+                        self._lanes[name] = len(self._lanes) % len(self._queues)
+                    groups.setdefault(self._lanes[name], []).append((callback, args))
+                if not groups:
+                    self._pending -= 1
+                    self._condition.notify_all()
+                    return
+                packet = {"remaining": len(groups)}
+                self.peak_pending = max(self.peak_pending, self._pending)
+                for lane, tasks in groups.items():
+                    self._queues[lane].put((packet, tasks))
+            except BaseException:
+                self._pending -= 1
+                self._condition.notify_all()
+                raise
+
+    def _work(self, queue):
+        while True:
+            item = queue.get()
+            if item is None:
+                return
+            packet, tasks = item
+            try:
+                for callback, args in tasks:
+                    with self._condition:
+                        skip = self._cancelled or self._error is not None
+                    if skip:
+                        break
+                    callback(*args)
+            except BaseException as exc:
+                with self._condition:
+                    if self._error is None:
+                        self._error = exc
+                    self._condition.notify_all()
+            finally:
+                # Do not retain the previous batch while waiting for the next one.
+                del item, tasks
+                callback = args = None
+                with self._condition:
+                    packet["remaining"] -= 1
+                    if packet["remaining"] == 0:
+                        self._pending -= 1
+                        self._condition.notify_all()
+                del packet
+
+    def close(self, *, cancel=False):
+        with self._condition:
+            if not self._stopping:
+                self._stopping = True
+                self._cancelled = cancel
+                for queue in self._queues:
+                    queue.put(None)
+                self._condition.notify_all()
+        for thread in self._threads:
+            thread.join()
+        if self._error is not None:
+            raise self._error
+
+
+class OutputClass:
+    """Append ordered batch results to AVI, MP4 and HDF5 with bounded memory.
+
+    ``add(name, value, t)`` accepts one NumPy result at batch index ``t``.
+    Use as a context manager to finalize videos and average PNGs reliably.
+    Each name starts at index zero and keeps the same shape and dtype.
+    Floating-point video levels are fixed from the first frame; HDF5 retains
+    numerical values using the same selection and conversions as save_outputs.
+    ``num_saving_workers`` defaults to zero (synchronous); positive values
+    overlap saving with processing. ``saving_queue_depth`` counts outstanding
+    batches, including active writes, and defaults to twice the worker count.
+    Submit from one producer thread. Queued inputs are copied before returning;
+    close waits for accepted work and reports background errors.
+    Output files are partial if processing or writing fails.
+
+    Example::
+
+        with OutputClass(reader, parameters) as output:
+            output.add("moment0", first_image, 0)
+            output.add("moment0", second_image, 1)
+    """
+
+    def __init__(self, file_reader, parameters=None, custom_path=None,
+                 custom_relative_path=None, save_to_h5=True):
+        self.parameters = parameters or {}
+        self.num_saving_workers, self.saving_queue_depth = _saving_options(
+            self.parameters.get("num_saving_workers", 0),
+            self.parameters.get("saving_queue_depth"))
+        self.target_dir = _prepare_output_directory(
+            file_reader, self.parameters, custom_path, custom_relative_path)
+        self.fps = calculate_fps(self.parameters)
+        self._streams = {}
+        self._static_names = set()
+        self._h5 = None
+        self._h5_lock = Lock()
+        self._scheduler = None
+        self._accepted = {}
+        self._closing = False
+        self._closed = False
+        try:
+            save_metadata(self.target_dir, file_reader, self.parameters)
+            if save_to_h5:
+                path = self.target_dir / "h5" / f"{self.target_dir.name}_output.h5"
+                self._h5 = h5py.File(path, "w")
+                self._h5.create_dataset("HD_parameters", data=json.dumps(
+                    to_serializable(self.parameters), ensure_ascii=False))
+                self._h5.create_dataset("HD_version", data=f"py{get_version()}")
+                self._h5.create_dataset("git_commit", data=get_git_version())
+            if self.num_saving_workers:
+                self._scheduler = _SavingScheduler(
+                    self.num_saving_workers, self.saving_queue_depth)
+        except BaseException:
+            self.close(finalize=False)
+            raise
+
+    @staticmethod
+    def _h5_selected(name):
+        return (name in {"moment0ff", "moment0", "moment1", "moment2",
+                        "spectrum_line", "sh_psd", "averaged_spectrogram",
+                        "spectrograms", "PROJ", "PROJff", "QSum_M0", "J0_M0",
+                        "color_Doppler_image", "directional_Doppler_image"}
+                or name.startswith(("NW_", "NE_", "SW_", "SE_", "NWxSE_", "NExSW_"))
+                or name.endswith("_flow_index") or "band_" in name or is_csv_output(name))
+
+    @staticmethod
+    def _h5_value(value):
+        if np.issubdtype(value.dtype, np.floating):
+            return np.nan_to_num(value, nan=0., posinf=0., neginf=0.).astype(np.float32)
+        return value
+
+    def _validate(self, name, value):
+        if self._closed or self._closing:
+            raise RuntimeError("OutputClass is closed")
+        if (not isinstance(name, str) or not name or name in {".", ".."}
+                or any(c in name for c in '/\\:')
+                or name in {"HD_parameters", "HD_version", "git_commit"}):
+            raise ValueError(f"Invalid output name: {name!r}")
+        value = np.asarray(value)
+        if value.dtype.kind not in "biufc" or value.size == 0:
+            raise ValueError("Outputs must be nonempty numerical arrays")
+        return value
+
+    def _open_video(self, name, fmt):
+        import imageio.v2 as imageio
+        kwargs = dict(fps=self.fps, macro_block_size=2, pixelformat="yuv420p")
+        if fmt == "avi":
+            kwargs.update(codec="mjpeg", quality=10,
+                          ffmpeg_params=["-color_range", "pc"])
+        else:
+            kwargs.update(codec="libx264",
+                          ffmpeg_params=["-crf", "18", "-preset", "medium"])
+        return imageio.get_writer(str(self.target_dir / fmt / f"{name}.{fmt}"), **kwargs)
+
+    def add(self, name: str, value: np.ndarray, t: int) -> None:
+        """Append one output; a standalone call consumes one queue slot."""
+        self.add_batch({name: value}, t)
+
+    def add_batch(self, outputs: dict[str, np.ndarray], t: int) -> None:
+        """Append a whole batch under one queue slot, copying queued inputs."""
+        self._submit(outputs, t, static=False)
+
+    def write_static(self, name: str, value: np.ndarray) -> None:
+        """Save an aggregate or diagnostic without adding a batch dimension."""
+        self._submit({name: value}, None, static=True)
+
+    def _submit(self, outputs, t, *, static):
+        if self._closed or self._closing:
+            raise RuntimeError("OutputClass is closed")
+        values = {}
+        for name, value in outputs.items():
+            value = self._validate(name, value)
+            previous = self._accepted.get(name)
+            if static:
+                if previous is not None:
+                    raise ValueError(f"Output {name!r} has already been written")
+            else:
+                if previous is not None and previous["static"]:
+                    raise ValueError(f"Output {name!r} was already written as static data")
+                expected = previous["count"] if previous else 0
+                if isinstance(t, bool) or not isinstance(t, Integral) or t != expected:
+                    raise ValueError(f"Output {name!r} expected batch index {expected}, got {t}")
+                if previous and (value.shape != previous["shape"] or value.dtype != previous["dtype"]):
+                    raise ValueError(f"Output {name!r} changed shape or dtype at batch {t}")
+            values[name] = value
+
+        def make_jobs():
+            snapshots = {name: value.copy() if self._scheduler else value
+                         for name, value in values.items()}
+            jobs = []
+            for name, value in snapshots.items():
+                self._accepted[name] = dict(static=static, count=0 if static else t + 1,
+                                            shape=value.shape, dtype=value.dtype)
+                callback = self._write_static if static else self._write_add
+                args = (name, value) if static else (name, value, t)
+                jobs.append((name, callback, args))
+            return jobs
+
+        try:
+            if self._scheduler:
+                self._scheduler.submit(make_jobs)
+            else:
+                for name, callback, args in make_jobs():
+                    callback(*args)
+        except BaseException:
+            self.close(finalize=False)
+            raise
+
+    def _write_add(self, name, value, t):
+        state = self._streams.get(name)
+        if state is None:
+            state = dict(count=0, shape=value.shape, dtype=value.dtype, writers=[], csv=None)
+            self._streams[name] = state
+        with self._h5_lock:
+            if self._h5 is not None and self._h5_selected(name):
+                data = self._h5_value(value)
+                if t == 0:
+                    self._h5.create_dataset(name, shape=(0, *value.shape),
+                                            maxshape=(None, *value.shape), dtype=data.dtype)
+                dataset = self._h5[name]
+                dataset.resize(t + 1, axis=0)
+                dataset[t] = data
+                self._h5.flush()
+        if is_csv_output(name):
+            if state["csv"] is None:
+                state["csv"] = (self.target_dir / "csv" / f"{name}.csv").open(
+                    "w", newline="", encoding="utf-8")
+            csv.writer(state["csv"]).writerow(value.reshape(-1).tolist())
+            state["csv"].flush()
+        elif is_image(value) and not np.iscomplexobj(value):
+            clean = np.nan_to_num(value, nan=0., posinf=0., neginf=0.).astype(np.float64)
+            if t == 0:
+                state["range"] = (float(clean.min()), float(clean.max()))
+                state["sum"] = np.zeros_like(clean)
+                for fmt in ("avi", "mp4"):
+                    state["writers"].append(self._open_video(name, fmt))
+            low, high = state["range"]
+            if value.dtype == np.uint8:
+                frame = value
+            elif (np.issubdtype(value.dtype, np.floating) and value.ndim == 3
+                  and value.shape[-1] in (3, 4)):
+                frame = np.rint(clean * 255).clip(0, 255).astype(np.uint8)
+            elif value.dtype == np.uint16:
+                frame = (clean / 65535. * 255.).astype(np.uint8)
+            elif high > low:
+                frame = (np.clip((clean - low) / (high - low), 0., 1.) * 255.).astype(np.uint8)
+            else:
+                frame = np.zeros(value.shape, dtype=np.uint8)
+            if frame.ndim == 2:
+                frame = np.repeat(frame[..., None], 3, axis=-1)
+            frame = make_even_dimensions(frame[None, ..., :3])[0]
+            for writer in state["writers"]:
+                writer.append_data(np.ascontiguousarray(frame))
+            state["sum"] += value
+        state["count"] += 1
+
+    def _write_static(self, name, value):
+        with self._h5_lock:
+            if self._h5 is not None and self._h5_selected(name):
+                self._h5.create_dataset(name, data=self._h5_value(value))
+                self._h5.flush()
+        if is_csv_output(name):
+            save_csv(self.target_dir / "csv" / f"{name}.csv", value)
+        else:
+            if is_image(value):
+                save_png(self.target_dir / "png" / f"{name}.png", value)
+            elif is_video(value):
+                save_video_average_png(self.target_dir / "png" / f"{name}.png", value)
+                for fmt in ("avi", "mp4"):
+                    save_video(self.target_dir / fmt / f"{name}.{fmt}", value,
+                               self.fps, writer="imageio")
+        self._static_names.add(name)
+
+    def close(self, *, finalize: bool = True) -> None:
+        if self._closed:
+            return
+        report_errors = finalize
+        self._closing = True
+        errors = []
+        worker_error = None
+        if self._scheduler:
+            try:
+                self._scheduler.close(cancel=not finalize)
+            except BaseException as exc:
+                worker_error = exc
+        finalize = finalize and worker_error is None
+        self._closed = True
+        for name, state in self._streams.items():
+            resources = [*state["writers"], state["csv"]]
+            for resource in resources:
+                if resource is not None:
+                    try:
+                        resource.close()
+                    except Exception as exc:
+                        errors.append(exc)
+            if finalize and "sum" in state and state["count"]:
+                try:
+                    average = state["sum"] / state["count"]
+                    if state["dtype"] == np.uint8 and average.ndim == 3:
+                        average = np.rint(average).clip(0, 255).astype(np.uint8)
+                    save_png(self.target_dir / "png" / f"{name}.png",
+                             average)
+                except Exception as exc:
+                    errors.append(exc)
+        if self._h5 is not None:
+            try:
+                self._h5.close()
+            except Exception as exc:
+                errors.append(exc)
+        self._streams.clear()
+        self._accepted.clear()
+        if worker_error is not None and report_errors:
+            raise worker_error
+        if errors and finalize:
+            raise RuntimeError("Failed to finalize output files") from errors[0]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        self.close(finalize=exc_type is None)
+
 
 def save_outputs(
     file_reader: Any,
@@ -1318,7 +1748,10 @@ def save_outputs(
     parameters: dict[str, Any] | None = None,
     custom_path: str | Path | None = None,
     custom_relative_path: str | Path | None = None,
-    save_to_h5: bool = True
+    save_to_h5: bool = True,
+    *,
+    num_saving_workers: int | None = None,
+    saving_queue_depth: int | None = None,
 ) -> Path:
     """Save a complete HoloDoppler output bundle.
 
@@ -1327,69 +1760,33 @@ def save_outputs(
 
     custom_relative_path:
         Path relative to the default *_HD output directory.
+
+    num_saving_workers:
+        None preserves legacy video scheduling; zero saves sequentially.
+        Positive values share a bounded thread pool across output formats.
     """
     start_time = time.time()
     parameters = parameters or {}
+    if num_saving_workers is not None:
+        num_saving_workers, saving_queue_depth = _saving_options(
+            num_saving_workers, saving_queue_depth)
 
-    default_path = get_default_output_path(file_reader.file_path)
+    target_dir = _prepare_output_directory(
+        file_reader, parameters, custom_path, custom_relative_path)
 
-    # Resolve output path.
-    if custom_path is not None and custom_relative_path is not None:
-        raise ValueError(
-            "custom_path and custom_relative_path cannot be used together"
-        )
-
-    if custom_path is not None:
-        target_dir = Path(custom_path).expanduser()
-        if not target_dir.is_absolute():
-            raise ValueError("custom_path must be an absolute path")
-
-    elif custom_relative_path is not None:
-        relative_path = Path(custom_relative_path)
-        if relative_path.is_absolute():
-            raise ValueError("custom_relative_path must be relative")
-        target_dir = default_path / relative_path
-
-    else:
-        target_dir = default_path
-
-    target_dir = Path(target_dir)
-
-    overwrite_option = parameters.get("overwrite_option", "overwrite")
-
-    if target_dir.exists():
-        if overwrite_option == "archive_old":
-            archive_dir = target_dir.parent / "archive"
-            archive_dir.mkdir(parents=True, exist_ok=True)
-
-            archive_target = archive_dir / target_dir.name
-            number = 1
-
-            while archive_target.exists():
-                archive_target = archive_dir / f"{target_dir.name} (#{number})"
-                number += 1
-
-            shutil.move(str(target_dir), str(archive_target))
-
-        elif overwrite_option == "erase":
-            if target_dir.is_dir():
-                shutil.rmtree(target_dir)
-            else:
-                target_dir.unlink()
-
-        elif overwrite_option != "overwrite":
-            raise ValueError(f"Unknown overwrite_option: {overwrite_option}")
-
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    create_directories(target_dir)
-
-    print(f"Saving output bundle to: {target_dir}")
+    logger.info(f"Saving output bundle to: {target_dir}")
 
     # FPS.
     fps = calculate_fps(
         parameters=parameters,
     )
+
+    if num_saving_workers is not None:
+        _run_saving_jobs(
+            _bundle_saving_jobs(target_dir, file_reader, output, parameters, fps, save_to_h5),
+            num_saving_workers, saving_queue_depth)
+        print(f"Saving completed in {time.time() - start_time:.1f} seconds")
+        return target_dir
 
     # 1. Videos.
     save_videos_parallel(
@@ -1420,25 +1817,7 @@ def save_outputs(
 
     # 6. HDF5.
     if save_to_h5:
-        h5_names = [
-                "moment0ff",
-                "moment0",
-                "moment1",
-                "moment2",
-                "spectrum_line",
-                "sh_psd",
-                "averaged_spectrogram",
-                "spectrograms"
-            ]
-
-        # Include all band_* and automatically selected CSV outputs.
-        for name in output:
-            if (
-                "band_" in name
-                or "coefs" in name.lower()
-                or "registration" in name.lower()
-            ) and name not in h5_names:
-                h5_names.append(name)
+        h5_names = [name for name in output if OutputClass._h5_selected(name)]
 
         save_h5(
             target_dir,
@@ -1448,5 +1827,51 @@ def save_outputs(
             git_commit=get_git_version(),
         )
 
-    print(f"Saving completed in {time.time() - start_time:.1f} seconds")
+    logger.info(f"Saving completed in {time.time() - start_time:.1f} seconds")
     return target_dir
+
+
+def _bundle_saving_jobs(target_dir, file_reader, output, parameters, fps, save_to_h5):
+    """Independent jobs sharing read-only arrays; a single job owns HDF5."""
+    for name, value in output.items():
+        if not isinstance(value, np.ndarray):
+            continue
+        if is_video(value):
+            for fmt in ("avi", "mp4"):
+                yield save_video, (target_dir / fmt / f"{name}.{fmt}", value, fps), {
+                    "writer": "imageio"}
+        png_path = target_dir / "png" / f"{name}.png"
+        if is_image(value):
+            yield save_png, (png_path, value), {}
+        elif is_video(value):
+            yield save_video_average_png, (png_path, value), {}
+        # The existing bundle saver skips unsupported CSV shapes (e.g. ECC matrices).
+        if is_csv_output(name) and value.ndim in (1, 2):
+            yield save_csv, (target_dir / "csv" / f"{name}.csv", value), {}
+    yield save_metadata, (target_dir,), {"file_reader": file_reader, "parameters": parameters}
+    if save_to_h5:
+        yield save_h5, (target_dir, output), {
+            "parameters": parameters,
+            "save_only_list": [name for name in output if OutputClass._h5_selected(name)],
+            "git_commit": get_git_version(),
+        }
+
+
+def _run_saving_jobs(jobs, workers, depth):
+    """Run bundle jobs without nested pools or an unbounded future list."""
+    if workers == 0:
+        for callback, args, kwargs in jobs:
+            callback(*args, **kwargs)
+        return
+    pending = deque()
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="SavingBundle") as executor:
+        try:
+            for callback, args, kwargs in jobs:
+                if len(pending) >= depth:
+                    pending.popleft().result()
+                pending.append(executor.submit(callback, *args, **kwargs))
+            while pending:
+                pending.popleft().result()
+        finally:
+            for future in pending:
+                future.cancel()

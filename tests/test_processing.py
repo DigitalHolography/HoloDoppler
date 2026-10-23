@@ -318,8 +318,6 @@ def test_config_defaults_and_validation():
 
     root = Path(__file__).resolve().parents[1]
     defaults = yaml.safe_load((root / 'parameters/default_parameters_default.yaml').read_text())
-    packaged = yaml.safe_load((root / 'holodoppler/ui/defaults/default_parameters_default.yaml').read_text())
-    assert defaults == packaged
     assert defaults['cupy_async'] is True
     assert defaults['cupy_prefetch_depth'] == 4
     params = {**defaults, 'z': 0.2, 'pixel_pitch': [1e-6, 1e-6], 'sampling_freq': 40000}

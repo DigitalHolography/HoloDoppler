@@ -128,8 +128,12 @@ class MinimalView(ttk.Frame):
             row=1, column=0, sticky="ew"
         )
 
-        self.action_button = ttk.Button(self, text="Run", command=self.controller.run_processing, style="Accent.TButton")
-        self.action_button.grid(row=3, column=0, pady=(0, 12))
+        actions = ttk.Frame(self)
+        actions.grid(row=3, column=0, pady=(0, 12))
+        self.action_button = ttk.Button(actions, text="Run", command=self.controller.run_processing, style="Accent.TButton")
+        self.action_button.grid(row=0, column=0, padx=(0, 8))
+        self.log_button = ttk.Button(actions, text="Logs", command=self.controller.toggle_logs)
+        self.log_button.grid(row=0, column=1)
 
         progress = ttk.Frame(self)
         progress.grid(row=4, column=0, sticky="ew", padx=56)
