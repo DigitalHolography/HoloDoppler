@@ -33,6 +33,10 @@ build = [
     "pyinstaller>=6.0",
     "cupy-cuda13x[ctk]>=14.0.1",
 ]
+advanced = [
+    "tensorly>=0.10.0",
+    "scikit-learn>=1.9.1",
+]
 
 [tool.setuptools.package-dir]
 "holodoppler.parameters" = "parameters"
