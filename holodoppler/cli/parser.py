@@ -74,7 +74,7 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--verbose",
         action="store_true",
-        help="Print the full traceback in case of error.",
+        help="Accepted for compatibility; errors always include their traceback in logs.",
     )
     parser.add_argument(
         "--tictoc",

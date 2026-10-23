@@ -1,3 +1,6 @@
+from holodoppler.logging import logger
+
+
 def update_from_holo_footer(
     parameters,
     holofooter,
@@ -59,7 +62,7 @@ def update_from_holo_footer(
                 ] = "AngularSpectrum"
 
             else:
-                print(
+                logger.warning(
                     "Couldn't parse spatial transform name "
                     "in HoloVibes footer "
                     f"({holovibes_transform!r}); "
@@ -127,9 +130,7 @@ def update_from_holo_footer(
         TypeError,
         ValueError,
     ) as exc:
-        print(
-            f"Issue from HoloVibes footer: {exc}"
-        )
+        logger.warning("Issue from HoloVibes footer: %s", exc)
 
     return parameters
 

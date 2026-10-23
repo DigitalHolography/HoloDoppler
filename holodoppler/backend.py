@@ -6,6 +6,8 @@ is not actually usable, the backend automatically falls back to NumPy.
 
 from __future__ import annotations
 
+from holodoppler.logging import logger
+
 import numpy as np
 import scipy.fft as np_fft
 import scipy.ndimage as np_ndi
@@ -84,10 +86,7 @@ def _cupy_usable() -> bool:
         return float(x.get()[0]) == 1.0
 
     except Exception as exc:
-        print(
-            "CuPy detected but CUDA is not usable; "
-            f"falling back to NumPy: {exc}"
-        )
+        logger.warning("CuPy detected but CUDA is not usable; falling back to NumPy: %s", exc)
         return False
 
 
@@ -250,7 +249,7 @@ class BackendManager:
         free_bytes, total_bytes = cp.cuda.runtime.memGetInfo()
         used_bytes = total_bytes - free_bytes
 
-        print(f"Used GPU memory: {used_bytes / 1e6:.1f} MB")
+        logger.debug("Used GPU memory: %.1f MB", used_bytes / 1e6)
 
     def synchronize(self) -> None:
         """Synchronize the GPU.

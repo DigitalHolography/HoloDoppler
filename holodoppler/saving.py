@@ -25,6 +25,7 @@ from PIL import Image
 
 from holodoppler.get_version import get_version
 from holodoppler.core.image_utils import resize_frames
+from holodoppler.logging import logger
 
 
 def ensure_directory(path: Path) -> Path:
@@ -36,16 +37,13 @@ def ensure_directory(path: Path) -> Path:
     except OSError as exc:
         absolute_path = path.resolve(strict=False)
 
-        print("\n[ensure_directory] FAILED")
-        print(f"Requested path : {path}")
-        print(f"Absolute path  : {absolute_path}")
-        print(f"Current cwd    : {Path.cwd()}")
-        print(f"Exists         : {absolute_path.exists()}")
-        print(f"Is directory   : {absolute_path.is_dir()}")
-        print(f"Is file        : {absolute_path.is_file()}")
-        print(f"Parent         : {absolute_path.parent}")
-        print(f"Parent exists  : {absolute_path.parent.exists()}")
-        print(f"Exception      : {exc!r}")
+        logger.debug(
+            "Could not create directory %s (absolute=%s, cwd=%s, exists=%s, "
+            "is_directory=%s, is_file=%s, parent=%s, parent_exists=%s): %s",
+            path, absolute_path, Path.cwd(), absolute_path.exists(),
+            absolute_path.is_dir(), absolute_path.is_file(),
+            absolute_path.parent, absolute_path.parent.exists(), exc,
+        )
 
         raise
 
@@ -436,10 +434,10 @@ def save_pngs(
             else:
                 continue
 
-            print(f"Saved PNG: {name}")
+            logger.info(f"Saved PNG: {name}")
 
         except Exception as exc:
-            print(f"Failed to save PNG {name}: {exc}")
+            logger.exception(f"Failed to save PNG {name}: {exc}")
 
 
 # ============================================================================
@@ -590,7 +588,7 @@ def save_h5(
 
     selected = None if save_only_list is None else set(save_only_list)
 
-    print(f"Saving H5: {h5_path}")
+    logger.info(f"Saving H5: {h5_path}")
 
     with h5py.File(h5_path, "w") as h5:
 
@@ -647,10 +645,7 @@ def save_h5(
 
     size_gb = h5_path.stat().st_size / (1024**3)
 
-    print(
-        f"H5 saved: {h5_path} "
-        f"({size_gb:.2f} GB)"
-    )
+    logger.info("H5 saved: %s (%.2f GB)", h5_path, size_gb)
 
     return h5_path
 
@@ -768,9 +763,9 @@ def save_csv_outputs(
         try:
             path = csv_dir / f"{name}.csv"
             save_csv(path, value)
-            print(f"Saved CSV: {path}")
+            logger.info(f"Saved CSV: {path}")
         except Exception as exc:
-            print(f"Failed to save CSV {name}: {exc}")
+            logger.exception(f"Failed to save CSV {name}: {exc}")
 
 def create_directories(
     target_dir: Path,
@@ -1078,7 +1073,7 @@ def save_videos(
 
     ffmpeg = find_ffmpeg() if writer == "cmd" else None
     if ffmpeg:
-        print(f"Using FFmpeg: {ffmpeg}")
+        logger.debug(f"Using FFmpeg: {ffmpeg}")
 
     for name, value in data_map.items():
         if value is None or not isinstance(value, np.ndarray):
@@ -1102,10 +1097,7 @@ def save_videos(
                 codec=codec,
                 writer=writer,
             )
-            print(
-                f"Saved video: {path} "
-                f"({time.time() - start:.1f}s)"
-            )
+            logger.info("Saved video: %s (%.1fs)", path, time.time() - start)
 
 def save_videos_parallel(
     target_dir: Path,
@@ -1146,7 +1138,7 @@ def save_videos_parallel(
     ffmpeg = find_ffmpeg() if writer == "cmd" else None
 
     if ffmpeg:
-        print(f"Using FFmpeg: {ffmpeg}")
+        logger.debug(f"Using FFmpeg: {ffmpeg}")
 
     def save_one_video(
         name: str,
@@ -1190,12 +1182,12 @@ def save_videos_parallel(
             jobs.append((name, value, fmt))
 
     if not jobs:
-        print("No videos to save.")
+        logger.info("No videos to save.")
         return
 
-    print(
-        f"Saving {len(jobs)} video(s) "
-        f"using {min(max_workers, len(jobs))} workers..."
+    logger.info(
+        "Saving %s video(s) using %s workers...",
+        len(jobs), min(max_workers, len(jobs)),
     )
 
     start_total = time.perf_counter()
@@ -1218,22 +1210,17 @@ def save_videos_parallel(
             try:
                 path, elapsed = future.result()
 
-                print(
-                    f"Saved video: {path} "
-                    f"({elapsed:.1f}s)"
-                )
+                logger.info("Saved video: %s (%.1fs)", path, elapsed)
 
             except Exception as exc:
                 errors.append((name, fmt, exc))
-                print(
-                    f"Failed to save {name}.{fmt}: {exc}"
-                )
+                logger.exception(f"Failed to save {name}.{fmt}: {exc}")
 
     elapsed_total = time.perf_counter() - start_total
 
-    print(
-        f"Video saving completed in {elapsed_total:.1f}s "
-        f"({len(jobs) - len(errors)}/{len(jobs)} successful)"
+    logger.info(
+        "Video saving completed in %.1fs (%s/%s successful)",
+        elapsed_total, len(jobs) - len(errors), len(jobs),
     )
 
     if errors:
@@ -1763,7 +1750,7 @@ def save_outputs(
     target_dir = _prepare_output_directory(
         file_reader, parameters, custom_path, custom_relative_path)
 
-    print(f"Saving output bundle to: {target_dir}")
+    logger.info(f"Saving output bundle to: {target_dir}")
 
     # FPS.
     fps = calculate_fps(
@@ -1834,7 +1821,7 @@ def save_outputs(
             git_commit=get_git_version(),
         )
 
-    print(f"Saving completed in {time.time() - start_time:.1f} seconds")
+    logger.info(f"Saving completed in {time.time() - start_time:.1f} seconds")
     return target_dir
 
 
