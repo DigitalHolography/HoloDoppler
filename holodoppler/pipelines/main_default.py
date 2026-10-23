@@ -1,14 +1,12 @@
 import numpy as np
 
 from holodoppler import backend
-from holodoppler.logging import logger
 from holodoppler.config import (
     update_from_cine_metadata,
     update_from_holo_footer,
     validate_main_parameters,
 )
 from holodoppler.core.batching import calculate_batch_indices
-from holodoppler.core.processing import run_batches
 from holodoppler.core.filtering import (
     corner_compensation,
     filter_2d,
@@ -22,6 +20,7 @@ from holodoppler.core.image_utils import (
 )
 from holodoppler.core.moments import moments
 from holodoppler.core.plots import plot_phase_with_slopes_rgb
+from holodoppler.core.processing import run_batches
 from holodoppler.core.propagation import (
     angular_spectrum_transform,
     angular_spectrum_transform_with_phase,
@@ -45,6 +44,7 @@ from holodoppler.core.zernike import (
     fit_zernike_fresnel,
 )
 from holodoppler.file_reader import get_reader
+from holodoppler.logging import logger
 from holodoppler.saving import (
     OutputClass,
     save_outputs,

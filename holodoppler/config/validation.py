@@ -395,9 +395,9 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'spectrogram_frequency_start' must be a real number; got {value!r} ({type(value).__name__})."
         )
-    if not 0 <= value <= 1:
+    if not 0 <= value <= 0.5:
         raise ValueError(
-            f"Parameter 'spectrogram_frequency_start' must be between 0 and 1; got {value!r}."
+            f"Parameter 'spectrogram_frequency_start' must be between 0 and 0.5; got {value!r}."
         )
 
     value = parameters.get("spectrogram_frequency_end", 0.5)
@@ -405,9 +405,9 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'spectrogram_frequency_end' must be a real number; got {value!r} ({type(value).__name__})."
         )
-    if not 0 <= value <= 1:
+    if not 0 <= value <= 0.5:
         raise ValueError(
-            f"Parameter 'spectrogram_frequency_end' must be between 0 and 1; got {value!r}."
+            f"Parameter 'spectrogram_frequency_end' must be between 0 and 0.5; got {value!r}."
         )
 
     value = parameters.get("spectrogram_frequency_binning", 4)
