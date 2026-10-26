@@ -136,7 +136,7 @@ def test_unclipped_rgb_is_averaged_before_display_clipping(tmp_path, monkeypatch
             destination.add("color_Doppler_image", frame, index)
     np.testing.assert_array_equal(np.array(Image.open(destination.target_dir / "png/color_Doppler_image.png")), expected)
     with h5py.File(destination.target_dir / "h5/output_output.h5") as handle:
-        np.testing.assert_array_equal(handle["color_Doppler_image"], video)
+        assert "color_Doppler_image" not in handle
 
 
 def test_directional_hsv_formula_and_balanced_pixels():
@@ -196,22 +196,25 @@ def test_default_doppler_video_average_and_preview(tmp_path, monkeypatch, square
         path = next(tmp_path.rglob("*_output.h5"))
         with h5py.File(path) as handle:
             assert not any(key.startswith("_") for key in handle)
-            outputs = {name: handle[name][()] for name in ("color_Doppler_image", "directional_Doppler_image")}
-        for name, value in outputs.items():
-            assert value.shape == (3, 10 if square else 6, 10, 3)
-            assert value.dtype == np.float32
-            assert np.isfinite(value).all()
-            if name == "directional_Doppler_image" or lab:
-                assert value.min() >= 0 and value.max() <= 1
+            assert "color_Doppler_image" not in handle
+            assert "directional_Doppler_image" not in handle
+            assert "moment0" in handle
+        outputs = {}
+        for name in ("color_Doppler_image", "directional_Doppler_image"):
             image = np.array(Image.open(path.parent.parent / "png" / f"{name}.png"))
-            np.testing.assert_array_equal(image, saving.cast_png_data(value.mean(axis=0, dtype=np.float64)))
+            assert image.shape == (10 if square else 6, 10, 3)
+            outputs[name] = image
         snapshots.append(outputs)
     for key in snapshots[0]:
         np.testing.assert_array_equal(snapshots[0][key], snapshots[1][key])
     main_default.preview(reader.file_path, p)
     preview_path = next(tmp_path.rglob("preview_output.h5"))
     with h5py.File(preview_path) as handle:
-        assert handle["color_Doppler_image"].shape == (10 if square else 6, 10, 3)
+        assert "color_Doppler_image" not in handle
+        assert "directional_Doppler_image" not in handle
+    for name in ("color_Doppler_image", "directional_Doppler_image"):
+        image = np.array(Image.open(preview_path.parent.parent / "png" / f"{name}.png"))
+        assert image.shape == (10 if square else 6, 10, 3)
 
 
 def test_disabled_outputs_do_not_compute_directional(monkeypatch):
@@ -240,7 +243,7 @@ def test_float_rgb_average_preserves_sub_byte_values(tmp_path, monkeypatch):
     actual = np.array(Image.open(destination.target_dir / "png/directional_Doppler_image.png"))
     np.testing.assert_array_equal(actual, np.ones((6, 10, 3), np.uint8))
     with h5py.File(destination.target_dir / "h5/output_output.h5") as handle:
-        np.testing.assert_array_equal(handle["directional_Doppler_image"], video)
+        assert "directional_Doppler_image" not in handle
 
 
 @pytest.mark.parametrize("hues", [[1, .66], [.08, .5], [.83, .33], [.75, .16]])
