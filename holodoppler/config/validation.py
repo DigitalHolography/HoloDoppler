@@ -222,6 +222,22 @@ def validate_main_parameters(parameters):
             f"Parameter 'frequency_bands' must be a sequence of real-number pairs; got {value!r} ({type(value).__name__})."
         )
 
+    value = parameters.get("resize_averaged_images", False)
+    if not isinstance(value, bool):
+        raise TypeError("Parameter 'resize_averaged_images' must be a boolean.")
+
+    value = parameters.get("moments_frequency_ranges", False)
+    if value is not False:
+        if not isinstance(value, (list, tuple)) or not all(
+            isinstance(pair, (list, tuple)) and len(pair) == 2
+            and all(isinstance(v, Real) and not isinstance(v, bool) for v in pair)
+            for pair in value
+        ):
+            raise TypeError("Parameter 'moments_frequency_ranges' must be false or a sequence of real-number pairs.")
+        if any(not all(isfinite(v) for v in pair) or not 0 <= pair[0] < pair[1]
+               for pair in value):
+            raise ValueError("Parameter 'moments_frequency_ranges' requires finite cutoffs with 0 <= low < high.")
+
     value = parameters.get("registration_flatfield_gw", 35.0)
     if not (isinstance(value, Real) and not isinstance(value, bool)):
         raise TypeError(

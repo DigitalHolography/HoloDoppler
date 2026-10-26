@@ -284,7 +284,15 @@ def find_ffmpeg() -> str:
     )
 
 
-def save_video_average_png(path: Path, video: np.ndarray) -> None:
+def _save_average_png(path: Path, average: np.ndarray, resize_averaged_images: bool) -> None:
+    image = prepare_png_image(average)
+    if resize_averaged_images:
+        image = image.resize((image.width * 2, image.height * 2), Image.Resampling.BICUBIC)
+    numerical.ensure_directory(Path(path).parent)
+    image.save(path)
+
+
+def save_video_average_png(path: Path, video: np.ndarray, *, resize_averaged_images: bool = False) -> None:
     """
     Save the temporal average of a video as PNG.
 
@@ -292,7 +300,7 @@ def save_video_average_png(path: Path, video: np.ndarray) -> None:
     then converted to a PNG-compatible integer representation.
     """
     average = average_video(video)
-    save_png(path, average)
+    _save_average_png(path, average, resize_averaged_images)
 
 
 def save_image_png(path: Path, image: np.ndarray) -> None:
@@ -307,6 +315,8 @@ def save_pngs(
     target_dir: Path,
     data_map: dict[str, Any],
     png_keys: Iterable[str] | None = None,
+    *,
+    resize_averaged_images: bool = False,
 ) -> None:
     """Save images and temporal-average PNGs."""
     png_dir = numerical.ensure_directory(target_dir / "png")
@@ -329,7 +339,7 @@ def save_pngs(
                 save_image_png(path, data)
 
             elif policy.is_video(data):
-                save_video_average_png(path, data)
+                save_video_average_png(path, data, resize_averaged_images=resize_averaged_images)
 
             else:
                 continue
@@ -662,10 +672,11 @@ def open_video(target_dir: Path, name: str, fmt: str, fps: float):
 class MediaStream:
     """Own encoders, first-frame display levels, and an unquantized average."""
 
-    def __init__(self, target_dir: Path, name: str, open_encoder):
+    def __init__(self, target_dir: Path, name: str, open_encoder, *, resize_averaged_images: bool = False):
         self.target_dir = target_dir
         self.name = name
         self.open_encoder = open_encoder
+        self.resize_averaged_images = resize_averaged_images
         self.writers = []
         self.count = 0
         self.total = None
@@ -713,14 +724,15 @@ class MediaStream:
                 average = self.total / self.count
                 if self.dtype == np.uint8 and average.ndim == 3:
                     average = np.rint(average).clip(0, 255).astype(np.uint8)
-                save_png(self.target_dir / "png" / f"{self.name}.png", average)
+                _save_average_png(self.target_dir / "png" / f"{self.name}.png", average,
+                                  self.resize_averaged_images)
             except Exception as exc:
                 errors.append(exc)
         if errors:
             raise RuntimeError(f"Failed to finalize media output {self.name!r}") from errors[0]
 
 
-def media_jobs(target_dir: Path, name: str, value: np.ndarray, fps: float):
+def media_jobs(target_dir: Path, name: str, value: np.ndarray, fps: float, *, resize_averaged_images: bool = False):
     """Describe static image or complete-video exports for any execution mode."""
     formats = policy.output_formats(name, value)
     for fmt in ("avi", "mp4"):
@@ -728,4 +740,5 @@ def media_jobs(target_dir: Path, name: str, value: np.ndarray, fps: float):
             yield save_video, (target_dir / fmt / f"{name}.{fmt}", value, fps), {"writer": "imageio"}
     if "png" in formats:
         callback = save_image_png if policy.is_image(value) else save_video_average_png
-        yield callback, (target_dir / "png" / f"{name}.png", value), {}
+        kwargs = {} if policy.is_image(value) else {"resize_averaged_images": resize_averaged_images}
+        yield callback, (target_dir / "png" / f"{name}.png", value), kwargs

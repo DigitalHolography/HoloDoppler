@@ -43,7 +43,7 @@ def is_csv_output(name: str) -> bool:
 
 
 def save_to_hdf5(name: str) -> bool:
-    """Select numerical outputs; rendered Doppler images stay in media exports."""
+    """Select numerical outputs; Doppler images and per-range moments stay in media exports."""
     return (name in {"moment0ff", "moment0", "moment1", "moment2",
                     "spectrum_line", "sh_psd", "averaged_spectrogram",
                     "spectrograms", "PROJ", "PROJff", "QSum_M0", "J0_M0"}

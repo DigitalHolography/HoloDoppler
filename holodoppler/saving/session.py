@@ -286,7 +286,8 @@ class OutputClass:
         elif "avi" in formats:
             if state["media"] is None:
                 state["media"] = media.MediaStream(
-                    self.target_dir, name, lambda fmt: self._open_video(name, fmt))
+                    self.target_dir, name, lambda fmt: self._open_video(name, fmt),
+                    resize_averaged_images=self.parameters.get("resize_averaged_images", False))
             state["media"].append(value)
 
     def _write_static(self, name, value):
@@ -296,7 +297,9 @@ class OutputClass:
         if "csv" in formats:
             data.save_csv(self.target_dir / "csv" / f"{name}.csv", value)
         else:
-            for callback, args, kwargs in media.media_jobs(self.target_dir, name, value, self.fps):
+            for callback, args, kwargs in media.media_jobs(
+                self.target_dir, name, value, self.fps,
+                resize_averaged_images=self.parameters.get("resize_averaged_images", False)):
                 callback(*args, **kwargs)
 
     def close(self, *, finalize: bool = True) -> None:
@@ -400,6 +403,7 @@ def save_outputs(
     media.save_pngs(
         target_dir,
         output,
+        resize_averaged_images=parameters.get("resize_averaged_images", False),
     )
 
     data.save_csv_outputs(target_dir, output)
@@ -433,7 +437,8 @@ def _bundle_saving_jobs(target_dir, file_reader, output, parameters, fps, save_t
         if policy.is_csv_output(name):
             yield data.save_csv, (target_dir / "csv" / f"{name}.csv", value), {}
             continue
-        yield from media.media_jobs(target_dir, name, value, fps)
+        yield from media.media_jobs(target_dir, name, value, fps,
+                                    resize_averaged_images=parameters.get("resize_averaged_images", False))
     yield data.save_metadata, (target_dir,), {"file_reader": file_reader, "parameters": parameters}
     if save_to_h5:
         yield data.save_h5, (target_dir, output), {

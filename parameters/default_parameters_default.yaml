@@ -66,6 +66,7 @@ corner_compensation: false
 
 # Image resizing
 square: true
+resize_averaged_images: false # Double temporal-average PNG width and height only.
 
 # Shack-Hartmann wavefront sensing
 shack_hartmann_autofocus: true # Compute correction once using registration_ref_first_frame and shack_hartmann_autofocus_batch_size, then reuse it for following batches

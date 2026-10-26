@@ -223,6 +223,23 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             axis=0,
         )
 
+    for k, (f1, f2) in enumerate(parameters.get("moments_frequency_ranges") or ()):
+        mask, band_freqs = frequency_symmetric_filtering(
+            xp, fft, nt_sub,
+            parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
+            f1, f2,
+        )
+        band_moments = moments(xp, psd[mask], band_freqs, [0, 1])
+        for order, image in enumerate(band_moments):
+            suffix = f"range_{k}_{f1}_{f2}"
+            output_dict[f"moment{order}_{suffix}"] = image
+        image = band_moments[0]
+        blurred = backend.gaussian_filter(
+            image, parameters.get("registration_flatfield_gw", 1.0))
+        valid = blurred != 0
+        corrected = xp.where(valid, image, 0) / xp.where(valid, blurred, 1)
+        output_dict[f"moment0ff_{suffix}"] = corrected
+
     del psd
 
     output_dict["M0ff"] = gaussian_flatfield(
@@ -521,6 +538,12 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None):
 
     del ref_frames
     del autofocus_result
+    del phase
+    if reason is not None:
+        phase_term = None
+    # Release unused autofocus allocations before processing the main batches.
+    # The accepted phase correction and coefficients remain available for reuse.
+    backend.clear_gpu_memory()
     if reason is not None:
         logger.warning("Shack-Hartmann autofocus correction rejected: %s; continuing without phase correction.", reason)
         return None, coefs
@@ -624,6 +647,7 @@ def _process_one_batch(
 
             if (
                 key in {"M0ff", "M0", "M1", "M2", "sh_psd"}
+                or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                            "_directional_Doppler_pos", "_directional_Doppler_neg"}
             ):
@@ -988,8 +1012,12 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
 
 
         for key in output :
-            if key in {"M0ff", "M0", "M1", "M2"} or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
-                           "_directional_Doppler_pos", "_directional_Doppler_neg"}:
+            if (
+                key in {"M0ff", "M0", "M1", "M2"}
+                or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
+                or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
+                                            "_directional_Doppler_pos", "_directional_Doppler_neg"}
+            ):
                 output[key] = apply_ecc_registration(output[key], registration_ecc, background="mean")
 
         output["registration_ecc"] = registration_ecc
