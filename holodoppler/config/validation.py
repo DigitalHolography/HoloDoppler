@@ -300,11 +300,12 @@ def validate_main_parameters(parameters):
             f"Parameter 'shack_hartmann_autofocus' must be a boolean; got {value!r} ({type(value).__name__})."
         )
 
-    value = parameters.get("shack_hartmann_autofocus_z4_threshold_rad", 1.5)
-    if isinstance(value, bool) or not isinstance(value, Real):
-        raise TypeError("shack_hartmann_autofocus_z4_threshold_rad must be a real number")
-    if not isfinite(value) or value <= 0:
-        raise ValueError("shack_hartmann_autofocus_z4_threshold_rad must be finite and positive")
+    value = parameters.get("shack_hartmann_autofocus_z4_threshold_rad", None)
+    if value is not None :
+        if isinstance(value, bool) or not isinstance(value, Real):
+            raise TypeError("shack_hartmann_autofocus_z4_threshold_rad must be a real number")
+        if not isfinite(value) or value <= 0:
+            raise ValueError("shack_hartmann_autofocus_z4_threshold_rad must be finite and positive")
 
     value = parameters.get("shack_hartmann_autofocus_batch_size", 256)
     if not (isinstance(value, Integral) and not isinstance(value, bool)):

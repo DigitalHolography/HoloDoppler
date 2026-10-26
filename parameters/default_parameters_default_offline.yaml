@@ -1,7 +1,7 @@
 pipeline_name: "default"
 
 # optional backend management
-force_numpy: true
+force_numpy: false
 use_parallel: true # use parallel workers cores or not (cupy or numpy)
 numpy_num_workers: 8 # Numpy only, the number of parallel workers to be used
 cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and downloads.
@@ -9,7 +9,7 @@ cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more 
 
 # saving management
 live_saving: true # false saves all outputs after processing; ECC still buffers when true.
-num_saving_workers: 0
+num_saving_workers: 3
 saving_queue_depth: null # Outstanding batches/jobs, including active writes; null = twice the worker count.
 
 # Core parameters
@@ -21,7 +21,7 @@ end_frame: -1 # -1 means process all frames
 
 # Propagation parameters
 spatial_propagation: "Fresnel" # Options: "Fresnel" or "AngularSpectrum"
-z: 1.13 # Propagation distance in meters
+z: 1.25 # Propagation distance in meters
 wavelength: 852.0e-9 # Wavelength in meters
 pixel_pitch: "use_metadata" # Pixel pitch in meters [y, x]
 Fresnel_use_ouput_kernel: false # Fresnel specific. Use output kernel for Fresnel transform
@@ -39,7 +39,7 @@ svd_remove_dc: true
 temporal_transformation: "FourierTransform" # Options: "FourierTransform" or None
 sampling_freq: "use_metadata" # Sampling frequency in Hz
 low_freq: 6000 # Low frequency cutoff in Hz
-high_freq: "use_metadata" # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
+high_freq: "use_metadata" # High frequency cutoff in Hz "use_metadata" is sampling_freq/2
 
 # Frequency bands for different cutoffs of the psd in Hz. It will give the average of the psd in the symmetric frequency range
 frequency_bands:
@@ -76,7 +76,8 @@ contrast_low_max_percent: [0.5, 99.5] # Applied only to rendered avi/png/report 
 contrast_gamma: 1.0
 
 # Shack-Hartmann wavefront sensing
-shack_hartmann_autofocus: false # Compute correction once using registration_ref_first_frame and shack_hartmann_autofocus_batch_size, then reuse it for following batches
+shack_hartmann_autofocus: true # Compute correction once using registration_ref_first_frame and shack_hartmann_autofocus_batch_size, then reuse it for following batches
+shack_hartmann_autofocus_z4_threshold_rad: null # Reject autofocus when abs(Z4) exceeds this limit in radians
 shack_hartmann_autofocus_batch_size: 512 # Number of frames used to compute the autofocus correction
 shack_hartmann: false # Enable Live (every batch) Shack-Hartmann processing
 shack_hartmann_nx_subap: 5 # Number of subapertures in X
@@ -92,8 +93,8 @@ shack_hartmann_zernike_fit_modes: [4,5,6] # Number of the Zernike modes to use i
 # Doppler images
 color_Doppler_image: true # Save color Doppler video and its temporal-average PNG.
 color_Doppler_use_lab: false # false: decorrelation stretch of [high, low, low]; true: Lab composite using M0 lightness.
-color_Doppler_low_frequency_band: [3000, 9000] # Symmetric low-frequency power band in Hz.
-color_Doppler_high_frequency_band: [9000, 18000] # Symmetric high-frequency power band in Hz.
+color_Doppler_low_frequency_band: [6000, 19500] # Symmetric low-frequency power band in Hz.
+color_Doppler_high_frequency_band: [19500, 39000] # Symmetric high-frequency power band in Hz.
 directional_Doppler_image: true # Save HSV directional Doppler video and its temporal-average PNG.
 directional_Doppler_frequency_band: null # null uses [low_freq, high_freq]; otherwise [low, high] in Hz.
 directional_Doppler_gaussian_width: 35.0 # Gaussian flatfield sigma in pixels; 0 disables smoothing.

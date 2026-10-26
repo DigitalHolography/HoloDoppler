@@ -505,7 +505,9 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None):
 
     reason = None
     modes = list(parameters.get("shack_hartmann_zernike_fit_modes", [4, 5, 6]))
-    threshold = parameters.get("shack_hartmann_autofocus_z4_threshold_rad", 1.5)
+    threshold = parameters.get("shack_hartmann_autofocus_z4_threshold_rad", None)
+    if threshold is None:
+        threshold = np.inf
     values = None if coefs is None else backend.to_numpy(coefs)
     phase = autofocus_result.get("shack_hartmann_wavefront_phase")
     if values is None or not np.isfinite(values).all():
