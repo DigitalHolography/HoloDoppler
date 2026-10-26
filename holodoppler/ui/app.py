@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import queue
 import threading
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -38,7 +39,7 @@ _WINDOW_MINSIZES = {
     "minimal": (640, 500),
     "advanced": (980, 640),
 }
-_MODE_SWITCH_SETTLE_MS = 120
+_MODE_SWITCH_SETTLE_MS = 80
 
 
 class _ModeNotebook(ttk.Notebook):
@@ -110,6 +111,7 @@ class UI(BaseTk):
         self._mode_switch_alpha: float | None = None
         self._mode_switch_after_id: str | None = None
         self._mode_switch_layout: tuple[tuple[str, str, int, int], ...] | None = None
+        self._mode_switch_layout_changed_at = 0.0
         self.notebook.before_select = self._begin_mode_switch
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
         self.bind("<Configure>", self._on_mode_layout, add="+")
@@ -573,9 +575,9 @@ class UI(BaseTk):
             self.after_cancel(self._mode_switch_after_id)
             self._mode_switch_after_id = None
 
-    def _schedule_mode_reveal(self) -> None:
+    def _schedule_mode_reveal(self, delay_ms: int = 0) -> None:
         self._cancel_mode_reveal()
-        self._mode_switch_after_id = self.after(_MODE_SWITCH_SETTLE_MS, self._queue_mode_reveal)
+        self._mode_switch_after_id = self.after(delay_ms, self._queue_mode_reveal)
 
     def _queue_mode_reveal(self) -> None:
         # A busy callback can make the timer due before pending layout events
@@ -587,10 +589,15 @@ class UI(BaseTk):
         layout = self._mode_layout_signature()
         if layout != self._mode_switch_layout:
             # A quiet outer window does not imply a finished nested layout.
-            # Require unchanged actual AND requested sizes across a complete
-            # quiet interval, allowing further grid passes to finish hidden.
+            # Start the quiet interval when actual/requested geometry changes,
+            # not when duplicate Configure/Map notifications arrive.
             self._mode_switch_layout = layout
-            self._schedule_mode_reveal()
+            self._mode_switch_layout_changed_at = time.monotonic()
+        remaining_ms = _MODE_SWITCH_SETTLE_MS - int(
+            (time.monotonic() - self._mode_switch_layout_changed_at) * 1000
+        )
+        if remaining_ms > 0:
+            self._schedule_mode_reveal(remaining_ms)
         else:
             self._mode_switch_after_id = self.after(0, self._reveal_mode_if_stable)
 

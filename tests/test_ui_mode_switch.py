@@ -8,6 +8,80 @@ import textwrap
 import pytest
 
 
+def test_mode_reveal_waits_once_for_actual_geometry_changes(monkeypatch):
+    from fractions import Fraction
+    from types import MethodType, SimpleNamespace
+
+    from holodoppler.ui import app
+
+    clock, serial, restored = [0], [0], []
+    pending = {}
+
+    def after(delay_ms, callback):
+        serial[0] += 1
+        timer = f"after{serial[0]}"
+        pending[timer] = (clock[0] + delay_ms, serial[0], callback)
+        return timer
+
+    def advance(target_ms):
+        for _ in range(100):
+            if not pending:
+                break
+            timer = min(pending, key=lambda name: pending[name][:2])
+            when, _, callback = pending[timer]
+            if when > target_ms:
+                break
+            del pending[timer]
+            clock[0] = when
+            callback()
+        else:
+            raise AssertionError("Reveal callbacks never settled")
+        clock[0] = target_ms
+
+    signature = [("initial geometry",)]
+    mode = SimpleNamespace(
+        _mode_switch_alpha=1.0,
+        _mode_switch_after_id=None,
+        _mode_switch_layout=None,
+        _mode_switch_layout_changed_at=0.0,
+        _mode_layout_signature=lambda: signature[0],
+        after=after,
+        after_idle=lambda callback: after(0, callback),
+        after_cancel=lambda timer: pending.pop(timer, None),
+        attributes=lambda *args: restored.append(clock[0]),
+    )
+    for name in (
+        "_on_mode_layout", "_cancel_mode_reveal", "_schedule_mode_reveal",
+        "_queue_mode_reveal", "_finish_mode_layout", "_reveal_mode_if_stable",
+        "_reveal_mode",
+    ):
+        setattr(mode, name, MethodType(getattr(app.UI, name), mode))
+    monkeypatch.setattr(app, "time", SimpleNamespace(
+        monotonic=lambda: Fraction(clock[0], 1000),
+    ))
+    quiet = app._MODE_SWITCH_SETTLE_MS
+
+    mode._schedule_mode_reveal()
+    advance(0)
+    assert mode._mode_switch_layout == signature[0], "Initial snapshot was delayed"
+    advance(quiet - 1)
+    mode._on_mode_layout(None)  # Duplicate Configure must not restart the wait.
+    advance(quiet)
+    assert restored == [quiet]
+
+    mode._mode_switch_alpha = 1.0
+    mode._schedule_mode_reveal()
+    advance(quiet)
+    changed_at = quiet + quiet // 2
+    advance(changed_at)
+    signature[0] = ("changed geometry",)
+    mode._on_mode_layout(None)
+    advance(quiet * 2)
+    assert mode._mode_switch_alpha == 1.0, "Revealed before changed layout settled"
+    advance(changed_at + quiet)
+    assert restored == [quiet, changed_at + quiet]
+
+
 @pytest.mark.parametrize("theme", ["dark", "light"])
 def test_mode_switch_hides_layout_and_restores_window(tmp_path, theme):
     script = textwrap.dedent(
