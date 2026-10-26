@@ -23,7 +23,7 @@ from holodoppler.get_version import get_version
     ("registration", (2, 3), {"h5", "csv"}, {"h5", "csv"}),
     ("shack_hartmann_zernike_coefs", (3,), {"h5", "csv"}, {"h5", "csv"}),
     ("shack_hartmann_shifts", (2, 3, 2), {"h5", "csv"}, {"h5", "csv"}),
-    ("autofocus_shack_hartmann_shifts", (2, 3, 2, 3, 2), {"h5", "csv"}, {"h5", "csv"}),
+    ("shack_hartmann_autofocus_shifts", (2, 3, 2, 3, 2), {"h5", "csv"}, {"h5", "csv"}),
     ("color_Doppler_image", (6, 8, 3), {"png"}, {"avi", "mp4", "png"}),
     ("directional_Doppler_image", (2, 6, 8, 3), {"avi", "mp4", "png"}, set()),
     ("diagnostic", (6, 8), {"png"}, {"avi", "mp4", "png"}),
@@ -53,21 +53,21 @@ def test_all_saving_paths_share_formats(tmp_path, monkeypatch, mode, workers):
         with saving.OutputClass(reader, parameters, custom_path=tmp_path / "output") as destination:
             for t in range(2):
                 destination.add_batch({name: value[t] for name, value in temporal.items()}, t)
-            destination.write_static("autofocus_shack_hartmann_shifts", reference)
+            destination.write_static("shack_hartmann_autofocus_shifts", reference)
         target = destination.target_dir
     else:
         target = saving.save_outputs(
-            reader, dict(temporal, autofocus_shack_hartmann_shifts=reference),
+            reader, dict(temporal, shack_hartmann_autofocus_shifts=reference),
             parameters, custom_path=tmp_path / "output", num_saving_workers=workers)
     with h5py.File(next(target.rglob("*.h5"))) as handle:
         assert "color_Doppler_image" not in handle
         assert "directional_Doppler_image" not in handle
         np.testing.assert_equal(handle["moment0"][:], moment)
         np.testing.assert_equal(handle["shack_hartmann_shifts"][:], shifts)
-        np.testing.assert_equal(handle["autofocus_shack_hartmann_shifts"][:], reference)
+        np.testing.assert_equal(handle["shack_hartmann_autofocus_shifts"][:], reference)
         assert handle["HD_version"][()] == f"py{get_version()}".encode()
         assert handle["git_commit"][()] == b"test"
-    for name, value in (("shack_hartmann_shifts", shifts), ("autofocus_shack_hartmann_shifts", reference)):
+    for name, value in (("shack_hartmann_shifts", shifts), ("shack_hartmann_autofocus_shifts", reference)):
         np.testing.assert_equal(np.loadtxt(target / "csv" / f"{name}.csv", delimiter=",").reshape(value.shape), value)
         assert not (target / "png" / f"{name}.png").exists()
     for name in ("color_Doppler_image", "directional_Doppler_image"):

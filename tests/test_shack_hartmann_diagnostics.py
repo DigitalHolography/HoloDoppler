@@ -80,11 +80,11 @@ def test_autofocus_guard(monkeypatch, z4, accepted, modes, failure):
     phase, coefs = main_default._get_autofocus_phase_term(params, reader, diagnostics)
     assert warning.call_count == (0 if accepted else 1)
     assert (phase is not None) == accepted
-    assert set(diagnostics) == {"autofocus_shack_hartmann_shifts"}
-    np.testing.assert_equal(diagnostics["autofocus_shack_hartmann_shifts"], np.ones((2, 2, 2)))
+    assert set(diagnostics) == {"shack_hartmann_autofocus_shifts"}
+    np.testing.assert_equal(diagnostics["shack_hartmann_autofocus_shifts"], np.ones((2, 2, 2)))
 
 
-@pytest.mark.parametrize("name", ["shack_hartmann_shifts", "autofocus_shack_hartmann_shifts", "spectrum_line"])
+@pytest.mark.parametrize("name", ["shack_hartmann_shifts", "shack_hartmann_autofocus_shifts", "spectrum_line"])
 @pytest.mark.parametrize("streaming", [False, True])
 def test_diagnostic_h5(tmp_path, monkeypatch, streaming, name):
     monkeypatch.setattr(saving_data, "get_git_version", lambda: "test")
@@ -158,6 +158,6 @@ def test_multidimensional_shift_csv(tmp_path, shape):
 def test_shift_bundle_csv_job(tmp_path):
     values = np.full((2, 3, 2, 3, 2), np.nan, dtype=np.float32)
     jobs = list(saving._bundle_saving_jobs(
-        tmp_path, None, {"autofocus_shack_hartmann_shifts": values}, {}, 1, False))
+        tmp_path, None, {"shack_hartmann_autofocus_shifts": values}, {}, 1, False))
     assert jobs[0][0] is saving.save_csv
     assert all(job[0] not in (saving.save_png, saving.save_video) for job in jobs)

@@ -499,7 +499,7 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None):
     coefs = autofocus_result.get("shack_hartmann_zernike_coefs")
 
     if diagnostics is not None and "shack_hartmann_shifts" in autofocus_result:
-        diagnostics["autofocus_shack_hartmann_shifts"] = backend.to_numpy(
+        diagnostics["shack_hartmann_autofocus_shifts"] = backend.to_numpy(
             autofocus_result["shack_hartmann_shifts"]
         )
 

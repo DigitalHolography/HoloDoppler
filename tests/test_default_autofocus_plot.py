@@ -126,10 +126,10 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every,
         np.testing.assert_array_equal(
             bundles[0]["shack_hartmann_autofocus_zernike_coefs"], coefs,
         )
-        np.testing.assert_equal(bundles[0]["autofocus_shack_hartmann_shifts"], pair_shifts)
+        np.testing.assert_equal(bundles[0]["shack_hartmann_autofocus_shifts"], pair_shifts)
         import h5py
         with h5py.File(next(tmp_path.rglob("*.h5"))) as h5:
-            np.testing.assert_equal(h5["autofocus_shack_hartmann_shifts"][:], pair_shifts)
+            np.testing.assert_equal(h5["shack_hartmann_autofocus_shifts"][:], pair_shifts)
         assert len(pngs) == 1
         assert pngs[0].name == "shack_hartmann_autofocus_wavefront_color_image.png"
         assert ("preview" in pngs[0].relative_to(tmp_path).parts) == (entrypoint == "preview")
