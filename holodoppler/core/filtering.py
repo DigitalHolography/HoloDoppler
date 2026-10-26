@@ -26,6 +26,7 @@ def filter_2d(xp, fft, frames, filter2d_low):
 
 
 
+
 def svd_filter(
     xp,
     linalg,
@@ -33,210 +34,75 @@ def svd_filter(
     svd_threshold,
     filter_mode="number_of_values",
     remove_dc=False,
-    debug=False,
+    diagnostic=None,
 ):
-    """SVD filtering to remove tissue signal.
-
-    The covariance eigendecomposition is performed in the temporal
-    dimension. For Nt > 300 this is generally preferable to computing
-    a full SVD of the pixel x time matrix.
+    """SVD clutter filtering using temporal covariance eigendecomposition.
 
     Parameters
     ----------
-    xp : module
-        Array module.
-    linalg : module
-        Linear algebra module providing eigh.
     H : array
-        Input complex data, shape (Nt, Ny, Nx).
-
+        Complex data of shape (Nt, Ny, Nx).
     svd_threshold : int or float
-        Threshold used according to ``filter_mode``.
-
+        Number of leading modes to remove, or eigenvalue threshold.
+        Negative values disable filtering.
     filter_mode : str
-        ``"number_of_values"``
-            Remove the N largest singular/eigenvalue components.
-
-        ``"amplitude_threshold"``
-            Remove components whose eigenvalue is greater than the
-            supplied threshold.
-
-        ``"relative_amplitude_threshold"``
-            Remove components whose eigenvalue / maximum eigenvalue
-            exceeds the supplied threshold.
-
+        "number_of_values" or "amplitude_threshold".
     remove_dc : bool
-        Remove the temporal mean before filtering.
-
-    debug : bool
-        Return intermediate SVD quantities.
+        Subtract the temporal mean before filtering.
+    diagnostic : dict, optional
+        Dictionary populated with intermediate results when provided.
 
     Returns
     -------
     H_filtered : array
-        Filtered data.
-
-    If debug=True, also returns:
-        removed_features,
-        kept_data,
-        eigenvalues,
-        covariance,
-        eigenvectors,
-        dc
+        Filtered data with the same shape as H.
     """
-
     if svd_threshold < 0:
-        if debug:
-            return H, None, None, None, None, None, None
         return H
 
-    # ------------------------------------------------------------------
-    # Remove DC
-    # ------------------------------------------------------------------
+    shape = H.shape
+    nt = shape[0]
+
+    dc = xp.mean(H, axis=0) if remove_dc else None
     if remove_dc:
-        dc = xp.mean(H, axis=0)
         H = H - dc
-    else:
-        dc = None
 
-    # ------------------------------------------------------------------
-    # Arrange as:
-    #
-    #       H2 = [pixels, time]
-    #
-    # This makes H2.conj().T @ H2 an Nt x Nt covariance matrix.
-    # ------------------------------------------------------------------
-    sz = H.shape
-    nt = sz[0]
-
+    # Pixels x time
     H2 = H.reshape(nt, -1).T
 
-    # ------------------------------------------------------------------
-    # Temporal covariance
-    # ------------------------------------------------------------------
+    # Temporal covariance and eigendecomposition
     cov = H2.conj().T @ H2
-
-    # Small regularization.
-    #
-    # Scale epsilon with the covariance rather than using an absolute
-    # 1e-12. This behaves better for very small or very large signals.
-    trace = xp.real(xp.trace(cov))
-
-    if nt:
-        eps = xp.finfo(cov.real.dtype).eps * trace / nt
-        if eps == 0:
-            eps = xp.finfo(cov.real.dtype).eps
-
-        cov = cov + eps * xp.eye(nt, dtype=cov.dtype)
-
-    # ------------------------------------------------------------------
-    # Hermitian eigendecomposition
-    #
-    # The supplied linalg module selects the appropriate implementation:
-    # NumPy/SciPy on CPU, CuPy on GPU.
-    # ------------------------------------------------------------------
     S, V = linalg.eigh(cov)
 
-    # eigh returns ascending eigenvalues.
-    #
-    # Reversing is cheap compared with argsort and is sufficient here
-    # because eigh already returns sorted eigenvalues.
+    # Descending eigenvalues
     S = S[::-1]
     V = V[:, ::-1]
 
-    # ------------------------------------------------------------------
-    # Select components to REMOVE
-    # ------------------------------------------------------------------
+    # Select modes to remove
     if filter_mode == "number_of_values":
-
-        n_remove = int(svd_threshold)
-
-        if n_remove < 0:
-            raise ValueError(
-                "svd_threshold must be >= 0 for "
-                "'number_of_values'"
-            )
-
-        n_remove = min(n_remove, nt)
-
-        mask = xp.zeros(nt, dtype=bool)
-        mask[:n_remove] = True
-
+        n = min(int(svd_threshold), nt)
+        V_remove = V[:, :n]
     elif filter_mode == "amplitude_threshold":
-
-        mask = S > svd_threshold
-
-    elif filter_mode == "relative_amplitude_threshold":
-
-        smax = S[0]
-
-        if smax == 0:
-            mask = xp.zeros(nt, dtype=bool)
-        else:
-            mask = S / smax > svd_threshold
-
+        V_remove = V[:, S > svd_threshold]
     else:
-        raise ValueError(
-            f"Unknown filter_mode: {filter_mode!r}. "
-            "Expected 'number_of_values', "
-            "'amplitude_threshold' or "
-            "'relative_amplitude_threshold'."
-        )
+        raise ValueError(f"Unknown filter_mode: {filter_mode}")
 
-    V_remove = V[:, mask]
-    V_keep = V[:, ~mask]
+    # Remove projection onto selected temporal modes
+    removed = H2 @ V_remove
+    H_filtered = H2 - removed @ V_remove.conj().T
+    H_filtered = H_filtered.T.reshape(shape)
 
-    # ------------------------------------------------------------------
-    # Projection
-    #
-    # H_filtered = H2 - projection_onto_removed_subspace
-    #
-    # Computing H2 @ V_remove first is considerably cheaper than forming
-    # the full Nt x Nt projection matrix.
-    # ------------------------------------------------------------------
-    if V_remove.shape[1] == 0:
-        H_filtered = H2
+    if diagnostic is not None:
+        diagnostic.update({
+            "removed_features": removed.reshape(*shape[1:], -1),
+            "kept_data": H_filtered,
+            "eigenvalues": S,
+            "covariance": cov,
+            "eigenvectors": V,
+            "dc": dc,
+        })
 
-    elif V_remove.shape[1] == nt:
-        # Everything is removed.
-        H_filtered = xp.zeros_like(H2)
-
-    else:
-        coefficients = H2 @ V_remove
-        H_filtered = H2 - coefficients @ V_remove.conj().T
-
-    # ------------------------------------------------------------------
-    # Debug information
-    # ------------------------------------------------------------------
-    if debug:
-
-        # Coordinates of the removed temporal modes.
-        if V_remove.shape[1]:
-            U_remove = H2 @ V_remove
-        else:
-            U_remove = xp.empty(
-                (H2.shape[0], 0),
-                dtype=H2.dtype,
-            )
-
-        # Reconstruct kept signal without constructing the full
-        # projection matrix.
-        if V_keep.shape[1]:
-            H_kept = (H2 @ V_keep) @ V_keep.conj().T
-        else:
-            H_kept = xp.zeros_like(H2)
-
-        return (
-            H_filtered.T.reshape(sz),
-            U_remove.reshape((sz[-2], sz[-1], -1)),
-            H_kept.T.reshape(sz),
-            S,
-            cov,
-            V,
-            dc,
-        )
-
-    return H_filtered.T.reshape(sz)
+    return H_filtered
 
 
 def svd_filter_stdmeanratio(
