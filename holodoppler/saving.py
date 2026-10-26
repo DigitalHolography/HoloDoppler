@@ -1539,8 +1539,7 @@ class OutputClass:
     def _h5_selected(name):
         return (name in {"moment0ff", "moment0", "moment1", "moment2",
                         "spectrum_line", "sh_psd", "averaged_spectrogram",
-                        "spectrograms", "PROJ", "PROJff", "QSum_M0", "J0_M0",
-                        "color_Doppler_image", "directional_Doppler_image"}
+                        "spectrograms", "PROJ", "PROJff", "QSum_M0", "J0_M0"}
                 or name.startswith(("NW_", "NE_", "SW_", "SE_", "NWxSE_", "NExSW_"))
                 or name.endswith("_flow_index") or "band_" in name or is_csv_output(name))
 
