@@ -475,7 +475,7 @@ def save_csv(path: Path, value: Any) -> None:
     Supported inputs:
         - list of dictionaries
         - list/tuple of rows
-        - numpy 1-D / 2-D arrays
+        - numpy arrays (axes after the first are flattened into columns)
         - pandas-like objects exposing to_csv()
     """
     path = Path(path)
@@ -490,6 +490,9 @@ def save_csv(path: Path, value: Any) -> None:
 
         if value.ndim == 1:
             value = value[:, None]
+
+        if value.ndim > 2:
+            value = value.reshape(value.shape[0], -1)
 
         if value.ndim != 2:
             raise ValueError(
@@ -613,17 +616,8 @@ def save_h5(
             if not isinstance(value, np.ndarray):
                 continue
 
-            # HDF5 should preserve useful numerical precision.
-            if np.issubdtype(value.dtype, np.floating):
-                value_to_save = np.nan_to_num(
-                    value,
-                    nan=0.0,
-                    posinf=0.0,
-                    neginf=0.0,
-                ).astype(np.float32)
-
-            else:
-                value_to_save = value
+            # Preserve NaNs and infinities in numerical data.
+            value_to_save = OutputClass._h5_value(value)
 
             h5.create_dataset(
                 name,
@@ -753,7 +747,7 @@ def save_metadata(
 def is_csv_output(name: str) -> bool:
     """Return True if an output must be saved to both CSV and HDF5."""
     name = name.lower()
-    return "coefs" in name or "registration" in name
+    return "coefs" in name or "registration" in name or name.endswith("shack_hartmann_shifts")
 
 
 def save_csv_outputs(
@@ -1547,7 +1541,7 @@ class OutputClass:
     @staticmethod
     def _h5_value(value):
         if np.issubdtype(value.dtype, np.floating):
-            return np.nan_to_num(value, nan=0., posinf=0., neginf=0.).astype(np.float32)
+            return value.astype(np.float32)
         return value
 
     def _validate(self, name, value):
@@ -1791,7 +1785,7 @@ def save_outputs(
     # 1. Videos.
     save_videos_parallel(
         target_dir,
-        output,
+        {k: v for k, v in output.items() if not is_csv_output(k)},
         fps=fps,
         video_formats=("avi","mp4"),
         writer="imageio",
@@ -1800,7 +1794,7 @@ def save_outputs(
     # 2. PNGs.
     save_pngs(
         target_dir,
-        output,
+        {k: v for k, v in output.items() if not is_csv_output(k)},
     )
 
     # 3. CSV outputs, also selected for HDF5.
@@ -1836,6 +1830,9 @@ def _bundle_saving_jobs(target_dir, file_reader, output, parameters, fps, save_t
     for name, value in output.items():
         if not isinstance(value, np.ndarray):
             continue
+        if is_csv_output(name):
+            yield save_csv, (target_dir / "csv" / f"{name}.csv", value), {}
+            continue
         if is_video(value):
             for fmt in ("avi", "mp4"):
                 yield save_video, (target_dir / fmt / f"{name}.{fmt}", value, fps), {
@@ -1845,9 +1842,6 @@ def _bundle_saving_jobs(target_dir, file_reader, output, parameters, fps, save_t
             yield save_png, (png_path, value), {}
         elif is_video(value):
             yield save_video_average_png, (png_path, value), {}
-        # The existing bundle saver skips unsupported CSV shapes (e.g. ECC matrices).
-        if is_csv_output(name) and value.ndim in (1, 2):
-            yield save_csv, (target_dir / "csv" / f"{name}.csv", value), {}
     yield save_metadata, (target_dir,), {"file_reader": file_reader, "parameters": parameters}
     if save_to_h5:
         yield save_h5, (target_dir, output), {

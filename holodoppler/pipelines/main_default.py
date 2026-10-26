@@ -300,11 +300,13 @@ def _process_shack_hartmann(
     # ------------------------------------------------------------
     # Calculate Shack-Hartmann displacements
     # ------------------------------------------------------------
+    shift_diagnostics = {} if output_dict is not None else None
     if parameters.get("shack_hartmann_graph_laplacian", False):
         shifts_y, shifts_x = calculate_displacements_graph_laplacian(
             xp,
             fft,
             U,
+            diagnostics=shift_diagnostics,
             pupil_threshold=parameters.get(
                 "shack_hartmann_pupil_threshold",
                 1.0,
@@ -324,6 +326,7 @@ def _process_shack_hartmann(
             xp,
             fft,
             U,
+            diagnostics=shift_diagnostics,
             pupil_threshold=parameters.get(
                 "shack_hartmann_pupil_threshold",
                 1.0,
@@ -342,6 +345,7 @@ def _process_shack_hartmann(
     # Optional diagnostic output
     # ------------------------------------------------------------
     if output_dict is not None:
+        output_dict.update(shift_diagnostics or {})
         sy, sx, numy, numx = U.shape
 
         U = xp.transpose(
@@ -494,8 +498,30 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None):
 
     coefs = autofocus_result.get("shack_hartmann_zernike_coefs")
 
+    if diagnostics is not None and "shack_hartmann_shifts" in autofocus_result:
+        diagnostics["autofocus_shack_hartmann_shifts"] = backend.to_numpy(
+            autofocus_result["shack_hartmann_shifts"]
+        )
+
+    reason = None
+    modes = list(parameters.get("shack_hartmann_zernike_fit_modes", [4, 5, 6]))
+    threshold = parameters.get("shack_hartmann_autofocus_z4_threshold_rad", 1.5)
+    values = None if coefs is None else backend.to_numpy(coefs)
+    phase = autofocus_result.get("shack_hartmann_wavefront_phase")
+    if values is None or not np.isfinite(values).all():
+        reason = "missing or nonfinite Zernike coefficients"
+    elif 4 not in modes:
+        reason = "Z4 is absent from the fitted modes"
+    elif abs(float(values[modes.index(4)])) > threshold:
+        reason = f"Z4={float(values[modes.index(4)]):g} rad exceeds absolute threshold {threshold:g} rad"
+    elif phase is None or not np.isfinite(backend.to_numpy(phase)).all():
+        reason = "missing or nonfinite wavefront phase"
+
     del ref_frames
     del autofocus_result
+    if reason is not None:
+        logger.warning("Shack-Hartmann autofocus correction rejected: %s; continuing without phase correction.", reason)
+        return None, coefs
 
     if phase_term is None:
         raise RuntimeError(
@@ -555,7 +581,7 @@ def _process_one_batch(
     #
     # computes a new correction for every batch.
     # ------------------------------------------------------------
-    if phase_term is None and parameters.get(
+    if (phase_term is None and not parameters.get("shack_hartmann_autofocus", False)) and parameters.get(
         "shack_hartmann",
         False,
     ):
@@ -744,7 +770,7 @@ def preview(file_path, parameters):
                     max(v.shape[-2:]),
                     max(v.shape[-2:]),
                 ))
-                if v.ndim == 2 or (k == "sh_psd" and v.ndim == 3)
+                if (v.ndim == 2 and not k.startswith("shack_hartmann_")) or (k == "sh_psd" and v.ndim == 3)
                 else v
             )
             for k, v in res.items()
@@ -921,7 +947,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
                     output[key] = value
             else:
                 value = value[0]
-                if parameters.get("square", False) and value.ndim == 2:
+                if parameters.get("square", False) and value.ndim == 2 and not key.startswith("shack_hartmann_"):
                     size = max(value.shape)
                     value = backend.to_numpy(resize_frames(
                         backend.xp, backend.zoom, value, size, size))
@@ -980,7 +1006,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
                     max(value.shape[-2:]),
                     max(value.shape[-2:]),
                 ))
-                if value.ndim == 3
+                if value.ndim == 3 and not key.startswith("shack_hartmann_")
                 else value
             )
             for key, value in output.items()

@@ -146,6 +146,7 @@ def calculate_displacements(
     shifts_range=20.0,
     ref=None,
     mask_disk_ratio=None,
+    diagnostics=None,
 ):
     """Calculate subaperture displacements using phase correlation"""
     ny_s, nx_s, Ny, Nx = U_subaps.shape
@@ -244,6 +245,9 @@ def calculate_displacements(
     shift_y[bad] = xp.nan
     shift_x[bad] = xp.nan
 
+    if diagnostics is not None:
+        diagnostics["shack_hartmann_shifts"] = xp.stack((shift_y, shift_x), axis=-1).astype(xp.float32)
+
     return shift_y.astype(xp.float32), shift_x.astype(xp.float32)
 
 
@@ -256,7 +260,14 @@ def calculate_displacements_graph_laplacian(
     deviation_threshold=3.0,
     shifts_range=20.0,
     use_corr_weights=False,
+    diagnostics=None,
 ):
+    """Solve shifts; optional diagnostics store accepted directed pair shifts.
+
+    Shape is (ny_sub, nx_sub, ny_sub, nx_sub, 2), last axis (dy, dx)
+    in pixels. Pair [iy, ix, jy, jx] measures j relative to i.
+    Rejected, self, and uncomputed pairs are NaN.
+    """
     ny_s, nx_s, Ny, Nx = U_subaps.shape
     B = ny_s * nx_s
     eps = 1e-12
@@ -276,6 +287,11 @@ def calculate_displacements_graph_laplacian(
     )
     pupil_mask = (xx * xx + yy * yy) <= pupil_threshold
     pupil_flat = pupil_mask.reshape(B)
+
+    pair_shifts = None
+    if diagnostics is not None:
+        pair_shifts = xp.full((B, B, 2), xp.nan, dtype=xp.float32)
+        diagnostics["shack_hartmann_shifts"] = pair_shifts.reshape(ny_s, nx_s, ny_s, nx_s, 2)
 
     valid_ids = xp.where(pupil_flat)[0]
     if valid_ids.size < 2:
@@ -334,6 +350,10 @@ def calculate_displacements_graph_laplacian(
             & (xp.abs(dx) <= 2 * shifts_range)
         )
         ok[i] = False
+
+        if pair_shifts is not None:
+            pair_shifts[i, ok, 0] = dy[ok]
+            pair_shifts[i, ok, 1] = dx[ok]
 
         S_y[i, ok] = dy[ok].astype(xp.float32)
         S_x[i, ok] = dx[ok].astype(xp.float32)

@@ -136,7 +136,7 @@ def test_integer_and_nonfinite_normalization(output_factory, monkeypatch, dtype)
         assert frame.dtype == np.uint8
         assert np.isfinite(frame).all()
         assert frame[0, 0, 0] == (0 if dtype == np.float32 else 255)
-        assert np.isfinite(output._h5["moment0"][:]).all()
+        np.testing.assert_equal(output._h5["moment0"][0], value)
 
 
 def test_encoder_failure_releases_resources(output_factory, monkeypatch):
