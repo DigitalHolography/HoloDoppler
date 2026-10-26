@@ -37,11 +37,12 @@ nt, ny, nx = data.shape
 
 X = data.reshape(nt, ny * nx).T      # (pixels, time)
 
-if center:
-    mean_field = X.mean(axis=1, keepdims=True)
-    X -= mean_field
-    mean_field = X.mean(axis=0, keepdims=True)
-    X -= mean_field
+pixel_mean = X.mean(axis=1, keepdims=True)
+X -= pixel_mean
+remove_spatial_mean = True
+if remove_spatial_mean:
+    frame_mean = X.mean(axis=0, keepdims=True)
+    X -= frame_mean
 
 print("Snapshot matrix :", X.shape)
 
