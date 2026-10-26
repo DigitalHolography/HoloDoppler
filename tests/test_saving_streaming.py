@@ -189,9 +189,11 @@ def test_real_encoder_round_trip(output_factory):
 
 
 @pytest.mark.parametrize("ecc", [False, True])
-def test_pipeline_streaming_and_ecc_order(tmp_path, monkeypatch, ecc):
+@pytest.mark.parametrize("gpu", [False, True])
+def test_pipeline_streaming_and_ecc_order(tmp_path, monkeypatch, ecc, gpu):
     from holodoppler import backend
 
+    monkeypatch.setattr(backend, "is_gpu", gpu)
     monkeypatch.setattr(backend, "to_numpy", np.asarray)
     monkeypatch.setattr(backend, "clear_gpu_memory", lambda: None)
     monkeypatch.setattr(main_default, "_get_autofocus_phase_term", lambda *args, **kw: (None, None))
@@ -206,6 +208,10 @@ def test_pipeline_streaming_and_ecc_order(tmp_path, monkeypatch, ecc):
             result = {name: np.full((6, 8), t, np.float32)
                       for name in ("M0", "M0ff", "M1", "M2")}
             result["sh_psd"] = np.ones((8, 6, 8), np.float32)
+            if gpu:
+                result = kwargs["prepare_result"](result)
+                assert "sh_psd" not in result
+                assert "averaged_spectrogram" not in result
             consume(t, result)
             assert len(calls) == (0 if ecc else 4 * (t + 1))
 
@@ -213,7 +219,8 @@ def test_pipeline_streaming_and_ecc_order(tmp_path, monkeypatch, ecc):
     monkeypatch.setattr(main_default, "register_with_ecc", lambda *args, **kw: np.zeros((2, 2, 3)))
     monkeypatch.setattr(main_default, "apply_ecc_registration", lambda value, *args, **kw: value + 10)
     main_default._process_to_output(None, dict(batch_size=4, first_frame=0,
-        image_registration=False, image_registration_with_ecc=ecc),
+        image_registration=False, image_registration_with_ecc=ecc,
+        save_averaged_spectrogram=True),
         [0, 4], destination, None)
     moments = [call for call in calls if call[0] == "moment0"]
     assert [call[2] for call in moments] == [0, 1]

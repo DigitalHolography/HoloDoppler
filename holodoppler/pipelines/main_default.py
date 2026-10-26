@@ -957,6 +957,20 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
             phase_term=autofocus_phase_term,
         )
 
+    gpu_aggregates = {}
+
+    def prepare_result(result):
+        result = _prepare_batch_results(result, parameters)
+        if backend.is_gpu and "sh_psd" in result:
+            # All batches accumulate on the scheduler's compute stream, before
+            # download. Only the final aggregate needs to cross to the CPU.
+            spectrum = result.pop("sh_psd")
+            if "averaged_spectrogram" not in gpu_aggregates:
+                gpu_aggregates["averaged_spectrogram"] = spectrum.copy()
+            else:
+                gpu_aggregates["averaged_spectrogram"] += spectrum
+        return result
+
     def consume_result(index, result):
         if buffered:
             _append_numpy_results(output, result, parameters, index, len(batch_indices))
@@ -990,9 +1004,14 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
         workers=parameters.get("numpy_num_workers", 8),
         cupy_async=parameters.get("cupy_async", True),
         cupy_prefetch_depth=parameters.get("cupy_prefetch_depth", 4),
-        prepare_result=lambda result: _prepare_batch_results(result, parameters),
+        prepare_result=prepare_result,
         progress_callback=progress_callback,
     )
+
+    if "averaged_spectrogram" in gpu_aggregates:
+        output["averaged_spectrogram"] = backend.to_numpy(
+            gpu_aggregates.pop("averaged_spectrogram")
+        )
 
     logger.debug("Output keys: %s", output.keys())
 
