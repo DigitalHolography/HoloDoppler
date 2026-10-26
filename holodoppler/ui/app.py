@@ -38,6 +38,7 @@ _WINDOW_MINSIZES = {
     "minimal": (640, 500),
     "advanced": (980, 640),
 }
+_MODE_SWITCH_SETTLE_MS = 120
 
 
 class _ModeNotebook(ttk.Notebook):
@@ -46,7 +47,7 @@ class _ModeNotebook(ttk.Notebook):
         self.before_select: Callable[[int], None] | None = None
         # Tk maps the selected page before <<NotebookTabChanged>> is handled.
         # Intercept the widget command so mouse, keyboard and Python selections
-        # all resize the window before that first layout.
+        # all prepare the window before that first layout.
         self._original_command = self._w + "_original"
         self.tk.call("rename", self._w, self._original_command)
         before_select = self._register(self._before_tab_select)
@@ -106,8 +107,13 @@ class UI(BaseTk):
         self._register_drop_targets()
         self._sync_views()
         self._preload_views()
-        self.notebook.before_select = lambda index: self._apply_window_size("advanced" if index == 1 else "minimal")
+        self._mode_switch_alpha: float | None = None
+        self._mode_switch_after_id: str | None = None
+        self._mode_switch_layout: tuple[tuple[str, str, int, int], ...] | None = None
+        self.notebook.before_select = self._begin_mode_switch
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+        self.bind("<Configure>", self._on_mode_layout, add="+")
+        self.bind("<Map>", self._on_mode_layout, add="+")
         self.attributes("-alpha", 1.0)
         self.poll_after_id = self.after(60, self._poll_events)
 
@@ -280,6 +286,12 @@ class UI(BaseTk):
         self.update_idletasks()
         self.notebook.configure(width=self.minimal.winfo_reqwidth(), height=self.minimal.winfo_reqheight())
         self.update_idletasks()
+        # Measure once while the requested size is current. During a rapid
+        # switch Tk may not have processed the previous size request yet.
+        self._notebook_chrome = (
+            self.notebook.winfo_reqwidth() - int(self.notebook.cget("width")),
+            self.notebook.winfo_reqheight() - int(self.notebook.cget("height")),
+        )
         for tab_name, view in (("minimal", self.minimal), ("advanced", self.advanced)):
             self.notebook.select(view)
             self._apply_window_size(tab_name)
@@ -444,12 +456,16 @@ class UI(BaseTk):
             self.events.put({"kind": "worker_done"})
 
     def _poll_events(self) -> None:
-        try:
-            while True:
-                event = self.events.get_nowait()
-                self._handle_event(event)
-        except queue.Empty:
-            pass
+        # The worker keeps running, but its queued text/image updates can
+        # change requested sizes continuously. Apply them after the mode is
+        # visible so they cannot keep the layout from ever becoming stable.
+        if self._mode_switch_alpha is None:
+            try:
+                while True:
+                    event = self.events.get_nowait()
+                    self._handle_event(event)
+            except queue.Empty:
+                pass
         self.poll_after_id = self.after(60, self._poll_events)
 
     def _handle_event(self, event: dict[str, Any]) -> None:
@@ -530,7 +546,84 @@ class UI(BaseTk):
     def _busy(self) -> bool:
         return self.worker is not None and self.worker.is_alive()
 
+    def _begin_mode_switch(self, index: int) -> None:
+        # Keep the window mapped so Tk can lay out and paint the new page,
+        # but hide both the old page's resize and the new page's first redraw.
+        if self._mode_switch_alpha is None:
+            self._mode_switch_alpha = float(self.attributes("-alpha"))
+            self.attributes("-alpha", 0.0)
+        self._cancel_mode_reveal()
+        self._mode_switch_layout = None
+        try:
+            self._apply_window_size("advanced" if index == 1 else "minimal")
+        except Exception:
+            self._reveal_mode()
+            raise
+
+    def _on_mode_layout(self, _event: tk.Event) -> None:
+        # Grid/notebook layouts can settle from the outside in: buttons may
+        # still move after their top-level page has stopped changing. The root
+        # bind tag receives all its descendants, but not separate log/dialog
+        # windows. Progressbar redraws do not generate these geometry events.
+        if self._mode_switch_alpha is not None:
+            self._schedule_mode_reveal()
+
+    def _cancel_mode_reveal(self) -> None:
+        if self._mode_switch_after_id is not None:
+            self.after_cancel(self._mode_switch_after_id)
+            self._mode_switch_after_id = None
+
+    def _schedule_mode_reveal(self) -> None:
+        self._cancel_mode_reveal()
+        self._mode_switch_after_id = self.after(_MODE_SWITCH_SETTLE_MS, self._queue_mode_reveal)
+
+    def _queue_mode_reveal(self) -> None:
+        # A busy callback can make the timer due before pending layout events
+        # are handled. Allow an idle layout pass and then another event-loop
+        # turn for the native resize events generated by that layout.
+        self._mode_switch_after_id = self.after_idle(self._finish_mode_layout)
+
+    def _finish_mode_layout(self) -> None:
+        layout = self._mode_layout_signature()
+        if layout != self._mode_switch_layout:
+            # A quiet outer window does not imply a finished nested layout.
+            # Require unchanged actual AND requested sizes across a complete
+            # quiet interval, allowing further grid passes to finish hidden.
+            self._mode_switch_layout = layout
+            self._schedule_mode_reveal()
+        else:
+            self._mode_switch_after_id = self.after(0, self._reveal_mode_if_stable)
+
+    def _mode_layout_signature(self) -> tuple[tuple[str, str, int, int], ...]:
+        layout = []
+        pending: list[tk.Misc] = [self]
+        while pending:
+            widget = pending.pop()
+            if widget.winfo_toplevel() != self or not widget.winfo_viewable():
+                continue
+            layout.append((
+                str(widget), widget.winfo_geometry(),
+                widget.winfo_reqwidth(), widget.winfo_reqheight(),
+            ))
+            pending.extend(widget.winfo_children())
+        return tuple(layout)
+
+    def _reveal_mode_if_stable(self) -> None:
+        if self._mode_layout_signature() != self._mode_switch_layout:
+            self._schedule_mode_reveal()
+        else:
+            self._reveal_mode()
+
+    def _reveal_mode(self) -> None:
+        self._cancel_mode_reveal()
+        if self._mode_switch_alpha is not None:
+            self.attributes("-alpha", self._mode_switch_alpha)
+            self._mode_switch_alpha = None
+        self._mode_switch_layout = None
+
     def _on_tab_changed(self, _event: tk.Event) -> None:
+        if self._mode_switch_alpha is not None:
+            self._schedule_mode_reveal()
         new_tab = self._current_tab_name()
         if new_tab == self.active_tab_name:
             return
@@ -545,8 +638,7 @@ class UI(BaseTk):
         view = self.advanced if tab_name == "advanced" else self.minimal
         # Notebook normally requests the largest of all its pages. Use only
         # this mode's content so the advanced controls do not enlarge minimal.
-        chrome_width = self.notebook.winfo_reqwidth() - int(self.notebook.cget("width"))
-        chrome_height = self.notebook.winfo_reqheight() - int(self.notebook.cget("height"))
+        chrome_width, chrome_height = self._notebook_chrome
         content_width, content_height = view.winfo_reqwidth(), view.winfo_reqheight()
         self.notebook.configure(width=content_width, height=content_height)
 
@@ -559,10 +651,10 @@ class UI(BaseTk):
         height = min(max(content_height + chrome_height, min_height), available_height)
         self.minsize(min_width, min_height)
         self.geometry(f"{width}x{height}")
-        self.update_idletasks()
 
     def _on_close(self) -> None:
         self.store.save_active_tab(self.active_tab_name)
+        self._cancel_mode_reveal()
         if self.poll_after_id is not None:
             try:
                 self.after_cancel(self.poll_after_id)
