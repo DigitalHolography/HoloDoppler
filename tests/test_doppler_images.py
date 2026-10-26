@@ -11,6 +11,7 @@ from scipy.ndimage import gaussian_filter
 import yaml
 
 from holodoppler import backend, saving
+from holodoppler.saving import media as saving_media
 from holodoppler.config import validate_main_parameters
 from holodoppler.core.doppler_images import directional, construct_colored_image, construct_colored_image_lab, construct_directional_image
 from holodoppler.pipelines import main_default
@@ -184,7 +185,7 @@ def test_default_doppler_video_average_and_preview(tmp_path, monkeypatch, square
                              frames[first_frame:first_frame + batch_size * (skip_every or 1):skip_every or 1].copy())
     monkeypatch.setattr(main_default, "get_reader", lambda _: reader)
     monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
-    monkeypatch.setattr(saving, "save_video", lambda *args, **kwargs: None)
+    monkeypatch.setattr(saving_media, "save_video", lambda *args, **kwargs: None)
     monkeypatch.setattr(main_default, "register_with_ecc", lambda values, **kwargs: np.zeros((len(values), 12)))
     monkeypatch.setattr(main_default, "apply_ecc_registration", lambda values, *args, **kwargs:
                         np.roll(values, 1, axis=-1))

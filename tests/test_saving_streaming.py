@@ -8,13 +8,16 @@ from PIL import Image
 import pytest
 
 from holodoppler import saving
+from holodoppler.saving import data as saving_data
+from holodoppler.saving import media as saving_media
+from holodoppler.saving import session as saving_session
 from holodoppler.pipelines import main_default
 
 
 @pytest.fixture
 def output_factory(tmp_path, monkeypatch):
-    monkeypatch.setattr(saving, "save_metadata", lambda *args: None)
-    monkeypatch.setattr(saving, "get_git_version", lambda: "test")
+    monkeypatch.setattr(saving_data, "save_metadata", lambda *args: None)
+    monkeypatch.setattr(saving_data, "get_git_version", lambda: "test")
     reader = SimpleNamespace(file_path=tmp_path / "input.raw")
 
     def create(**kwargs):
@@ -88,7 +91,7 @@ def test_invalid_option_before_creating_destination(output_factory, tmp_path):
 
 
 def test_directory_access_probe(output_factory, monkeypatch):
-    monkeypatch.setattr(saving.tempfile, "TemporaryFile", Mock(side_effect=PermissionError("locked")))
+    monkeypatch.setattr(saving_session.tempfile, "TemporaryFile", Mock(side_effect=PermissionError("locked")))
     with pytest.raises(PermissionError, match="locked"):
         output_factory()
 
@@ -230,7 +233,7 @@ def test_default_process_h5_with_square_and_spectrograms(tmp_path, monkeypatch, 
 
     # Run actual batch processing and HDF5 saving; video encoding has its own round trip.
     monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
-    monkeypatch.setattr(saving, "save_video", lambda *args, **kwargs: None)
+    monkeypatch.setattr(saving_media, "save_video", lambda *args, **kwargs: None)
     streaming_output = Mock(wraps=saving.OutputClass)
     bundle_output = Mock(wraps=saving.save_outputs)
     monkeypatch.setattr(main_default, "OutputClass", streaming_output)

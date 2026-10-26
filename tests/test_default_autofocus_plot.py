@@ -9,6 +9,8 @@ import pytest
 import yaml
 
 from holodoppler import backend, saving
+from holodoppler.saving import data as saving_data
+from holodoppler.saving import media as saving_media
 from holodoppler.pipelines import main_default
 
 
@@ -76,11 +78,11 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every,
 
     monkeypatch.setattr(main_default, "_process_one_batch", process_batch)
     bundles = []
-    monkeypatch.setattr(saving, "save_metadata", lambda *args, **kwargs: None)
-    monkeypatch.setattr(saving, "save_version_files", lambda *args: None)
-    monkeypatch.setattr(saving, "get_git_version", lambda: "test")
+    monkeypatch.setattr(saving_data, "save_metadata", lambda *args, **kwargs: None)
+    monkeypatch.setattr(saving_data, "save_version_files", lambda *args: None)
+    monkeypatch.setattr(saving_data, "get_git_version", lambda: "test")
     video_writer = Mock()
-    monkeypatch.setattr(saving, "save_video", video_writer)
+    monkeypatch.setattr(saving_media, "save_video", video_writer)
 
     def save_bundle(**kwargs):
         bundles.append(kwargs["output"])

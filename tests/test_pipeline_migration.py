@@ -10,6 +10,7 @@ import pytest
 import yaml
 
 from holodoppler import backend, saving
+from holodoppler.saving import media as saving_media
 from holodoppler.core import pipeline
 from holodoppler.pipelines import pipelines
 
@@ -71,7 +72,7 @@ def test_streamed_and_buffered_outputs_match(tmp_path, monkeypatch, name, propag
     reader, _ = reader_for(tmp_path, frames)
     monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
     monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
-    monkeypatch.setattr(saving, "save_video", lambda *args, **kwargs: None)
+    monkeypatch.setattr(saving_media, "save_video", lambda *args, **kwargs: None)
     module_name = "sliding_shack_hart" if name == "sliding_shack_hartmann" else name
     module = import_module(f"holodoppler.pipelines.main_{module_name}")
     p = parameters(name, spatial_propagation=propagation, image_registration=registration)
@@ -296,7 +297,7 @@ def test_pca_ecc_runs_after_averaging_before_resizing(tmp_path, monkeypatch, liv
     reader, _ = reader_for(tmp_path, frames)
     monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
     monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
-    monkeypatch.setattr(saving, "save_video", lambda *args, **kwargs: None)
+    monkeypatch.setattr(saving_media, "save_video", lambda *args, **kwargs: None)
     monkeypatch.setattr(pca, "_process_one_batch", lambda p, frames, PROJ_reg=None, phase_term=None:
                         ({"PROJ": frames[0], "PROJff": frames[0]}, PROJ_reg))
     def estimate(images, **kwargs):

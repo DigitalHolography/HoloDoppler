@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from holodoppler import backend, saving
+from holodoppler.saving import data as saving_data
 from holodoppler.core.shack_hartmann import calculate_displacements, calculate_displacements_graph_laplacian
 from holodoppler.pipelines import main_default
 
@@ -86,7 +87,7 @@ def test_autofocus_guard(monkeypatch, z4, accepted, modes, failure):
 @pytest.mark.parametrize("name", ["shack_hartmann_shifts", "autofocus_shack_hartmann_shifts", "spectrum_line"])
 @pytest.mark.parametrize("streaming", [False, True])
 def test_diagnostic_h5(tmp_path, monkeypatch, streaming, name):
-    monkeypatch.setattr(saving, "get_git_version", lambda: "test")
+    monkeypatch.setattr(saving_data, "get_git_version", lambda: "test")
     values = np.array([np.nan, 2, -2, np.inf, -np.inf, 0], dtype=np.float32)
     if name != "spectrum_line":
         values = values.reshape(1, 3, 2)
