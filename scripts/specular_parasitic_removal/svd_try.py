@@ -22,13 +22,19 @@ import matplotlib.pyplot as plt
 center = True          # subtract temporal mean
 n_modes = 10            # number of modes to display
 
-DATA_PATH = r"Y:\260113_IOP_BP\260113_FIY0713.holo"
+DATA_PATH = r"Z:\261021\261021_DEY_13.holo"
 
 from holodoppler.file_reader import FileReaderFactory
 
 reader = FileReaderFactory.create(DATA_PATH)
 
 data = reader.read_frames(0,512).copy().astype(np.float64)
+
+
+from holodoppler.core.propagation import fresnel_transform
+
+data = fresnel_transform(np, np.fft, data, 0.5, 20e-6, 852e-9)
+
 
 # ------------------------------------------------------------
 # Build snapshot matrix
@@ -39,7 +45,7 @@ X = data.reshape(nt, ny * nx).T      # (pixels, time)
 
 pixel_mean = X.mean(axis=1, keepdims=True)
 X -= pixel_mean
-remove_spatial_mean = True
+remove_spatial_mean = False
 if remove_spatial_mean:
     frame_mean = X.mean(axis=0, keepdims=True)
     X -= frame_mean
@@ -108,7 +114,7 @@ axes = axes.ravel()
 
 for k in range(n_modes):
 
-    mode = U[:,k].reshape(ny,nx)
+    mode = np.abs(U[:,k].reshape(ny,nx))
 
     vmax = np.max(np.abs(mode))
 
@@ -152,7 +158,7 @@ for k in range(n_modes):
 
     coeff = S[k] * Vt[k]
 
-    axes[k].plot(time, coeff, lw=2)
+    axes[k].plot(time, np.abs(coeff), lw=2)
 
     axes[k].set_ylabel(f"Mode {k+1}")
     axes[k].grid(alpha=.3)
@@ -166,15 +172,15 @@ plt.tight_layout()
 # FIGURE 5 : Reconstruction example
 # ============================================================
 
-r = 5          # number of retained modes
+r = n_modes          # number of retained modes
 
 Xr = U[:,:r] @ np.diag(S[:r]) @ Vt[:r]
 
 frame = 100
 
-original = X[:,frame].reshape(ny,nx)
-recon = Xr[:,frame].reshape(ny,nx)
-residual = original - recon
+original = np.abs(X[:,frame].reshape(ny,nx))
+recon = np.abs(Xr[:,frame].reshape(ny,nx))
+residual = np.abs(original - recon)
 
 fig, ax = plt.subplots(1,3,figsize=(15,5))
 
