@@ -32,6 +32,9 @@ processing with the profiles in `parameters/`.
 
 For Laser Doppler Holography rendering keep using the `default` pipeline.
 
+See [How the main pipeline works](docs/main-pipeline.md) for the processing
+stages, data flow, execution modes, and remaining design concerns. 
+
 ### Preview
 
 ```bash
@@ -69,7 +72,7 @@ Give a `.txt` file with one `.holo` or `.cine` path per line.
 The processing backend management options should be tuned for your computer specifications.
 
 ```yaml
-force_numpy: false # force the use of numpy (cpu cores only)
+backend: "auto" # auto, numpy (CPU), or cupy (GPU)
 numpy_num_workers: 8 # CPU workers; 0 or 1 runs sequentially
 cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and downloads. (cupy)
 cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM. (cupy)

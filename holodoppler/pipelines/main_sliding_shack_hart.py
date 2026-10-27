@@ -140,14 +140,11 @@ def _process_batch(
     # ------------------------------------------------------------------
     # Temporal transform
     # ------------------------------------------------------------------
-    if parameters.get("temporal_transformation") == "FourierTransform":
-        spectrum_f = fourier_time_transform(
-            xp,
-            fft,
-            holograms_f,
-        )
-    else:
-        spectrum_f = holograms_f
+    spectrum_f = fourier_time_transform(
+        xp,
+        fft,
+        holograms_f,
+    )
 
     # ------------------------------------------------------------------
     # Frequency selection
@@ -172,21 +169,21 @@ def _process_batch(
     # ------------------------------------------------------------------
     # Moments
     # ------------------------------------------------------------------
-    output_dict["M0"] = moment(
+    output_dict["moment0"] = moment(
         xp,
         psd[idxs],
         freqs,
         0,
     )
 
-    output_dict["M1"] = moment(
+    output_dict["moment1"] = moment(
         xp,
         psd[idxs],
         freqs,
         1,
     )
 
-    output_dict["M2"] = moment(
+    output_dict["moment2"] = moment(
         xp,
         psd[idxs],
         freqs,
@@ -196,8 +193,8 @@ def _process_batch(
     # ------------------------------------------------------------------
     # Flat-field correction
     # ------------------------------------------------------------------
-    output_dict["M0ff"] = gaussian_flatfield(
-        output_dict["M0"],
+    output_dict["moment0ff"] = gaussian_flatfield(
+        output_dict["moment0"],
         parameters.get("registration_flatfield_gw", 1.0),
         backend.gaussian_filter,
     )
@@ -236,7 +233,7 @@ def _process_batch(
 def _process_one_batch(
     parameters,
     frames,
-    M0_reg=None,
+    moment0_reg=None,
     U_buffer=None,
     phase_term=None,
 ):
@@ -474,17 +471,17 @@ def _process_one_batch(
     # Image registration
     # ------------------------------------------------------------------
     if (
-        M0_reg is None
+        moment0_reg is None
         and parameters.get("image_registration", False)
     ):
-        M0_reg = res["M0ff"]
+        moment0_reg = res["moment0ff"]
 
-    if M0_reg is not None:
+    if moment0_reg is not None:
         shift_y, shift_x = register_images_shifts(
             xp,
             backend.fft,
-            M0_reg,
-            res["M0ff"],
+            moment0_reg,
+            res["moment0ff"],
             radius=parameters.get(
                 "registration_radius",
                 0.8,
@@ -497,7 +494,7 @@ def _process_one_batch(
 
         for key, value in list(res.items()):
             if (
-                key in {"M0ff", "M0", "M1", "M2"}
+                key in {"moment0ff", "moment0", "moment1", "moment2"}
                 or "band_" in key
             ):
                 res[key] = apply_register_images_shifts(
@@ -515,7 +512,7 @@ def _process_one_batch(
             ]
         )
 
-    return res, M0_reg
+    return res, moment0_reg
 
 
 def _run(file_path, parameters, preview=False, progress_callback=None):
@@ -530,11 +527,11 @@ def _run(file_path, parameters, preview=False, progress_callback=None):
     if p.get("image_registration", False) and (ref_first != p["first_frame"] or ref_size != p["batch_size"]):
         frames = read_reference(reader, p, ref_first, ref_size, "Registration reference")
         result, reference = _process_one_batch(p, frames, phase_term=phase)
-        reference = result["M0ff"].copy()
+        reference = result["moment0ff"].copy()
     history = []
     stateful = p.get("shack_hartmann", False) and phase is None and p.get("sh_time_accumulation", 1) > 1
     def process_batch(frames, reference):
-        return _process_one_batch(p, frames, M0_reg=reference,
+        return _process_one_batch(p, frames, moment0_reg=reference,
                                   U_buffer=history if stateful else None, phase_term=phase)
     static = {} if coefs is None else {"shack_hartmann_autofocus_zernike_coefs": backend.to_numpy(coefs)}
     return run_pipeline(reader, p, process_batch, preview=preview, reference=reference,

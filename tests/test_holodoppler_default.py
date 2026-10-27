@@ -51,8 +51,7 @@ def _create_params_file() -> None:
         "svd_threshold": 2,
         "svd_filter_mode": "number_of_values",  # Options: "number_of_values", "amplitude_threshold"
         "svd_remove_dc": True,
-        # Temporal transformation
-        "temporal_transformation": "FourierTransform",  # Options: "FourierTransform" or None
+        # Temporal sampling
         "sampling_freq": "use_holovibes",  # Sampling frequency in Hz
         "low_freq": 6000,  # Low frequency cutoff in Hz
         "high_freq": 18300,  # High frequency cutoff in Hz "use_holovibes" sampling_freq/2

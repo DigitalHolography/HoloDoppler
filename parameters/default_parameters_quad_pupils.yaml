@@ -1,7 +1,7 @@
 pipeline_name: "split_apertures"
 
 # optional backend management
-force_numpy: false
+backend: "auto" # auto, numpy (CPU), or cupy (GPU; falls back to CPU if unavailable)
 numpy_num_workers: 8 # Numpy only, the number of parallel workers to be used
 cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and downloads.
 cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM.
@@ -33,7 +33,7 @@ svd_threshold: 2
 svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold"
 svd_remove_dc: true
 
-# Temporal transformation
+# Temporal sampling
 sampling_freq: "use_holovibes" # Sampling frequency in Hz
 low_freq: 2000 # Low frequency cutoff in Hz
 high_freq: "use_holovibes" # High frequency cutoff in Hz "use_holovibes" sampling_freq/2

@@ -97,7 +97,7 @@ def recording(tmp_path):
     normal_output = tmp_path / 'normal-output'
     normal_output.mkdir()
     (normal_output / 'keep.txt').write_text('Do not overwrite')
-    params.update(force_numpy=True, custom_path=str(normal_output),
+    params.update(backend="numpy", custom_path=str(normal_output),
                   batch_size=8, batch_stride=8, first_frame=0, end_frame=-1,
                   sampling_freq=1000, low_freq=100, high_freq=400,
                   pixel_pitch=[1e-6, 1e-6], z=.1, svd_threshold=2,

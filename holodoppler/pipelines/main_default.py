@@ -152,24 +152,12 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     # ------------------------------------------------------------
     # Temporal Fourier transform
     # ------------------------------------------------------------
-    if parameters.get("temporal_transformation") == "FourierTransform":
-        spectrum_f = fourier_time_transform(
-            xp,
-            fft,
-            holograms_f,
-        )
-    else:
-        spectrum_f = holograms_f
+    spectrum_f = fourier_time_transform(
+        xp,
+        fft,
+        holograms_f,
+    )
     del holograms_f
-
-    if not reference_only and parameters.get("directional_Doppler_image", False):
-        band = parameters.get("directional_Doppler_frequency_band") or (
-            parameters["low_freq"], parameters.get("high_freq"))
-        output_dict["_directional_Doppler_pos"], output_dict["_directional_Doppler_neg"] = directional(
-            xp, backend.gaussian_filter, spectrum_f, *band,
-            parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
-            parameters.get("directional_Doppler_gaussian_width", 35.),
-        )
 
     psd = xp.abs(spectrum_f)
     del spectrum_f
@@ -181,16 +169,25 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     if parameters.get("corner_compensation", False):
         psd = corner_compensation(xp, psd)
 
+    if not reference_only and parameters.get("directional_Doppler_image", False):
+        band = parameters.get("directional_Doppler_frequency_band") or (
+            parameters["low_freq"], parameters.get("high_freq"))
+        output_dict["_directional_Doppler_pos"], output_dict["_directional_Doppler_neg"] = directional(
+            xp, backend.gaussian_filter, psd, *band,
+            parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
+            parameters.get("directional_Doppler_gaussian_width", 35.),
+        )
+
     fs = parameters["sampling_freq"] / (parameters.get("skip_every") or 1)
     orders = [0] if reference_only else [0, 1, 2]
     indices, selected_freqs = frequency_symmetric_filtering(
         xp, fft, nt_sub, fs, parameters["low_freq"], parameters.get("high_freq"),
     )
     images = moments(xp, psd[indices], selected_freqs, orders)
-    output_dict.update(zip(("M0", "M1", "M2"), images))
+    output_dict.update(zip(("moment0", "moment1", "moment2"), images))
     if reference_only:
-        output_dict["M0ff"] = gaussian_flatfield(
-            output_dict["M0"], parameters.get("registration_flatfield_gw", 1.0),
+        output_dict["moment0ff"] = gaussian_flatfield(
+            output_dict["moment0"], parameters.get("registration_flatfield_gw", 1.0),
             backend.gaussian_filter,
         )
         return output_dict
@@ -228,16 +225,15 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
             suffix = f"range_{k}_{f1}_{f2}"
             output_dict[f"moment{order}_{suffix}"] = image
         image = band_moments[0]
-        blurred = backend.gaussian_filter(
-            image, parameters.get("registration_flatfield_gw", 1.0))
-        valid = blurred != 0
-        corrected = xp.where(valid, image, 0) / xp.where(valid, blurred, 1)
-        output_dict[f"moment0ff_{suffix}"] = corrected
+        output_dict[f"moment0ff_{suffix}"] = gaussian_flatfield(
+            image, parameters.get("registration_flatfield_gw", 1.0),
+            backend.gaussian_filter,
+        )
 
     del psd
 
-    output_dict["M0ff"] = gaussian_flatfield(
-        output_dict["M0"],
+    output_dict["moment0ff"] = gaussian_flatfield(
+        output_dict["moment0"],
         parameters.get("registration_flatfield_gw", 1.0),
         backend.gaussian_filter,
     )
@@ -643,7 +639,7 @@ def _process_one_batch(
         registration_ref is None
         and parameters.get("image_registration", False)
     ):
-        registration_ref = res["M0ff"]
+        registration_ref = res["moment0ff"]
 
     if registration_ref is not None:
 
@@ -651,7 +647,7 @@ def _process_one_batch(
             backend.xp,
             backend.fft,
             registration_ref,
-            res["M0ff"],
+            res["moment0ff"],
             radius=parameters["registration_radius"],
             sub_pixel=parameters["registration_sub_pixel"],
         )
@@ -659,7 +655,7 @@ def _process_one_batch(
         for key, value in list(res.items()):
 
             if (
-                key in {"M0ff", "M0", "M1", "M2", "sh_psd"}
+                key in {"moment0ff", "moment0", "moment1", "moment2", "sh_psd"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                            "_directional_Doppler_pos", "_directional_Doppler_neg"}
@@ -751,8 +747,7 @@ def _square_spectrum(spectrum, parameters):
 
 
 def preview(file_path, parameters):
-    if parameters.get("force_numpy",False):
-        backend.set_backend("numpy")
+    backend.set_backend(parameters.get("backend", "auto"))
     file_reader = get_reader(file_path)
 
     logger.debug("Preview input: %s", file_path)
@@ -825,11 +820,6 @@ def preview(file_path, parameters):
 
     backend.clear_gpu_memory()
 
-    res_np["moment0"] = res_np.pop("M0")
-    res_np["moment0ff"] = res_np.pop("M0ff")
-    res_np["moment1"] = res_np.pop("M1")
-    res_np["moment2"] = res_np.pop("M2")
-
     res_np.update(autofocus_diagnostics)
     save_outputs(
         file_reader=file_reader,
@@ -844,8 +834,7 @@ def preview(file_path, parameters):
 
 
 def process(file_path, parameters, progress_callback=None):
-    if parameters.get("force_numpy",False):
-        backend.set_backend("numpy")
+    backend.set_backend(parameters.get("backend", "auto"))
 
     file_reader = get_reader(file_path)
 
@@ -939,7 +928,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
         registration_ref = _process_batch(
             parameters, ref_frames, phase_term=reference_phase,
             reference_only=True, propagation_kernel=propagation_kernel,
-        )["M0ff"]
+        )["moment0ff"]
     del ref_frames, autofocus_frames
 
     def process_batch(frames, reference):
@@ -980,7 +969,6 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
             else:
                 value = value[0]
                 to_save[key] = value
-        to_save = {_output_name(key): value for key, value in to_save.items()}
         destination.add_batch(to_save, index)
 
     registration_ref = run_batches(
@@ -1002,6 +990,9 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
         output["averaged_spectrogram"] = backend.to_numpy(_square_spectrum(
             output["averaged_spectrogram"], parameters))
 
+    if "averaged_spectrogram" in output:
+        output["averaged_spectrogram"] /= len(batch_indices)
+
     logger.debug("Output keys: %s", output.keys())
 
     if auto_coefs is not None:
@@ -1016,12 +1007,12 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
 
     if parameters.get("image_registration_with_ecc", False):
         logger.info("Running Registration ECC algo:")
-        registration_ecc = register_with_ecc(output["M0ff"],radius=parameters.get("registration_ecc_radius",0.8),iterations=300,eps=1e-6, progress_callback=progress_callback, ecc_min_threshold=parameters.get("registration_ecc_min_threshold",0.7))
+        registration_ecc = register_with_ecc(output["moment0ff"],radius=parameters.get("registration_ecc_radius",0.8),iterations=300,eps=1e-6, progress_callback=progress_callback, ecc_min_threshold=parameters.get("registration_ecc_min_threshold",0.7))
 
 
         for key in output :
             if (
-                key in {"M0ff", "M0", "M1", "M2"}
+                key in {"moment0ff", "moment0", "moment1", "moment2"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                                             "_directional_Doppler_pos", "_directional_Doppler_neg"}
@@ -1050,14 +1041,6 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
 
     backend.clear_gpu_memory()
 
-    # ------------------------------------------------------------
-    # Renaming for compatibility with Doppler View
-    # ------------------------------------------------------------
-    for key in list(output):
-        renamed = _output_name(key)
-        if renamed != key:
-            output[renamed] = output.pop(key)
-
     if destination is None:
         output.update(autofocus_diagnostics)
         save_outputs(file_reader=file_reader, output=output, parameters=parameters,
@@ -1075,8 +1058,3 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
             destination.write_static(key, value)
     for key, value in autofocus_diagnostics.items():
         destination.write_static(key, value)
-
-
-def _output_name(name):
-    return {"M0": "moment0", "M0ff": "moment0ff",
-            "M1": "moment1", "M2": "moment2"}.get(name, name)

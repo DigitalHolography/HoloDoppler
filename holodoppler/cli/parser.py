@@ -89,7 +89,8 @@ def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--backend",
         type=str,
-        help="Force the backend parameter to the specified value.",
+        choices=("auto", "numpy", "cupy"),
+        help="Select auto, NumPy CPU, or CuPy GPU (falls back to CPU if unavailable).",
     )
 
 

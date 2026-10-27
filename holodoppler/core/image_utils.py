@@ -6,7 +6,7 @@ def gaussian_flatfield(
     gaussian_width,
     gaussian_filter_func,
 ):
-    """Apply Gaussian flat-field correction.
+    """Apply Gaussian flat-field correction, returning zero where background is zero.
 
     Parameters
     ----------
@@ -22,7 +22,9 @@ def gaussian_flatfield(
         gaussian_width,
     )
 
-    return array / blurred
+    # Avoid evaluating division at zero denominators on either NumPy or CuPy.
+    valid = blurred != 0
+    return (array * valid) / (blurred + (~valid))
 
 
 def temporal_gaussian_filter(

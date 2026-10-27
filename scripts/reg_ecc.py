@@ -13,7 +13,7 @@ video_path = Path(r"D:\za\260717_AUZ\260717_AUZ_HD\avi\moment0ff.avi")
 parent_folder = video_path.parent
 
 # Optional: save the registered video
-registered_video_path = parent_folder/"M0ff_registered_affine.avi"
+registered_video_path = parent_folder/"moment0ff_registered_affine.avi"
 
 
 # ============================================================
@@ -456,7 +456,7 @@ header = (
 )
 
 np.savetxt(
-    parent_folder / "M0ff_registration_parameters.csv",
+    parent_folder / "moment0ff_registration_parameters.csv",
     results,
     delimiter=",",
     header=header,
@@ -464,7 +464,7 @@ np.savetxt(
 )
 
 print("Saved:")
-print("  M0ff_registration_parameters.csv")
+print("  moment0ff_registration_parameters.csv")
 
 
 # ============================================================

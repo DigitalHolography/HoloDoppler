@@ -28,7 +28,7 @@ def cpu_backend():
 
 def parameters(name, **changes):
     p = yaml.safe_load((ROOT / "parameters/default_parameters_default.yaml").read_text())
-    p.update(pipeline_name=name, force_numpy=True, batch_size=4, batch_stride=4,
+    p.update(pipeline_name=name, backend="numpy", batch_size=4, batch_stride=4,
              first_frame=0, end_frame=-1, skip_every=None, numpy_num_workers=2,
              shack_hartmann=False, shack_hartmann_autofocus=False,
              image_registration=False, image_registration_with_ecc=False,
@@ -158,8 +158,8 @@ def test_quadrants_cover_odd_pupil_and_accept_phase(method):
     output = {}
     split._process_batch(parameters("split_apertures", spatial_propagation=method),
                          frames, phase_term=np.ones((7, 9), np.complex64), output_dict=output)
-    assert output["M0"].shape == (7, 9)
-    assert output["NW_M0"].shape == output["SE_M0"].shape == (4, 5)
+    assert output["moment0"].shape == (7, 9)
+    assert output["NW_moment0"].shape == output["SE_moment0"].shape == (4, 5)
 
 
 def test_skip_and_reference_bounds(tmp_path):

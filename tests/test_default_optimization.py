@@ -185,7 +185,7 @@ def test_reference_uses_autofocus_and_reuses_matching_frames(monkeypatch, autofo
     ref_frames = data[:reference_size * skip:skip]
     ref_frames = filtering.filter_2d(np, fft, ref_frames, p["filter2d_low"])
     expected = original(p, ref_frames, phase_term=correction if autofocus == "accepted" else None,
-                        reference_only=True)["M0ff"]
+                        reference_only=True)["moment0ff"]
     np.testing.assert_allclose(references[0], expected, rtol=2e-5, atol=1e-6)
     assert saved["moment0"].dtype == np.float64
 
@@ -197,7 +197,7 @@ def test_reference_only_avoids_doppler_and_spectrograms(monkeypatch):
     monkeypatch.setattr(pipeline, "directional", Mock(side_effect=AssertionError("unused output")))
     frames = np.random.default_rng(11).random((4, 6, 8)).astype(np.float32)
     result = pipeline._process_batch(p, frames, reference_only=True)
-    assert set(result) == {"M0", "M0ff"}
+    assert set(result) == {"moment0", "moment0ff"}
 
 
 @pytest.mark.parametrize("ecc", [False, True])
@@ -243,7 +243,7 @@ def test_finalization_matches_cpu_formulas(monkeypatch, ecc, live, lab):
     for key, value in expected.items():
         if key == "sh_psd":
             continue
-        np.testing.assert_allclose(saved[pipeline._output_name(key)], value, rtol=1e-5, atol=1e-6)
+        np.testing.assert_allclose(saved[key], value, rtol=1e-5, atol=1e-6)
     assert saved["spectrograms"].shape == (2, 3, 4)
     assert saved["averaged_spectrogram"].shape == (4, 8, 8)
     assert saved["color_Doppler_image"].shape == (8, 8, 3)

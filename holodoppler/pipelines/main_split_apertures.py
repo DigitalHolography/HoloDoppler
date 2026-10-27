@@ -210,11 +210,11 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         spectrum_f = fourier_time_transform(xp, fft, U_q)
         psd = xp.abs(spectrum_f) ** 2
         qres = {
-            qname + "_M0": moment(xp, psd[idxs], freqs, 0),
-            qname + "_M1": moment(xp, psd[idxs], freqs, 1),
+            qname + "_moment0": moment(xp, psd[idxs], freqs, 0),
+            qname + "_moment1": moment(xp, psd[idxs], freqs, 1),
         }
-        qres[qname + "_M0ff"] = gaussian_flatfield(
-            qres[qname + "_M0"],
+        qres[qname + "_moment0ff"] = gaussian_flatfield(
+            qres[qname + "_moment0"],
             parameters.get("registration_flatfield_gw", 1.0),
             backend.gaussian_filter,
         )
@@ -235,18 +235,18 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
 
         P = xp.angle(spectr)
 
-        output_dict[f"{prefix}_{suffix}_M0_HF"] = moment(xp, A[idxs], freqs, 0)
-        output_dict[f"{prefix}_{suffix}_M0_HF_phi"] = moment(xp, P[idxs], freqs, 0)
-        # output_dict[f"{prefix}_{suffix}_M1_HF"] = moment(xp, A[idxs], freqs, 1)
+        output_dict[f"{prefix}_{suffix}_moment0_HF"] = moment(xp, A[idxs], freqs, 0)
+        output_dict[f"{prefix}_{suffix}_moment0_HF_phi"] = moment(xp, P[idxs], freqs, 0)
+        # output_dict[f"{prefix}_{suffix}_moment1_HF"] = moment(xp, A[idxs], freqs, 1)
 
         for k, (f1, f2) in enumerate(parameters.get("frequency_bands", [])):
             idxs_band, freqs_band = frequency_symmetric_filtering(
                 xp, fft, nt_sub, (parameters["sampling_freq"] / (parameters.get("skip_every") or 1)), f1, f2
             )
-            output_dict[f"{prefix}_{suffix}_M0_LF_{k}"] = moment(
+            output_dict[f"{prefix}_{suffix}_moment0_LF_{k}"] = moment(
                 xp, A[idxs_band], freqs_band, 0
             )
-            # output_dict[f"{prefix}_{suffix}_M1_LF_{k}"] = moment(
+            # output_dict[f"{prefix}_{suffix}_moment1_LF_{k}"] = moment(
             #     xp, A[idxs_band], freqs_band, 1
             # )
 
@@ -303,10 +303,10 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     U_q_filt.clear()  # free memory
     del U_q_filt
 
-    # B_E = quadrant_moments["NE"]["NE_M0"] + quadrant_moments["SE"]["SE_M0"]
-    # B_W = quadrant_moments["NW"]["NW_M0"] + quadrant_moments["SW"]["SW_M0"]
-    # B_N = quadrant_moments["NW"]["NW_M0"] + quadrant_moments["NE"]["NE_M0"]
-    # B_S = quadrant_moments["SW"]["SW_M0"] + quadrant_moments["SE"]["SE_M0"]
+    # B_E = quadrant_moments["NE"]["NE_moment0"] + quadrant_moments["SE"]["SE_moment0"]
+    # B_W = quadrant_moments["NW"]["NW_moment0"] + quadrant_moments["SW"]["SW_moment0"]
+    # B_N = quadrant_moments["NW"]["NW_moment0"] + quadrant_moments["NE"]["NE_moment0"]
+    # B_S = quadrant_moments["SW"]["SW_moment0"] + quadrant_moments["SE"]["SE_moment0"]
 
     # # Uncomment these if you need to free memory
     # # del psd_full, quadrant_moments
@@ -316,8 +316,8 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     # Ay = (B_N - B_S) / (B_N + B_S + eps)
     # A_mag = xp.sqrt(Ax**2 + Ay**2)
 
-    # NESW = (quadrant_moments["NE"]["NE_M0"] - quadrant_moments["SW"]["SW_M0"])
-    # NWSE = (quadrant_moments["NW"]["NW_M0"] - quadrant_moments["SE"]["SE_M0"])
+    # NESW = (quadrant_moments["NE"]["NE_moment0"] - quadrant_moments["SW"]["SW_moment0"])
+    # NWSE = (quadrant_moments["NW"]["NW_moment0"] - quadrant_moments["SE"]["SE_moment0"])
 
     # A_mag = xp.sqrt(Ax**2 + Ay**2)
 
@@ -337,26 +337,26 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     # )
 
     # Full pupil image reconstruction
-    output_dict["M0"] = moment(xp, U_main[idxs], freqs, 0)
+    output_dict["moment0"] = moment(xp, U_main[idxs], freqs, 0)
 
     sq = 0
     for qname, moments in quadrant_moments.items():
         sq += moments[
-            qname + "_M0"
-        ]  # xp.squeeze(square_cupy(moments[qname + "_M0"][xp.newaxis, ...], newy=ny, newx=nx))
-    output_dict["QSum_M0"] = sq
+            qname + "_moment0"
+        ]  # xp.squeeze(square_cupy(moments[qname + "_moment0"][xp.newaxis, ...], newy=ny, newx=nx))
+    output_dict["QSum_moment0"] = sq
 
     jo = sq - xp.squeeze(
         resize_frames(xp, backend.zoom,
-            output_dict["M0"][xp.newaxis, ...], sq.shape[0], sq.shape[1]
+            output_dict["moment0"][xp.newaxis, ...], sq.shape[0], sq.shape[1]
         )
     )
-    output_dict["J0_M0"] = jo
+    output_dict["J0_moment0"] = jo
 
-    output_dict["M1"] = moment(xp, U_main[idxs], freqs, 1)
-    output_dict["M2"] = moment(xp, U_main[idxs], freqs, 2)
-    output_dict["M0ff"] = gaussian_flatfield(
-        output_dict["M0"],
+    output_dict["moment1"] = moment(xp, U_main[idxs], freqs, 1)
+    output_dict["moment2"] = moment(xp, U_main[idxs], freqs, 2)
+    output_dict["moment0ff"] = gaussian_flatfield(
+        output_dict["moment0"],
         parameters.get("registration_flatfield_gw", 1.0),
         backend.gaussian_filter,
     )
@@ -389,9 +389,9 @@ def _process_one_batch(parameters, frames, reference=None, phase_term=None):
         phase_term = _process_shack_hartmann(parameters, frames, output_dict=result)
     _process_batch(parameters, frames, phase_term=phase_term, output_dict=result)
     if reference is None and parameters.get("image_registration", False):
-        reference = result["M0ff"].copy()
+        reference = result["moment0ff"].copy()
     if reference is not None:
-        sy, sx = register_images_shifts(xp, backend.fft, reference, result["M0ff"],
+        sy, sx = register_images_shifts(xp, backend.fft, reference, result["moment0ff"],
             radius=parameters.get("registration_radius", .8), sub_pixel=parameters.get("registration_sub_pixel", True))
         for key, value in list(result.items()):
             if value.ndim == 2 and not key.startswith("shack_hartmann_"):
@@ -414,7 +414,7 @@ def _run(file_path, parameters, preview=False, progress_callback=None):
     if p.get("image_registration", False) and (ref_first != p["first_frame"] or ref_size != p["batch_size"]):
         frames = read_reference(reader, p, ref_first, ref_size, "Registration reference")
         result, reference = _process_one_batch(p, frames, phase_term=phase)
-        reference = result["M0ff"].copy()
+        reference = result["moment0ff"].copy()
     def process_batch(frames, reference):
         return _process_one_batch(p, frames, reference=reference, phase_term=phase)
     static = {} if coefs is None else {"shack_hartmann_autofocus_zernike_coefs": backend.to_numpy(coefs)}

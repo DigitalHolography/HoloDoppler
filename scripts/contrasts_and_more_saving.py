@@ -59,9 +59,9 @@ with h5py.File(input_path, "r") as f:
     for key in f.keys():
         print(f"  - {key}: {f[key].shape} {f[key].dtype}")
 
-    target_fields = ["M0", "M1", "M2"]
+    target_fields = ["moment0", "moment1", "moment2"]
     band_fields = [key for key in f.keys() if key.startswith("band_")]
-    all_fields = ["M0ff"]  # target_fields + band_fields
+    all_fields = ["moment0ff"]  # target_fields + band_fields
 
     for field_name in all_fields:
 

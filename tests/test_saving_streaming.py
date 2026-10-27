@@ -206,8 +206,8 @@ def test_pipeline_streaming_and_ecc_order(tmp_path, monkeypatch, ecc, gpu):
     def batches(reader, indices, batch_size, process, consume, **kwargs):
         for t in range(2):
             result = {name: np.full((6, 8), t, np.float32)
-                      for name in ("M0", "M0ff", "M1", "M2")}
-            result["sh_psd"] = np.ones((8, 6, 8), np.float32)
+                      for name in ("moment0", "moment0ff", "moment1", "moment2")}
+            result["sh_psd"] = np.full((8, 6, 8), 1 + 2 * t, np.float32)
             if gpu:
                 result = kwargs["prepare_result"](result)
                 assert "sh_psd" not in result
@@ -252,7 +252,7 @@ def test_default_process_h5_with_square_and_spectrograms(tmp_path, monkeypatch, 
     monkeypatch.setattr(main_default, "get_reader", lambda path: reader)
     params = yaml.safe_load((Path(__file__).resolve().parents[1] /
         "parameters/default_parameters_default.yaml").read_text())
-    params.update(force_numpy=True, batch_size=8, batch_stride=8, first_frame=0,
+    params.update(backend="numpy", batch_size=8, batch_stride=8, first_frame=0,
         end_frame=-1, numpy_num_workers=1, shack_hartmann_autofocus=False,
         shack_hartmann=False, image_registration=True, registration_ref_first_frame=0,
         registration_ref_batch_size=8, image_registration_with_ecc=ecc,
@@ -294,7 +294,7 @@ def test_nonlive_saving_happens_after_all_batches(monkeypatch):
 
     def batches(reader, indices, batch_size, process, consume, **kwargs):
         for t in range(2):
-            consume(t, {"M0": np.full((6, 8), t, np.float32)})
+            consume(t, {"moment0": np.full((6, 8), t, np.float32)})
             save.assert_not_called()
 
     monkeypatch.setattr(main_default, "run_batches", batches)

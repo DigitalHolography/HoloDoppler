@@ -37,7 +37,7 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every,
         pixel_pitch=[1e-6, 1e-6], wavelength=852e-9, z=0.1,
         sampling_freq=1000, low_freq=100, high_freq=400,
         image_registration=False, image_registration_with_ecc=False,
-        filter2d=False, square=True, force_numpy=False,
+        filter2d=False, square=True, backend="auto",
         numpy_num_workers=1,
     )
     frames = np.ones((4, 12, 18), dtype=np.float32)
@@ -74,7 +74,7 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every,
 
     def process_batch(parameters, frames, registration_ref=None, phase_term=None, **kwargs):
         corrections.append(phase_term)
-        return {key: frames[0].copy() for key in ("M0", "M0ff", "M1", "M2")}, None
+        return {key: frames[0].copy() for key in ("moment0", "moment0ff", "moment1", "moment2")}, None
 
     monkeypatch.setattr(main_default, "_process_one_batch", process_batch)
     bundles = []

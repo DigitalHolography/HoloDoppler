@@ -28,7 +28,7 @@ def cpu():
 def params(**updates):
     p = yaml.safe_load((Path(__file__).resolve().parents[1] /
                        "parameters/default_parameters_default.yaml").read_text())
-    p.update(force_numpy=True, batch_size=8, batch_stride=8, first_frame=0,
+    p.update(backend="numpy", batch_size=8, batch_stride=8, first_frame=0,
              end_frame=-1, skip_every=1, sampling_freq=1000, low_freq=0, high_freq=450,
              pixel_pitch=[1e-6, 1e-6], z=.1, numpy_num_workers=2,
              svd_threshold=0, svd_remove_dc=False, filter2d=False,
@@ -50,9 +50,10 @@ def params(**updates):
 @pytest.mark.parametrize("width", [0, 1.2])
 def test_directional_intervals_and_normalization(n, width):
     sh = np.random.default_rng(2).normal(size=(n, 3, 5)) + 1j
+    psd = np.abs(sh) ** 2
     first, last = 1, 3
-    pos = np.abs(sh[first - 1:last]).sum(axis=0)
-    neg = np.abs(sh[n - last:n - first + 1]).sum(axis=0)
+    pos = psd[first - 1:last].sum(axis=0)
+    neg = psd[n - last:n - first + 1].sum(axis=0)
     background = pos + neg
     if width:
         background = gaussian_filter(background, width, mode="nearest", radius=int(np.ceil(2 * width)))
@@ -60,7 +61,7 @@ def test_directional_intervals_and_normalization(n, width):
     expected_pos *= pos.sum() / expected_pos.sum()
     expected_neg = neg / background
     expected_neg *= neg.sum() / expected_neg.sum()
-    actual_pos, actual_neg = directional(np, gaussian_filter, sh, 1, 3, n, width)
+    actual_pos, actual_neg = directional(np, gaussian_filter, psd, 1, 3, n, width)
     np.testing.assert_allclose(actual_pos, expected_pos)
     np.testing.assert_allclose(actual_neg, expected_neg)
     assert actual_pos.sum() == pytest.approx(pos.sum())

@@ -63,10 +63,8 @@ def _worker(config_path, stage):
         from holodoppler import backend
         from holodoppler.cli import preview, process
         if config['backend'] is not None:
-            backend.set_backend(config['backend'])
-            params['force_numpy'] = config['backend'] == 'numpy'
-        elif params.get('force_numpy', False):
-            backend.set_backend('numpy')
+            params['backend'] = config['backend']
+        backend.set_backend(params.get('backend', 'auto'))
         _event(events, 'ready', backend=backend.get_backend_name())
         _write_json(directory / f'{stage}.parameters.json', params)
 
@@ -542,7 +540,7 @@ def _parser():
     parser.add_argument('--pipeline', help='Override pipeline_name from the parameters.')
     parser.add_argument('--end-frame', '--end_frame', type=int, help='Override exclusive end_frame; <=0 uses the entire recording.')
     parser.add_argument('--mode', choices=('both', 'preview', 'process'), default='both')
-    parser.add_argument('--backend', choices=('auto', 'numpy', 'cupy'), help='Override backend/force_numpy; unavailable CUDA falls back to NumPy.')
+    parser.add_argument('--backend', choices=('auto', 'numpy', 'cupy'), help='Override backend; unavailable CUDA falls back to NumPy.')
     parser.add_argument('--interval', type=_positive, default=.2, help='CPU/RAM sampling target in seconds (default: 0.2).')
     parser.add_argument('--gpu-interval', type=_positive, default=1., help='Minimum delay between NVIDIA observations (default: 1 s).')
     parser.add_argument('--gpu-timeout', type=_positive, default=3., help='Timeout per NVIDIA query (default: 3 s).')

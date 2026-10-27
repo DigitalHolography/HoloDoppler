@@ -3,14 +3,18 @@
 from math import ceil
 
 
-def directional(xp, gaussian_filter, spectrum, f1, f2, fs, gaussian_width):
-    """Inclusive one-based bin intervals and energy-preserving flatfield."""
-    n = spectrum.shape[0]
+def directional(xp, gaussian_filter, psd, f1, f2, fs, gaussian_width):
+    """Zeroth moments of PSD in directional bins, with energy-preserving flatfield.
+
+    Input is real power (abs(complex spectrum)**2), frequency axis first.
+    Retains the inclusive one-based bin intervals used for directional rendering.
+    """
+    n = psd.shape[0]
     f2 = fs / 2 if f2 is None else f2
     n1 = max(1, min(ceil(f1 * n / fs), ceil(n / 2)))
     n2 = max(1, min(ceil(f2 * n / fs), ceil(n / 2)))
-    positive = xp.sum(xp.abs(spectrum[n1 - 1:n2]), axis=0)
-    negative = xp.sum(xp.abs(spectrum[n - n2:n - n1 + 1]), axis=0)
+    positive = xp.sum(psd[n1 - 1:n2], axis=0)
+    negative = xp.sum(psd[n - n2:n - n1 + 1], axis=0)
     total = positive + negative
     if gaussian_width:
         # Replicate padding with a 2*ceil(2*sigma)+1 kernel.
@@ -151,7 +155,7 @@ def finish_doppler_images(output, xp, parameters=None):
     if "_color_Doppler_low" in output:
         low, high = output.pop("_color_Doppler_low"), output.pop("_color_Doppler_high")
         if (parameters or {}).get("color_Doppler_use_lab", False):
-            output["color_Doppler_image"] = construct_colored_image_lab(xp, output["M0"], low, high)
+            output["color_Doppler_image"] = construct_colored_image_lab(xp, output["moment0"], low, high)
         elif low.ndim == 2:
             output["color_Doppler_image"] = construct_colored_image(xp, low, high)[0]
         else:

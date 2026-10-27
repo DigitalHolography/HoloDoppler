@@ -1,7 +1,7 @@
 pipeline_name: "default"
 
 # optional backend management
-force_numpy: false
+backend: "auto" # auto, numpy (CPU), or cupy (GPU; falls back to CPU if unavailable)
 numpy_num_workers: 8 # CPU workers; 0 or 1 runs sequentially
 cupy_async: false # GPU pipeline: overlap reading, uploads, computation, and downloads.
 cupy_prefetch_depth: 1 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM.
@@ -35,8 +35,7 @@ svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_th
 svd_remove_dc: true
 svd_block_size_mib: 8 # Target MiB per SVD pixel-block work array (main filtering and sequential SH); larger may be faster but uses more RAM/VRAM.
 
-# Temporal transformation
-temporal_transformation: "FourierTransform" # Options: "FourierTransform" or None
+# Temporal sampling
 sampling_freq: "use_metadata" # Sampling frequency in Hz
 low_freq: 6000 # Low frequency cutoff in Hz
 high_freq: "use_metadata" # High frequency cutoff in Hz "use_metadata" is sampling_freq/2
@@ -96,7 +95,7 @@ shack_hartmann_zernike_fit_modes: [4,5,6] # Number of the Zernike modes to use i
 
 # Doppler images
 color_Doppler_image: true # Save color Doppler video and its temporal-average PNG.
-color_Doppler_use_lab: false # false: decorrelation stretch of [high, low, low]; true: Lab composite using M0 lightness.
+color_Doppler_use_lab: false # false: decorrelation stretch of [high, low, low]; true: Lab composite using moment0 lightness.
 color_Doppler_low_frequency_band: [6000, 19500] # Symmetric low-frequency power band in Hz.
 color_Doppler_high_frequency_band: [19500, 39000] # Symmetric high-frequency power band in Hz.
 directional_Doppler_image: true # Save HSV directional Doppler video and its temporal-average PNG.

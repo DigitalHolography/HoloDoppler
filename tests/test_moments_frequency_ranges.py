@@ -29,7 +29,7 @@ def cpu():
 
 def parameters(**changes):
     p = yaml.safe_load((ROOT / "parameters/default_parameters_default.yaml").read_text())
-    p.update(force_numpy=True, batch_size=8, batch_stride=8, first_frame=0,
+    p.update(backend="numpy", batch_size=8, batch_stride=8, first_frame=0,
              end_frame=-1, sampling_freq=1000, low_freq=0, high_freq=450,
              pixel_pitch=[1e-6, 1e-6], z=.1, numpy_num_workers=2,
              svd_threshold=0, svd_remove_dc=False, filter2d=False,

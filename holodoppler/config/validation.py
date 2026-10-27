@@ -39,11 +39,13 @@ def validate_main_parameters(parameters):
         if value < 1:
             raise ValueError("Parameter 'saving_queue_depth' must be positive.")
 
-    value = parameters.get("force_numpy", False)
-    if not (isinstance(value, bool)):
-        raise TypeError(
-            f"Parameter 'force_numpy' must be a boolean; got {value!r} ({type(value).__name__})."
-        )
+    if "force_numpy" in parameters:
+        logger.warning("Parameter 'force_numpy' was removed; use backend='numpy', 'cupy', or 'auto'.")
+    if "temporal_transformation" in parameters:
+        raise ValueError("Parameter 'temporal_transformation' was removed; spectral processing always uses FourierTransform.")
+    value = parameters.get("backend", "auto")
+    if not isinstance(value, str) or value not in {"auto", "numpy", "cupy"}:
+        raise ValueError("Parameter 'backend' must be 'auto', 'numpy', or 'cupy'.")
 
     value = parameters.get("numpy_num_workers", 0)
     if not (isinstance(value, Integral) and not isinstance(value, bool)):
@@ -174,12 +176,6 @@ def validate_main_parameters(parameters):
     if not (isinstance(value, bool)):
         raise TypeError(
             f"Parameter 'svd_remove_dc' must be a boolean; got {value!r} ({type(value).__name__})."
-        )
-
-    value = parameters.get("temporal_transformation", 'FourierTransform')
-    if not (isinstance(value, str)):
-        raise TypeError(
-            f"Parameter 'temporal_transformation' must be a string; got {value!r} ({type(value).__name__})."
         )
 
     value = parameters.get("sampling_freq", 'use_holovibes')
@@ -463,8 +459,6 @@ def validate_main_parameters(parameters):
         if not isinstance(parameters.get(key, False), bool):
             raise TypeError(f"{key} must be a boolean")
     if parameters.get("color_Doppler_image", False) or parameters.get("directional_Doppler_image", False):
-        if parameters.get("temporal_transformation") != "FourierTransform":
-            raise ValueError("Doppler images require temporal_transformation='FourierTransform'")
         for key, default in (
             ("color_Doppler_low_frequency_band", [3000, 9000]),
             ("color_Doppler_high_frequency_band", [9000, 18000]),

@@ -124,13 +124,13 @@ def test_default_pipeline_processing_and_spectrogram_resize():
     frames = np.random.default_rng(10).random((8, 4, 6)).astype(np.float32)
     params = dict(spatial_propagation='Fresnel', z=.1, pixel_pitch=(1e-6, 1e-6), wavelength=852e-9,
         Fresnel_use_ouput_kernel=False, svd_threshold=1, svd_filter_mode='number_of_values',
-        svd_remove_dc=False, temporal_transformation='FourierTransform', sampling_freq=1000,
+        svd_remove_dc=False, sampling_freq=1000,
         low_freq=0, high_freq=500, registration_flatfield_gw=1, frequency_bands=[(0, 400)],
         save_spectograms=True, save_averaged_spectrogram=True, spectrogram_resize_shape=(4, 4),
         spectrogram_resize_order=1, spectrogram_frequency_start=0., spectrogram_frequency_end=.5,
         spectrogram_frequency_binning=2)
     result = main_default._process_batch(params, frames)
-    assert result['M0'].shape == (4, 6)
+    assert result['moment0'].shape == (4, 6)
     assert all(np.isfinite(value).all() for value in result.values())
     output = {}
     prepared = main_default._prepare_batch_results(result, params)

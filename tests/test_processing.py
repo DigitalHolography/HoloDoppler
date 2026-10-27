@@ -292,13 +292,13 @@ def test_spectrogram_preparation_and_collection(monkeypatch, save_spectrograms, 
     }
     output = {}
     for index in range(2):
-        raw = {'sh_psd': psd + index, 'M0': np.ones((4, 4)) * index}
+        raw = {'sh_psd': psd + index, 'moment0': np.ones((4, 4)) * index}
         prepared = _prepare_batch_results(raw, params)
         assert 'sh_psd' in raw  # Preparation does not mutate the batch mapping.
         assert ('sh_psd' in prepared) == save_average
         assert ('spectrograms' in prepared) == save_spectrograms
         _append_numpy_results(output, prepared, params, index, 2)
-    np.testing.assert_array_equal(output['M0'][:, 0, 0], [0, 1])
+    np.testing.assert_array_equal(output['moment0'][:, 0, 0], [0, 1])
     if save_average:
         np.testing.assert_array_equal(output['averaged_spectrogram'], 2 * psd + 1)
     if save_spectrograms:

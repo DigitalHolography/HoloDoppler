@@ -46,7 +46,7 @@ def save_to_hdf5(name: str) -> bool:
     """Select numerical outputs; Doppler images and per-range moments stay in media exports."""
     return (name in {"moment0ff", "moment0", "moment1", "moment2",
                     "spectrum_line", "sh_psd", "averaged_spectrogram",
-                    "spectrograms", "PROJ", "PROJff", "QSum_M0", "J0_M0"}
+                    "spectrograms", "PROJ", "PROJff", "QSum_moment0", "J0_moment0"}
             or name.startswith(("NW_", "NE_", "SW_", "SE_", "NWxSE_", "NExSW_"))
             or name.endswith("_flow_index") or "band_" in name or is_csv_output(name))
 
