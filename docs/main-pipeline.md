@@ -312,28 +312,3 @@ come from code review, not scientific validation against experimental recordings
 8. **`_process_to_output()` has many responsibilities.** It owns reference setup,
    GPU aggregation, callbacks, ECC, and static/temporal saving. Explicit run state
    and finalization functions could clarify ownership and failure cleanup.
-
-## Configuration migration
-
-- Replace `force_numpy: true` with `backend: numpy`.
-- Replace `force_numpy: false` with `backend: auto`, or choose `cupy` explicitly.
-- Use CLI `--backend numpy`, `--backend cupy`, or `--backend auto`.
-- Remove `temporal_transformation`; the FFT always runs and this removed key
-  raises a migration error. The old `force_numpy` key logs a migration warning;
-  only `backend` selects the execution backend.
-- Internal and saved moment keys are `moment0`, `moment0ff`, `moment1`, `moment2`.
-  Consumers of private batch functions must use these names too.
-- Averaged PSD values now represent a mean, so they no longer scale with batch
-  count. Directional rendering uses power, so its appearance can change.
-
-## Regression coverage
-
-[`test_default_pipeline_contract.py`](../tests/test_default_pipeline_contract.py)
-checks zero-safe flat-field division, unconditional temporal FFT, PSD-based
-directional inputs, canonical moment keys, batch averaging across streaming,
-buffered, and ECC paths, and CLI backend overrides for preview and processing.
-[`test_saving_streaming.py`](../tests/test_saving_streaming.py) also checks
-aggregation through the CPU and simulated GPU preparation paths.
-
-CUDA-dependent checks skip when a usable GPU is unavailable. These tests verify
-implementation behavior; they do not replace scientific validation on recordings.
