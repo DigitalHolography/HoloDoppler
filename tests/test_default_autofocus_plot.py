@@ -8,6 +8,7 @@ from PIL import Image
 import pytest
 import yaml
 
+from holodoppler.core import pipeline as lifecycle
 from holodoppler import backend, saving
 from holodoppler.saving import data as saving_data
 from holodoppler.saving import media as saving_media
@@ -45,7 +46,7 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every,
         extension=".raw", total_frames=12, file_path=tmp_path / "input.raw",
         read_frames=Mock(side_effect=lambda **kwargs: frames.copy()),
     )
-    monkeypatch.setattr(main_default, "get_reader", lambda path: reader)
+    monkeypatch.setattr(lifecycle, "get_reader", lambda path: reader)
 
     phase = np.arange(12 * 18, dtype=np.float32).reshape(12, 18) / 10
     shifts_y = np.array([[1, np.nan], [0, -1]], dtype=np.float32)
@@ -93,7 +94,7 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every,
             parameters=kwargs["parameters"], custom_path=target,
         )
 
-    monkeypatch.setattr(main_default, "save_outputs", save_bundle)
+    monkeypatch.setattr(lifecycle, "save_outputs", save_bundle)
     # Process streams through OutputClass; preview still saves a complete bundle.
     if entrypoint == "process":
         class RecordingOutput(saving.OutputClass):
@@ -105,7 +106,7 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every,
                 bundles[0][name] = value
                 super().write_static(name, value)
 
-        monkeypatch.setattr(main_default, "OutputClass", RecordingOutput)
+        monkeypatch.setattr(lifecycle, "OutputClass", RecordingOutput)
         monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
     getattr(main_default, entrypoint)("input.raw", parameters)
 

@@ -7,6 +7,7 @@ import numpy as np
 from PIL import Image
 import pytest
 
+from holodoppler.core import pipeline as lifecycle
 from holodoppler import saving
 from holodoppler.saving import data as saving_data
 from holodoppler.saving import media as saving_media
@@ -215,9 +216,9 @@ def test_pipeline_streaming_and_ecc_order(tmp_path, monkeypatch, ecc, gpu):
             consume(t, result)
             assert len(calls) == (0 if ecc else 4 * (t + 1))
 
-    monkeypatch.setattr(main_default, "run_batches", batches)
-    monkeypatch.setattr(main_default, "register_with_ecc", lambda *args, **kw: np.zeros((2, 2, 3)))
-    monkeypatch.setattr(main_default, "apply_ecc_registration", lambda value, *args, **kw: value + 10)
+    monkeypatch.setattr(lifecycle, "run_batches", batches)
+    monkeypatch.setattr(lifecycle, "register_with_ecc", lambda *args, **kw: np.zeros((2, 2, 3)))
+    monkeypatch.setattr(lifecycle, "apply_ecc_registration", lambda value, *args, **kw: value + 10)
     main_default._process_to_output(None, dict(batch_size=4, first_frame=0,
         image_registration=False, image_registration_with_ecc=ecc,
         save_averaged_spectrogram=True),
@@ -243,13 +244,13 @@ def test_default_process_h5_with_square_and_spectrograms(tmp_path, monkeypatch, 
     monkeypatch.setattr(saving_media, "save_video", lambda *args, **kwargs: None)
     streaming_output = Mock(wraps=saving.OutputClass)
     bundle_output = Mock(wraps=saving.save_outputs)
-    monkeypatch.setattr(main_default, "OutputClass", streaming_output)
-    monkeypatch.setattr(main_default, "save_outputs", bundle_output)
+    monkeypatch.setattr(lifecycle, "OutputClass", streaming_output)
+    monkeypatch.setattr(lifecycle, "save_outputs", bundle_output)
     frames = np.random.default_rng(11).random((16, 12, 18)).astype(np.float32)
     reader = SimpleNamespace(file_path=tmp_path / "input.raw", extension=".raw",
         total_frames=16, read_frames=lambda first_frame, batch_size, skip_every=None:
         frames[first_frame:first_frame + batch_size * (skip_every or 1):skip_every or 1].copy())
-    monkeypatch.setattr(main_default, "get_reader", lambda path: reader)
+    monkeypatch.setattr(lifecycle, "get_reader", lambda path: reader)
     params = yaml.safe_load((Path(__file__).resolve().parents[1] /
         "parameters/default_parameters_default.yaml").read_text())
     params.update(backend="numpy", batch_size=8, batch_stride=8, first_frame=0,
@@ -265,9 +266,9 @@ def test_default_process_h5_with_square_and_spectrograms(tmp_path, monkeypatch, 
     else:
         params["live_saving"] = live_saving
     # Test the buffering/correction path without depending on ECC convergence for noise.
-    monkeypatch.setattr(main_default, "register_with_ecc", lambda *args, **kwargs:
+    monkeypatch.setattr(lifecycle, "register_with_ecc", lambda *args, **kwargs:
                         np.repeat(np.eye(2, 3)[None], 2, axis=0))
-    monkeypatch.setattr(main_default, "apply_ecc_registration", lambda value, *args, **kwargs: value)
+    monkeypatch.setattr(lifecycle, "apply_ecc_registration", lambda value, *args, **kwargs: value)
     main_default.process(reader.file_path, params)
     assert streaming_output.call_count == (0 if live_saving is False else 1)
     assert bundle_output.call_count == (1 if live_saving is False else 0)
@@ -290,14 +291,14 @@ def test_nonlive_saving_happens_after_all_batches(monkeypatch):
     monkeypatch.setattr(backend, "clear_gpu_memory", lambda: None)
     monkeypatch.setattr(main_default, "_get_autofocus_phase_term", lambda *args, **kwargs: (None, None))
     save = Mock()
-    monkeypatch.setattr(main_default, "save_outputs", save)
+    monkeypatch.setattr(lifecycle, "save_outputs", save)
 
     def batches(reader, indices, batch_size, process, consume, **kwargs):
         for t in range(2):
             consume(t, {"moment0": np.full((6, 8), t, np.float32)})
             save.assert_not_called()
 
-    monkeypatch.setattr(main_default, "run_batches", batches)
+    monkeypatch.setattr(lifecycle, "run_batches", batches)
     main_default._process_to_output(None, dict(batch_size=4, first_frame=0,
         live_saving=False, image_registration=False), [0, 4], None, None)
     save.assert_called_once()

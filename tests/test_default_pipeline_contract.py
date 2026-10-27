@@ -8,6 +8,7 @@ import pytest
 from scipy.ndimage import gaussian_filter
 import yaml
 
+from holodoppler.core import pipeline as lifecycle
 from holodoppler import backend
 from holodoppler.cli import command
 from holodoppler.cli.command import _apply_cli_overrides, _run_pipeline, PipelineMode
@@ -91,10 +92,10 @@ def test_psd_mean_uses_all_complete_batches(monkeypatch, live, ecc, workers):
                 "moment0ff": image, "moment1": image, "moment2": image}, None
 
     monkeypatch.setattr(pipeline, "_process_one_batch", process)
-    monkeypatch.setattr(pipeline, "register_with_ecc", lambda images, **kw: np.zeros((len(images), 2)))
-    monkeypatch.setattr(pipeline, "apply_ecc_registration", lambda images, *a, **kw: images)
+    monkeypatch.setattr(lifecycle, "register_with_ecc", lambda images, **kw: np.zeros((len(images), 2)))
+    monkeypatch.setattr(lifecycle, "apply_ecc_registration", lambda images, *a, **kw: images)
     saved = {}
-    monkeypatch.setattr(pipeline, "save_outputs", lambda **kw: saved.update(kw["output"]))
+    monkeypatch.setattr(lifecycle, "save_outputs", lambda **kw: saved.update(kw["output"]))
     destination = Mock() if live else None
     if live:
         destination.write_static.side_effect = lambda name, value: saved.update({name: value})
@@ -109,7 +110,7 @@ def test_cli_backend_override_reaches_each_default_entrypoint(monkeypatch, mode,
     args = SimpleNamespace(tictoc=False, debug=False, backend=selection, dynamic_options={})
     p = _apply_cli_overrides(parameters(), args)
     reader = SimpleNamespace(extension=".raw", total_frames=0)
-    monkeypatch.setattr(pipeline, "get_reader", lambda path: reader)
+    monkeypatch.setattr(lifecycle, "get_reader", lambda path: reader)
     choose = Mock(wraps=backend.set_backend)
     monkeypatch.setattr(backend, "set_backend", choose)
     # Force deterministic CPU fallback while still checking the requested selection.
@@ -119,7 +120,7 @@ def test_cli_backend_override_reaches_each_default_entrypoint(monkeypatch, mode,
         reader.read_frames = lambda **kw: np.ones((8, 3, 5), np.float32)
         monkeypatch.setattr(pipeline, "_process_one_batch", lambda *a, **kw:
             ({f"moment{suffix}": np.ones((3, 5)) for suffix in ("0", "0ff", "1", "2")}, None))
-        monkeypatch.setattr(pipeline, "save_outputs", lambda **kw: None)
+        monkeypatch.setattr(lifecycle, "save_outputs", lambda **kw: None)
     _run_pipeline(Path("input.raw"), p, mode)
     choose.assert_called_once_with(selection)
     assert backend.get_backend_name() == "numpy"

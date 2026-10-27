@@ -272,7 +272,7 @@ def test_real_cuda_matches_sequential():
 def test_spectrogram_preparation_and_collection(monkeypatch, save_spectrograms, save_average):
     from scipy.ndimage import zoom
     from holodoppler.pipelines.main_default import (
-        _append_numpy_results, _prepare_batch_results,
+        _DefaultOutputs, _prepare_batch_results,
     )
     from holodoppler.core.image_utils import resize_frames
 
@@ -290,6 +290,8 @@ def test_spectrogram_preparation_and_collection(monkeypatch, save_spectrograms, 
         'spectrogram_frequency_end': 0.25,
         'spectrogram_frequency_binning': 2,
     }
+    from holodoppler.core.pipeline import store_batch_result
+    collector = _DefaultOutputs(params)
     output = {}
     for index in range(2):
         raw = {'sh_psd': psd + index, 'moment0': np.ones((4, 4)) * index}
@@ -297,10 +299,11 @@ def test_spectrogram_preparation_and_collection(monkeypatch, save_spectrograms, 
         assert 'sh_psd' in raw  # Preparation does not mutate the batch mapping.
         assert ('sh_psd' in prepared) == save_average
         assert ('spectrograms' in prepared) == save_spectrograms
-        _append_numpy_results(output, prepared, params, index, 2)
+        for key, value in collector.consume(prepared).items():
+            store_batch_result(output, key, value, index, 2)
     np.testing.assert_array_equal(output['moment0'][:, 0, 0], [0, 1])
     if save_average:
-        np.testing.assert_array_equal(output['averaged_spectrogram'], 2 * psd + 1)
+        np.testing.assert_array_equal(collector.aggregates['averaged_spectrogram'], 2 * psd + 1)
     if save_spectrograms:
         for index in range(2):
             resized = resize_frames(np, zoom, psd + index, 2, 2, order=1)
@@ -340,7 +343,7 @@ def test_default_pipeline_scheduled_equivalence(device, registration, fixed_phas
     from pathlib import Path
     import yaml
     from holodoppler.pipelines.main_default import (
-        _process_one_batch, _prepare_batch_results, _append_numpy_results,
+        _process_one_batch, _prepare_batch_results, _DefaultOutputs,
     )
 
     if device == 'cupy' and not backend.cupy_available:
@@ -367,16 +370,22 @@ def test_default_pipeline_scheduled_equivalence(device, registration, fixed_phas
         for asynchronous in (False, True):
             # Construct on the caller stream, as with a precomputed autofocus correction.
             phase = backend.xp.exp(-1j * backend.xp.full((16, 16), 0.2)) if fixed_phase else None
+            from holodoppler.core.pipeline import store_batch_result
+            collector = _DefaultOutputs(params)
             output = {}
+            def consume(index, result):
+                for key, value in collector.consume(result).items():
+                    store_batch_result(output, key, value, index, 3)
             processing.run_batches(
                 Reader(), [0, 1, 2], 16,
                 lambda frames, ref: _process_one_batch(params, frames, ref, phase),
-                lambda index, result: _append_numpy_results(output, result, params, index, 3),
+                consume,
                 registration_enabled=registration,
                 workers=2 if asynchronous else 0,
                 cupy_async=asynchronous, cupy_prefetch_depth=2,
                 prepare_result=lambda result: _prepare_batch_results(result, params),
             )
+            output.update(collector.finish(3))
             outputs.append(output)
         assert outputs[0].keys() == outputs[1].keys()
         for key in outputs[0]:
