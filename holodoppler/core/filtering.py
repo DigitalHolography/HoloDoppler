@@ -35,6 +35,7 @@ def svd_filter(
     filter_mode="number_of_values",
     remove_dc=False,
     diagnostic=None,
+    block_size_mib=8,
 ):
     """SVD clutter filtering using temporal covariance eigendecomposition.
 
@@ -52,6 +53,10 @@ def svd_filter(
     diagnostic : dict, optional
         Dictionary populated with intermediate results when provided.
 
+    block_size_mib : positive float, optional
+        Target size in MiB for each pixel-block work array, not total memory.
+        Larger blocks can improve throughput at the cost of RAM/VRAM.
+
     Returns
     -------
     H_filtered : array
@@ -60,49 +65,78 @@ def svd_filter(
     if svd_threshold < 0:
         return H
 
-    shape = H.shape
-    nt = shape[0]
+    filtered = xp.empty(H.shape, dtype=H.dtype)
+    _svd_filter_matrix(
+        xp, linalg, H.reshape(H.shape[0], -1) if H.flags.c_contiguous else H,
+        filtered.reshape(H.shape[0], -1), svd_threshold,
+        filter_mode, remove_dc, diagnostic, H.shape, block_size_mib=block_size_mib,
+    )
+    return filtered
 
-    dc = xp.mean(H, axis=0) if remove_dc else None
-    if remove_dc:
-        H = H - dc
 
-    # Pixels x time
-    H2 = H.reshape(nt, -1).T
+def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
+                       remove_dc=False, diagnostic=None, shape=None, regularization=0,
+                       block_size_mib=8):
+    """Filter time-first data into a time-by-pixel output without changing input."""
+    nt, pixels = output.shape
+    block_bytes = int(block_size_mib * 1024**2)
+    block_size = max(1, block_bytes // (nt * data.dtype.itemsize))
+    cov = xp.zeros((nt, nt), dtype=data.dtype)
+    dc = xp.empty(pixels, dtype=data.dtype) if remove_dc and diagnostic is not None else None
 
-    # Temporal covariance and eigendecomposition
-    cov = H2.conj().T @ H2
-    S, V = linalg.eigh(cov)
-
-    # Descending eigenvalues
-    S = S[::-1]
-    V = V[:, ::-1]
-
-    # Select modes to remove
-    if filter_mode == "number_of_values":
-        n = min(int(svd_threshold), nt)
-        V_remove = V[:, :n]
-    elif filter_mode == "amplitude_threshold":
-        V_remove = V[:, S > svd_threshold]
+    # Reuse the final output as centered storage. Time-major blocks follow the
+    # main pipeline's native layout and avoid a large strided transpose copy.
+    for start in range(0, pixels, block_size):
+        stop = min(start + block_size, pixels)
+        if data.ndim == 2:
+            block = data[:, start:stop].copy()
+        else:
+            # A tiled subaperture is a strided view of the original hologram.
+            # Gather only this pixel block, never reshape-copy the whole view.
+            indices = xp.arange(start, stop)
+            block = data[:, indices // data.shape[2], indices % data.shape[2]]
+        if remove_dc:
+            mean = xp.mean(block, axis=0)
+            block -= mean[None, :]
+            if dc is not None:
+                dc[start:stop] = mean
+        cov += block.conj() @ block.T
+        output[:, start:stop] = block
+    del block
+    if regularization:
+        cov[xp.diag_indices(nt)] += regularization
+    values, vectors = linalg.eigh(cov)
+    values, vectors = values[::-1], vectors[:, ::-1]
+    if mode == "number_of_values":
+        selected = vectors[:, :min(int(threshold), nt)]
+    elif mode == "amplitude_threshold":
+        selected = vectors[:, values > threshold]
     else:
-        raise ValueError(f"Unknown filter_mode: {filter_mode}")
+        raise ValueError(f"Unknown filter_mode: {mode}")
 
-    # Remove projection onto selected temporal modes
-    removed = H2 @ V_remove
-    H_filtered = H2 - removed @ V_remove.conj().T
-    H_filtered = H_filtered.T.reshape(shape)
+    removed_features = (xp.empty((pixels, selected.shape[1]), dtype=data.dtype)
+                        if diagnostic is not None else None)
+    conjugate = selected.conj()
+    for start in range(0, pixels, block_size):
+        stop = min(start + block_size, pixels)
+        block = output[:, start:stop]
+        if selected.shape[1]:
+            removed = selected.T @ block
+            block -= conjugate @ removed
+            if removed_features is not None:
+                removed_features[start:stop] = removed.T
+        elif removed_features is not None:
+            removed_features[start:stop] = 0
 
     if diagnostic is not None:
         diagnostic.update({
-            "removed_features": removed.reshape(*shape[1:], -1),
-            "kept_data": H_filtered,
-            "eigenvalues": S,
+            "removed_features": removed_features.reshape(*shape[1:], -1),
+            "kept_data": output.reshape(shape),
+            "eigenvalues": values,
             "covariance": cov,
-            "eigenvectors": V,
-            "dc": dc,
+            "eigenvectors": vectors,
+            "dc": None if dc is None else dc.reshape(shape[1:]),
         })
-
-    return H_filtered
 
 
 def svd_filter_stdmeanratio(
@@ -181,30 +215,42 @@ def svd_filter_stdmeanratio(
     return H2.T.reshape(sz)
 
 
-def svd_filter_batched(xp, U_subaps, svd_threshold):
-    """Batched SVD filter for subapertures"""
+def svd_filter_batched(xp, U_subaps, svd_threshold, *, block_size_mib=8,
+                       regularization=1e-12, parallel=False):
+    """Filter subapertures with bounded blocks or batched backend operations.
+
+    Parallel processing trades stack-sized covariance/projection temporaries for
+    fewer launches and batched eigendecomposition. It requires much more VRAM.
+    """
 
     if svd_threshold < 0:
         return U_subaps
 
     ny_s, nx_s, sub_ny, sub_nx, nz = U_subaps.shape
-    B = ny_s * nx_s
+    if parallel:
+        count = min(int(svd_threshold), nz)
+        if count == 0:
+            return U_subaps.copy()
+        matrix = U_subaps.reshape(ny_s * nx_s, sub_ny * sub_nx, nz)
+        covariance = matrix.conj().swapaxes(-1, -2) @ matrix
+        if regularization:
+            covariance += regularization * xp.eye(nz, dtype=matrix.dtype)
+        _, vectors = xp.linalg.eigh(covariance)
+        selected = vectors[..., -count:]
+        removed = matrix @ selected
+        return (matrix - removed @ selected.conj().swapaxes(-1, -2)).reshape(U_subaps.shape)
 
-    H2 = U_subaps.reshape(B, sub_ny * sub_nx, nz)
-    eps = 1e-12
-
-    cov = xp.einsum("bpi,bpj->bij", H2.conj(), H2) + eps * xp.eye(nz, dtype=H2.dtype)
-
-    V_list = []
-    for b in range(B):
-        _, Vb = xp.linalg.eigh(cov[b])
-        V_list.append(Vb[:, ::-1])
-
-    Vt = xp.stack([Vb[:, :svd_threshold] for Vb in V_list], axis=0)
-    H2_Vt = xp.einsum("bpi,bik->bpk", H2, Vt)
-    proj = xp.einsum("bpk,bjk->bpj", H2_Vt, Vt.conj())
-
-    return (H2 - proj).reshape(ny_s, nx_s, sub_ny, sub_nx, nz)
+    # Transposed tiling can be noncontiguous. Keep input views where possible;
+    # process one subaperture at a time and write into the final output.
+    result = xp.empty(U_subaps.shape, dtype=U_subaps.dtype)
+    for y in range(ny_s):
+        for x in range(nx_s):
+            data = U_subaps[y, x].transpose(2, 0, 1)
+            target = result[y, x].reshape(sub_ny * sub_nx, nz).T
+            _svd_filter_matrix(xp, xp.linalg, data, target, svd_threshold,
+                               "number_of_values", regularization=regularization,
+                               block_size_mib=block_size_mib)
+    return result
 
 
 @cache # pyright: ignore[reportArgumentType]
@@ -258,3 +304,20 @@ def corner_compensation(xp, psd):
     psd = psd / mean_outside
 
     return psd
+
+
+@cache
+def symmetric_frequency_slices(batch_size, sampling_freq, low_freq, high_freq=None):
+    """Contiguous FFT-order runs matching the strict symmetric band mask.
+
+    Planning uses CPU metadata so CuPy boolean indexing never synchronizes the
+    compute stream or materializes a selected PSD stack.
+    """
+    import numpy as np
+
+    frequencies = np.fft.fftfreq(batch_size, 1 / sampling_freq)
+    selected = np.abs(frequencies) > low_freq
+    if high_freq is not None:
+        selected &= np.abs(frequencies) < high_freq
+    edges = np.flatnonzero(np.diff(np.r_[False, selected, False]))
+    return tuple(slice(int(start), int(stop)) for start, stop in edges.reshape(-1, 2))

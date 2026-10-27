@@ -75,7 +75,6 @@ def _run_cupy_batches(
         slot["uploaded"] = uploaded
         with compute:
             result, reference = process_batch(device, reference)
-            slot["raw_result"] = result
             if prepare_result is not None:
                 result = prepare_result(result)
             slot["device_result"] = result

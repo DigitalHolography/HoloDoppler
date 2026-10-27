@@ -13,6 +13,7 @@ from holodoppler.core.filtering import (
     filter_2d,
     fourier_time_transform,
     frequency_symmetric_filtering,
+    symmetric_frequency_slices,
     svd_filter,
 )
 from holodoppler.core.image_utils import (
@@ -25,6 +26,7 @@ from holodoppler.core.processing import run_batches
 from holodoppler.core.propagation import (
     angular_spectrum_transform,
     angular_spectrum_transform_with_phase,
+    build_fresnel_kernel_in,
     fresnel_transform,
     fresnel_transform_with_phase,
 )
@@ -57,7 +59,8 @@ from holodoppler.core.pipeline import (
 )
 
 
-def _process_batch(parameters, frames, phase_term=None, output_dict=None):
+def _process_batch(parameters, frames, phase_term=None, output_dict=None,
+                   reference_only=False, propagation_kernel=None):
     xp = backend.xp
     fft = backend.fft
 
@@ -67,7 +70,14 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     # ------------------------------------------------------------
     # Spatial propagation
     # ------------------------------------------------------------
-    if phase_term is not None:
+    if propagation_kernel is not None:
+        holograms = fresnel_transform(
+            xp, fft, frames, parameters["z"], parameters["pixel_pitch"],
+            parameters["wavelength"],
+            use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
+            input_kernel=propagation_kernel,
+        )
+    elif phase_term is not None:
         if prop_method == "Fresnel":
             holograms = fresnel_transform_with_phase(
                 xp,
@@ -127,10 +137,11 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     # SVD filtering
     # ------------------------------------------------------------
     holograms_f = svd_filter(
-        backend.xp, backend.linalg, holograms,
+        backend.xp, backend.linalg, holograms.astype(xp.complex64, copy=False),
         parameters["svd_threshold"],
         filter_mode=parameters["svd_filter_mode"],
         remove_dc=parameters["svd_remove_dc"],
+        block_size_mib=parameters.get("svd_block_size_mib", 8),
     )
 
     del holograms
@@ -151,7 +162,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         spectrum_f = holograms_f
     del holograms_f
 
-    if parameters.get("directional_Doppler_image", False):
+    if not reference_only and parameters.get("directional_Doppler_image", False):
         band = parameters.get("directional_Doppler_frequency_band") or (
             parameters["low_freq"], parameters.get("high_freq"))
         output_dict["_directional_Doppler_pos"], output_dict["_directional_Doppler_neg"] = directional(
@@ -167,27 +178,23 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     # ------------------------------------------------------------
     # Frequency filtering
     # ------------------------------------------------------------
-    idxs, freqs = frequency_symmetric_filtering(
-        xp,
-        fft,
-        nt_sub,
-        parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
-        parameters["low_freq"],
-        parameters.get("high_freq"),
-    )
-
     if parameters.get("corner_compensation", False):
         psd = corner_compensation(xp, psd)
 
-    # ------------------------------------------------------------
-    # Moments
-    # ------------------------------------------------------------
-    output_dict["M0"], output_dict["M1"], output_dict["M2"] = moments(
-        xp,
-        psd[idxs],
-        freqs,
-        [0,1,2],
+    fs = parameters["sampling_freq"] / (parameters.get("skip_every") or 1)
+    orders = [0] if reference_only else [0, 1, 2]
+    indices, selected_freqs = frequency_symmetric_filtering(
+        xp, fft, nt_sub, fs, parameters["low_freq"], parameters.get("high_freq"),
     )
+    images = moments(xp, psd[indices], selected_freqs, orders)
+    output_dict.update(zip(("M0", "M1", "M2"), images))
+    if reference_only:
+        output_dict["M0ff"] = gaussian_flatfield(
+            output_dict["M0"], parameters.get("registration_flatfield_gw", 1.0),
+            backend.gaussian_filter,
+        )
+        return output_dict
+
     output_dict["spectrum_line"] = xp.mean(
         psd,
         axis=(-2, -1),
@@ -196,9 +203,8 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     if parameters.get("color_Doppler_image", False):
         for name, default in (("low", [3000, 9000]), ("high", [9000, 18000])):
             band = parameters.get(f"color_Doppler_{name}_frequency_band", default)
-            mask, _ = frequency_symmetric_filtering(
-                xp, fft, nt_sub, parameters["sampling_freq"] / (parameters.get("skip_every") or 1), *band)
-            output_dict[f"_color_Doppler_{name}"] = xp.sum(psd[mask], axis=0)
+            output_dict[f"_color_Doppler_{name}"] = _band_moments(
+                psd, fs, *band, [0])[0]
 
     if parameters.get("save_spectograms",False) or parameters.get("save_averaged_spectrogram",False):
         output_dict["sh_psd"] = psd # the power spectrum density
@@ -209,27 +215,15 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     for k, (f1, f2) in enumerate(
         parameters.get("frequency_bands", [])
     ):
-        idxs_band, _ = frequency_symmetric_filtering(
-            xp,
-            fft,
-            nt_sub,
-            parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
-            f1,
-            f2,
-        )
-
-        output_dict[f"band_{k}_{f1}_{f2}"] = xp.mean(
-            psd[idxs_band],
-            axis=0,
+        slices = symmetric_frequency_slices(nt_sub, fs, f1, f2)
+        count = sum(part.stop - part.start for part in slices)
+        summed = _band_moments(psd, fs, f1, f2, [0])[0]
+        output_dict[f"band_{k}_{f1}_{f2}"] = (
+            summed / count if count else xp.full_like(summed, xp.nan)
         )
 
     for k, (f1, f2) in enumerate(parameters.get("moments_frequency_ranges") or ()):
-        mask, band_freqs = frequency_symmetric_filtering(
-            xp, fft, nt_sub,
-            parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
-            f1, f2,
-        )
-        band_moments = moments(xp, psd[mask], band_freqs, [0, 1])
+        band_moments = _band_moments(psd, fs, f1, f2, [0, 1])
         for order, image in enumerate(band_moments):
             suffix = f"range_{k}_{f1}_{f2}"
             output_dict[f"moment{order}_{suffix}"] = image
@@ -249,6 +243,32 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
     )
 
     return output_dict
+
+
+def _fixed_fresnel_kernel(parameters, phase_term):
+    """Build the fixed corrected input kernel before scheduling any batches."""
+    if phase_term is None or parameters["spatial_propagation"] != "Fresnel":
+        return None
+    ny, nx = phase_term.shape[-2:]
+    return (build_fresnel_kernel_in(
+        backend.xp, parameters["z"], tuple(parameters["pixel_pitch"]),
+        parameters["wavelength"], ny, nx,
+    ) * phase_term).astype(backend.xp.complex64, copy=False)
+
+
+def _band_moments(psd, sampling_freq, low, high, orders):
+    """Keep legacy moment precision/order; use slice sums for plain band power."""
+    xp = backend.xp
+    if orders != [0]:
+        indices, selected_freqs = frequency_symmetric_filtering(
+            xp, backend.fft, psd.shape[0], sampling_freq, low, high,
+        )
+        return moments(xp, psd[indices], selected_freqs, orders)
+
+    image = xp.zeros(psd.shape[1:], dtype=psd.dtype)
+    for part in symmetric_frequency_slices(psd.shape[0], sampling_freq, low, high):
+        image += xp.sum(psd[part], axis=0)
+    return [image]
 
 
 def _process_shack_hartmann(
@@ -290,6 +310,9 @@ def _process_shack_hartmann(
             parameters["shack_hartmann_nx_subap"],
             parameters["shack_hartmann_ny_subap"],
             parameters["shack_hartmann_svd_threshold"],
+            sub_aps_process=parameters.get("shack_hartmann_sub_aps_process", "sequential"),
+            svd_block_size_mib=parameters.get("svd_block_size_mib", 8),
+            svd_regularization=parameters.get("shack_hartmann_svd_regularization", 1e-12),
         )
 
     elif prop_method == "AngularSpectrum":
@@ -307,6 +330,9 @@ def _process_shack_hartmann(
             parameters["shack_hartmann_nx_subap"],
             parameters["shack_hartmann_ny_subap"],
             parameters["shack_hartmann_svd_threshold"],
+            sub_aps_process=parameters.get("shack_hartmann_sub_aps_process", "sequential"),
+            svd_block_size_mib=parameters.get("svd_block_size_mib", 8),
+            svd_regularization=parameters.get("shack_hartmann_svd_regularization", 1e-12),
         )
 
     else:
@@ -432,7 +458,7 @@ def _process_shack_hartmann(
     # This is the fixed wavefront correction that will be reused
     # for all following batches when autofocus is enabled.
     # ------------------------------------------------------------
-    phase_term = xp.exp(-1j * phase)
+    phase_term = xp.exp(-1j * phase.astype(xp.float32, copy=False))
 
     return xp.nan_to_num(
         phase_term,
@@ -440,7 +466,8 @@ def _process_shack_hartmann(
     )
 
 
-def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None):
+def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None,
+                              reference_frames=None):
     """
     Compute the Shack-Hartmann autofocus correction once from
     the configured reference batch.
@@ -451,6 +478,7 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None):
     Reference batch:
         start = registration_ref_first_frame
         size  = shack_hartmann_autofocus_batch_size (defaults to batch_size)
+        reference_frames optionally supplies the already-read raw reference.
 
     Returns
     -------
@@ -475,11 +503,12 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None):
     _validate_reference_batch(
         file_reader, ref_first_frame, ref_batch_size, "Autofocus reference", parameters.get("skip_every")
     )
-    ref_frames = file_reader.read_frames(
-        first_frame=ref_first_frame,
-        batch_size=ref_batch_size,
-        skip_every=parameters.get("skip_every"),
-    )
+    ref_frames = reference_frames
+    if ref_frames is None:
+        ref_frames = file_reader.read_frames(
+            first_frame=ref_first_frame, batch_size=ref_batch_size,
+            skip_every=parameters.get("skip_every"),
+        )
 
     if ref_frames.shape[0] == 0:
         raise ValueError(
@@ -533,7 +562,7 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None):
         reason = "Z4 is absent from the fitted modes"
     elif abs(float(values[modes.index(4)])) > threshold:
         reason = f"Z4={float(values[modes.index(4)]):g} rad exceeds absolute threshold {threshold:g} rad"
-    elif phase is None or not np.isfinite(backend.to_numpy(phase)).all():
+    elif phase is None or not bool(backend.xp.isfinite(phase).all()):
         reason = "missing or nonfinite wavefront phase"
 
     del ref_frames
@@ -564,6 +593,7 @@ def _process_one_batch(
     frames,
     registration_ref=None,
     phase_term=None,
+    propagation_kernel=None,
 ):
     """
     Process one batch.
@@ -586,26 +616,8 @@ def _process_one_batch(
 
     res = {}
 
-    # ------------------------------------------------------------
-    # Wavefront correction
-    # ------------------------------------------------------------
-    #
-    # Fixed autofocus phase has priority when it is supplied.
-    #
-    # Therefore:
-    #
-    #   shack_hartmann_autofocus = True
-    #   shack_hartmann = False
-    #
-    # computes the phase once and reuses it.
-    #
-    # Live Shack-Hartmann:
-    #
-    #   shack_hartmann_autofocus = False
-    #   shack_hartmann = True
-    #
-    # computes a new correction for every batch.
-    # ------------------------------------------------------------
+    # A fixed autofocus correction takes precedence. Rejected autofocus must
+    # continue uncorrected rather than falling back to live Shack-Hartmann.
     if (phase_term is None and not parameters.get("shack_hartmann_autofocus", False)) and parameters.get(
         "shack_hartmann",
         False,
@@ -621,6 +633,7 @@ def _process_one_batch(
         frames,
         phase_term=phase_term,
         output_dict=res,
+        propagation_kernel=propagation_kernel,
     )
 
     # ------------------------------------------------------------
@@ -657,6 +670,7 @@ def _process_one_batch(
                     shift_y=shift_y,
                     shift_x=shift_x,
                     fft=backend.fft,
+                    block_size_mib=parameters.get("registration_block_size_mib", 8),
                 )
 
         res["registration"] = backend.xp.stack(
@@ -689,9 +703,16 @@ def _prepare_batch_results(res, parameters):
         if parameters.get("save_spectograms", False):
             shape = parameters.get("spectrogram_resize_shape", (256, 256))
             order = parameters.get("spectrogram_resize_order", 1)
-            res["spectrograms"] = resize_frames(
+            value = resize_frames(
                 backend.xp, backend.zoom, res["sh_psd"], *shape, order=order
             )
+            n_freq, ny, nx = value.shape
+            start = int(n_freq * parameters.get("spectrogram_frequency_start", 0.0))
+            end = int(n_freq * parameters.get("spectrogram_frequency_end", 0.5))
+            value = backend.xp.concatenate((value[:end], value[start + n_freq // 2:]), axis=0)
+            binning = parameters.get("spectrogram_frequency_binning", 4)
+            res["spectrograms"] = value.reshape(
+                value.shape[0] // binning, binning, ny, nx).mean(axis=1)
         if not parameters.get("save_averaged_spectrogram", False):
             del res["sh_psd"]
     return res
@@ -705,19 +726,28 @@ def _append_numpy_results(output, res, parameters, batch_index, num_batches):
                 output["averaged_spectrogram"] += spectrum
             else:
                 output["averaged_spectrogram"] = spectrum.copy()
-        elif key == "spectrograms":
-            value = backend.to_numpy(value)
-            n_freq, nny, nnx = value.shape
-            start_idx = int(n_freq * parameters.get("spectrogram_frequency_start", 0.0))
-            end_idx = int(n_freq * parameters.get("spectrogram_frequency_end", 0.5))
-            value = np.concatenate(
-                (value[:end_idx], value[start_idx + n_freq // 2 :]), axis=0
-            )
-            binning = parameters.get("spectrogram_frequency_binning", 4)
-            value = value.reshape(value.shape[0] // binning, binning, nny, nnx).mean(axis=1)
-            _store_batch_result(output, key, value, batch_index, num_batches)
         else:
             _store_batch_result(output, key, value, batch_index, num_batches)
+
+
+def _finalize_spatial_result(result, parameters):
+    """Square scalar maps before rendering Doppler colors on the same backend."""
+    result = dict(result)
+    if parameters.get("square", False):
+        for key, value in result.items():
+            if (value.ndim == 2 and not key.startswith("shack_hartmann_")
+                    and key not in {"registration", "registration_ecc"}):
+                size = max(value.shape)
+                result[key] = resize_frames(backend.xp, backend.zoom, value, size, size)
+    finish_doppler_images(result, backend.xp, parameters)
+    return result
+
+
+def _square_spectrum(spectrum, parameters):
+    if parameters.get("square", False):
+        size = max(spectrum.shape[-2:])
+        return resize_frames(backend.xp, backend.zoom, spectrum, size, size)
+    return spectrum
 
 
 def preview(file_path, parameters):
@@ -785,28 +815,10 @@ def preview(file_path, parameters):
     if auto_coefs is not None:
         res["shack_hartmann_autofocus_zernike_coefs"] = backend.to_numpy(auto_coefs)
 
-    # ------------------------------------------------------------
-    # Square output
-    # ------------------------------------------------------------
-    if parameters.get("square", False):
-        res = {
-            k: (
-                backend.to_numpy(resize_frames(backend.xp, backend.zoom,
-                    v,
-                    max(v.shape[-2:]),
-                    max(v.shape[-2:]),
-                ))
-                if (v.ndim == 2 and not k.startswith("shack_hartmann_")) or (k == "sh_psd" and v.ndim == 3)
-                else v
-            )
-            for k, v in res.items()
-        }
-
-    res_np = {
-        k: backend.to_numpy(v)
-        for k, v in res.items()
-    }
-    finish_doppler_images(res_np, np, parameters)
+    res = _finalize_spatial_result(res, parameters)
+    if "sh_psd" in res:
+        res["sh_psd"] = _square_spectrum(res["sh_psd"], parameters)
+    res_np = {key: backend.to_numpy(value) for key, value in res.items()}
 
     del res
     del autofocus_phase_term
@@ -888,94 +900,74 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
     output = {}
 
     registration_ref = None
-
-    # ------------------------------------------------------------
-    # Build the registration reference once
-    # ------------------------------------------------------------
-    if (
-        parameters.get(
-            "image_registration",
-            False,
-        )
-        and (
-            parameters["registration_ref_first_frame"] != first_frame
-            or parameters["registration_ref_batch_size"]
-            != parameters["batch_size"]
-        )
-    ):
-
+    explicit_reference = parameters.get("image_registration", False) and (
+        parameters["registration_ref_first_frame"] != first_frame
+        or parameters["registration_ref_batch_size"] != batch_size
+    )
+    ref_frames = None
+    if explicit_reference:
         _validate_reference_batch(
             file_reader, parameters["registration_ref_first_frame"],
-            parameters["registration_ref_batch_size"], "Registration reference", parameters.get("skip_every"),
+            parameters["registration_ref_batch_size"], "Registration reference",
+            parameters.get("skip_every"),
         )
-        ref_frames = file_reader.read_frames(
-            first_frame=parameters[
-                "registration_ref_first_frame"
-            ],
-            batch_size=parameters[
-                "registration_ref_batch_size"
-            ],
+        ref_frames = backend.to_backend(_frame_stack(file_reader.read_frames(
+            first_frame=parameters["registration_ref_first_frame"],
+            batch_size=parameters["registration_ref_batch_size"],
             skip_every=parameters.get("skip_every"),
-        )
+        ))).astype(backend.xp.float32, copy=False)
 
-        ref_frames = backend.to_backend(_frame_stack(ref_frames)).astype(
-            backend.xp.float32,
-            copy=False,
-        )
-
-        ref_res, _ = _process_one_batch(
-            parameters,
-            ref_frames,
-            registration_ref=None,
-            phase_term=None,
-        )
-
-        registration_ref = ref_res["M0ff"].copy()
-
-        del ref_frames
-        del ref_res
-
-        backend.clear_gpu_memory()
-
-    # ------------------------------------------------------------
-    # Build one Shack-Hartmann autofocus correction from the
-    # configured reference batch.
-    #
-    # The returned phase_term is kept alive and passed to every
-    # processed batch below.
-    # ------------------------------------------------------------
     autofocus_diagnostics = {}
+    autofocus_frames = None
+    if (ref_frames is not None and parameters.get("shack_hartmann_autofocus", False)
+            and parameters.get("shack_hartmann_autofocus_batch_size", batch_size)
+            == parameters["registration_ref_batch_size"]):
+        autofocus_frames = ref_frames
     autofocus_phase_term, auto_coefs = _get_autofocus_phase_term(
-        parameters,
-        file_reader,
-        diagnostics=autofocus_diagnostics,
+        parameters, file_reader, diagnostics=autofocus_diagnostics,
+        reference_frames=autofocus_frames,
     )
+    propagation_kernel = _fixed_fresnel_kernel(parameters, autofocus_phase_term)
+    if explicit_reference:
+        if parameters.get("filter2d", False):
+            ref_frames = filter_2d(backend.xp, backend.fft, ref_frames,
+                                   parameters["filter2d_low"])
+        reference_phase = autofocus_phase_term
+        if (reference_phase is None and not parameters.get("shack_hartmann_autofocus", False)
+                and parameters.get("shack_hartmann", False)):
+            reference_phase = _process_shack_hartmann(parameters, ref_frames)
+        registration_ref = _process_batch(
+            parameters, ref_frames, phase_term=reference_phase,
+            reference_only=True, propagation_kernel=propagation_kernel,
+        )["M0ff"]
+    del ref_frames, autofocus_frames
 
     def process_batch(frames, reference):
         return _process_one_batch(
             parameters, frames, registration_ref=reference,
-            phase_term=autofocus_phase_term,
+            phase_term=autofocus_phase_term, propagation_kernel=propagation_kernel,
         )
 
-    gpu_aggregates = {}
+    aggregates = {}
+    ecc_enabled = parameters.get("image_registration_with_ecc", False)
 
     def prepare_result(result):
         result = _prepare_batch_results(result, parameters)
         if backend.is_gpu and "sh_psd" in result:
-            # All batches accumulate on the scheduler's compute stream, before
-            # download. Only the final aggregate needs to cross to the CPU.
             spectrum = result.pop("sh_psd")
-            if "averaged_spectrogram" not in gpu_aggregates:
-                gpu_aggregates["averaged_spectrogram"] = spectrum.copy()
+            if "averaged_spectrogram" not in aggregates:
+                aggregates["averaged_spectrogram"] = spectrum.copy()
             else:
-                gpu_aggregates["averaged_spectrogram"] += spectrum
+                aggregates["averaged_spectrogram"] += spectrum
+        if not ecc_enabled:
+            result = _finalize_spatial_result(result, parameters)
         return result
 
     def consume_result(index, result):
         if buffered:
             _append_numpy_results(output, result, parameters, index, len(batch_indices))
             return
-        # Reuse spectrogram preparation on a single batch, then discard it.
+        # Add a temporary batch axis for the shared NumPy collector.
         current = {}
         _append_numpy_results(current, result, parameters, 0, 1)
         to_save = {}
@@ -987,12 +979,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
                     output[key] = value
             else:
                 value = value[0]
-                if parameters.get("square", False) and value.ndim == 2 and not key.startswith("shack_hartmann_"):
-                    size = max(value.shape)
-                    value = backend.to_numpy(resize_frames(
-                        backend.xp, backend.zoom, value, size, size))
                 to_save[key] = value
-        finish_doppler_images(to_save, np, parameters)
         to_save = {_output_name(key): value for key, value in to_save.items()}
         destination.add_batch(to_save, index)
 
@@ -1008,10 +995,12 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
         progress_callback=progress_callback,
     )
 
-    if "averaged_spectrogram" in gpu_aggregates:
-        output["averaged_spectrogram"] = backend.to_numpy(
-            gpu_aggregates.pop("averaged_spectrogram")
-        )
+    if "averaged_spectrogram" in aggregates:
+        output["averaged_spectrogram"] = backend.to_numpy(_square_spectrum(
+            aggregates.pop("averaged_spectrogram"), parameters))
+    elif "averaged_spectrogram" in output:
+        output["averaged_spectrogram"] = backend.to_numpy(_square_spectrum(
+            output["averaged_spectrogram"], parameters))
 
     logger.debug("Output keys: %s", output.keys())
 
@@ -1043,25 +1032,18 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
         logger.info("Registration calculated.")
 
 
-    # ------------------------------------------------------------
-    # Square spatial outputs
-    # ------------------------------------------------------------
-    if parameters.get("square", False):
-
-        output = {
-            key: (
-                backend.to_numpy(resize_frames(backend.xp, backend.zoom,
-                    value,
-                    max(value.shape[-2:]),
-                    max(value.shape[-2:]),
-                ))
-                if value.ndim == 3 and not key.startswith("shack_hartmann_")
-                else value
-            )
-            for key, value in output.items()
-        }
-
-    finish_doppler_images(output, np, parameters)
+    if ecc_enabled:
+        # ECC is a CPU operation. Transfer only one corrected batch at a time
+        # for resizing/rendering, then release its backend allocations.
+        static_names = {"averaged_spectrogram", "shack_hartmann_autofocus_zernike_coefs"}
+        temporal = {key: value for key, value in output.items() if key not in static_names}
+        finished = {}
+        for index in range(len(batch_indices)):
+            current = {key: backend.to_backend(value[index]) for key, value in temporal.items()}
+            for key, value in _finalize_spatial_result(current, parameters).items():
+                _store_batch_result(finished, key, value, index, len(batch_indices))
+        output = {key: value for key, value in output.items() if key in static_names}
+        output.update(finished)
 
     # The fixed autofocus correction is no longer needed.
     del autofocus_phase_term

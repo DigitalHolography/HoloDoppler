@@ -117,14 +117,17 @@ def fresnel_transform(
     wavelength,
     zero_padding=False,
     use_output_kernel=True,
+    input_kernel=None,
 ):
-    """Apply Fresnel transform"""
+    """Apply Fresnel propagation, optionally reusing a corrected input kernel."""
 
     pixel_pitch = ensure_yx_pixel_pitch(pixel_pitch)
     ny, nx = frames.shape[-2:]
-    kernel_in = build_fresnel_kernel_in(
-        xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
-    )
+    kernel_in = input_kernel
+    if kernel_in is None:
+        kernel_in = build_fresnel_kernel_in(
+            xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
+        )
 
     if zero_padding:
 
@@ -166,8 +169,9 @@ def fresnel_transform_with_phase(
     if zero_padding:
         ny, nx = frames.shape[-2:]
         frames = pad_array_centrally(xp, frames, zero_padding)
+    corrected_kernel = (kernel_in * phase_term).astype(xp.complex64, copy=False)
     result = fft.fftshift(
-        fft.fft2(frames * kernel_in * phase_term, axes=(-1, -2), norm="ortho"),
+        fft.fft2(frames * corrected_kernel, axes=(-1, -2), norm="ortho"),
         axes=(-1, -2),
     )
 

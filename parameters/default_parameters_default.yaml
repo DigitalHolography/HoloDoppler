@@ -2,8 +2,7 @@ pipeline_name: "default"
 
 # optional backend management
 force_numpy: false # force the use of numpy (cpu cores only)
-use_parallel: true # use parallel workers cores or not (numpy)
-numpy_num_workers: 16 # the number of parallel workers to be used (numpy)
+numpy_num_workers: 16 # CPU workers; 0 or 1 runs sequentially
 cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and downloads. (cupy)
 cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM. (cupy)
 # saving management
@@ -34,6 +33,7 @@ filter2d_low: 0.03
 svd_threshold: 23
 svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold"
 svd_remove_dc: true
+svd_block_size_mib: 8 # Target MiB per SVD pixel-block work array (main filtering and sequential SH); larger may be faster but uses more RAM/VRAM.
 
 # Temporal transformation
 temporal_transformation: "FourierTransform" # Options: "FourierTransform" or None
@@ -55,6 +55,7 @@ registration_ref_first_frame: 0
 registration_ref_batch_size: 512
 registration_radius: 0.8
 registration_sub_pixel: true
+registration_block_size_mib: 8 # Target MiB per complex FFT work array for shifting stacks; at least one spatial plane. Larger may be faster but uses more RAM/VRAM.
 
 # Advanced Image registration
 image_registration_with_ecc: false # uses the first computed frame as reference
@@ -73,9 +74,11 @@ shack_hartmann_autofocus: true # Compute correction once using registration_ref_
 shack_hartmann_autofocus_z4_threshold_rad: 1.5 # Reject autofocus when abs(Z4) exceeds this limit in radians
 shack_hartmann_autofocus_batch_size: 512 # Number of frames used to compute the autofocus correction
 shack_hartmann: false # Enable Live (every batch) Shack-Hartmann processing
+shack_hartmann_sub_aps_process: "sequential" # "sequential": lower GPU RAM, possibly slower; "parallel": batched backend SVD/FFTs, potentially faster but much more GPU RAM.
 shack_hartmann_nx_subap: 5 # Number of subapertures in X
 shack_hartmann_ny_subap: 5 # Number of subapertures in Y
 shack_hartmann_svd_threshold: 10
+shack_hartmann_svd_regularization: 1.0e-12 # SVD covariance diagonal regularization; 0 disables it.
 shack_hartmann_pupil_threshold: 1.5 # Rejection of the side sub images if they are too
 shack_hartmann_deviation_threshold: 10.0 # Max displacement accepted in number of the std
 shack_hartmann_shifts_pixel_range_threshold: 1000.0 # Max displacement accepted in pixels

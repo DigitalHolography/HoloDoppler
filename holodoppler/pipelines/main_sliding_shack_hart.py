@@ -128,6 +128,7 @@ def _process_batch(
             parameters["svd_threshold"],
             filter_mode=parameters["svd_filter_mode"],
             remove_dc=parameters["svd_remove_dc"],
+            block_size_mib=parameters.get("svd_block_size_mib", 8),
         )
         del holograms
     else:
@@ -284,6 +285,9 @@ def _process_one_batch(
                 parameters["shack_hartmann_nx_subap"],
                 parameters["shack_hartmann_ny_subap"],
                 parameters["shack_hartmann_svd_threshold"],
+                sub_aps_process=parameters.get("shack_hartmann_sub_aps_process", "sequential"),
+                svd_block_size_mib=parameters.get("svd_block_size_mib", 8),
+                svd_regularization=parameters.get("shack_hartmann_svd_regularization", 1e-12),
             )
 
         elif prop_method == "AngularSpectrum":
@@ -301,6 +305,9 @@ def _process_one_batch(
                 parameters["shack_hartmann_nx_subap"],
                 parameters["shack_hartmann_ny_subap"],
                 parameters["shack_hartmann_svd_threshold"],
+                sub_aps_process=parameters.get("shack_hartmann_sub_aps_process", "sequential"),
+                svd_block_size_mib=parameters.get("svd_block_size_mib", 8),
+                svd_regularization=parameters.get("shack_hartmann_svd_regularization", 1e-12),
             )
 
         else:

@@ -53,7 +53,7 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every,
     coefs = np.array([z4, 2, 3], dtype=np.float32)
     monkeypatch.setattr(
         main_default, "construct_subapertures_fresnel",
-        lambda *args: np.ones((2, 2, 12, 18), dtype=np.float32),
+        lambda *args, **kwargs: np.ones((2, 2, 12, 18), dtype=np.float32),
     )
     pair_shifts = np.stack((shifts_y, shifts_x), axis=-1)
     pair_shifts = (pair_shifts[None, None, :, :, :] - pair_shifts[:, :, None, None, :]).astype(np.float32)
@@ -72,7 +72,7 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every,
 
     corrections = []
 
-    def process_batch(parameters, frames, registration_ref=None, phase_term=None):
+    def process_batch(parameters, frames, registration_ref=None, phase_term=None, **kwargs):
         corrections.append(phase_term)
         return {key: frames[0].copy() for key in ("M0", "M0ff", "M1", "M2")}, None
 

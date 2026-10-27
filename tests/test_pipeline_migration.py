@@ -130,7 +130,7 @@ def test_pca_means_and_partial_group(tmp_path, monkeypatch, accumulation, expect
 def test_sliding_history_includes_only_current_window(monkeypatch):
     from holodoppler.pipelines import main_sliding_shack_hart as sliding
     captured = []
-    monkeypatch.setattr(sliding, "construct_subapertures_fresnel", lambda xp, fft, frames, *args:
+    monkeypatch.setattr(sliding, "construct_subapertures_fresnel", lambda xp, fft, frames, *args, **kwargs:
                         np.full((2, 2, 3, 3), frames[0, 0, 0], np.float32))
     def displacements(xp, fft, images, **kwargs):
         captured.append(images.copy())

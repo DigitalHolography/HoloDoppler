@@ -31,7 +31,6 @@ def _create_params_file() -> None:
     params = {
         "pipeline_name": "default",
         # optional backend management
-        "use_parallel": True,  # use parallel workers cores or not (cupy or numpy)
         "numpy_num_workers": 8,  # in numpy mode, the number of parallel workers to be used
         # Core parameters
         "batch_size": 64,

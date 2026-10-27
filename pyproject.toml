@@ -25,6 +25,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+benchmark = [
+    "psutil>=5.9",
+]
 dev = [
     "pytest>=9.1.1",
 ]

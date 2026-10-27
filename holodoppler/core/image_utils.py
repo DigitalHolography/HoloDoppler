@@ -315,6 +315,9 @@ def resize_frames(
 
     _, height, width = video_frames.shape
 
+    if (height, width) == (new_height, new_width):
+        return video_frames[0] if was_2d else video_frames
+
     zoom_factors = (
         1.0,
         new_height / height,

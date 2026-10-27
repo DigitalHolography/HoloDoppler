@@ -45,12 +45,6 @@ def validate_main_parameters(parameters):
             f"Parameter 'force_numpy' must be a boolean; got {value!r} ({type(value).__name__})."
         )
 
-    value = parameters.get("use_parallel", False)
-    if not (isinstance(value, bool)):
-        raise TypeError(
-            f"Parameter 'use_parallel' must be a boolean; got {value!r} ({type(value).__name__})."
-        )
-
     value = parameters.get("numpy_num_workers", 0)
     if not (isinstance(value, Integral) and not isinstance(value, bool)):
         raise TypeError(
@@ -156,6 +150,13 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'filter2d_low' must be a real number; got {value!r} ({type(value).__name__})."
         )
+
+    for key in ("svd_block_size_mib", "registration_block_size_mib"):
+        value = parameters.get(key, 8)
+        if isinstance(value, bool) or not isinstance(value, Real):
+            raise TypeError(f"{key} must be a real number")
+        if not isfinite(value) or value <= 0:
+            raise ValueError(f"{key} must be finite and positive")
 
     value = parameters.get("svd_threshold", 39)
     if not (isinstance(value, Real) and not isinstance(value, bool)):
@@ -334,6 +335,18 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'shack_hartmann' must be a boolean; got {value!r} ({type(value).__name__})."
         )
+
+    value = parameters.get("shack_hartmann_sub_aps_process", "sequential")
+    if not isinstance(value, str):
+        raise TypeError("shack_hartmann_sub_aps_process must be a string")
+    if value not in ("sequential", "parallel"):
+        raise ValueError("shack_hartmann_sub_aps_process must be 'sequential' or 'parallel'")
+
+    value = parameters.get("shack_hartmann_svd_regularization", 1e-12)
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise TypeError("shack_hartmann_svd_regularization must be a real number")
+    if not isfinite(value) or value < 0:
+        raise ValueError("shack_hartmann_svd_regularization must be finite and nonnegative")
 
     value = parameters.get("shack_hartmann_nx_subap", 5)
     if not (isinstance(value, Integral) and not isinstance(value, bool)):

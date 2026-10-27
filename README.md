@@ -70,8 +70,7 @@ The processing backend management options should be tuned for your computer spec
 
 ```yaml
 force_numpy: false # force the use of numpy (cpu cores only)
-use_parallel: true # use parallel workers cores or not (numpy)
-numpy_num_workers: 8 # the number of parallel workers to be used (numpy)
+numpy_num_workers: 8 # CPU workers; 0 or 1 runs sequentially
 cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and downloads. (cupy)
 cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM. (cupy)
 ```

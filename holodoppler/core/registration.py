@@ -109,6 +109,7 @@ def apply_register_images_shifts(
     *extra,
     fft=None,
     integer_translation=None,
+    block_size_mib=8,
 ):
     """Apply release-style or dev-style registration shift arguments."""
     if extra:
@@ -142,6 +143,7 @@ def apply_register_images_shifts(
         shift_x,
         method="fourier",
         integer=False,
+        block_size_mib=block_size_mib,
     )
 
 def _preprocess(xp, img, mask=None, gaussian_sigma=None, gaussian_filter=None):
@@ -380,6 +382,7 @@ def apply_shifts(
     shift_x,
     method="fourier",
     integer=False,
+    block_size_mib=8,
 ):
     """
     Apply translation.
@@ -391,6 +394,8 @@ def apply_shifts(
         "roll" uses integer xp.roll and is much faster.
     integer : bool
         If True, round shifts to int before applying.
+    block_size_mib : positive float
+        Target MiB per complex FFT work array, with at least one spatial plane.
     """
     if integer or method == "roll":
         sy = int(round(float(shift_y)))
@@ -399,20 +404,32 @@ def apply_shifts(
 
     ny, nx = img.shape[-2:]
 
-    fy = fft.fftfreq(ny).reshape(ny, 1)
-    fx = fft.fftfreq(nx).reshape(1, nx)
+    coordinate_dtype = xp.float32 if img.real.dtype.itemsize <= 4 else xp.float64
+    fy = fft.fftfreq(ny).astype(coordinate_dtype, copy=False).reshape(ny, 1)
+    fx = fft.fftfreq(nx).astype(coordinate_dtype, copy=False).reshape(1, nx)
 
     phase = xp.exp(-2j * xp.pi * (fy * shift_y + fx * shift_x))
 
-    out = fft.ifft2(
-        fft.fft2(img, axes=(-2, -1)) * phase,
-        axes=(-2, -1),
-    )
+    def shifted(block):
+        out = fft.ifft2(
+            fft.fft2(block, axes=(-2, -1)) * phase, axes=(-2, -1))
+        if xp.isrealobj(img):
+            out = out.real
+        return out.astype(img.dtype, copy=False)
 
-    if xp.isrealobj(img):
-        out = out.real
-
-    return out.astype(img.dtype, copy=False)
+    if img.ndim == 2:
+        return shifted(img)
+    # PSD stacks can be much larger than the image maps. Bound FFT workspace
+    # rather than allocating a complex transform for the entire stack.
+    result = xp.empty(img.shape, dtype=img.dtype)
+    complex_dtype = xp.complex64 if img.real.dtype.itemsize <= 4 else xp.complex128
+    complex_bytes = xp.dtype(complex_dtype).itemsize
+    depth = max(1, int(block_size_mib * 1024**2) // (ny * nx * complex_bytes))
+    source = img.reshape(-1, ny, nx)
+    target = result.reshape(-1, ny, nx)
+    for start in range(0, len(source), depth):
+        target[start:start + depth] = shifted(source[start:start + depth])
+    return result
 
 
 def apply_registration(

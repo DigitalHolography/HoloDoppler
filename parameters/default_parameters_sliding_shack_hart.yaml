@@ -33,6 +33,7 @@ filter2d_low: 0.03
 svd_threshold: 0
 svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold"
 svd_remove_dc: true
+svd_block_size_mib: 8 # Target MiB per SVD pixel-block work array (main filtering and sequential SH); larger may be faster but uses more RAM/VRAM.
 svd_filtering: true
 
 # Temporal transformation
@@ -66,9 +67,11 @@ contrast_gamma: 1.0
 
 # Shack-Hartmann wavefront sensing
 shack_hartmann: true # Enable Live (every batch) Shack-Hartmann processing
+shack_hartmann_sub_aps_process: "sequential" # "sequential": lower GPU RAM, possibly slower; "parallel": batched backend SVD/FFTs, potentially faster but much more GPU RAM.
 shack_hartmann_nx_subap: 5 # Number of subapertures in X
 shack_hartmann_ny_subap: 5 # Number of subapertures in Y
 shack_hartmann_svd_threshold: 10
+shack_hartmann_svd_regularization: 1.0e-12 # SVD covariance diagonal regularization; 0 disables it.
 shack_hartmann_pupil_threshold: 2.0 # Rejection of the side sub images if they are too
 shack_hartmann_deviation_threshold: 10.0 # Max displacement accepted in number of the std
 shack_hartmann_shifts_pixel_range_threshold: 1000.0 # Max displacement accepted in pixels
