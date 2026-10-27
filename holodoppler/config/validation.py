@@ -155,8 +155,10 @@ def validate_main_parameters(parameters):
 
     for key in ("svd_block_size_mib", "registration_block_size_mib"):
         value = parameters.get(key, 8)
+        if value is None:
+            continue
         if isinstance(value, bool) or not isinstance(value, Real):
-            raise TypeError(f"{key} must be a real number")
+            raise TypeError(f"{key} must be a real number or null")
         if not isfinite(value) or value <= 0:
             raise ValueError(f"{key} must be finite and positive")
 

@@ -394,8 +394,9 @@ def apply_shifts(
         "roll" uses integer xp.roll and is much faster.
     integer : bool
         If True, round shifts to int before applying.
-    block_size_mib : positive float
+    block_size_mib : positive float or None
         Target MiB per complex FFT work array, with at least one spatial plane.
+        None transforms the entire stack at once without a workspace limit.
     """
     if integer or method == "roll":
         sy = int(round(float(shift_y)))
@@ -417,7 +418,7 @@ def apply_shifts(
             out = out.real
         return out.astype(img.dtype, copy=False)
 
-    if img.ndim == 2:
+    if img.ndim == 2 or block_size_mib is None:
         return shifted(img)
     # PSD stacks can be much larger than the image maps. Bound FFT workspace
     # rather than allocating a complex transform for the entire stack.

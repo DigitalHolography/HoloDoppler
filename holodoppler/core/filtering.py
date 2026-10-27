@@ -53,9 +53,10 @@ def svd_filter(
     diagnostic : dict, optional
         Dictionary populated with intermediate results when provided.
 
-    block_size_mib : positive float, optional
+    block_size_mib : positive float or None, optional
         Target size in MiB for each pixel-block work array, not total memory.
         Larger blocks can improve throughput at the cost of RAM/VRAM.
+        None processes all pixels in one block without a workspace limit.
 
     Returns
     -------
@@ -79,8 +80,8 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
                        block_size_mib=8):
     """Filter time-first data into a time-by-pixel output without changing input."""
     nt, pixels = output.shape
-    block_bytes = int(block_size_mib * 1024**2)
-    block_size = max(1, block_bytes // (nt * data.dtype.itemsize))
+    block_size = (max(1, pixels) if block_size_mib is None else
+                  max(1, int(block_size_mib * 1024**2) // (nt * data.dtype.itemsize)))
     cov = xp.zeros((nt, nt), dtype=data.dtype)
     dc = xp.empty(pixels, dtype=data.dtype) if remove_dc and diagnostic is not None else None
 
@@ -221,6 +222,8 @@ def svd_filter_batched(xp, U_subaps, svd_threshold, *, block_size_mib=8,
 
     Parallel processing trades stack-sized covariance/projection temporaries for
     fewer launches and batched eigendecomposition. It requires much more VRAM.
+    In sequential mode, block_size_mib=None processes each subaperture's pixels
+    in one block. Parallel mode does not use the pixel-block limit.
     """
 
     if svd_threshold < 0:

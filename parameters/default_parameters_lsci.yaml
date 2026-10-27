@@ -1,6 +1,6 @@
 pipeline_name: "lsci"
 
-# optional backend management
+# backend management
 backend: "auto" # auto, numpy (CPU), or cupy (GPU; falls back to CPU if unavailable)
 numpy_num_workers: 8 # Numpy only, the number of parallel workers to be used
 cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and downloads.

@@ -219,6 +219,27 @@ The full averaged PSD does not receive ECC correction.
 
 ### Execution and memory
 
+Profiles group the workspace limits and subaperture execution mode under
+`# backend management`:
+
+```yaml
+svd_block_size_mib: 8
+registration_block_size_mib: 8
+shack_hartmann_sub_aps_process: sequential # sequential or parallel
+```
+
+Both MiB settings accept a positive finite number or `null`. A numeric value
+targets the size of an individual work array, not total RAM/VRAM consumption.
+`svd_block_size_mib: null` processes all pixels in one block, including each
+subaperture in sequential Shack-Hartmann processing.
+`registration_block_size_mib: null` transforms the entire stack at once.
+Omitting either setting keeps the 8 MiB default.
+
+The subaperture mode is independent of these limits: `sequential` processes
+subapertures one at a time; `parallel` uses batched SVD/FFTs and does not use the
+SVD pixel-block limit. Choosing `null` removes workspace limiting; it does not
+automatically change the execution mode or check available memory.
+
 The shared `run_batches()` always delivers results in input order:
 
 - **CPU:** 0 or 1 worker runs sequentially; larger counts use a bounded thread

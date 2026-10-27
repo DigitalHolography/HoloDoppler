@@ -1,10 +1,14 @@
 pipeline_name: "default"
 
-# optional backend management
+# backend management
 backend: "auto" # auto, numpy (CPU), or cupy (GPU; falls back to CPU if unavailable)
 numpy_num_workers: 16 # CPU workers; 0 or 1 runs sequentially
 cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and downloads. (cupy)
 cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM. (cupy)
+svd_block_size_mib: null # 8 # Target MiB per SVD pixel-block work array (main filtering and sequential SH); null processes all pixels at once.
+registration_block_size_mib: null # 8 # Target MiB per complex FFT work array for shifting stacks; at least one spatial plane. null transforms the full stack at once.
+shack_hartmann_sub_aps_process: "parallel" # "sequential": lower RAM/VRAM; "parallel": batched SVD/FFTs, potentially faster but uses more RAM/VRAM.
+
 # saving management
 live_saving: true # false saves all outputs after processing; ECC still buffers when true.
 overwrite_option: "erase"
@@ -33,7 +37,6 @@ filter2d_low: 0.03
 svd_threshold: 23
 svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold"
 svd_remove_dc: true
-svd_block_size_mib: 8 # Target MiB per SVD pixel-block work array (main filtering and sequential SH); larger may be faster but uses more RAM/VRAM.
 
 # Temporal sampling
 sampling_freq: "use_holovibes" # Sampling frequency in Hz
@@ -54,7 +57,6 @@ registration_ref_first_frame: 0
 registration_ref_batch_size: 512
 registration_radius: 0.8
 registration_sub_pixel: true
-registration_block_size_mib: 8 # Target MiB per complex FFT work array for shifting stacks; at least one spatial plane. Larger may be faster but uses more RAM/VRAM.
 
 # Advanced Image registration
 image_registration_with_ecc: false # uses the first computed frame as reference
@@ -73,7 +75,6 @@ shack_hartmann_autofocus: true # Compute correction once using registration_ref_
 shack_hartmann_autofocus_z4_threshold_rad: 1.5 # Reject autofocus when abs(Z4) exceeds this limit in radians
 shack_hartmann_autofocus_batch_size: 512 # Number of frames used to compute the autofocus correction
 shack_hartmann: false # Enable Live (every batch) Shack-Hartmann processing
-shack_hartmann_sub_aps_process: "sequential" # "sequential": lower GPU RAM, possibly slower; "parallel": batched backend SVD/FFTs, potentially faster but much more GPU RAM.
 shack_hartmann_nx_subap: 5 # Number of subapertures in X
 shack_hartmann_ny_subap: 5 # Number of subapertures in Y
 shack_hartmann_svd_threshold: 10
