@@ -42,8 +42,7 @@ function accepts them.
 | [CLI](../holodoppler/cli/command.py), [registry](../holodoppler/pipelines/__init__.py) | Configuration loading and pipeline dispatch |
 | [Configuration](../holodoppler/config/) | Resolve metadata placeholders and validate parameters |
 | [File readers](../holodoppler/file_reader/file_reader.py) | Read `.holo` or `.cine` frame batches |
-| [Default pipeline](../holodoppler/pipelines/main_default.py) | References, optical processing, PSD aggregation and Doppler rendering |
-| [Shared lifecycle](../holodoppler/core/pipeline.py) | Input setup, accumulation, ECC, temporal buffering and saving |
+| [Default pipeline](../holodoppler/pipelines/main_default.py) | References, optical processing, outputs, finalization |
 | [Batch runner](../holodoppler/core/processing.py) | Ordered CPU/GPU execution and progress |
 | [Filtering](../holodoppler/core/filtering.py), [propagation](../holodoppler/core/propagation.py), [moments](../holodoppler/core/moments.py) | Numerical operations |
 | [Saving](../holodoppler/saving/README.md) | Output selection, bounded saving jobs, media and numerical exports |
@@ -241,19 +240,6 @@ subapertures one at a time; `parallel` uses batched SVD/FFTs and does not use th
 SVD pixel-block limit. Choosing `null` removes workspace limiting; it does not
 automatically change the execution mode or check available memory.
 
-Full processing delegates to `core.pipeline.run_pipeline()`. The shared lifecycle
-owns the saving context, ordered output groups, preallocated temporal buffers,
-ECC and static output writes. Stateful pipelines still disable CPU workers, and
-PCA accumulation retains partial trailing groups and its output cadence metadata.
-
-The default pipeline supplies preparation and consumption hooks for PSD handling,
-an ECC key predicate, a spatial finalizer, and a static-output factory. Preparation
-runs before download on the GPU compute stream (or CPU workers); consumption runs
-on the caller. Without ECC the finalizer runs before download; with ECC it runs
-on one corrected backend batch at a time. Static spectra and autofocus diagnostics
-never enter temporal buffering or ECC. Processing and saving failures propagate
-through the saving context so partial outputs close without finalization.
-
 The shared `run_batches()` always delivers results in input order:
 
 - **CPU:** 0 or 1 worker runs sequentially; larger counts use a bounded thread
@@ -322,10 +308,11 @@ come from code review, not scientific validation against experimental recordings
 2. **Moments are raw sums.** Signed `moment1` cancellation, unnormalized `moment2`,
    and the distinction between band means and moment sums need to remain explicit
    in the output contract and metadata.
-3. **Lifecycle hooks have execution constraints.** GPU aggregation must remain on
-   the ordered compute stream; CPU aggregation belongs to the caller because
-   preparation can run on multiple CPU workers. Delayed Doppler rendering must
-   follow ECC. New hooks must preserve these ownership and ordering requirements.
+3. **There are two orchestration implementations.** `core/pipeline.py` provides
+   setup, accumulation, ECC and saving for other pipelines. The default pipeline
+   still owns its own orchestration for GPU aggregation and delayed color rendering.
+   Shared lifecycle operations could be extracted gradually while preserving these
+   requirements.
 4. **Output meaning is encoded in strings and dimensions.** Registration, resizing
    and saving independently infer semantics from keys and shapes. An output
    specification with axes, spatial/temporal role, registration policy and export
@@ -343,6 +330,6 @@ come from code review, not scientific validation against experimental recordings
    with live saving; video playback FPS is independent of acquisition cadence.
    Both should be visible before a run, with buffering estimates and distinct
    timing metadata.
-8. **Reference preparation remains pipeline-specific.** `_process_to_output()`
-   prepares autofocus and registration references, then delegates processing and
-   saving to the shared lifecycle. Preview retains its distinct processing policy.
+8. **`_process_to_output()` has many responsibilities.** It owns reference setup,
+   GPU aggregation, callbacks, ECC, and static/temporal saving. Explicit run state
+   and finalization functions could clarify ownership and failure cleanup.

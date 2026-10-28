@@ -134,10 +134,7 @@ def test_default_pipeline_processing_and_spectrogram_resize():
     assert all(np.isfinite(value).all() for value in result.values())
     output = {}
     prepared = main_default._prepare_batch_results(result, params)
-    from holodoppler.core.pipeline import store_batch_result
-    collector = main_default._DefaultOutputs(params)
-    for key, value in collector.consume(prepared).items():
-        store_batch_result(output, key, value, 0, 1)
+    main_default._append_numpy_results(output, prepared, params, 0, 1)
     assert output['spectrograms'].shape == (1, 4, 4, 4)
     assert isinstance(output['spectrograms'], np.ndarray)
 

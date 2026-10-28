@@ -8,7 +8,6 @@ import pytest
 import yaml
 from scipy import fft, linalg, ndimage
 
-from holodoppler.core import pipeline as lifecycle
 from holodoppler import backend
 from holodoppler.core import filtering, moments, propagation, registration
 from holodoppler.pipelines import main_default as pipeline
@@ -168,7 +167,7 @@ def test_reference_uses_autofocus_and_reuses_matching_frames(monkeypatch, autofo
         references.append(fixed.copy())
         return 0, 0
     monkeypatch.setattr(pipeline, "register_images_shifts", shifts)
-    monkeypatch.setattr(lifecycle, "save_outputs", lambda **options: saved.update(options["output"]))
+    monkeypatch.setattr(pipeline, "save_outputs", lambda **options: saved.update(options["output"]))
     pipeline._process_to_output(reader, p, [0, 4 * skip], None, None)
     for _, actual in calls:
         if autofocus == "accepted":
@@ -234,11 +233,11 @@ def test_finalization_matches_cpu_formulas(monkeypatch, ecc, live, lab):
         destination.write_static.side_effect = lambda key, value: saved.update({key: value})
     else:
         destination = None
-        monkeypatch.setattr(lifecycle, "save_outputs", lambda **options: saved.update(
+        monkeypatch.setattr(pipeline, "save_outputs", lambda **options: saved.update(
             {key: value if key == "averaged_spectrogram" else value[0]
              for key, value in options["output"].items()}))
-    monkeypatch.setattr(lifecycle, "register_with_ecc", lambda images, **kw: np.zeros((len(images), 2)))
-    monkeypatch.setattr(lifecycle, "apply_ecc_registration", lambda images, *a, **kw: np.roll(images, 1, axis=-1))
+    monkeypatch.setattr(pipeline, "register_with_ecc", lambda images, **kw: np.zeros((len(images), 2)))
+    monkeypatch.setattr(pipeline, "apply_ecc_registration", lambda images, *a, **kw: np.roll(images, 1, axis=-1))
     reader = SimpleNamespace(read_frames=lambda **kw: frames.copy())
     pipeline._process_to_output(reader, p, [0], destination, None)
     for key, value in expected.items():
@@ -310,8 +309,8 @@ def test_optional_gpu_finalization_and_transfer_parity(monkeypatch, asynchronous
     frames = np.random.default_rng(7).random((16, 12, 18)).astype(np.float32)
     reader = SimpleNamespace(read_frames=lambda first_frame, batch_size, **kw:
                               frames[first_frame:first_frame + batch_size].copy())
-    monkeypatch.setattr(lifecycle, "register_with_ecc", lambda images, **kw: np.zeros((len(images), 2)))
-    monkeypatch.setattr(lifecycle, "apply_ecc_registration", lambda images, *a, **kw: np.roll(images, 1, axis=-1))
+    monkeypatch.setattr(pipeline, "register_with_ecc", lambda images, **kw: np.zeros((len(images), 2)))
+    monkeypatch.setattr(pipeline, "apply_ecc_registration", lambda images, *a, **kw: np.roll(images, 1, axis=-1))
     outputs = []
     for device in ("numpy", "cupy"):
         backend.set_backend(device)

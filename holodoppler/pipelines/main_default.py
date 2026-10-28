@@ -1,6 +1,12 @@
 import numpy as np
 
 from holodoppler import backend
+from holodoppler.config import (
+    update_from_cine_metadata,
+    update_from_holo_footer,
+    validate_main_parameters,
+)
+from holodoppler.core.batching import calculate_batch_indices
 from holodoppler.core.doppler_images import directional, finish_doppler_images
 from holodoppler.core.filtering import (
     corner_compensation,
@@ -15,16 +21,8 @@ from holodoppler.core.image_utils import (
     resize_frames,
 )
 from holodoppler.core.moments import moments
-from holodoppler.core.pipeline import (
-    _MANAGED_DESTINATION,
-    batch_indices as get_batch_indices,
-    frame_stack as _frame_stack,
-    prepare_input,
-    run_pipeline,
-    save_result_bundle,
-    validate_reference_batch as _validate_reference_batch,
-)
 from holodoppler.core.plots import plot_phase_with_slopes_rgb
+from holodoppler.core.processing import run_batches
 from holodoppler.core.propagation import (
     angular_spectrum_transform,
     angular_spectrum_transform_with_phase,
@@ -33,8 +31,10 @@ from holodoppler.core.propagation import (
     fresnel_transform_with_phase,
 )
 from holodoppler.core.registration import (
+    apply_ecc_registration,
     apply_register_images_shifts,
     register_images_shifts,
+    register_with_ecc,
 )
 from holodoppler.core.shack_hartmann import (
     calculate_displacements,
@@ -46,7 +46,17 @@ from holodoppler.core.zernike import (
     fit_zernike_angular_spectrum,
     fit_zernike_fresnel,
 )
+from holodoppler.file_reader import get_reader
 from holodoppler.logging import logger
+from holodoppler.saving import (
+    OutputClass,
+    save_outputs,
+)
+
+
+from holodoppler.core.pipeline import (
+    frame_stack as _frame_stack, validate_reference_batch as _validate_reference_batch,
+)
 
 
 def _process_batch(parameters, frames, phase_term=None, output_dict=None,
@@ -669,6 +679,19 @@ def _process_one_batch(
     return res, registration_ref
 
 
+def _store_batch_result(output, key, value, batch_index, num_batches):
+    """Allocate each output once, using its first batch's shape and dtype."""
+    value = backend.to_numpy(value)
+    if key not in output:
+        output[key] = np.empty((num_batches, *value.shape), dtype=value.dtype)
+    if output[key].shape[1:] != value.shape:
+        raise ValueError(
+            f"Output {key!r} changed shape from {output[key].shape[1:]} "
+            f"to {value.shape} at batch {batch_index}."
+        )
+    output[key][batch_index] = value
+
+
 def _prepare_batch_results(res, parameters):
     """Finish backend operations before the scheduler downloads results."""
     res = dict(res)
@@ -691,46 +714,16 @@ def _prepare_batch_results(res, parameters):
     return res
 
 
-class _DefaultOutputs:
-    """Keep PSD aggregation on the compute stream for GPU, caller for CPU."""
-
-    def __init__(self, parameters):
-        self.parameters = parameters
-        self.aggregates = {}
-
-    def _accumulate(self, spectrum):
-        if "averaged_spectrogram" not in self.aggregates:
-            self.aggregates["averaged_spectrogram"] = spectrum.copy()
+def _append_numpy_results(output, res, parameters, batch_index, num_batches):
+    for key, value in res.items():
+        if key == "sh_psd":
+            spectrum = backend.to_numpy(value)
+            if "averaged_spectrogram" in output:
+                output["averaged_spectrogram"] += spectrum
+            else:
+                output["averaged_spectrogram"] = spectrum.copy()
         else:
-            self.aggregates["averaged_spectrogram"] += spectrum
-
-    def prepare(self, result):
-        result = _prepare_batch_results(result, self.parameters)
-        if backend.is_gpu and "sh_psd" in result:
-            self._accumulate(result.pop("sh_psd"))
-        return result
-
-    def consume(self, result):
-        result = dict(result)
-        if "sh_psd" in result:
-            self._accumulate(backend.to_numpy(result.pop("sh_psd")))
-        return result
-
-    def finish(self, completed):
-        output = {}
-        if "averaged_spectrogram" in self.aggregates:
-            spectrum = _square_spectrum(self.aggregates.pop("averaged_spectrogram"), self.parameters)
-            spectrum = backend.to_numpy(spectrum)
-            spectrum /= completed
-            output["averaged_spectrogram"] = np.squeeze(spectrum)
-        return output
-
-
-def _ecc_spatial_key(key):
-    return (key in {"moment0ff", "moment0", "moment1", "moment2"}
-            or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
-            or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
-                                        "_directional_Doppler_pos", "_directional_Doppler_neg"})
+            _store_batch_result(output, key, value, batch_index, num_batches)
 
 
 def _finalize_spatial_result(result, parameters):
@@ -754,8 +747,28 @@ def _square_spectrum(spectrum, parameters):
 
 
 def preview(file_path, parameters):
-    file_reader, parameters = prepare_input(file_path, parameters, copy_parameters=False)
+    backend.set_backend(parameters.get("backend", "auto"))
+    file_reader = get_reader(file_path)
+
     logger.debug("Preview input: %s", file_path)
+
+    if file_reader.extension == ".holo":
+        logger.debug("File header: %s", file_reader.header)
+
+        parameters = update_from_holo_footer(
+            parameters,
+            file_reader.footer,
+        )
+
+    if file_reader.extension == ".cine":
+        logger.debug("File header: %s", file_reader.header)
+
+        parameters = update_from_cine_metadata(
+            parameters,
+            file_reader.header
+        )
+
+    validate_main_parameters(parameters)
 
     _validate_reference_batch(
         file_reader, parameters["first_frame"], parameters["batch_size"], "Preview", parameters.get("skip_every")
@@ -808,24 +821,72 @@ def preview(file_path, parameters):
     backend.clear_gpu_memory()
 
     res_np.update(autofocus_diagnostics)
-    save_result_bundle(file_reader, parameters, res_np, preview=True)
+    save_outputs(
+        file_reader=file_reader,
+        output=res_np,
+        parameters=parameters,
+        custom_relative_path="preview",
+        num_saving_workers=parameters.get("num_saving_workers", 0),
+        saving_queue_depth=parameters.get("saving_queue_depth"),
+    )
 
     return res_np["moment0ff"]
 
 
 def process(file_path, parameters, progress_callback=None):
-    file_reader, parameters = prepare_input(file_path, parameters, copy_parameters=False)
-    indices = get_batch_indices(file_reader, parameters)
-    if not indices:
+    backend.set_backend(parameters.get("backend", "auto"))
+
+    file_reader = get_reader(file_path)
+
+    if file_reader.extension == ".holo":
+        logger.debug("File header: %s", file_reader.header)
+
+        parameters = update_from_holo_footer(
+            parameters,
+            file_reader.footer,
+        )
+
+    if file_reader.extension == ".cine":
+        logger.debug("File header: %s", file_reader.header)
+
+        parameters = update_from_cine_metadata(
+            parameters,
+            file_reader.header
+        )
+
+    validate_main_parameters(parameters)
+
+    batch_size = parameters["batch_size"]
+    batch_stride = parameters["batch_stride"]
+    first_frame = parameters["first_frame"]
+
+    end_frame = parameters.get(
+        "end_frame",
+        0,
+    )
+
+    batch_indices = calculate_batch_indices(
+        first_frame, end_frame, batch_size, batch_stride, file_reader.total_frames,
+        skip_every=parameters.get("skip_every"),
+    )
+    if not batch_indices:
         return
-    _process_to_output(file_reader, parameters, indices,
-                       progress_callback=progress_callback)
+
+    if parameters.get("live_saving", True):
+        with OutputClass(file_reader, parameters) as destination:
+            _process_to_output(file_reader, parameters, batch_indices,
+                               destination, progress_callback)
+    else:
+        _process_to_output(file_reader, parameters, batch_indices,
+                           None, progress_callback)
 
 
-def _process_to_output(file_reader, parameters, batch_indices,
-                       destination=_MANAGED_DESTINATION, progress_callback=None):
+def _process_to_output(file_reader, parameters, batch_indices, destination,
+                       progress_callback):
     batch_size = parameters["batch_size"]
     first_frame = parameters["first_frame"]
+    buffered = destination is None or parameters.get("image_registration_with_ecc", False)
+    output = {}
 
     registration_ref = None
     explicit_reference = parameters.get("image_registration", False) and (
@@ -876,26 +937,124 @@ def _process_to_output(file_reader, parameters, batch_indices,
             phase_term=autofocus_phase_term, propagation_kernel=propagation_kernel,
         )
 
-    outputs = _DefaultOutputs(parameters)
+    aggregates = {}
+    ecc_enabled = parameters.get("image_registration_with_ecc", False)
 
-    def static_factory(completed):
-        result = outputs.finish(completed)
-        if auto_coefs is not None:
-            result["shack_hartmann_autofocus_zernike_coefs"] = backend.to_numpy(auto_coefs)
-        result.update(autofocus_diagnostics)
+    def prepare_result(result):
+        result = _prepare_batch_results(result, parameters)
+        if backend.is_gpu and "sh_psd" in result:
+            spectrum = result.pop("sh_psd")
+            if "averaged_spectrogram" not in aggregates:
+                aggregates["averaged_spectrogram"] = spectrum.copy()
+            else:
+                aggregates["averaged_spectrogram"] += spectrum
+        if not ecc_enabled:
+            result = _finalize_spatial_result(result, parameters)
         return result
 
-    try:
-        run_pipeline(
-            file_reader, parameters, process_batch, indices=batch_indices,
-            reference=registration_ref, destination=destination, preallocate=True,
-            prepare_batch=outputs.prepare, consume_batch=outputs.consume,
-            finalize_result=lambda result: _finalize_spatial_result(result, parameters),
-            ecc_key_predicate=_ecc_spatial_key, static_factory=static_factory,
-            progress_callback=progress_callback,
-        )
-    finally:
-        # Release references before clearing cached GPU allocations, also on failure.
-        autofocus_phase_term = propagation_kernel = registration_ref = None
-        outputs.aggregates.clear()
-        backend.clear_gpu_memory()
+    def consume_result(index, result):
+        if buffered:
+            _append_numpy_results(output, result, parameters, index, len(batch_indices))
+            return
+        # Add a temporary batch axis for the shared NumPy collector.
+        current = {}
+        _append_numpy_results(current, result, parameters, 0, 1)
+        to_save = {}
+        for key, value in current.items():
+            if key == "averaged_spectrogram":
+                if key in output:
+                    output[key] += value
+                else:
+                    output[key] = value
+            else:
+                value = value[0]
+                to_save[key] = value
+        destination.add_batch(to_save, index)
+
+    registration_ref = run_batches(
+        file_reader, batch_indices, batch_size, process_batch, consume_result,
+        skip_every=parameters.get("skip_every"),
+        registration_ref=registration_ref,
+        registration_enabled=parameters.get("image_registration", False),
+        workers=parameters.get("numpy_num_workers", 8),
+        cupy_async=parameters.get("cupy_async", True),
+        cupy_prefetch_depth=parameters.get("cupy_prefetch_depth", 4),
+        prepare_result=prepare_result,
+        progress_callback=progress_callback,
+    )
+
+    if "averaged_spectrogram" in aggregates:
+        output["averaged_spectrogram"] = backend.to_numpy(_square_spectrum(
+            aggregates.pop("averaged_spectrogram"), parameters))
+    elif "averaged_spectrogram" in output:
+        output["averaged_spectrogram"] = backend.to_numpy(_square_spectrum(
+            output["averaged_spectrogram"], parameters))
+
+    if "averaged_spectrogram" in output:
+        output["averaged_spectrogram"] /= len(batch_indices)
+
+    logger.debug("Output keys: %s", output.keys())
+
+    if auto_coefs is not None:
+        output["shack_hartmann_autofocus_zernike_coefs"] = backend.to_numpy(auto_coefs)
+
+    if "averaged_spectrogram" in output:
+        output["averaged_spectrogram"] = np.squeeze(output["averaged_spectrogram"]) # This aggregate has no batch axis.
+
+    # ------------------------------------------------------------
+    # ECC Image Registration at the end
+    # ------------------------------------------------------------
+
+    if parameters.get("image_registration_with_ecc", False):
+        logger.info("Running Registration ECC algo:")
+        registration_ecc = register_with_ecc(output["moment0ff"],radius=parameters.get("registration_ecc_radius",0.8),iterations=300,eps=1e-6, progress_callback=progress_callback, ecc_min_threshold=parameters.get("registration_ecc_min_threshold",0.7))
+
+
+        for key in output :
+            if (
+                key in {"moment0ff", "moment0", "moment1", "moment2"}
+                or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
+                or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
+                                            "_directional_Doppler_pos", "_directional_Doppler_neg"}
+            ):
+                output[key] = apply_ecc_registration(output[key], registration_ecc, background="mean")
+
+        output["registration_ecc"] = registration_ecc
+        logger.info("Registration calculated.")
+
+
+    if ecc_enabled:
+        # ECC is a CPU operation. Transfer only one corrected batch at a time
+        # for resizing/rendering, then release its backend allocations.
+        static_names = {"averaged_spectrogram", "shack_hartmann_autofocus_zernike_coefs"}
+        temporal = {key: value for key, value in output.items() if key not in static_names}
+        finished = {}
+        for index in range(len(batch_indices)):
+            current = {key: backend.to_backend(value[index]) for key, value in temporal.items()}
+            for key, value in _finalize_spatial_result(current, parameters).items():
+                _store_batch_result(finished, key, value, index, len(batch_indices))
+        output = {key: value for key, value in output.items() if key in static_names}
+        output.update(finished)
+
+    # The fixed autofocus correction is no longer needed.
+    del autofocus_phase_term
+
+    backend.clear_gpu_memory()
+
+    if destination is None:
+        output.update(autofocus_diagnostics)
+        save_outputs(file_reader=file_reader, output=output, parameters=parameters,
+                     num_saving_workers=parameters.get("num_saving_workers", 0),
+                     saving_queue_depth=parameters.get("saving_queue_depth"))
+        return
+
+    static_names = {"averaged_spectrogram", "shack_hartmann_autofocus_zernike_coefs"}
+    if buffered:
+        temporal = {key: value for key, value in output.items() if key not in static_names}
+        for t in range(len(batch_indices)):
+            destination.add_batch({key: value[t] for key, value in temporal.items()}, t)
+    for key, value in output.items():
+        if not buffered or key in static_names:
+            destination.write_static(key, value)
+    for key, value in autofocus_diagnostics.items():
+        destination.write_static(key, value)
