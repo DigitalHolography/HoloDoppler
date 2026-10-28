@@ -22,7 +22,7 @@ def get_data(holo_path):
     png = os.path.join(
         preview,
         "png",
-        "M0ff.png"
+        "moment0ff.png"
     )
 
     csv_file = os.path.join(

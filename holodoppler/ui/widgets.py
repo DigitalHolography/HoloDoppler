@@ -27,6 +27,7 @@ class SettingsEditor(ttk.Frame):
             "Processing",
             (
                 "pipeline_name",
+                "backend",
                 "batch_size",
                 "batch_stride",
                 "accumulation",
@@ -46,7 +47,6 @@ class SettingsEditor(ttk.Frame):
         (
             "Frequency",
             (
-                "temporal_transformation",
                 "time_transform",
                 "sampling_freq",
                 "low_freq",
@@ -76,7 +76,7 @@ class SettingsEditor(ttk.Frame):
     CHOICES: dict[str, tuple[str, ...]] = {
         "spatial_propagation": ("Fresnel", "AngularSpectrum", "None"),
         "image_registration_type": ("translation_rotation_scale", "translation"),
-        "temporal_transformation": ("FourierTransform", "None"),
+        "backend": ("auto", "numpy", "cupy"),
         "shack_hartmann_graph_ref": ("central_sub_ap", "ref_from_registration", "none"),
     }
 

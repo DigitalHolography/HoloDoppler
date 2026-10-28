@@ -9,13 +9,17 @@ import pytest
 import yaml
 
 from holodoppler import backend, saving
+from holodoppler.saving import data as saving_data
+from holodoppler.saving import media as saving_media
 from holodoppler.pipelines import main_default
 
 
+@pytest.mark.parametrize("z4", [1.0, 2.0])
+@pytest.mark.parametrize("live_saving", [False, True])
 @pytest.mark.parametrize("skip_every", [1, 2])
 @pytest.mark.parametrize("entrypoint", ["preview", "process"])
 @pytest.mark.parametrize("autofocus", [True, False])
-def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every):
+def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every, z4, live_saving):
     numpy_backend = backend.BackendManager("numpy")
     for name in ("xp", "fft", "zoom", "is_gpu"):
         monkeypatch.setattr(backend, name, getattr(numpy_backend, name))
@@ -27,13 +31,13 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every)
     defaults = Path(__file__).resolve().parents[1] / "parameters/default_parameters_default.yaml"
     parameters = yaml.safe_load(defaults.read_text(encoding="utf-8"))
     parameters.update(
-        skip_every=skip_every, batch_size=4, batch_stride=4, first_frame=0, end_frame=-1,
+        live_saving=live_saving, skip_every=skip_every, batch_size=4, batch_stride=4, first_frame=0, end_frame=-1,
         registration_ref_first_frame=0, shack_hartmann_autofocus_batch_size=4,
         shack_hartmann_autofocus=autofocus, spatial_propagation="Fresnel",
         pixel_pitch=[1e-6, 1e-6], wavelength=852e-9, z=0.1,
         sampling_freq=1000, low_freq=100, high_freq=400,
         image_registration=False, image_registration_with_ecc=False,
-        filter2d=False, square=True, force_numpy=False,
+        filter2d=False, square=True, backend="auto",
         numpy_num_workers=1,
     )
     frames = np.ones((4, 12, 18), dtype=np.float32)
@@ -46,15 +50,20 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every)
     phase = np.arange(12 * 18, dtype=np.float32).reshape(12, 18) / 10
     shifts_y = np.array([[1, np.nan], [0, -1]], dtype=np.float32)
     shifts_x = np.array([[0, np.nan], [1, -1]], dtype=np.float32)
-    coefs = np.array([1, 2, 3], dtype=np.float32)
+    coefs = np.array([z4, 2, 3], dtype=np.float32)
     monkeypatch.setattr(
         main_default, "construct_subapertures_fresnel",
-        lambda *args: np.ones((2, 2, 12, 18), dtype=np.float32),
+        lambda *args, **kwargs: np.ones((2, 2, 12, 18), dtype=np.float32),
     )
-    monkeypatch.setattr(
-        main_default, "calculate_displacements_graph_laplacian",
-        lambda *args, **kwargs: (shifts_y, shifts_x),
-    )
+    pair_shifts = np.stack((shifts_y, shifts_x), axis=-1)
+    pair_shifts = (pair_shifts[None, None, :, :, :] - pair_shifts[:, :, None, None, :]).astype(np.float32)
+
+    def displacements(*args, diagnostics=None, **kwargs):
+        if diagnostics is not None:
+            diagnostics["shack_hartmann_shifts"] = pair_shifts.copy()
+        return shifts_y, shifts_x
+
+    monkeypatch.setattr(main_default, "calculate_displacements_graph_laplacian", displacements)
     monkeypatch.setattr(
         main_default, "fit_zernike_fresnel", lambda *args: (coefs, phase),
     )
@@ -63,17 +72,17 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every)
 
     corrections = []
 
-    def process_batch(parameters, frames, registration_ref=None, phase_term=None):
+    def process_batch(parameters, frames, registration_ref=None, phase_term=None, **kwargs):
         corrections.append(phase_term)
-        return {key: frames[0].copy() for key in ("M0", "M0ff", "M1", "M2")}, None
+        return {key: frames[0].copy() for key in ("moment0", "moment0ff", "moment1", "moment2")}, None
 
     monkeypatch.setattr(main_default, "_process_one_batch", process_batch)
     bundles = []
-    monkeypatch.setattr(saving, "save_metadata", lambda *args, **kwargs: None)
-    monkeypatch.setattr(saving, "save_version_files", lambda *args: None)
-    monkeypatch.setattr(saving, "get_git_version", lambda: "test")
+    monkeypatch.setattr(saving_data, "save_metadata", lambda *args, **kwargs: None)
+    monkeypatch.setattr(saving_data, "save_version_files", lambda *args: None)
+    monkeypatch.setattr(saving_data, "get_git_version", lambda: "test")
     video_writer = Mock()
-    monkeypatch.setattr(saving, "save_video", video_writer)
+    monkeypatch.setattr(saving_media, "save_video", video_writer)
 
     def save_bundle(**kwargs):
         bundles.append(kwargs["output"])
@@ -110,10 +119,17 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every)
         for actual, expected in zip(render.call_args.args, (phase, shifts_y, shifts_x)):
             np.testing.assert_equal(actual, expected)
         for correction in corrections:
-            np.testing.assert_allclose(correction, np.exp(-1j * phase))
+            if z4 > 1.5:
+                assert correction is None
+            else:
+                np.testing.assert_allclose(correction, np.exp(-1j * phase))
         np.testing.assert_array_equal(
             bundles[0]["shack_hartmann_autofocus_zernike_coefs"], coefs,
         )
+        np.testing.assert_equal(bundles[0]["shack_hartmann_autofocus_shifts"], pair_shifts)
+        import h5py
+        with h5py.File(next(tmp_path.rglob("*.h5"))) as h5:
+            np.testing.assert_equal(h5["shack_hartmann_autofocus_shifts"][:], pair_shifts)
         assert len(pngs) == 1
         assert pngs[0].name == "shack_hartmann_autofocus_wavefront_color_image.png"
         assert ("preview" in pngs[0].relative_to(tmp_path).parts) == (entrypoint == "preview")

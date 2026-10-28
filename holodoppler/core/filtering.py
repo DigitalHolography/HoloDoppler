@@ -26,6 +26,7 @@ def filter_2d(xp, fft, frames, filter2d_low):
 
 
 
+
 def svd_filter(
     xp,
     linalg,
@@ -33,210 +34,110 @@ def svd_filter(
     svd_threshold,
     filter_mode="number_of_values",
     remove_dc=False,
-    debug=False,
+    diagnostic=None,
+    block_size_mib=8,
 ):
-    """SVD filtering to remove tissue signal.
-
-    The covariance eigendecomposition is performed in the temporal
-    dimension. For Nt > 300 this is generally preferable to computing
-    a full SVD of the pixel x time matrix.
+    """SVD clutter filtering using temporal covariance eigendecomposition.
 
     Parameters
     ----------
-    xp : module
-        Array module.
-    linalg : module
-        Linear algebra module providing eigh.
     H : array
-        Input complex data, shape (Nt, Ny, Nx).
-
+        Complex data of shape (Nt, Ny, Nx).
     svd_threshold : int or float
-        Threshold used according to ``filter_mode``.
-
+        Number of leading modes to remove, or eigenvalue threshold.
+        Negative values disable filtering.
     filter_mode : str
-        ``"number_of_values"``
-            Remove the N largest singular/eigenvalue components.
-
-        ``"amplitude_threshold"``
-            Remove components whose eigenvalue is greater than the
-            supplied threshold.
-
-        ``"relative_amplitude_threshold"``
-            Remove components whose eigenvalue / maximum eigenvalue
-            exceeds the supplied threshold.
-
+        "number_of_values" or "amplitude_threshold".
     remove_dc : bool
-        Remove the temporal mean before filtering.
+        Subtract the temporal mean before filtering.
+    diagnostic : dict, optional
+        Dictionary populated with intermediate results when provided.
 
-    debug : bool
-        Return intermediate SVD quantities.
+    block_size_mib : positive float or None, optional
+        Target size in MiB for each pixel-block work array, not total memory.
+        Larger blocks can improve throughput at the cost of RAM/VRAM.
+        None processes all pixels in one block without a workspace limit.
 
     Returns
     -------
     H_filtered : array
-        Filtered data.
-
-    If debug=True, also returns:
-        removed_features,
-        kept_data,
-        eigenvalues,
-        covariance,
-        eigenvectors,
-        dc
+        Filtered data with the same shape as H.
     """
-
     if svd_threshold < 0:
-        if debug:
-            return H, None, None, None, None, None, None
         return H
 
-    # ------------------------------------------------------------------
-    # Remove DC
-    # ------------------------------------------------------------------
-    if remove_dc:
-        dc = xp.mean(H, axis=0)
-        H = H - dc
-    else:
-        dc = None
+    filtered = xp.empty(H.shape, dtype=H.dtype)
+    _svd_filter_matrix(
+        xp, linalg, H.reshape(H.shape[0], -1) if H.flags.c_contiguous else H,
+        filtered.reshape(H.shape[0], -1), svd_threshold,
+        filter_mode, remove_dc, diagnostic, H.shape, block_size_mib=block_size_mib,
+    )
+    return filtered
 
-    # ------------------------------------------------------------------
-    # Arrange as:
-    #
-    #       H2 = [pixels, time]
-    #
-    # This makes H2.conj().T @ H2 an Nt x Nt covariance matrix.
-    # ------------------------------------------------------------------
-    sz = H.shape
-    nt = sz[0]
 
-    H2 = H.reshape(nt, -1).T
+def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
+                       remove_dc=False, diagnostic=None, shape=None, regularization=0,
+                       block_size_mib=8):
+    """Filter time-first data into a time-by-pixel output without changing input."""
+    nt, pixels = output.shape
+    block_size = (max(1, pixels) if block_size_mib is None else
+                  max(1, int(block_size_mib * 1024**2) // (nt * data.dtype.itemsize)))
+    cov = xp.zeros((nt, nt), dtype=data.dtype)
+    dc = xp.empty(pixels, dtype=data.dtype) if remove_dc and diagnostic is not None else None
 
-    # ------------------------------------------------------------------
-    # Temporal covariance
-    # ------------------------------------------------------------------
-    cov = H2.conj().T @ H2
-
-    # Small regularization.
-    #
-    # Scale epsilon with the covariance rather than using an absolute
-    # 1e-12. This behaves better for very small or very large signals.
-    trace = xp.real(xp.trace(cov))
-
-    if nt:
-        eps = xp.finfo(cov.real.dtype).eps * trace / nt
-        if eps == 0:
-            eps = xp.finfo(cov.real.dtype).eps
-
-        cov = cov + eps * xp.eye(nt, dtype=cov.dtype)
-
-    # ------------------------------------------------------------------
-    # Hermitian eigendecomposition
-    #
-    # The supplied linalg module selects the appropriate implementation:
-    # NumPy/SciPy on CPU, CuPy on GPU.
-    # ------------------------------------------------------------------
-    S, V = linalg.eigh(cov)
-
-    # eigh returns ascending eigenvalues.
-    #
-    # Reversing is cheap compared with argsort and is sufficient here
-    # because eigh already returns sorted eigenvalues.
-    S = S[::-1]
-    V = V[:, ::-1]
-
-    # ------------------------------------------------------------------
-    # Select components to REMOVE
-    # ------------------------------------------------------------------
-    if filter_mode == "number_of_values":
-
-        n_remove = int(svd_threshold)
-
-        if n_remove < 0:
-            raise ValueError(
-                "svd_threshold must be >= 0 for "
-                "'number_of_values'"
-            )
-
-        n_remove = min(n_remove, nt)
-
-        mask = xp.zeros(nt, dtype=bool)
-        mask[:n_remove] = True
-
-    elif filter_mode == "amplitude_threshold":
-
-        mask = S > svd_threshold
-
-    elif filter_mode == "relative_amplitude_threshold":
-
-        smax = S[0]
-
-        if smax == 0:
-            mask = xp.zeros(nt, dtype=bool)
+    # Reuse the final output as centered storage. Time-major blocks follow the
+    # main pipeline's native layout and avoid a large strided transpose copy.
+    for start in range(0, pixels, block_size):
+        stop = min(start + block_size, pixels)
+        if data.ndim == 2:
+            block = data[:, start:stop].copy()
         else:
-            mask = S / smax > svd_threshold
-
+            # A tiled subaperture is a strided view of the original hologram.
+            # Gather only this pixel block, never reshape-copy the whole view.
+            indices = xp.arange(start, stop)
+            block = data[:, indices // data.shape[2], indices % data.shape[2]]
+        if remove_dc:
+            mean = xp.mean(block, axis=0)
+            block -= mean[None, :]
+            if dc is not None:
+                dc[start:stop] = mean
+        cov += block.conj() @ block.T
+        output[:, start:stop] = block
+    del block
+    if regularization:
+        cov[xp.diag_indices(nt)] += regularization
+    values, vectors = linalg.eigh(cov)
+    values, vectors = values[::-1], vectors[:, ::-1]
+    if mode == "number_of_values":
+        selected = vectors[:, :min(int(threshold), nt)]
+    elif mode == "amplitude_threshold":
+        selected = vectors[:, values > threshold]
     else:
-        raise ValueError(
-            f"Unknown filter_mode: {filter_mode!r}. "
-            "Expected 'number_of_values', "
-            "'amplitude_threshold' or "
-            "'relative_amplitude_threshold'."
-        )
+        raise ValueError(f"Unknown filter_mode: {mode}")
 
-    V_remove = V[:, mask]
-    V_keep = V[:, ~mask]
+    removed_features = (xp.empty((pixels, selected.shape[1]), dtype=data.dtype)
+                        if diagnostic is not None else None)
+    conjugate = selected.conj()
+    for start in range(0, pixels, block_size):
+        stop = min(start + block_size, pixels)
+        block = output[:, start:stop]
+        if selected.shape[1]:
+            removed = selected.T @ block
+            block -= conjugate @ removed
+            if removed_features is not None:
+                removed_features[start:stop] = removed.T
+        elif removed_features is not None:
+            removed_features[start:stop] = 0
 
-    # ------------------------------------------------------------------
-    # Projection
-    #
-    # H_filtered = H2 - projection_onto_removed_subspace
-    #
-    # Computing H2 @ V_remove first is considerably cheaper than forming
-    # the full Nt x Nt projection matrix.
-    # ------------------------------------------------------------------
-    if V_remove.shape[1] == 0:
-        H_filtered = H2
-
-    elif V_remove.shape[1] == nt:
-        # Everything is removed.
-        H_filtered = xp.zeros_like(H2)
-
-    else:
-        coefficients = H2 @ V_remove
-        H_filtered = H2 - coefficients @ V_remove.conj().T
-
-    # ------------------------------------------------------------------
-    # Debug information
-    # ------------------------------------------------------------------
-    if debug:
-
-        # Coordinates of the removed temporal modes.
-        if V_remove.shape[1]:
-            U_remove = H2 @ V_remove
-        else:
-            U_remove = xp.empty(
-                (H2.shape[0], 0),
-                dtype=H2.dtype,
-            )
-
-        # Reconstruct kept signal without constructing the full
-        # projection matrix.
-        if V_keep.shape[1]:
-            H_kept = (H2 @ V_keep) @ V_keep.conj().T
-        else:
-            H_kept = xp.zeros_like(H2)
-
-        return (
-            H_filtered.T.reshape(sz),
-            U_remove.reshape((sz[-2], sz[-1], -1)),
-            H_kept.T.reshape(sz),
-            S,
-            cov,
-            V,
-            dc,
-        )
-
-    return H_filtered.T.reshape(sz)
+    if diagnostic is not None:
+        diagnostic.update({
+            "removed_features": removed_features.reshape(*shape[1:], -1),
+            "kept_data": output.reshape(shape),
+            "eigenvalues": values,
+            "covariance": cov,
+            "eigenvectors": vectors,
+            "dc": None if dc is None else dc.reshape(shape[1:]),
+        })
 
 
 def svd_filter_stdmeanratio(
@@ -315,30 +216,44 @@ def svd_filter_stdmeanratio(
     return H2.T.reshape(sz)
 
 
-def svd_filter_batched(xp, U_subaps, svd_threshold):
-    """Batched SVD filter for subapertures"""
+def svd_filter_batched(xp, U_subaps, svd_threshold, *, block_size_mib=8,
+                       regularization=1e-12, parallel=False):
+    """Filter subapertures with bounded blocks or batched backend operations.
+
+    Parallel processing trades stack-sized covariance/projection temporaries for
+    fewer launches and batched eigendecomposition. It requires much more VRAM.
+    In sequential mode, block_size_mib=None processes each subaperture's pixels
+    in one block. Parallel mode does not use the pixel-block limit.
+    """
 
     if svd_threshold < 0:
         return U_subaps
 
     ny_s, nx_s, sub_ny, sub_nx, nz = U_subaps.shape
-    B = ny_s * nx_s
+    if parallel:
+        count = min(int(svd_threshold), nz)
+        if count == 0:
+            return U_subaps.copy()
+        matrix = U_subaps.reshape(ny_s * nx_s, sub_ny * sub_nx, nz)
+        covariance = matrix.conj().swapaxes(-1, -2) @ matrix
+        if regularization:
+            covariance += regularization * xp.eye(nz, dtype=matrix.dtype)
+        _, vectors = xp.linalg.eigh(covariance)
+        selected = vectors[..., -count:]
+        removed = matrix @ selected
+        return (matrix - removed @ selected.conj().swapaxes(-1, -2)).reshape(U_subaps.shape)
 
-    H2 = U_subaps.reshape(B, sub_ny * sub_nx, nz)
-    eps = 1e-12
-
-    cov = xp.einsum("bpi,bpj->bij", H2.conj(), H2) + eps * xp.eye(nz, dtype=H2.dtype)
-
-    V_list = []
-    for b in range(B):
-        _, Vb = xp.linalg.eigh(cov[b])
-        V_list.append(Vb[:, ::-1])
-
-    Vt = xp.stack([Vb[:, :svd_threshold] for Vb in V_list], axis=0)
-    H2_Vt = xp.einsum("bpi,bik->bpk", H2, Vt)
-    proj = xp.einsum("bpk,bjk->bpj", H2_Vt, Vt.conj())
-
-    return (H2 - proj).reshape(ny_s, nx_s, sub_ny, sub_nx, nz)
+    # Transposed tiling can be noncontiguous. Keep input views where possible;
+    # process one subaperture at a time and write into the final output.
+    result = xp.empty(U_subaps.shape, dtype=U_subaps.dtype)
+    for y in range(ny_s):
+        for x in range(nx_s):
+            data = U_subaps[y, x].transpose(2, 0, 1)
+            target = result[y, x].reshape(sub_ny * sub_nx, nz).T
+            _svd_filter_matrix(xp, xp.linalg, data, target, svd_threshold,
+                               "number_of_values", regularization=regularization,
+                               block_size_mib=block_size_mib)
+    return result
 
 
 @cache # pyright: ignore[reportArgumentType]
@@ -392,3 +307,20 @@ def corner_compensation(xp, psd):
     psd = psd / mean_outside
 
     return psd
+
+
+@cache
+def symmetric_frequency_slices(batch_size, sampling_freq, low_freq, high_freq=None):
+    """Contiguous FFT-order runs matching the strict symmetric band mask.
+
+    Planning uses CPU metadata so CuPy boolean indexing never synchronizes the
+    compute stream or materializes a selected PSD stack.
+    """
+    import numpy as np
+
+    frequencies = np.fft.fftfreq(batch_size, 1 / sampling_freq)
+    selected = np.abs(frequencies) > low_freq
+    if high_freq is not None:
+        selected &= np.abs(frequencies) < high_freq
+    edges = np.flatnonzero(np.diff(np.r_[False, selected, False]))
+    return tuple(slice(int(start), int(stop)) for start, stop in edges.reshape(-1, 2))

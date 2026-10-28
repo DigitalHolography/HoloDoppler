@@ -10,6 +10,7 @@ import pytest
 import yaml
 
 from holodoppler import backend, saving
+from holodoppler.saving import media as saving_media
 from holodoppler.core import pipeline
 from holodoppler.pipelines import pipelines
 
@@ -27,7 +28,7 @@ def cpu_backend():
 
 def parameters(name, **changes):
     p = yaml.safe_load((ROOT / "parameters/default_parameters_default.yaml").read_text())
-    p.update(pipeline_name=name, force_numpy=True, batch_size=4, batch_stride=4,
+    p.update(pipeline_name=name, backend="numpy", batch_size=4, batch_stride=4,
              first_frame=0, end_frame=-1, skip_every=None, numpy_num_workers=2,
              shack_hartmann=False, shack_hartmann_autofocus=False,
              image_registration=False, image_registration_with_ecc=False,
@@ -71,7 +72,7 @@ def test_streamed_and_buffered_outputs_match(tmp_path, monkeypatch, name, propag
     reader, _ = reader_for(tmp_path, frames)
     monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
     monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
-    monkeypatch.setattr(saving, "save_video", lambda *args, **kwargs: None)
+    monkeypatch.setattr(saving_media, "save_video", lambda *args, **kwargs: None)
     module_name = "sliding_shack_hart" if name == "sliding_shack_hartmann" else name
     module = import_module(f"holodoppler.pipelines.main_{module_name}")
     p = parameters(name, spatial_propagation=propagation, image_registration=registration)
@@ -129,7 +130,7 @@ def test_pca_means_and_partial_group(tmp_path, monkeypatch, accumulation, expect
 def test_sliding_history_includes_only_current_window(monkeypatch):
     from holodoppler.pipelines import main_sliding_shack_hart as sliding
     captured = []
-    monkeypatch.setattr(sliding, "construct_subapertures_fresnel", lambda xp, fft, frames, *args:
+    monkeypatch.setattr(sliding, "construct_subapertures_fresnel", lambda xp, fft, frames, *args, **kwargs:
                         np.full((2, 2, 3, 3), frames[0, 0, 0], np.float32))
     def displacements(xp, fft, images, **kwargs):
         captured.append(images.copy())
@@ -157,8 +158,8 @@ def test_quadrants_cover_odd_pupil_and_accept_phase(method):
     output = {}
     split._process_batch(parameters("split_apertures", spatial_propagation=method),
                          frames, phase_term=np.ones((7, 9), np.complex64), output_dict=output)
-    assert output["M0"].shape == (7, 9)
-    assert output["NW_M0"].shape == output["SE_M0"].shape == (4, 5)
+    assert output["moment0"].shape == (7, 9)
+    assert output["NW_moment0"].shape == output["SE_moment0"].shape == (4, 5)
 
 
 def test_skip_and_reference_bounds(tmp_path):
@@ -296,7 +297,7 @@ def test_pca_ecc_runs_after_averaging_before_resizing(tmp_path, monkeypatch, liv
     reader, _ = reader_for(tmp_path, frames)
     monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
     monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
-    monkeypatch.setattr(saving, "save_video", lambda *args, **kwargs: None)
+    monkeypatch.setattr(saving_media, "save_video", lambda *args, **kwargs: None)
     monkeypatch.setattr(pca, "_process_one_batch", lambda p, frames, PROJ_reg=None, phase_term=None:
                         ({"PROJ": frames[0], "PROJff": frames[0]}, PROJ_reg))
     def estimate(images, **kwargs):

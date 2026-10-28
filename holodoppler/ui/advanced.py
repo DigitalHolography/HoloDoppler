@@ -104,7 +104,7 @@ class AdvancedView(ttk.Frame):
         self._select_input(self.active_input_index, update_preview_choice=not keep_completed_preview)
         if not keep_completed_preview:
             self.preview_label.configure(
-                text=f"Processing {path.name}...\nM0 preview will appear when complete.",
+                text=f"Processing {path.name}...\nmoment0 preview will appear when complete.",
                 image="",
             )
 

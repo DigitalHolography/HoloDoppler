@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from holodoppler import saving
+from holodoppler.saving import media as saving_media
 from holodoppler.cli import command
 from holodoppler.logging import logger
 
@@ -14,7 +15,8 @@ from holodoppler.logging import logger
 def records(monkeypatch):
     # Capture the shared logger without opening the user's persistent log.
     monkeypatch.setattr(command, "configure_logging", lambda: logger)
-    monkeypatch.setattr(logger, "level", logging.DEBUG)
+    previous_level = logger.level
+    logger.setLevel(logging.DEBUG)
     handler = BufferingHandler(100)
     logger.addHandler(handler)
     try:
@@ -22,6 +24,7 @@ def records(monkeypatch):
     finally:
         logger.removeHandler(handler)
         handler.close()
+        logger.setLevel(previous_level)
 
 
 @pytest.mark.parametrize("action", ["process", "preview"])
@@ -86,7 +89,7 @@ def test_png_saving_logs_failure_and_keeps_other_outputs(monkeypatch, records, t
             raise OSError("write failed")
         save_image(path, image)
 
-    monkeypatch.setattr(saving, "save_image_png", save)
+    monkeypatch.setattr(saving_media, "save_image_png", save)
     image = np.zeros((3, 4), dtype=np.uint8)
 
     saving.save_pngs(tmp_path, {"broken": image, "good": image})

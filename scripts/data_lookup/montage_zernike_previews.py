@@ -15,7 +15,7 @@ def get_data(holo_path):
         "preview"
     )
 
-    png = os.path.join(folder, "png", "M0ff.png")
+    png = os.path.join(folder, "png", "moment0ff.png")
     csv_file = os.path.join(
         folder, "csv",
         "shack_hartmann_autofocus_zernike_coefs.csv"

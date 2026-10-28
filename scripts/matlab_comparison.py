@@ -37,7 +37,7 @@ else:
 
 
 with h5py.File(test_path, "r") as f_test, h5py.File(REFERENCE_PATH, "r") as f_ref:
-    test_data = f_test["M0"][:]
+    test_data = f_test["moment0"][:]
     ref_data = np.squeeze(f_ref["moment0"][:, :, :, :])
 
     ref_data = np.flip(

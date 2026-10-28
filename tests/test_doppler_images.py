@@ -11,6 +11,7 @@ from scipy.ndimage import gaussian_filter
 import yaml
 
 from holodoppler import backend, saving
+from holodoppler.saving import media as saving_media
 from holodoppler.config import validate_main_parameters
 from holodoppler.core.doppler_images import directional, construct_colored_image, construct_colored_image_lab, construct_directional_image
 from holodoppler.pipelines import main_default
@@ -27,7 +28,7 @@ def cpu():
 def params(**updates):
     p = yaml.safe_load((Path(__file__).resolve().parents[1] /
                        "parameters/default_parameters_default.yaml").read_text())
-    p.update(force_numpy=True, batch_size=8, batch_stride=8, first_frame=0,
+    p.update(backend="numpy", batch_size=8, batch_stride=8, first_frame=0,
              end_frame=-1, skip_every=1, sampling_freq=1000, low_freq=0, high_freq=450,
              pixel_pitch=[1e-6, 1e-6], z=.1, numpy_num_workers=2,
              svd_threshold=0, svd_remove_dc=False, filter2d=False,
@@ -49,9 +50,10 @@ def params(**updates):
 @pytest.mark.parametrize("width", [0, 1.2])
 def test_directional_intervals_and_normalization(n, width):
     sh = np.random.default_rng(2).normal(size=(n, 3, 5)) + 1j
+    psd = np.abs(sh) ** 2
     first, last = 1, 3
-    pos = np.abs(sh[first - 1:last]).sum(axis=0)
-    neg = np.abs(sh[n - last:n - first + 1]).sum(axis=0)
+    pos = psd[first - 1:last].sum(axis=0)
+    neg = psd[n - last:n - first + 1].sum(axis=0)
     background = pos + neg
     if width:
         background = gaussian_filter(background, width, mode="nearest", radius=int(np.ceil(2 * width)))
@@ -59,7 +61,7 @@ def test_directional_intervals_and_normalization(n, width):
     expected_pos *= pos.sum() / expected_pos.sum()
     expected_neg = neg / background
     expected_neg *= neg.sum() / expected_neg.sum()
-    actual_pos, actual_neg = directional(np, gaussian_filter, sh, 1, 3, n, width)
+    actual_pos, actual_neg = directional(np, gaussian_filter, psd, 1, 3, n, width)
     np.testing.assert_allclose(actual_pos, expected_pos)
     np.testing.assert_allclose(actual_neg, expected_neg)
     assert actual_pos.sum() == pytest.approx(pos.sum())
@@ -136,7 +138,7 @@ def test_unclipped_rgb_is_averaged_before_display_clipping(tmp_path, monkeypatch
             destination.add("color_Doppler_image", frame, index)
     np.testing.assert_array_equal(np.array(Image.open(destination.target_dir / "png/color_Doppler_image.png")), expected)
     with h5py.File(destination.target_dir / "h5/output_output.h5") as handle:
-        np.testing.assert_array_equal(handle["color_Doppler_image"], video)
+        assert "color_Doppler_image" not in handle
 
 
 def test_directional_hsv_formula_and_balanced_pixels():
@@ -184,7 +186,7 @@ def test_default_doppler_video_average_and_preview(tmp_path, monkeypatch, square
                              frames[first_frame:first_frame + batch_size * (skip_every or 1):skip_every or 1].copy())
     monkeypatch.setattr(main_default, "get_reader", lambda _: reader)
     monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
-    monkeypatch.setattr(saving, "save_video", lambda *args, **kwargs: None)
+    monkeypatch.setattr(saving_media, "save_video", lambda *args, **kwargs: None)
     monkeypatch.setattr(main_default, "register_with_ecc", lambda values, **kwargs: np.zeros((len(values), 12)))
     monkeypatch.setattr(main_default, "apply_ecc_registration", lambda values, *args, **kwargs:
                         np.roll(values, 1, axis=-1))
@@ -196,22 +198,25 @@ def test_default_doppler_video_average_and_preview(tmp_path, monkeypatch, square
         path = next(tmp_path.rglob("*_output.h5"))
         with h5py.File(path) as handle:
             assert not any(key.startswith("_") for key in handle)
-            outputs = {name: handle[name][()] for name in ("color_Doppler_image", "directional_Doppler_image")}
-        for name, value in outputs.items():
-            assert value.shape == (3, 10 if square else 6, 10, 3)
-            assert value.dtype == np.float32
-            assert np.isfinite(value).all()
-            if name == "directional_Doppler_image" or lab:
-                assert value.min() >= 0 and value.max() <= 1
+            assert "color_Doppler_image" not in handle
+            assert "directional_Doppler_image" not in handle
+            assert "moment0" in handle
+        outputs = {}
+        for name in ("color_Doppler_image", "directional_Doppler_image"):
             image = np.array(Image.open(path.parent.parent / "png" / f"{name}.png"))
-            np.testing.assert_array_equal(image, saving.cast_png_data(value.mean(axis=0, dtype=np.float64)))
+            assert image.shape == (10 if square else 6, 10, 3)
+            outputs[name] = image
         snapshots.append(outputs)
     for key in snapshots[0]:
         np.testing.assert_array_equal(snapshots[0][key], snapshots[1][key])
     main_default.preview(reader.file_path, p)
     preview_path = next(tmp_path.rglob("preview_output.h5"))
     with h5py.File(preview_path) as handle:
-        assert handle["color_Doppler_image"].shape == (10 if square else 6, 10, 3)
+        assert "color_Doppler_image" not in handle
+        assert "directional_Doppler_image" not in handle
+    for name in ("color_Doppler_image", "directional_Doppler_image"):
+        image = np.array(Image.open(preview_path.parent.parent / "png" / f"{name}.png"))
+        assert image.shape == (10 if square else 6, 10, 3)
 
 
 def test_disabled_outputs_do_not_compute_directional(monkeypatch):
@@ -240,7 +245,7 @@ def test_float_rgb_average_preserves_sub_byte_values(tmp_path, monkeypatch):
     actual = np.array(Image.open(destination.target_dir / "png/directional_Doppler_image.png"))
     np.testing.assert_array_equal(actual, np.ones((6, 10, 3), np.uint8))
     with h5py.File(destination.target_dir / "h5/output_output.h5") as handle:
-        np.testing.assert_array_equal(handle["directional_Doppler_image"], video)
+        assert "directional_Doppler_image" not in handle
 
 
 @pytest.mark.parametrize("hues", [[1, .66], [.08, .5], [.83, .33], [.75, .16]])

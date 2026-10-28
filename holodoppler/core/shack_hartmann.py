@@ -9,7 +9,7 @@ from .propagation import (
 )
 from .filtering import (
     svd_filter_batched,
-    frequency_symmetric_filtering,
+    symmetric_frequency_slices,
 )
 from .image_utils import elliptical_mask
 
@@ -28,54 +28,69 @@ def construct_subapertures_fresnel(
     nx_subabs,
     ny_subabs,
     svd_threshold,
+    *,
+    sub_aps_process="sequential",
+    svd_block_size_mib=8,
+    svd_regularization=1e-12,
 ):
-    """Construct subaperture images using Fresnel propagation"""
-    # no kernel out for speed, but could be added if needed
+    """Construct Fresnel subaperture images sequentially or in backend batches.
 
-    Nz, Ny, Nx = U0.shape
-    sub_ny, sub_nx = Ny // ny_subabs, Nx // nx_subabs  # size of the sub aps
-
-    # Frequency filtering
-    idxs, _ = frequency_symmetric_filtering(
-        xp, fft, time_window, fs, low_freq, high_freq=high_freq
-    )
-
-    # Fresnel kernel
-    pixel_pitch = ensure_yx_pixel_pitch(pixel_pitch)
-    kernel_in = build_fresnel_kernel_in(
-        xp, z_prop, pixel_pitch, wavelength, Ny, Nx, zero_padding=None
-    )  # TODO accept a shack hartman zero_padding option
-
-    # Qin = crop_array_centrally(kernel_in, (Ny, Nx), xp)
-    # if Qin.ndim == 2:
-    #     Qin = Qin[None, :, :]
-
-    U_prop_qin = U0 * kernel_in
-
-    # Crop to tiling region
+    Sequential mode finishes one tile at a time to minimize RAM/VRAM. Parallel
+    mode batches propagation, SVD, and FFTs for throughput, using much more memory.
+    """
+    _validate_subaperture_mode(sub_aps_process)
+    nt, ny, nx = U0.shape
+    sub_ny, sub_nx = ny // ny_subabs, nx // nx_subabs
     crop_ny, crop_nx = sub_ny * ny_subabs, sub_nx * nx_subabs
-    y0, x0 = (Ny - crop_ny) // 2, (Nx - crop_nx) // 2
-    U_prop_qin = U_prop_qin[:, y0 : y0 + crop_ny, x0 : x0 + crop_nx]
+    y0, x0 = (ny - crop_ny) // 2, (nx - crop_nx) // 2
+    kernel = build_fresnel_kernel_in(
+        xp, z_prop, ensure_yx_pixel_pitch(pixel_pitch), wavelength, ny, nx,
+        zero_padding=None,
+    )
+    bands = symmetric_frequency_slices(time_window, fs, low_freq, high_freq)
+    if sub_aps_process == "parallel":
+        field = U0[:, y0:y0 + crop_ny, x0:x0 + crop_nx] * kernel[:, y0:y0 + crop_ny, x0:x0 + crop_nx]
+        tiles = field.reshape(nt, ny_subabs, sub_ny, nx_subabs, sub_nx).transpose(1, 3, 2, 4, 0)
+        filtered = svd_filter_batched(
+            xp, tiles, svd_threshold, parallel=True,
+            block_size_mib=svd_block_size_mib, regularization=svd_regularization,
+        )
+        del tiles, field
+        filtered = filtered.reshape(ny_subabs * nx_subabs, sub_ny, sub_nx, nt).transpose(0, 3, 1, 2)
+        spatial = fft.fft2(filtered, axes=(-2, -1))
+        del filtered
+        centered = fft.fftshift(spatial, axes=(-2, -1))
+        del spatial
+        spectrum = fft.fft(centered, axis=1)
+        del centered
+        return _subaperture_power(xp, spectrum, bands, axis=1).reshape(
+            ny_subabs, nx_subabs, sub_ny, sub_nx)
 
-    # Reshape into subapertures
-    U_subap_all = U_prop_qin.reshape(
-        Nz, ny_subabs, sub_ny, nx_subabs, sub_nx
-    ).transpose(1, 3, 2, 4, 0)
+    result = xp.empty((ny_subabs, nx_subabs, sub_ny, sub_nx), dtype=xp.float32)
 
-    # SVD filtering
-    U_subap_all = svd_filter_batched(xp, U_subap_all, svd_threshold)
+    for y in range(ny_subabs):
+        ys = slice(y0 + y * sub_ny, y0 + (y + 1) * sub_ny)
+        for x in range(nx_subabs):
+            xs = slice(x0 + x * sub_nx, x0 + (x + 1) * sub_nx)
+            field = U0[:, ys, xs] * kernel[:, ys, xs]
+            tiled = field.transpose(1, 2, 0)[None, None, ...]
+            filtered = svd_filter_batched(
+                xp, tiled, svd_threshold, block_size_mib=svd_block_size_mib,
+                regularization=svd_regularization,
+            )
+            filtered = filtered[0, 0].transpose(2, 0, 1)
+            del tiled, field
 
-    B = ny_subabs * nx_subabs
-    U_subap_all = U_subap_all.reshape(B, sub_ny, sub_nx, Nz).transpose(0, 3, 1, 2)
+            spatial = fft.fft2(filtered, axes=(-2, -1))
+            del filtered
+            centered = fft.fftshift(spatial, axes=(-2, -1))
+            del spatial
+            spectrum = fft.fft(centered, axis=0)
+            del centered
 
-    # FFT2 + temporal FFT
-    U_f2 = fft.fftshift(fft.fft2(U_subap_all, axes=(-2, -1)), axes=(-2, -1))
-    U_ft = fft.fft(U_f2, axis=1)[:, idxs, :, :]
-
-    # Power spectrum
-    M0 = xp.mean(xp.abs(U_ft) ** 2, axis=1)
-
-    return M0.reshape(ny_subabs, nx_subabs, sub_ny, sub_nx).astype(xp.float32)
+            result[y, x] = _subaperture_power(xp, spectrum, bands, axis=0)
+            del spectrum
+    return result
 
 
 def construct_subapertures_angular(
@@ -92,49 +107,84 @@ def construct_subapertures_angular(
     nx_subabs,
     ny_subabs,
     svd_threshold,
+    *,
+    sub_aps_process="sequential",
+    svd_block_size_mib=8,
+    svd_regularization=1e-12,
 ):
-    """Construct subaperture images using Angular Spectrum propagation"""
-    Nz, Ny, Nx = U0.shape
-    sub_ny, sub_nx = Ny // ny_subabs, Nx // nx_subabs
+    """Construct angular subapertures in sequential or batched backend mode.
 
-    pixel_pitch = ensure_yx_pixel_pitch(pixel_pitch)
+    Angular propagation needs the full spatial Fourier stack in either mode;
+    sequential mode bounds the following inverse FFT, SVD, and temporal FFT work.
+    """
+    _validate_subaperture_mode(sub_aps_process)
+    nt, ny, nx = U0.shape
+    sub_ny, sub_nx = ny // ny_subabs, nx // nx_subabs
     kernel = build_angular_kernel(
-        xp, z_prop, pixel_pitch, wavelength, Ny, Nx, zero_padding=None
-    )  # TODO accept a shack hartman zero_padding option
-
-    U_fft = fft.fft2(U0.astype(xp.complex64), axes=(-2, -1)) * fft.fftshift(
-        kernel, axes=(-2, -1)
+        xp, z_prop, ensure_yx_pixel_pitch(pixel_pitch), wavelength, ny, nx,
+        zero_padding=None,
     )
-
+    spectrum = fft.fft2(U0.astype(xp.complex64, copy=False), axes=(-2, -1))
+    spectrum *= fft.fftshift(kernel, axes=(-2, -1))
     crop_ny, crop_nx = sub_ny * ny_subabs, sub_nx * nx_subabs
-    y0, x0 = (Ny - crop_ny) // 2, (Nx - crop_nx) // 2
-    U_fft = U_fft[:, y0 : y0 + crop_ny, x0 : x0 + crop_nx]
-    U_fft = fft.fftshift(U_fft, axes=(-2, -1))
+    y0, x0 = (ny - crop_ny) // 2, (nx - crop_nx) // 2
+    spectrum = fft.fftshift(spectrum[:, y0:y0 + crop_ny, x0:x0 + crop_nx], axes=(-2, -1))
+    bands = symmetric_frequency_slices(time_window, fs, low_freq, high_freq)
 
-    # Split into subapertures
-    U_subap_all = U_fft.reshape(Nz, ny_subabs, sub_ny, nx_subabs, sub_nx).transpose(
-        0, 1, 3, 2, 4
-    )
+    if sub_aps_process == "parallel":
+        tiles = spectrum.reshape(nt, ny_subabs, sub_ny, nx_subabs, sub_nx).transpose(0, 1, 3, 2, 4)
+        tiles = fft.ifftshift(tiles, axes=(-2, -1))
+        del spectrum
+        field = fft.ifft2(tiles, axes=(-2, -1))
+        del tiles
+        filtered = svd_filter_batched(
+            xp, field.transpose(1, 2, 3, 4, 0), svd_threshold, parallel=True,
+            block_size_mib=svd_block_size_mib, regularization=svd_regularization,
+        )
+        del field
+        filtered = filtered.reshape(ny_subabs * nx_subabs, sub_ny, sub_nx, nt).transpose(0, 3, 1, 2)
+        temporal = fft.fft(filtered, axis=1, norm="ortho")
+        del filtered
+        return _subaperture_power(xp, temporal, bands, axis=1).reshape(
+            ny_subabs, nx_subabs, sub_ny, sub_nx)
 
-    U_subap_all = fft.ifftshift(U_subap_all, axes=(-2, -1))
-    U_subap_all = fft.ifft2(U_subap_all, axes=(-2, -1))
+    result = xp.empty((ny_subabs, nx_subabs, sub_ny, sub_nx), dtype=xp.float32)
+    for y in range(ny_subabs):
+        ys = slice(y * sub_ny, (y + 1) * sub_ny)
+        for x in range(nx_subabs):
+            xs = slice(x * sub_nx, (x + 1) * sub_nx)
+            shifted = fft.ifftshift(spectrum[:, ys, xs], axes=(-2, -1))
+            field = fft.ifft2(shifted, axes=(-2, -1))
+            del shifted
+            filtered = svd_filter_batched(
+                xp, field.transpose(1, 2, 0)[None, None, ...], svd_threshold,
+                block_size_mib=svd_block_size_mib, regularization=svd_regularization,
+            )[0, 0].transpose(2, 0, 1)
+            del field
+            temporal = fft.fft(filtered, axis=0, norm="ortho")
+            del filtered
+            result[y, x] = _subaperture_power(xp, temporal, bands, axis=0)
+            del temporal
+    return result
 
-    U_subap_all = U_subap_all.transpose(1, 2, 3, 4, 0)
 
-    # SVD filtering
-    U_subap_all = svd_filter_batched(xp, U_subap_all, svd_threshold)
+def _validate_subaperture_mode(mode):
+    if mode not in ("sequential", "parallel"):
+        raise ValueError("sub_aps_process must be 'sequential' or 'parallel'")
 
-    B = ny_subabs * nx_subabs
-    U_subap_all = U_subap_all.reshape(B, sub_ny, sub_nx, Nz).transpose(0, 3, 1, 2)
 
-    # Frequency filtering
-    idxs, _ = frequency_symmetric_filtering(
-        xp, fft, time_window, fs, low_freq, high_freq=high_freq
-    )
-    U_ft = fft.fft(U_subap_all, axis=1, norm="ortho")[:, idxs, :, :]
-    M0 = xp.mean(xp.abs(U_ft) ** 2, axis=1)
-
-    return M0.reshape(ny_subabs, nx_subabs, sub_ny, sub_nx).astype(xp.float32)
+def _subaperture_power(xp, spectrum, bands, axis):
+    """Mean band power, preserving the original frequency-bin normalization."""
+    count = sum(part.stop - part.start for part in bands)
+    shape = spectrum.shape[:axis] + spectrum.shape[axis + 1:]
+    image = xp.zeros(shape, dtype=xp.float32)
+    for part in bands:
+        selection = (slice(None),) * axis + (part,)
+        power = xp.abs(spectrum[selection])
+        xp.square(power, out=power)
+        image += xp.sum(power, axis=axis)
+        del power
+    return image / count if count else xp.full_like(image, xp.nan)
 
 
 def calculate_displacements(
@@ -146,6 +196,7 @@ def calculate_displacements(
     shifts_range=20.0,
     ref=None,
     mask_disk_ratio=None,
+    diagnostics=None,
 ):
     """Calculate subaperture displacements using phase correlation"""
     ny_s, nx_s, Ny, Nx = U_subaps.shape
@@ -244,6 +295,9 @@ def calculate_displacements(
     shift_y[bad] = xp.nan
     shift_x[bad] = xp.nan
 
+    if diagnostics is not None:
+        diagnostics["shack_hartmann_shifts"] = xp.stack((shift_y, shift_x), axis=-1).astype(xp.float32)
+
     return shift_y.astype(xp.float32), shift_x.astype(xp.float32)
 
 
@@ -256,7 +310,14 @@ def calculate_displacements_graph_laplacian(
     deviation_threshold=3.0,
     shifts_range=20.0,
     use_corr_weights=False,
+    diagnostics=None,
 ):
+    """Solve shifts; optional diagnostics store accepted directed pair shifts.
+
+    Shape is (ny_sub, nx_sub, ny_sub, nx_sub, 2), last axis (dy, dx)
+    in pixels. Pair [iy, ix, jy, jx] measures j relative to i.
+    Rejected, self, and uncomputed pairs are NaN.
+    """
     ny_s, nx_s, Ny, Nx = U_subaps.shape
     B = ny_s * nx_s
     eps = 1e-12
@@ -276,6 +337,11 @@ def calculate_displacements_graph_laplacian(
     )
     pupil_mask = (xx * xx + yy * yy) <= pupil_threshold
     pupil_flat = pupil_mask.reshape(B)
+
+    pair_shifts = None
+    if diagnostics is not None:
+        pair_shifts = xp.full((B, B, 2), xp.nan, dtype=xp.float32)
+        diagnostics["shack_hartmann_shifts"] = pair_shifts.reshape(ny_s, nx_s, ny_s, nx_s, 2)
 
     valid_ids = xp.where(pupil_flat)[0]
     if valid_ids.size < 2:
@@ -334,6 +400,10 @@ def calculate_displacements_graph_laplacian(
             & (xp.abs(dx) <= 2 * shifts_range)
         )
         ok[i] = False
+
+        if pair_shifts is not None:
+            pair_shifts[i, ok, 0] = dy[ok]
+            pair_shifts[i, ok, 1] = dx[ok]
 
         S_y[i, ok] = dy[ok].astype(xp.float32)
         S_x[i, ok] = dx[ok].astype(xp.float32)

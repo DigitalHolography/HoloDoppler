@@ -39,17 +39,13 @@ def validate_main_parameters(parameters):
         if value < 1:
             raise ValueError("Parameter 'saving_queue_depth' must be positive.")
 
-    value = parameters.get("force_numpy", False)
-    if not (isinstance(value, bool)):
-        raise TypeError(
-            f"Parameter 'force_numpy' must be a boolean; got {value!r} ({type(value).__name__})."
-        )
-
-    value = parameters.get("use_parallel", False)
-    if not (isinstance(value, bool)):
-        raise TypeError(
-            f"Parameter 'use_parallel' must be a boolean; got {value!r} ({type(value).__name__})."
-        )
+    if "force_numpy" in parameters:
+        logger.warning("Parameter 'force_numpy' was removed; use backend='numpy', 'cupy', or 'auto'.")
+    if "temporal_transformation" in parameters:
+        raise ValueError("Parameter 'temporal_transformation' was removed; spectral processing always uses FourierTransform.")
+    value = parameters.get("backend", "auto")
+    if not isinstance(value, str) or value not in {"auto", "numpy", "cupy"}:
+        raise ValueError("Parameter 'backend' must be 'auto', 'numpy', or 'cupy'.")
 
     value = parameters.get("numpy_num_workers", 0)
     if not (isinstance(value, Integral) and not isinstance(value, bool)):
@@ -157,6 +153,15 @@ def validate_main_parameters(parameters):
             f"Parameter 'filter2d_low' must be a real number; got {value!r} ({type(value).__name__})."
         )
 
+    for key in ("svd_block_size_mib", "registration_block_size_mib"):
+        value = parameters.get(key, 8)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, Real):
+            raise TypeError(f"{key} must be a real number or null")
+        if not isfinite(value) or value <= 0:
+            raise ValueError(f"{key} must be finite and positive")
+
     value = parameters.get("svd_threshold", 39)
     if not (isinstance(value, Real) and not isinstance(value, bool)):
         raise TypeError(
@@ -173,12 +178,6 @@ def validate_main_parameters(parameters):
     if not (isinstance(value, bool)):
         raise TypeError(
             f"Parameter 'svd_remove_dc' must be a boolean; got {value!r} ({type(value).__name__})."
-        )
-
-    value = parameters.get("temporal_transformation", 'FourierTransform')
-    if not (isinstance(value, str)):
-        raise TypeError(
-            f"Parameter 'temporal_transformation' must be a string; got {value!r} ({type(value).__name__})."
         )
 
     value = parameters.get("sampling_freq", 'use_holovibes')
@@ -221,6 +220,22 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'frequency_bands' must be a sequence of real-number pairs; got {value!r} ({type(value).__name__})."
         )
+
+    value = parameters.get("resize_averaged_images", False)
+    if not isinstance(value, bool):
+        raise TypeError("Parameter 'resize_averaged_images' must be a boolean.")
+
+    value = parameters.get("moments_frequency_ranges", False)
+    if value is not False:
+        if not isinstance(value, (list, tuple)) or not all(
+            isinstance(pair, (list, tuple)) and len(pair) == 2
+            and all(isinstance(v, Real) and not isinstance(v, bool) for v in pair)
+            for pair in value
+        ):
+            raise TypeError("Parameter 'moments_frequency_ranges' must be false or a sequence of real-number pairs.")
+        if any(not all(isfinite(v) for v in pair) or not 0 <= pair[0] < pair[1]
+               for pair in value):
+            raise ValueError("Parameter 'moments_frequency_ranges' requires finite cutoffs with 0 <= low < high.")
 
     value = parameters.get("registration_flatfield_gw", 35.0)
     if not (isinstance(value, Real) and not isinstance(value, bool)):
@@ -300,6 +315,13 @@ def validate_main_parameters(parameters):
             f"Parameter 'shack_hartmann_autofocus' must be a boolean; got {value!r} ({type(value).__name__})."
         )
 
+    value = parameters.get("shack_hartmann_autofocus_z4_threshold_rad", None)
+    if value is not None :
+        if isinstance(value, bool) or not isinstance(value, Real):
+            raise TypeError("shack_hartmann_autofocus_z4_threshold_rad must be a real number")
+        if not isfinite(value) or value <= 0:
+            raise ValueError("shack_hartmann_autofocus_z4_threshold_rad must be finite and positive")
+
     value = parameters.get("shack_hartmann_autofocus_batch_size", 256)
     if not (isinstance(value, Integral) and not isinstance(value, bool)):
         raise TypeError(
@@ -311,6 +333,18 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'shack_hartmann' must be a boolean; got {value!r} ({type(value).__name__})."
         )
+
+    value = parameters.get("shack_hartmann_sub_aps_process", "sequential")
+    if not isinstance(value, str):
+        raise TypeError("shack_hartmann_sub_aps_process must be a string")
+    if value not in ("sequential", "parallel"):
+        raise ValueError("shack_hartmann_sub_aps_process must be 'sequential' or 'parallel'")
+
+    value = parameters.get("shack_hartmann_svd_regularization", 1e-12)
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise TypeError("shack_hartmann_svd_regularization must be a real number")
+    if not isfinite(value) or value < 0:
+        raise ValueError("shack_hartmann_svd_regularization must be finite and nonnegative")
 
     value = parameters.get("shack_hartmann_nx_subap", 5)
     if not (isinstance(value, Integral) and not isinstance(value, bool)):
@@ -427,8 +461,6 @@ def validate_main_parameters(parameters):
         if not isinstance(parameters.get(key, False), bool):
             raise TypeError(f"{key} must be a boolean")
     if parameters.get("color_Doppler_image", False) or parameters.get("directional_Doppler_image", False):
-        if parameters.get("temporal_transformation") != "FourierTransform":
-            raise ValueError("Doppler images require temporal_transformation='FourierTransform'")
         for key, default in (
             ("color_Doppler_low_frequency_band", [3000, 9000]),
             ("color_Doppler_high_frequency_band", [9000, 18000]),

@@ -410,11 +410,7 @@ class UI(BaseTk):
         import numpy as np
 
         for name in (
-            "M0",
-            "moment_0",
             "moment0",
-            "M0ff",
-            "moment_0_ff",
             "moment0ff",
             "Projection",
             "Projectionff",

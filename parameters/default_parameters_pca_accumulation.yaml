@@ -1,10 +1,12 @@
 pipeline_name: "pca_accumulation"
 
-# optional backend management
-force_numpy: false
+# backend management
+backend: "auto" # auto, numpy (CPU), or cupy (GPU; falls back to CPU if unavailable)
 numpy_num_workers: 8 # Numpy only, the number of parallel workers to be used
 cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and downloads.
 cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM.
+svd_block_size_mib: null # Target MiB per SVD pixel-block work array (main filtering and sequential SH); null processes all pixels at once.
+shack_hartmann_sub_aps_process: "parallel" # "sequential": lower RAM/VRAM; "parallel": batched SVD/FFTs, potentially faster but uses more RAM/VRAM.
 
 # saving management
 live_saving: true # false saves all outputs after processing; ECC still buffers when true.
@@ -53,6 +55,7 @@ shack_hartmann: false # Enable Live (every batch) Shack-Hartmann processing
 shack_hartmann_nx_subap: 5 # Number of subapertures in X
 shack_hartmann_ny_subap: 5 # Number of subapertures in Y
 shack_hartmann_svd_threshold: 10
+shack_hartmann_svd_regularization: 1.0e-12 # SVD covariance diagonal regularization; 0 disables it.
 shack_hartmann_pupil_threshold: 1.5 # Rejection of the side sub images if they are too
 shack_hartmann_deviation_threshold: 10.0 # Max displacement accepted in number of the std
 shack_hartmann_shifts_pixel_range_threshold: 1000.0 # Max displacement accepted in pixels

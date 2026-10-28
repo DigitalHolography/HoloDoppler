@@ -8,13 +8,16 @@ from PIL import Image
 import pytest
 
 from holodoppler import saving
+from holodoppler.saving import data as saving_data
+from holodoppler.saving import media as saving_media
+from holodoppler.saving import session as saving_session
 from holodoppler.pipelines import main_default
 
 
 @pytest.fixture
 def output_factory(tmp_path, monkeypatch):
-    monkeypatch.setattr(saving, "save_metadata", lambda *args: None)
-    monkeypatch.setattr(saving, "get_git_version", lambda: "test")
+    monkeypatch.setattr(saving_data, "save_metadata", lambda *args: None)
+    monkeypatch.setattr(saving_data, "get_git_version", lambda: "test")
     reader = SimpleNamespace(file_path=tmp_path / "input.raw")
 
     def create(**kwargs):
@@ -88,7 +91,7 @@ def test_invalid_option_before_creating_destination(output_factory, tmp_path):
 
 
 def test_directory_access_probe(output_factory, monkeypatch):
-    monkeypatch.setattr(saving.tempfile, "TemporaryFile", Mock(side_effect=PermissionError("locked")))
+    monkeypatch.setattr(saving_session.tempfile, "TemporaryFile", Mock(side_effect=PermissionError("locked")))
     with pytest.raises(PermissionError, match="locked"):
         output_factory()
 
@@ -136,7 +139,7 @@ def test_integer_and_nonfinite_normalization(output_factory, monkeypatch, dtype)
         assert frame.dtype == np.uint8
         assert np.isfinite(frame).all()
         assert frame[0, 0, 0] == (0 if dtype == np.float32 else 255)
-        assert np.isfinite(output._h5["moment0"][:]).all()
+        np.testing.assert_equal(output._h5["moment0"][0], value)
 
 
 def test_encoder_failure_releases_resources(output_factory, monkeypatch):
@@ -186,9 +189,11 @@ def test_real_encoder_round_trip(output_factory):
 
 
 @pytest.mark.parametrize("ecc", [False, True])
-def test_pipeline_streaming_and_ecc_order(tmp_path, monkeypatch, ecc):
+@pytest.mark.parametrize("gpu", [False, True])
+def test_pipeline_streaming_and_ecc_order(tmp_path, monkeypatch, ecc, gpu):
     from holodoppler import backend
 
+    monkeypatch.setattr(backend, "is_gpu", gpu)
     monkeypatch.setattr(backend, "to_numpy", np.asarray)
     monkeypatch.setattr(backend, "clear_gpu_memory", lambda: None)
     monkeypatch.setattr(main_default, "_get_autofocus_phase_term", lambda *args, **kw: (None, None))
@@ -201,8 +206,12 @@ def test_pipeline_streaming_and_ecc_order(tmp_path, monkeypatch, ecc):
     def batches(reader, indices, batch_size, process, consume, **kwargs):
         for t in range(2):
             result = {name: np.full((6, 8), t, np.float32)
-                      for name in ("M0", "M0ff", "M1", "M2")}
-            result["sh_psd"] = np.ones((8, 6, 8), np.float32)
+                      for name in ("moment0", "moment0ff", "moment1", "moment2")}
+            result["sh_psd"] = np.full((8, 6, 8), 1 + 2 * t, np.float32)
+            if gpu:
+                result = kwargs["prepare_result"](result)
+                assert "sh_psd" not in result
+                assert "averaged_spectrogram" not in result
             consume(t, result)
             assert len(calls) == (0 if ecc else 4 * (t + 1))
 
@@ -210,7 +219,8 @@ def test_pipeline_streaming_and_ecc_order(tmp_path, monkeypatch, ecc):
     monkeypatch.setattr(main_default, "register_with_ecc", lambda *args, **kw: np.zeros((2, 2, 3)))
     monkeypatch.setattr(main_default, "apply_ecc_registration", lambda value, *args, **kw: value + 10)
     main_default._process_to_output(None, dict(batch_size=4, first_frame=0,
-        image_registration=False, image_registration_with_ecc=ecc),
+        image_registration=False, image_registration_with_ecc=ecc,
+        save_averaged_spectrogram=True),
         [0, 4], destination, None)
     moments = [call for call in calls if call[0] == "moment0"]
     assert [call[2] for call in moments] == [0, 1]
@@ -230,7 +240,7 @@ def test_default_process_h5_with_square_and_spectrograms(tmp_path, monkeypatch, 
 
     # Run actual batch processing and HDF5 saving; video encoding has its own round trip.
     monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
-    monkeypatch.setattr(saving, "save_video", lambda *args, **kwargs: None)
+    monkeypatch.setattr(saving_media, "save_video", lambda *args, **kwargs: None)
     streaming_output = Mock(wraps=saving.OutputClass)
     bundle_output = Mock(wraps=saving.save_outputs)
     monkeypatch.setattr(main_default, "OutputClass", streaming_output)
@@ -242,7 +252,7 @@ def test_default_process_h5_with_square_and_spectrograms(tmp_path, monkeypatch, 
     monkeypatch.setattr(main_default, "get_reader", lambda path: reader)
     params = yaml.safe_load((Path(__file__).resolve().parents[1] /
         "parameters/default_parameters_default.yaml").read_text())
-    params.update(force_numpy=True, batch_size=8, batch_stride=8, first_frame=0,
+    params.update(backend="numpy", batch_size=8, batch_stride=8, first_frame=0,
         end_frame=-1, numpy_num_workers=1, shack_hartmann_autofocus=False,
         shack_hartmann=False, image_registration=True, registration_ref_first_frame=0,
         registration_ref_batch_size=8, image_registration_with_ecc=ecc,
@@ -284,7 +294,7 @@ def test_nonlive_saving_happens_after_all_batches(monkeypatch):
 
     def batches(reader, indices, batch_size, process, consume, **kwargs):
         for t in range(2):
-            consume(t, {"M0": np.full((6, 8), t, np.float32)})
+            consume(t, {"moment0": np.full((6, 8), t, np.float32)})
             save.assert_not_called()
 
     monkeypatch.setattr(main_default, "run_batches", batches)

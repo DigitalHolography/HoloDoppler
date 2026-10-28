@@ -47,7 +47,7 @@ def calibration_calc_res(file_reader, parameters):
 
     freqs = freqs[idxs]
 
-    res["M0"] = np.sum(psd[idxs] * (freqs[..., np.newaxis, np.newaxis] ** 0), axis=0)
+    res["moment0"] = np.sum(psd[idxs] * (freqs[..., np.newaxis, np.newaxis] ** 0), axis=0)
 
     return res
 

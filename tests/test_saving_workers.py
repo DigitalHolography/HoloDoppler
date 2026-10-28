@@ -11,6 +11,7 @@ from PIL import Image
 import pytest
 
 from holodoppler import saving
+from holodoppler.saving import data as saving_data
 from holodoppler.config import validate_main_parameters
 
 
@@ -154,7 +155,7 @@ def test_worker_failure_wakes_blocked_producer_and_closes_resources(tmp_path, mo
     try:
         output.add("registration", np.zeros(2), 0)
         assert started.wait(5)
-        csv_handle = output._streams["registration"]["csv"]
+        csv_handle = output._streams["registration"]["csv"].handle
         producer.start()
         assert attempting.wait(5)
     finally:
@@ -257,9 +258,9 @@ def _assert_equal_bundles(first, second):
 @pytest.mark.parametrize("workers", [1, 3])
 @pytest.mark.parametrize("live", [True, False])
 def test_real_outputs_equal_synchronous_saving(tmp_path, monkeypatch, workers, live):
-    monkeypatch.setattr(saving, "get_git_version", lambda: "test")
+    monkeypatch.setattr(saving_data, "get_git_version", lambda: "test")
     # Avoid comparing per-run parameter metadata files; HDF5 metadata is checked above.
-    monkeypatch.setattr(saving, "save_metadata", lambda *args, **kwargs: None)
+    monkeypatch.setattr(saving_data, "save_metadata", lambda *args, **kwargs: None)
     reader = SimpleNamespace(file_path=tmp_path / "input.raw")
     video = np.arange(3 * 17 * 19, dtype=np.float32).reshape(3, 17, 19)
     video[1, 0, :3] = [np.nan, np.inf, -np.inf]

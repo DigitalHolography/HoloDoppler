@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "holodoppler"
-version = "1.4"
+version = "1.4.4"
 description = "HoloDoppler processing and preview tools."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -25,6 +25,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+benchmark = [
+    "psutil>=5.9",
+]
 dev = [
     "pytest>=9.1.1",
 ]

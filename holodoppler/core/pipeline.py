@@ -34,8 +34,7 @@ def validate_reference_batch(reader, first, size, label, skip_every=None):
 
 def prepare_input(file_path, parameters):
     parameters = dict(parameters)
-    if parameters.get("force_numpy", False):
-        backend.set_backend("numpy")
+    backend.set_backend(parameters.get("backend", "auto"))
     reader = get_reader(file_path)
     if reader.extension == ".holo":
         parameters = update_from_holo_footer(parameters, reader.footer)
@@ -60,11 +59,6 @@ def read_reference(reader, parameters, first, size, label):
     ))).astype(backend.xp.float32, copy=False)
 
 
-def output_name(name):
-    return {"M0": "moment0", "M0ff": "moment0ff",
-            "M1": "moment1", "M2": "moment2"}.get(name, name)
-
-
 def prepare_result(result, parameters):
     prepared = {}
     for key, value in result.items():
@@ -73,7 +67,7 @@ def prepare_result(result, parameters):
         if parameters.get("square", False) and value.ndim == 2:
             size = max(value.shape)
             value = resize_frames(backend.xp, backend.zoom, backend.to_backend(value), size, size)
-        prepared[output_name(key)] = backend.to_numpy(value)
+        prepared[key] = backend.to_numpy(value)
     return prepared
 
 

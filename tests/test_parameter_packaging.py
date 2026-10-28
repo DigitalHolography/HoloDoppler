@@ -108,16 +108,23 @@ def test_wheel_and_source_distribution_include_canonical_presets(tmp_path):
     ], cwd=ROOT, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
     sources = list((ROOT / "parameters").glob("*.yaml"))
+    saving_sources = list((ROOT / "holodoppler" / "saving").glob("*.py"))
     wheel = next((tmp_path / "dist").glob("*.whl"))
     site = tmp_path / "installed"
     with zipfile.ZipFile(wheel) as archive:
         for source in sources:
             assert archive.read(f"holodoppler/parameters/{source.name}") == source.read_bytes()
+        assert "holodoppler/saving.py" not in archive.namelist()
+        for source in saving_sources:
+            assert archive.read(f"holodoppler/saving/{source.name}") == source.read_bytes()
         archive.extractall(site)
     with tarfile.open(next((tmp_path / "dist").glob("*.tar.gz"))) as archive:
         names = archive.getnames()
         for source in sources:
             name = next(name for name in names if name.endswith(f"/parameters/{source.name}"))
+            assert archive.extractfile(name).read() == source.read_bytes()
+        for source in saving_sources:
+            name = next(name for name in names if name.endswith(f"/holodoppler/saving/{source.name}"))
             assert archive.extractfile(name).read() == source.read_bytes()
     work = tmp_path / "unrelated-working-directory"
     work.mkdir()
@@ -126,6 +133,9 @@ def test_wheel_and_source_distribution_include_canonical_presets(tmp_path):
         sys.executable, "-c",
         "from pathlib import Path; from holodoppler.ui.paths import parameters_dir; "
         "from holodoppler.ui.settings_store import SettingsStore; "
+        "from holodoppler.saving import OutputClass, save_outputs; "
+        "assert OutputClass.__module__ == 'holodoppler.saving.session'; "
+        "assert save_outputs.__module__ == 'holodoppler.saving.session'; "
         "import sys; assert parameters_dir() == Path(sys.argv[1]); "
         "assert len(SettingsStore()._default_parameter_sources()) == int(sys.argv[2])",
         str(site / "holodoppler" / "parameters"), str(len(sources)),

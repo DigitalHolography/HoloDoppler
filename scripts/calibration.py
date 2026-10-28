@@ -62,7 +62,7 @@ def calibration_calc_res(file_reader, parameters):
 
     freqs = freqs[idxs]
 
-    res["M0"] = np.sum(psd[idxs] * (freqs[..., np.newaxis, np.newaxis] ** 0), axis=0)
+    res["moment0"] = np.sum(psd[idxs] * (freqs[..., np.newaxis, np.newaxis] ** 0), axis=0)
 
     return res
 
@@ -107,13 +107,13 @@ def _cmd(args):
     file_reader.close()
     debug_imgs = plot_debug_safe(res, parameters)
 
-    # --- Add M0 ---
-    if "M0" in res:
-        M0 = res["M0"]
-        if cp is not None and isinstance(M0, cp.ndarray):
-            M0 = M0.get()
-        M0 = (M0 - np.min(M0)) / (np.max(M0) - np.min(M0) + 1e-12)
-        debug_imgs["M0"] = (M0 * 255).astype(np.uint8)
+    # --- Add moment0 ---
+    if "moment0" in res:
+        moment0 = res["moment0"]
+        if cp is not None and isinstance(moment0, cp.ndarray):
+            moment0 = moment0.get()
+        moment0 = (moment0 - np.min(moment0)) / (np.max(moment0) - np.min(moment0) + 1e-12)
+        debug_imgs["moment0"] = (moment0 * 255).astype(np.uint8)
 
     print("DEBUG KEYS:", list(debug_imgs.keys()))
 
