@@ -52,7 +52,8 @@ function accepts them.
 ```mermaid
 flowchart TD
     A[Input recording and parameters] --> B[Resolve metadata and validate]
-    B --> C[Select complete batches]
+    B --> V[Validate registration and autofocus reference bounds]
+    V --> C[Select complete batches]
     C --> D[Optional fixed Shack-Hartmann autofocus]
     D --> E[Optional registration reference]
     E --> F[Read next batch]
@@ -86,7 +87,11 @@ The reader supplies file metadata. Values marked `use_holovibes` are resolved
 from the `.holo` footer; supported `.cine` values marked `use_metadata` are
 resolved from its header. Explicit numerical values remain unchanged. The
 default pipeline passes its parameter mapping to resolvers that mutate it.
-Validation happens after resolution.
+Validation happens once after resolution in shared preview/process setup. Enabled
+registration and autofocus reference bounds are checked next, before processing
+batch indices are calculated or output writers are opened. Preview retains its
+first-batch behavior without translation registration or ECC. The registration
+reference receives the fixed autofocus correction when autofocus is enabled.
 
 [`calculate_batch_indices`](../holodoppler/core/batching.py) schedules only complete
 batches. Let `N = batch_size`, `s = skip_every` (1 when omitted), and `b` be a
@@ -311,8 +316,8 @@ come from code review, not scientific validation against experimental recordings
 3. **There are two orchestration implementations.** `core/pipeline.py` provides
    setup, accumulation, ECC and saving for other pipelines. The default pipeline
    still owns its own orchestration for GPU aggregation and delayed color rendering.
-   Shared lifecycle operations could be extracted gradually while preserving these
-   requirements.
+   Default preview and process share local setup and validation helpers without
+   importing `core.pipeline`.
 4. **Output meaning is encoded in strings and dimensions.** Registration, resizing
    and saving independently infer semantics from keys and shapes. An output
    specification with axes, spatial/temporal role, registration policy and export

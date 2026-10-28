@@ -54,9 +54,49 @@ from holodoppler.saving import (
 )
 
 
-from holodoppler.core.pipeline import (
-    frame_stack as _frame_stack, validate_reference_batch as _validate_reference_batch,
-)
+def _frame_stack(frames):
+    return frames[None, ...] if frames.ndim == 2 else frames
+
+
+def _validate_reference_batch(reader, first, size, label, skip_every=None):
+    step = 1 if skip_every is None else skip_every
+    if size <= 0 or first < 0 or first + (size - 1) * step >= reader.total_frames:
+        raise ValueError(
+            f"{label} batch (first_frame={first}, batch_size={size}) "
+            f"cannot fit within {reader.total_frames} file frames"
+        )
+
+
+def _prepare_input(file_path, parameters, *, preview=False):
+    backend.set_backend(parameters.get("backend", "auto"))
+    reader = get_reader(file_path)
+    if reader.extension == ".holo":
+        parameters = update_from_holo_footer(parameters, reader.footer)
+    elif reader.extension == ".cine":
+        parameters = update_from_cine_metadata(parameters, reader.header)
+    validate_main_parameters(parameters)
+    skip = parameters.get("skip_every")
+    if parameters.get("image_registration", False):
+        _validate_reference_batch(reader, parameters["registration_ref_first_frame"],
+                                  parameters["registration_ref_batch_size"],
+                                  "Registration reference", skip)
+    if parameters.get("shack_hartmann_autofocus", False):
+        _validate_reference_batch(reader, parameters["registration_ref_first_frame"],
+                                  parameters.get("shack_hartmann_autofocus_batch_size",
+                                                 parameters["batch_size"]),
+                                  "Autofocus reference", skip)
+    if preview:
+        _validate_reference_batch(reader, parameters["first_frame"],
+                                  parameters["batch_size"], "Preview", skip)
+        indices = range(parameters["first_frame"], parameters["first_frame"] + 1)
+    else:
+        indices = calculate_batch_indices(
+            parameters["first_frame"], parameters.get("end_frame", 0),
+            parameters["batch_size"], parameters["batch_stride"], reader.total_frames,
+            skip_every=skip,
+        )
+    return reader, parameters, indices
+
 
 
 def _process_batch(parameters, frames, phase_term=None, output_dict=None,
@@ -496,9 +536,6 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None,
         ref_first_frame, ref_batch_size,
     )
 
-    _validate_reference_batch(
-        file_reader, ref_first_frame, ref_batch_size, "Autofocus reference", parameters.get("skip_every")
-    )
     ref_frames = reference_frames
     if ref_frames is None:
         ref_frames = file_reader.read_frames(
@@ -747,32 +784,7 @@ def _square_spectrum(spectrum, parameters):
 
 
 def preview(file_path, parameters):
-    backend.set_backend(parameters.get("backend", "auto"))
-    file_reader = get_reader(file_path)
-
-    logger.debug("Preview input: %s", file_path)
-
-    if file_reader.extension == ".holo":
-        logger.debug("File header: %s", file_reader.header)
-
-        parameters = update_from_holo_footer(
-            parameters,
-            file_reader.footer,
-        )
-
-    if file_reader.extension == ".cine":
-        logger.debug("File header: %s", file_reader.header)
-
-        parameters = update_from_cine_metadata(
-            parameters,
-            file_reader.header
-        )
-
-    validate_main_parameters(parameters)
-
-    _validate_reference_batch(
-        file_reader, parameters["first_frame"], parameters["batch_size"], "Preview", parameters.get("skip_every")
-    )
+    file_reader, parameters, _ = _prepare_input(file_path, parameters, preview=True)
 
     # ------------------------------------------------------------
     # Build autofocus phase once from the configured reference batch
@@ -834,41 +846,7 @@ def preview(file_path, parameters):
 
 
 def process(file_path, parameters, progress_callback=None):
-    backend.set_backend(parameters.get("backend", "auto"))
-
-    file_reader = get_reader(file_path)
-
-    if file_reader.extension == ".holo":
-        logger.debug("File header: %s", file_reader.header)
-
-        parameters = update_from_holo_footer(
-            parameters,
-            file_reader.footer,
-        )
-
-    if file_reader.extension == ".cine":
-        logger.debug("File header: %s", file_reader.header)
-
-        parameters = update_from_cine_metadata(
-            parameters,
-            file_reader.header
-        )
-
-    validate_main_parameters(parameters)
-
-    batch_size = parameters["batch_size"]
-    batch_stride = parameters["batch_stride"]
-    first_frame = parameters["first_frame"]
-
-    end_frame = parameters.get(
-        "end_frame",
-        0,
-    )
-
-    batch_indices = calculate_batch_indices(
-        first_frame, end_frame, batch_size, batch_stride, file_reader.total_frames,
-        skip_every=parameters.get("skip_every"),
-    )
+    file_reader, parameters, batch_indices = _prepare_input(file_path, parameters)
     if not batch_indices:
         return
 
@@ -895,11 +873,6 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
     )
     ref_frames = None
     if explicit_reference:
-        _validate_reference_batch(
-            file_reader, parameters["registration_ref_first_frame"],
-            parameters["registration_ref_batch_size"], "Registration reference",
-            parameters.get("skip_every"),
-        )
         ref_frames = backend.to_backend(_frame_stack(file_reader.read_frames(
             first_frame=parameters["registration_ref_first_frame"],
             batch_size=parameters["registration_ref_batch_size"],
