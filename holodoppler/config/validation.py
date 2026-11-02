@@ -4,6 +4,7 @@ from numbers import Integral, Real
 from math import isfinite
 
 from holodoppler.logging import logger
+from holodoppler.core.filtering import _welch_window
 
 
 def validate_main_parameters(parameters):
@@ -68,6 +69,27 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'batch_size' must be an integer; got {value!r} ({type(value).__name__})."
         )
+
+    if not isinstance(parameters.get("welch_enabled", False), bool):
+        raise TypeError("welch_enabled must be a boolean")
+    for key in ("welch_batch_size", "welch_stride"):
+        value = parameters.get(key, 32)
+        if isinstance(value, bool) or not isinstance(value, Integral):
+            raise TypeError(f"{key} must be a positive integer")
+        if value <= 0:
+            raise ValueError(f"{key} must be positive")
+    window = parameters.get("welch_windowing")
+    if window is not None:
+        if not isinstance(window, str):
+            raise TypeError("welch_windowing must be a window name or null")
+        _welch_window(window, parameters.get("welch_batch_size", 32))
+    if parameters.get("welch_enabled", False):
+        length = parameters.get("welch_batch_size", 32)
+        if length > parameters.get("batch_size", 256):
+            raise ValueError("welch_batch_size must not exceed batch_size")
+        if (parameters.get("image_registration", False)
+                and length > parameters.get("registration_ref_batch_size", 512)):
+            raise ValueError("welch_batch_size must not exceed registration_ref_batch_size")
 
     value = parameters.get("first_frame", 0)
     if not (isinstance(value, Integral) and not isinstance(value, bool)):

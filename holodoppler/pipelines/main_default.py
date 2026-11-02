@@ -15,6 +15,7 @@ from holodoppler.core.filtering import (
     frequency_symmetric_filtering,
     symmetric_frequency_slices,
     svd_filter,
+    welch_power_spectrum,
 )
 from holodoppler.core.image_utils import (
     gaussian_flatfield,
@@ -104,7 +105,6 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     xp = backend.xp
     fft = backend.fft
 
-    nt_sub = frames.shape[0]
     prop_method = parameters["spatial_propagation"]
 
     # ------------------------------------------------------------
@@ -192,16 +192,20 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     # ------------------------------------------------------------
     # Temporal Fourier transform
     # ------------------------------------------------------------
-    spectrum_f = fourier_time_transform(
-        xp,
-        fft,
-        holograms_f,
-    )
+    if parameters.get("welch_enabled", False):
+        psd = welch_power_spectrum(
+            xp, fft, holograms_f,
+            batch_size=parameters.get("welch_batch_size", 32),
+            stride=parameters.get("welch_stride", 32),
+            windowing=parameters.get("welch_windowing"),
+        )
+    else:
+        spectrum_f = fourier_time_transform(xp, fft, holograms_f)
+        psd = xp.abs(spectrum_f)
+        del spectrum_f
+        xp.square(psd, out=psd)
     del holograms_f
-
-    psd = xp.abs(spectrum_f)
-    del spectrum_f
-    xp.square(psd, out=psd)
+    nt_sub = psd.shape[0]
 
     # ------------------------------------------------------------
     # Frequency filtering

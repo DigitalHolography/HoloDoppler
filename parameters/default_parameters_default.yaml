@@ -38,6 +38,12 @@ svd_threshold: 23
 svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold"
 svd_remove_dc: true
 
+# Welch spectral averaging (after SVD; input batching stays unchanged)
+welch_enabled: false
+welch_windowing: null # Named periodic taper (e.g. hann, hamming); null applies no taper.
+welch_batch_size: 32 # FFT segment length in selected frames; positive integer, never null.
+welch_stride: 32 # Spacing between segment starts in selected frames.
+
 # Temporal sampling
 sampling_freq: "use_holovibes" # Sampling frequency in Hz
 low_freq: 6000 # Low frequency cutoff in Hz

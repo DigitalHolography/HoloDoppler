@@ -166,9 +166,20 @@ is estimated per processing batch, and for a separately processed reference.
    bypasses the entire filter, including mean removal. Pixel blocks limit
    intermediate work arrays, not total memory.
 5. **Temporal FFT:** `fft(..., axis=0, norm="ortho")` always produces the complex
-   spectrum. No temporal window is applied here.
+   spectrum. By default no temporal window is applied. With `welch_enabled: true`,
+   complete segments of `welch_batch_size` selected frames (default 32) start every
+   `welch_stride` selected frames (default 32); incomplete trailing segments are
+   discarded. Both sizes must be positive integers; neither accepts null.
+   `welch_windowing: null` applies no taper; a name such as `hann` or `hamming`
+   selects a SciPy periodic taper. No additional detrending is performed.
 6. **Power spectrum:** `P = abs(spectrum)**2`, optionally followed by corner
-   compensation.
+   compensation. Welch averages segment powers, normalized by the taper's mean
+   squared weight when present, using one segment at a time. Frequency bins use
+   the segment FFT length; all moments, Doppler maps and saved spectra use this
+   averaged spectrum. Registration reference images use the same Welch settings
+   and must contain at least one complete segment. Shack-Hartmann wavefront
+   estimation is unchanged. Input `batch_size`, `batch_stride`, and output cadence
+   remain unchanged; strides larger than the segment length leave gaps.
 7. **Directional intermediates:** optional positive/negative maps are zeroth
    moments (sums of power) over directional PSD bins, with energy-preserving
    flat-field normalization. The existing inclusive directional bin intervals
