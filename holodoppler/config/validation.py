@@ -267,6 +267,8 @@ def validate_main_parameters(parameters):
     if not isinstance(value, bool):
         raise TypeError("Parameter 'resize_averaged_images' must be a boolean.")
 
+    if not isinstance(parameters.get("compute_gaussian_width", True), bool):
+        raise TypeError("compute_gaussian_width must be a boolean")
     value = parameters.get("moments_frequency_ranges", False)
     if value is not False:
         if not isinstance(value, (list, tuple)) or not all(

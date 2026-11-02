@@ -43,6 +43,9 @@ welch_windowing: null # Named periodic taper (e.g. hann, hamming); null applies 
 welch_batch_size: 32 # FFT segment length in selected frames; positive integer, never null.
 welch_stride: 32 # Spacing between segment starts in selected frames.
 
+# Gaussian spectral width after SVD, before frequency filtering
+compute_gaussian_width: true
+
 # Temporal sampling
 sampling_freq: "use_metadata" # Sampling frequency in Hz
 low_freq: 6000 # Low frequency cutoff in Hz

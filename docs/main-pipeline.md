@@ -359,3 +359,19 @@ computation first; unavailable keys log a warning and fall back to `moment0ff`.
 With `pca_compute: true`, setting `pca_flatfield: true` applies Gaussian flatfield
 correction using `registration_flatfield_gw` and emits only `pca_sum_ff` instead
 of `pca_sum`. Both PCA variants support numerical and media exports.
+
+
+Gaussian spectral width is enabled by `compute_gaussian_width: true`. The output
+`gaussian_width` is intrinsic Gaussian FWHM in Hz, using the magnitude of the
+post-SVD PSD in double precision (Welch when enabled), before corner compensation
+and moment cutoffs. At least five FFT bins are required.
+The estimator always uses every FFT bin of the complete spectrum.
+For effective sampling frequency fs (accounting for frame skipping), define
+Hk = sum abs(PSD(f)) exp(-i 2 pi k f/fs).
+Then sigma = fs/(pi*sqrt(6)) * sqrt(log(abs(H1))-log(abs(H2))) and
+FWHM = 2*sqrt(2*log(2))*sigma. No flat-field correction is applied.
+An estimate is valid only for finite positive spectral sums, finite harmonic
+magnitudes exceeding 100*double-epsilon*sum(abs(PSD)), and abs(H1)>abs(H2).
+Invalid estimates return zero, matching the MATLAB implementation (despite its
+comment promising NaN). Outputs are registered and saved alongside other scalar
+maps, including numerical HDF5 data.
