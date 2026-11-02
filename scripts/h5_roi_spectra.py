@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog
 
 import h5py
 import numpy as np
@@ -19,8 +19,9 @@ from matplotlib.widgets import RectangleSelector
 # 'density'    : divide by N * fs (power/Hz for an unnormalized FFT)
 # 'unit_area'  : divide by sum(non-DC spectrum) * df (integral becomes 1)
 # 'peak'       : divide by max(non-DC spectrum) (peak becomes 1)
+
 # Unit-area and peak modes compare shapes, removing absolute power differences.
-PSD_NORMALIZATION = 'num_freq' # choose this one !! (if the fft was not normalized in holodoppler as for 1.4.4 and below)
+PSD_NORMALIZATION = 'num_freq' # choose this one or replace with a skip_every based normalisation because its really the fact that frames where skipped that reduce total power.
 
 
 def prepare_spectrum(mean, frequency, fs, normalization=PSD_NORMALIZATION):
@@ -52,6 +53,90 @@ def prepare_spectrum(mean, frequency, fs, normalization=PSD_NORMALIZATION):
         psd = psd / divisor
     bin_sum = psd.sum()
     return frequency[nonzero], psd, bin_sum, bin_sum * df
+
+
+def frequency_range_image(entry, lower, upper, symmetric=False, difference=False):
+    """Sum normalized, non-DC PSD bins per pixel in the requested Hz range."""
+    if not np.isfinite([lower, upper]).all() or lower > upper:
+        raise ValueError('Enter finite frequency bounds with minimum <= maximum.')
+    if difference and lower < 0:
+        raise ValueError('For positive minus negative, enter nonnegative frequency bounds.')
+    # Stored spectra use FFT order, whereas entry frequencies are shifted.
+    frequency = np.fft.ifftshift(entry['freq'])
+    selected = (frequency >= lower) & (frequency <= upper)
+    if symmetric or difference:
+        selected |= (frequency >= -upper) & (frequency <= -lower)
+    selected &= frequency != 0
+    if not selected.any():
+        raise ValueError('The selected range contains no nonzero frequency bins.')
+    spectrum = entry['spectrum']
+    num_freq = spectrum.shape[0]
+    if difference:
+        positive = selected & (frequency > 0)
+        negative = selected & (frequency < 0)
+        image = (spectrum[positive].sum(axis=0, dtype=np.float64)
+                 - spectrum[negative].sum(axis=0, dtype=np.float64))
+    else:
+        image = spectrum[selected].sum(axis=0, dtype=np.float64)
+    if PSD_NORMALIZATION == 'none':
+        divisor = 1.0
+    elif PSD_NORMALIZATION == 'num_freq':
+        divisor = num_freq
+    elif PSD_NORMALIZATION == 'num_freq_squared':
+        divisor = num_freq**2
+    elif PSD_NORMALIZATION == 'density':
+        divisor = num_freq * entry['fs']
+    elif PSD_NORMALIZATION == 'unit_area':
+        divisor = spectrum[frequency != 0].sum(axis=0, dtype=np.float64)
+        divisor *= entry['fs'] / num_freq
+    elif PSD_NORMALIZATION == 'peak':
+        divisor = spectrum[frequency != 0].max(axis=0)
+    else:
+        raise ValueError(f'Unknown PSD_NORMALIZATION: {PSD_NORMALIZATION!r}')
+    return np.divide(image, divisor, out=np.zeros_like(image), where=divisor != 0)
+
+
+class FrequencyRangeDialog(simpledialog.Dialog):
+    def __init__(self, parent, entries, difference=False):
+        self.entries = entries
+        self.difference = difference
+        super().__init__(parent, title=('PSD positive minus negative' if difference
+                                       else 'PSD frequency range'))
+
+    def body(self, master):
+        tk.Label(master, text='Minimum frequency (Hz)').grid(row=0, column=0)
+        tk.Label(master, text='Maximum frequency (Hz)').grid(row=1, column=0)
+        self.lower = tk.Entry(master)
+        self.upper = tk.Entry(master)
+        self.lower.grid(row=0, column=1)
+        self.upper.grid(row=1, column=1)
+        self.lower.insert(0, '0')
+        self.upper.insert(0, f"{self.entries[0]['freq'].max():g}")
+        self.symmetric = tk.BooleanVar(value=True)
+        if self.difference:
+            tk.Label(master, text='Positive [min, max] minus negative [-max, -min]; min >= 0'
+                     ).grid(row=2, column=0, columnspan=2)
+        else:
+            tk.Checkbutton(master, text='Symmetric: also include [-maximum, -minimum]',
+                           variable=self.symmetric).grid(row=2, column=0, columnspan=2)
+        self.sources = [f"{i + 1}: {entry['label']}" for i, entry in enumerate(self.entries)]
+        self.source = tk.StringVar(value=self.sources[0])
+        if len(self.entries) > 1:
+            tk.Label(master, text='Image source').grid(row=3, column=0)
+            tk.OptionMenu(master, self.source, *self.sources).grid(row=3, column=1)
+        return self.lower
+
+    def validate(self):
+        try:
+            lower, upper = float(self.lower.get()), float(self.upper.get())
+            index = self.sources.index(self.source.get())
+            image = frequency_range_image(self.entries[index], lower, upper,
+                                          self.symmetric.get(), difference=self.difference)
+        except ValueError as exc:
+            messagebox.showerror('Invalid frequency range', str(exc), parent=self)
+            return False
+        self.result = (image, lower, upper, self.symmetric.get(), index)
+        return True
 
 
 def dataset(file, names):
@@ -109,6 +194,10 @@ class App:
         tk.Button(bar, text='Open H5', command=self.open).pack(side='left')
         tk.Button(bar, text='skip_every_comparison', command=self.skip_every_comparison).pack(side='left')
         tk.Button(bar, text='Clear ROIs', command=self.clear).pack(side='left')
+        tk.Button(bar, text='Frequency range...', command=self.show_frequency_range).pack(side='left')
+        tk.Button(bar, text='Positive - negative...',
+                  command=lambda: self.show_frequency_range(difference=True)).pack(side='left')
+        tk.Button(bar, text='Reset moment0ff', command=self.reset_moment).pack(side='left')
         self.log_log = tk.BooleanVar(value=False)
         tk.Checkbutton(bar, text='Log-log', variable=self.log_log,
                        command=self.update_spectrum_scale).pack(side='left')
@@ -215,7 +304,7 @@ class App:
         self.moment = moment
         self.image_ax.clear()
         self.spectrum_ax.clear()
-        self.image_ax.imshow(moment, origin='upper', cmap='gray')
+        self.image_artist = self.image_ax.imshow(moment, origin='upper', cmap='gray')
         self.image_ax.set_title('moment0ff — drag to select ROI')
         self.spectrum_ax.set_title(f'Mean spectrum per ROI ({PSD_NORMALIZATION})')
         self.spectrum_ax.set_xlabel('Frequency (Hz)')
@@ -226,6 +315,39 @@ class App:
         self.root.title(title)
         self.update_spectrum_scale()
         self.canvas.draw_idle()
+
+    def show_frequency_range(self, difference=False):
+        if not self.entries:
+            messagebox.showinfo('No data', 'Open an H5 file first.')
+            return
+        dialog = FrequencyRangeDialog(self.root, self.entries, difference=difference)
+        if dialog.result is None:
+            return
+        image, lower, upper, symmetric, index = dialog.result
+        ranges = f'[{lower:g}, {upper:g}]'
+        if difference:
+            ranges += f' - [{-upper:g}, {-lower:g}]'
+        elif symmetric:
+            ranges += f' + [{-upper:g}, {-lower:g}]'
+        self.set_image(image, f'PSD sum {ranges} Hz (DC excluded)\n'
+                       f"{self.entries[index]['label']} ({PSD_NORMALIZATION})",
+                       signed=difference)
+
+    def set_image(self, image, title, signed=False):
+        # Update the existing artist to preserve ROIs and their spectra.
+        self.image_artist.set_data(image)
+        self.image_artist.set_cmap('RdBu_r' if signed else 'gray')
+        if signed:
+            limit = float(np.max(np.abs(image))) or 1.0
+            self.image_artist.set_clim(-limit, limit)
+        else:
+            self.image_artist.autoscale()
+        self.image_ax.set_title(title)
+        self.canvas.draw_idle()
+
+    def reset_moment(self):
+        if self.moment is not None:
+            self.set_image(self.moment, 'moment0ff — drag to select ROI')
 
     def update_spectrum_scale(self):
         """Refresh existing curves when switching between linear and log axes."""
