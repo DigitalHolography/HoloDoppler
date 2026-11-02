@@ -101,6 +101,14 @@ def _prepare_input(file_path, parameters, *, preview=False):
 
 
 
+def _registration_image(result, parameters):
+    key = parameters.get("registration_image", "moment0ff")
+    if key not in result or result[key].ndim not in (2, 3):
+        logger.warning("Registration image %r unavailable; using moment0ff", key)
+        key = "moment0ff"
+    return result[key]
+
+
 def _process_batch(parameters, frames, phase_term=None, output_dict=None,
                    reference_only=False, propagation_kernel=None):
     xp = backend.xp
@@ -177,7 +185,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     if output_dict is None:
         output_dict = {}
 
-    if parameters.get("pca_compute", False) and not reference_only:
+    if parameters.get("pca_compute", False) and (not reference_only or parameters.get("registration_image", "moment0ff") in {"pca_sum", "pca_sum_ff"}):
         window = parameters.get("pca_time_window", 32)
         start, end = parameters.get("pca_index_range", [0, 16])
         count = holograms.shape[0] // window
@@ -192,7 +200,12 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
                 total = image
             else:
                 total += image
-        output_dict["pca_sum"] = total / count
+        if parameters.get("pca_flatfield", False):
+            output_dict["pca_sum_ff"] = gaussian_flatfield(
+                total / count, parameters.get("registration_flatfield_gw", 1.0),
+                backend.gaussian_filter)
+        else:
+            output_dict["pca_sum"] = total / count
 
     # ------------------------------------------------------------
     # SVD filtering
@@ -250,7 +263,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     )
     images = moments(xp, psd[indices], selected_freqs, orders)
     output_dict.update(zip(("moment0", "moment1", "moment2"), images))
-    if reference_only:
+    if reference_only and parameters.get("registration_image", "moment0ff") == "moment0ff":
         output_dict["moment0ff"] = gaussian_flatfield(
             output_dict["moment0"], parameters.get("registration_flatfield_gw", 1.0),
             backend.gaussian_filter,
@@ -701,7 +714,7 @@ def _process_one_batch(
         registration_ref is None
         and parameters.get("image_registration", False)
     ):
-        registration_ref = res["moment0ff"]
+        registration_ref = _registration_image(res, parameters)
 
     if registration_ref is not None:
 
@@ -709,7 +722,7 @@ def _process_one_batch(
             backend.xp,
             backend.fft,
             registration_ref,
-            res["moment0ff"],
+            _registration_image(res, parameters),
             radius=parameters["registration_radius"],
             sub_pixel=parameters["registration_sub_pixel"],
         )
@@ -717,7 +730,7 @@ def _process_one_batch(
         for key, value in list(res.items()):
 
             if (
-                key in {"moment0ff", "moment0", "moment1", "moment2", "sh_psd", "pca_sum"}
+                key in {"moment0ff", "moment0", "moment1", "moment2", "sh_psd", "pca_sum", "pca_sum_ff"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                            "_directional_Doppler_pos", "_directional_Doppler_neg"}
@@ -923,10 +936,11 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
         if (reference_phase is None and not parameters.get("shack_hartmann_autofocus", False)
                 and parameters.get("shack_hartmann", False)):
             reference_phase = _process_shack_hartmann(parameters, ref_frames)
-        registration_ref = _process_batch(
+        reference_result = _process_batch(
             parameters, ref_frames, phase_term=reference_phase,
             reference_only=True, propagation_kernel=propagation_kernel,
-        )["moment0ff"]
+        )
+        registration_ref = _registration_image(reference_result, parameters)
     del ref_frames, autofocus_frames
 
     def process_batch(frames, reference):
@@ -1005,12 +1019,12 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
 
     if parameters.get("image_registration_with_ecc", False):
         logger.info("Running Registration ECC algo:")
-        registration_ecc = register_with_ecc(output["moment0ff"],radius=parameters.get("registration_ecc_radius",0.8),iterations=300,eps=1e-6, progress_callback=progress_callback, ecc_min_threshold=parameters.get("registration_ecc_min_threshold",0.7))
+        registration_ecc = register_with_ecc(_registration_image(output, parameters),radius=parameters.get("registration_ecc_radius",0.8),iterations=300,eps=1e-6, progress_callback=progress_callback, ecc_min_threshold=parameters.get("registration_ecc_min_threshold",0.7))
 
 
         for key in output :
             if (
-                key in {"moment0ff", "moment0", "moment1", "moment2", "pca_sum"}
+                key in {"moment0ff", "moment0", "moment1", "moment2", "pca_sum", "pca_sum_ff"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                                             "_directional_Doppler_pos", "_directional_Doppler_neg"}

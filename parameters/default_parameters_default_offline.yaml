@@ -58,6 +58,7 @@ moments_frequency_ranges:
   - [30000, 39000]
 
 # Image registration
+registration_image: moment0ff # Exact computed image key; unavailable keys warn and fall back to moment0ff.
 registration_flatfield_gw: 35.0 # Gaussian width for flatfield normalization
 
 # Image registration Live
@@ -114,5 +115,6 @@ save_averaged_spectrogram: true # this outputs a powerspectrum density averaged 
 
 # PCA magnitude projection before SVD (full nonoverlapping packets only)
 pca_compute: false
+pca_flatfield: false # Emit pca_sum_ff instead of pca_sum, using registration_flatfield_gw.
 pca_time_window: 32
 pca_index_range: [0, 16] # Python slice: exclusive upper bound

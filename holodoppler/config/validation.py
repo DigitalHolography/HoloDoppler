@@ -70,6 +70,10 @@ def validate_main_parameters(parameters):
             f"Parameter 'batch_size' must be an integer; got {value!r} ({type(value).__name__})."
         )
 
+    if not isinstance(parameters.get("registration_image", "moment0ff"), str):
+        raise TypeError("registration_image must be a string")
+    if not isinstance(parameters.get("pca_flatfield", False), bool):
+        raise TypeError("pca_flatfield must be a boolean")
     if not isinstance(parameters.get("pca_compute", False), bool):
         raise TypeError("pca_compute must be a boolean")
     window = parameters.get("pca_time_window", 32)

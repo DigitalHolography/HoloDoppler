@@ -349,3 +349,13 @@ come from code review, not scientific validation against experimental recordings
 8. **`_process_to_output()` has many responsibilities.** It owns reference setup,
    GPU aggregation, callbacks, ECC, and static/temporal saving. Explicit run state
    and finalization functions could clarify ownership and failure cleanup.
+
+### Registration image and PCA flatfield
+
+`registration_image` defaults to `moment0ff` and selects the computed scalar image
+used for translation and ECC, including separately computed references. Examples
+are `pca_sum`, `pca_sum_ff`, and `band_0_3000_6000`. Enable the corresponding
+computation first; unavailable keys log a warning and fall back to `moment0ff`.
+With `pca_compute: true`, setting `pca_flatfield: true` applies Gaussian flatfield
+correction using `registration_flatfield_gw` and emits only `pca_sum_ff` instead
+of `pca_sum`. Both PCA variants support numerical and media exports.
