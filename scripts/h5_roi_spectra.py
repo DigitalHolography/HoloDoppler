@@ -1,15 +1,20 @@
 """Tkinter H5 ROI spectrum viewer, including skip_every comparisons."""
 import json
+import queue
+import threading
 from pathlib import Path
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
+import warnings
 
 import h5py
 import numpy as np
+from matplotlib import colormaps
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
 from matplotlib.widgets import RectangleSelector
+from scipy.optimize import OptimizeWarning, curve_fit
 
 
 # Hard-coded normalization choice (N includes the DC bin; fs includes skip_every):
@@ -21,6 +26,93 @@ from matplotlib.widgets import RectangleSelector
 # 'peak'       : divide by max(non-DC spectrum) (peak becomes 1)
 # Unit-area and peak modes compare shapes, removing absolute power differences.
 PSD_NORMALIZATION = 'num_freq' # choose this one !! (if the fft was not normalized in holodoppler as for 1.4.4 and below)
+
+
+def gaussian_model(frequency, K, A, W):
+    return K + A * np.exp(-0.5 * (frequency / W)**2)
+
+
+def gaussian_initial(frequency, values):
+    baseline = max(0.0, float(values.min()))
+    return (baseline, max(float(np.ptp(values)), 0.1),
+            max(float(np.max(np.abs(frequency))) / 2, 0.01))
+
+
+FIT_MODELS = {
+    'Zero-centered Gaussian': {
+        'formula': 'K + A · exp(−f² / (2W²))',
+        'parameters': ('K', 'A', 'W'),
+        'function': gaussian_model,
+        'bounds': ((0, 0, 1e-10), (np.inf, np.inf, np.inf)),
+        'initial': gaussian_initial,
+    },
+}
+
+
+def fit_frequency_mask(frequency, low, high, symmetric):
+    """Select non-DC bins, requiring enough distinct samples for this model."""
+    if not np.isfinite([low, high]).all() or not 0 <= low < high:
+        raise ValueError('Frequency bounds must be finite and satisfy 0 ≤ minimum < maximum.')
+    selected_frequency = np.abs(frequency) if symmetric else frequency
+    mask = ((selected_frequency >= low) & (selected_frequency <= high) &
+            (frequency != 0))
+    if np.unique(np.abs(frequency[mask])).size < 4:
+        raise ValueError('Select at least four distinct nonzero absolute frequencies.')
+    return mask
+
+
+def fit_pixel_maps(entry, low, high, symmetric=True,
+                   model_name='Zero-centered Gaussian', normalization=PSD_NORMALIZATION,
+                   progress=None, cancel=None):
+    """Fit normalized spectra; return NaN for invalid pixels, or None on cancellation."""
+    model = FIT_MODELS[model_name]
+    mask = fit_frequency_mask(entry['freq'], low, high, symmetric)
+    frequency = entry['freq'][mask]
+    frequency_scale = float(np.max(np.abs(frequency)))
+    x = frequency / frequency_scale
+    shape = entry['spectrum'].shape[1:]
+    maps = {name: np.full(shape, np.nan) for name in (*model['parameters'], 'R²')}
+    total = int(np.prod(shape))
+    report_every = max(1, total // 200)
+    for index, (row, col) in enumerate(np.ndindex(shape)):
+        if cancel is not None and cancel.is_set():
+            return None
+        raw = entry['spectrum'][:, row, col]
+        # Invalid bins must not poison the normalization of otherwise usable data.
+        finite_raw = np.isfinite(raw)
+        normalization_input = (np.where(finite_raw, raw, 0)
+                               if normalization in ('peak', 'unit_area') else raw)
+        _, values, _, _ = prepare_spectrum(
+            normalization_input, entry['freq'], entry['fs'], normalization)
+        values[~np.fft.fftshift(finite_raw)[entry['freq'] != 0]] = np.nan
+        values = values[mask[entry['freq'] != 0]]
+        valid = np.isfinite(values)
+        y = values[valid]
+        pixel_x = x[valid]
+        if np.unique(np.abs(pixel_x)).size >= 4 and np.ptp(y) > 0:
+            scale = float(np.max(np.abs(y)))
+            y = y / scale
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter('error', OptimizeWarning)
+                    parameters, _ = curve_fit(
+                        model['function'], pixel_x, y,
+                        p0=model['initial'](pixel_x, y), bounds=model['bounds'],
+                        maxfev=2000)
+                prediction = model['function'](pixel_x, *parameters)
+                score = 1 - np.sum((y - prediction)**2) / np.sum((y - y.mean())**2)
+                parameters = parameters * np.array([scale, scale, frequency_scale])
+                if np.isfinite(parameters).all() and np.isfinite(score):
+                    for name, value in zip(model['parameters'], parameters):
+                        maps[name][row, col] = value
+                    maps['R²'][row, col] = score
+            except (RuntimeError, ValueError, FloatingPointError, OptimizeWarning):
+                pass
+        if progress is not None and ((index + 1) % report_every == 0 or index + 1 == total):
+            progress(index + 1, total)
+    if cancel is not None and cancel.is_set():
+        return None
+    return maps
 
 
 def prepare_spectrum(mean, frequency, fs, normalization=PSD_NORMALIZATION):
@@ -109,6 +201,8 @@ class App:
         tk.Button(bar, text='Open H5', command=self.open).pack(side='left')
         tk.Button(bar, text='skip_every_comparison', command=self.skip_every_comparison).pack(side='left')
         tk.Button(bar, text='Clear ROIs', command=self.clear).pack(side='left')
+        self.fit_button = tk.Button(bar, text='Fit pixels', command=self.fit_pixels, state='disabled')
+        self.fit_button.pack(side='left')
         self.log_log = tk.BooleanVar(value=False)
         tk.Checkbutton(bar, text='Log-log', variable=self.log_log,
                        command=self.update_spectrum_scale).pack(side='left')
@@ -212,6 +306,7 @@ class App:
             self.selector = None
         self.rois.clear()
         self.entries = entries
+        self.fit_button.config(state='normal')
         self.moment = moment
         self.image_ax.clear()
         self.spectrum_ax.clear()
@@ -226,6 +321,11 @@ class App:
         self.root.title(title)
         self.update_spectrum_scale()
         self.canvas.draw_idle()
+
+    def fit_pixels(self):
+        if not self.entries:
+            return
+        FitDialog(self.root, tuple(self.entries))
 
     def update_spectrum_scale(self):
         """Refresh existing curves when switching between linear and log axes."""
@@ -288,6 +388,187 @@ class App:
         self.spectrum_ax.relim()
         self.spectrum_ax.autoscale_view()
         self.canvas.draw_idle()
+
+
+class FitDialog:
+    """Own a snapshot of the selected datasets and a cancellable fitting worker."""
+
+    def __init__(self, parent, entries):
+        self.entries = entries
+        self.window = tk.Toplevel(parent)
+        self.window.title('Fit every pixel')
+        self.window.protocol('WM_DELETE_WINDOW', self.close)
+        self.events = queue.Queue()
+        self.cancel = threading.Event()
+        self.running = False
+        self.closed = False
+        self.dataset = tk.StringVar()
+        self.model = tk.StringVar(value=next(iter(FIT_MODELS)))
+        self.low = tk.StringVar(value='0')
+        self.high = tk.StringVar()
+        self.symmetric = tk.BooleanVar(value=True)
+        body = ttk.Frame(self.window, padding=12)
+        body.pack(fill='both', expand=True)
+        self.controls = []
+        labels = [f"{i + 1}: {entry['label']}" for i, entry in enumerate(entries)]
+        for row, (label, variable, choices) in enumerate((
+                ('Dataset', self.dataset, labels), ('Model', self.model, list(FIT_MODELS)))):
+            ttk.Label(body, text=label).grid(row=row, column=0, sticky='w')
+            widget = ttk.Combobox(body, textvariable=variable, values=choices,
+                                  state='readonly', width=48)
+            widget.grid(row=row, column=1, sticky='ew', pady=3)
+            self.controls.append((widget, 'readonly'))
+        self.dataset_box = self.controls[0][0]
+        self.dataset_box.current(0)
+        self.dataset_box.bind('<<ComboboxSelected>>', self.update_range)
+        ttk.Label(body, text=FIT_MODELS[self.model.get()]['formula'] + '\nW = standard deviation (Hz); K, A ≥ 0; W > 0').grid(
+            row=2, column=0, columnspan=2, pady=6)
+        for row, (label, variable) in enumerate((('Minimum (Hz)', self.low),
+                                                ('Maximum (Hz)', self.high)), start=3):
+            ttk.Label(body, text=label).grid(row=row, column=0, sticky='w')
+            widget = ttk.Entry(body, textvariable=variable)
+            widget.grid(row=row, column=1, sticky='ew', pady=3)
+            self.controls.append((widget, 'normal'))
+        symmetric = ttk.Checkbutton(body, text='Include symmetric negative range', variable=self.symmetric)
+        symmetric.grid(row=5, column=0, columnspan=2, sticky='w')
+        self.controls.append((symmetric, 'normal'))
+        ttk.Label(body, text=f'All spatial pixels · normalization: {PSD_NORMALIZATION} · DC excluded').grid(
+            row=6, column=0, columnspan=2, pady=6)
+        self.progress = ttk.Progressbar(body, mode='determinate')
+        self.progress.grid(row=7, column=0, columnspan=2, sticky='ew')
+        self.status = ttk.Label(body, text='Ready')
+        self.status.grid(row=8, column=0, columnspan=2, sticky='w', pady=6)
+        self.start_button = ttk.Button(body, text='Fit', command=self.start)
+        self.start_button.grid(row=9, column=0)
+        self.cancel_button = ttk.Button(body, text='Cancel', command=self.cancel_fit, state='disabled')
+        self.cancel_button.grid(row=9, column=1)
+        body.columnconfigure(1, weight=1)
+        self.update_range()
+
+    def update_range(self, event=None):
+        frequency = self.entries[self.dataset_box.current()]['freq']
+        positive = frequency[frequency > 0]
+        self.low.set('0')
+        self.high.set(str(float(positive.max())) if positive.size else '0')
+
+    def start(self):
+        entry = self.entries[self.dataset_box.current()]
+        try:
+            low, high = float(self.low.get()), float(self.high.get())
+            symmetric, model = self.symmetric.get(), self.model.get()
+            fit_frequency_mask(entry['freq'], low, high, symmetric)
+        except ValueError as exc:
+            messagebox.showerror('Invalid fitting range', str(exc), parent=self.window)
+            return
+        self.running = True
+        self.cancel.clear()
+        for control, _ in self.controls:
+            control.config(state='disabled')
+        self.start_button.config(state='disabled')
+        self.cancel_button.config(state='normal')
+        self.progress.config(maximum=np.prod(entry['spectrum'].shape[1:]), value=0)
+        self.status.config(text='Fitting…')
+
+        def worker():
+            try:
+                maps = fit_pixel_maps(entry, low, high, symmetric, model,
+                                      progress=lambda done, total: self.events.put(('progress', done, total)),
+                                      cancel=self.cancel)
+                self.events.put(('done', maps))
+            except Exception as exc:
+                self.events.put(('error', str(exc)))
+
+        self.run_description = (f"{entry['label']}\n{model}: {FIT_MODELS[model]['formula']}\n"
+                                f'{low:g}–{high:g} Hz; symmetric: {symmetric}; normalization: {PSD_NORMALIZATION}')
+        threading.Thread(target=worker, daemon=True).start()
+        self.window.after(100, self.poll)
+
+    def cancel_fit(self):
+        self.cancel.set()
+        self.cancel_button.config(state='disabled')
+        self.status.config(text='Cancelling…')
+
+    def close(self):
+        self.closed = True
+        self.cancel.set()
+        self.window.destroy()
+
+    def poll(self):
+        if self.closed:
+            return
+        while True:
+            try:
+                event = self.events.get_nowait()
+            except queue.Empty:
+                break
+            if event[0] == 'progress':
+                self.progress.config(value=event[1])
+                self.status.config(text=f'{event[1]:,} / {event[2]:,} pixels')
+                continue
+            self.running = False
+            for control, state in self.controls:
+                control.config(state=state)
+            self.start_button.config(state='normal')
+            self.cancel_button.config(state='disabled')
+            if event[0] == 'error':
+                self.status.config(text='Fit failed')
+                messagebox.showerror('Fit failed', event[1], parent=self.window)
+            elif event[1] is None or self.cancel.is_set():
+                self.status.config(text='Cancelled')
+            else:
+                maps = event[1]
+                success = int(np.isfinite(maps['R²']).sum())
+                self.status.config(text=f'Done: {success:,} successful; {maps["R²"].size - success:,} failed')
+                if success:
+                    show_fit_maps(self.window.master, maps, self.run_description)
+                else:
+                    messagebox.showinfo('No successful fits',
+                                        'All pixels failed or had constant, nonfinite, or insufficient data.',
+                                        parent=self.window)
+        if self.running:
+            self.window.after(100, self.poll)
+
+
+def show_fit_maps(parent, maps, description):
+    window = tk.Toplevel(parent)
+    window.title('Pixel fit maps')
+    ttk.Label(window, text=description).pack(padx=10, pady=6)
+    success = int(np.isfinite(maps['R²']).sum())
+    ttk.Label(window, text=f'{success:,} successful; {maps["R²"].size - success:,} failed pixels').pack()
+    choice = tk.StringVar(value=next(iter(maps)))
+    selector = ttk.Combobox(window, textvariable=choice,
+                            values=['W (Hz)' if name == 'W' else name for name in maps], state='readonly')
+    selector.pack(pady=6)
+    figure = Figure(figsize=(7, 6), constrained_layout=True)
+    ax = figure.subplots()
+    cmap = colormaps['viridis'].copy()
+    cmap.set_bad('lightgray')
+    image = ax.imshow(np.ma.masked_invalid(maps[choice.get()]), origin='upper', cmap=cmap)
+    colorbar = figure.colorbar(image, ax=ax)
+    canvas = FigureCanvasTkAgg(figure, master=window)
+    canvas.get_tk_widget().pack(fill='both', expand=True)
+    NavigationToolbar2Tk(canvas, window)
+
+    def update(event=None):
+        label = choice.get()
+        name = 'W' if label == 'W (Hz)' else label
+        values = maps[name]
+        finite = values[np.isfinite(values)]
+        image.set_data(np.ma.masked_invalid(values))
+        if finite.size:
+            low, high = float(finite.min()), float(finite.max())
+            if low == high:
+                delta = max(abs(low) * 0.01, 1e-12)
+                low, high = low - delta, high + delta
+            image.set_clim(low, high)
+        colorbar.set_label(label)
+        ax.set_title(label)
+        ax.set_xlabel('x (pixel)')
+        ax.set_ylabel('y (pixel)')
+        canvas.draw_idle()
+
+    selector.bind('<<ComboboxSelected>>', update)
+    update()
 
 
 if __name__ == '__main__':
