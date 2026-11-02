@@ -70,6 +70,22 @@ def validate_main_parameters(parameters):
             f"Parameter 'batch_size' must be an integer; got {value!r} ({type(value).__name__})."
         )
 
+    if not isinstance(parameters.get("pca_compute", False), bool):
+        raise TypeError("pca_compute must be a boolean")
+    window = parameters.get("pca_time_window", 32)
+    if isinstance(window, bool) or not isinstance(window, Integral):
+        raise TypeError("pca_time_window must be a positive integer")
+    if window <= 0:
+        raise ValueError("pca_time_window must be positive")
+    bounds = parameters.get("pca_index_range", [0, 16])
+    if (not isinstance(bounds, (list, tuple)) or len(bounds) != 2
+            or any(isinstance(v, bool) or not isinstance(v, Integral) for v in bounds)):
+        raise TypeError("pca_index_range must contain two integers")
+    if not 0 <= bounds[0] < bounds[1] <= window:
+        raise ValueError("pca_index_range must satisfy 0 <= start < end <= pca_time_window")
+    if parameters.get("pca_compute", False) and window > parameters.get("batch_size", 256):
+        raise ValueError("pca_time_window must not exceed batch_size")
+
     if not isinstance(parameters.get("welch_enabled", False), bool):
         raise TypeError("welch_enabled must be a boolean")
     for key in ("welch_batch_size", "welch_stride"):

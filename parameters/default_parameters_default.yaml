@@ -110,3 +110,8 @@ spectrogram_frequency_start: 0
 spectrogram_frequency_end: 0.5
 spectrogram_frequency_binning: 4
 save_averaged_spectrogram: true # this outputs a powerspectrum density averaged over all the batches and registered (with translation only if image_registration is on, it doesn't work with ecc registration)
+
+# PCA magnitude projection before SVD (full nonoverlapping packets only)
+pca_compute: false
+pca_time_window: 32
+pca_index_range: [0, 16] # Python slice: exclusive upper bound

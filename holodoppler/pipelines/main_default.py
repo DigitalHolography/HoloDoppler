@@ -9,6 +9,7 @@ from holodoppler.config import (
 from holodoppler.core.batching import calculate_batch_indices
 from holodoppler.core.doppler_images import directional, finish_doppler_images
 from holodoppler.core.filtering import (
+    pca_time_transform,
     corner_compensation,
     filter_2d,
     fourier_time_transform,
@@ -172,6 +173,26 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
             raise ValueError(
                 f"Unknown propagation method: {prop_method!r}"
             )
+
+    if output_dict is None:
+        output_dict = {}
+
+    if parameters.get("pca_compute", False) and not reference_only:
+        window = parameters.get("pca_time_window", 32)
+        start, end = parameters.get("pca_index_range", [0, 16])
+        count = holograms.shape[0] // window
+        if count == 0:
+            raise ValueError("pca_time_window must fit within the supplied frame stack")
+        total = None
+        for offset in range(0, count * window, window):
+            projected = pca_time_transform(
+                xp, holograms[offset:offset + window], remove_dc=False)
+            image = xp.sum(xp.abs(projected[start:end]), axis=0)
+            if total is None:
+                total = image
+            else:
+                total += image
+        output_dict["pca_sum"] = total / count
 
     # ------------------------------------------------------------
     # SVD filtering
@@ -696,7 +717,7 @@ def _process_one_batch(
         for key, value in list(res.items()):
 
             if (
-                key in {"moment0ff", "moment0", "moment1", "moment2", "sh_psd"}
+                key in {"moment0ff", "moment0", "moment1", "moment2", "sh_psd", "pca_sum"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                            "_directional_Doppler_pos", "_directional_Doppler_neg"}
@@ -989,7 +1010,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
 
         for key in output :
             if (
-                key in {"moment0ff", "moment0", "moment1", "moment2"}
+                key in {"moment0ff", "moment0", "moment1", "moment2", "pca_sum"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                                             "_directional_Doppler_pos", "_directional_Doppler_neg"}

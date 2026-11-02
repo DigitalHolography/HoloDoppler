@@ -111,3 +111,8 @@ directional_Doppler_hues: [1.0, 0.66] # [positive, negative] HSV hues; red / blu
 
 # spectrograms
 save_averaged_spectrogram: true # this outputs a powerspectrum density averaged over all the batches and registered (with translation only if image_registration is on, it doesn't work with ecc registration)
+
+# PCA magnitude projection before SVD (full nonoverlapping packets only)
+pca_compute: false
+pca_time_window: 32
+pca_index_range: [0, 16] # Python slice: exclusive upper bound

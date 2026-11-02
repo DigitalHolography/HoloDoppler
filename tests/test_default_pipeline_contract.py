@@ -135,3 +135,33 @@ def test_temporal_transform_is_no_longer_configurable():
     validate_main_parameters(parameters())
     with pytest.raises(ValueError, match="removed"):
         validate_main_parameters(parameters(temporal_transformation="None"))
+
+
+def test_pca_sum_averages_full_packets_before_svd(monkeypatch):
+    from holodoppler.core.filtering import pca_time_transform
+    from holodoppler.saving.policy import save_to_hdf5
+    rng = np.random.default_rng(12)
+    frames = (rng.normal(size=(10, 3, 5)) + 1j * rng.normal(size=(10, 3, 5))).astype(np.complex64)
+    monkeypatch.setattr(pipeline, "fresnel_transform", lambda *a, **k: frames.copy())
+    def svd(xp, linalg, holograms, *args, **kwargs):
+        holograms[:] = 0
+        return holograms
+    monkeypatch.setattr(pipeline, "svd_filter", svd)
+    expected = np.mean([np.abs(pca_time_transform(np, frames[i:i+4]))[:2].sum(axis=0)
+                        for i in (0, 4)], axis=0)
+    p = parameters(pca_compute=True, pca_time_window=4, pca_index_range=[0, 2])
+    result = pipeline._process_batch(p, frames)
+    np.testing.assert_allclose(result["pca_sum"], expected)
+    assert save_to_hdf5("pca_sum")
+    assert "pca_sum" not in pipeline._process_batch(dict(p, pca_compute=False), frames)
+    assert "pca_sum" not in pipeline._process_batch(p, frames, reference_only=True)
+
+
+@pytest.mark.parametrize("updates", [
+    {"pca_compute": 1}, {"pca_time_window": 0},
+    {"pca_index_range": [0, 33]}, {"pca_index_range": [2, 2]},
+    {"pca_compute": True, "pca_time_window": 32},
+])
+def test_invalid_pca_parameters(updates):
+    with pytest.raises((TypeError, ValueError), match="pca_"):
+        validate_main_parameters(parameters(**updates))
