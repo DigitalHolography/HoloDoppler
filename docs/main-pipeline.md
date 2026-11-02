@@ -375,3 +375,13 @@ magnitudes exceeding 100*double-epsilon*sum(abs(PSD)), and abs(H1)>abs(H2).
 Invalid estimates return zero, matching the MATLAB implementation (despite its
 comment promising NaN). Outputs are registered and saved alongside other scalar
 maps, including numerical HDF5 data.
+
+### Local block SVD
+
+Set `svd_filter_by_bloc: true` to apply local SVD after global SVD in the default pipeline.
+`svd_filter_by_bloc_window_size` is the square window side in pixels (default 5);
+stride is one and overlapping estimates are averaged. Windows must fit the image.
+`svd_filter_by_bloc_threshold` counts leading singular components to remove
+(default 0, disabling SVD). This count is independent of `svd_filter_mode`.
+In both modes, `svd_remove_dc` subtracts each pixel's temporal mean before SVD,
+including at threshold zero. The existing negative global threshold bypass remains unchanged.
