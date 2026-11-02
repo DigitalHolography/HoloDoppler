@@ -4,6 +4,9 @@ Filtering operations: SVD, frequency filtering
 
 from functools import cache
 
+import numpy as np
+from scipy.signal.windows import get_window
+
 from .image_utils import elliptical_mask
 
 
@@ -275,6 +278,49 @@ def frequency_symmetric_filtering(
 def fourier_time_transform(xp, fft, H):
     """FFT along time axis"""
     return fft.fft(H, axis=0, norm="ortho")
+
+
+@cache
+def _welch_window(name, length):
+    """Return immutable CPU taper weights and their mean squared weight."""
+    if not isinstance(name, str):
+        raise TypeError("welch_windowing must be a window name or null")
+    try:
+        weights = get_window(name, length, fftbins=True)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"Invalid welch_windowing: {name!r}") from exc
+    energy = float(np.mean(weights ** 2))
+    if not np.isfinite(energy) or energy <= 0:
+        raise ValueError("welch_windowing must have finite positive mean squared weight")
+    weights.setflags(write=False)
+    return weights, energy
+
+
+def welch_power_spectrum(xp, fft, H, batch_size=32, stride=32, windowing=None):
+    """Average complete, time-first segment periodograms without detrending."""
+    if batch_size > H.shape[0]:
+        raise ValueError("welch_batch_size must fit within the supplied frame stack")
+    taper, energy = None, 1.0
+    if windowing is not None:
+        weights, energy = _welch_window(windowing, batch_size)
+        taper = xp.asarray(weights, dtype=H.real.dtype).reshape(
+            (batch_size,) + (1,) * (H.ndim - 1))
+    total = None
+    starts = range(0, H.shape[0] - batch_size + 1, stride)
+    for start in starts:
+        segment = H[start:start + batch_size]
+        if taper is not None:
+            segment = segment * taper
+        spectrum = fourier_time_transform(xp, fft, segment)
+        power = xp.abs(spectrum)
+        del spectrum
+        xp.square(power, out=power)
+        if total is None:
+            total = power
+        else:
+            total += power
+    total /= len(starts) * energy
+    return total
 
 
 def pca_time_transform(xp, H, remove_dc=False):
