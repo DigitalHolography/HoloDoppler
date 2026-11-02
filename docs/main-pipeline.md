@@ -359,3 +359,15 @@ computation first; unavailable keys log a warning and fall back to `moment0ff`.
 With `pca_compute: true`, setting `pca_flatfield: true` applies Gaussian flatfield
 correction using `registration_flatfield_gw` and emits only `pca_sum_ff` instead
 of `pca_sum`. Both PCA variants support numerical and media exports.
+
+
+Gaussian spectral width is enabled by `compute_gaussian_width: true`. The output
+`gaussian_width` is in Hz and uses the post-SVD PSD (Welch when enabled), before
+corner compensation and moment cutoffs. `gaussian_width_range: null` uses every
+FFT bin; `[6000, 18500]` selects inclusive bounds on absolute frequency.
+For effective sampling frequency fs (accounting for frame skipping), define
+Ik = sum PSD(f) exp(-i 2 pi k f/fs). The width is
+fs/pi * sqrt((log(abs(I1)) - log(abs(I2)))/3).
+Zero/nonfinite integral magnitudes or a negative log difference produce NaN;
+a zero log difference produces zero. Outputs are registered and saved alongside
+other scalar maps, including numerical HDF5 data.

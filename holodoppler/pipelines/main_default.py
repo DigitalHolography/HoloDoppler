@@ -22,7 +22,7 @@ from holodoppler.core.image_utils import (
     gaussian_flatfield,
     resize_frames,
 )
-from holodoppler.core.moments import moments
+from holodoppler.core.moments import moments, gaussian_width
 from holodoppler.core.plots import plot_phase_with_slopes_rgb
 from holodoppler.core.processing import run_batches
 from holodoppler.core.propagation import (
@@ -240,6 +240,13 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
         xp.square(psd, out=psd)
     del holograms_f
     nt_sub = psd.shape[0]
+    if parameters.get("compute_gaussian_width", True) and (
+        not reference_only or parameters.get("registration_image") == "gaussian_width"
+    ):
+        output_dict["gaussian_width"] = gaussian_width(
+            xp, psd, parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
+            parameters.get("gaussian_width_range"),
+        )
 
     # ------------------------------------------------------------
     # Frequency filtering
@@ -730,7 +737,7 @@ def _process_one_batch(
         for key, value in list(res.items()):
 
             if (
-                key in {"moment0ff", "moment0", "moment1", "moment2", "sh_psd", "pca_sum", "pca_sum_ff"}
+                key in {"gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "sh_psd", "pca_sum", "pca_sum_ff"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                            "_directional_Doppler_pos", "_directional_Doppler_neg"}
@@ -1024,7 +1031,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
 
         for key in output :
             if (
-                key in {"moment0ff", "moment0", "moment1", "moment2", "pca_sum", "pca_sum_ff"}
+                key in {"gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "pca_sum", "pca_sum_ff"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                                             "_directional_Doppler_pos", "_directional_Doppler_neg"}

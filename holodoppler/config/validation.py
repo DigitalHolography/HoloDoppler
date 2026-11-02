@@ -267,6 +267,16 @@ def validate_main_parameters(parameters):
     if not isinstance(value, bool):
         raise TypeError("Parameter 'resize_averaged_images' must be a boolean.")
 
+    if not isinstance(parameters.get("compute_gaussian_width", True), bool):
+        raise TypeError("compute_gaussian_width must be a boolean")
+    band = parameters.get("gaussian_width_range")
+    if band is not None:
+        if (not isinstance(band, (list, tuple)) or len(band) != 2
+                or not all(isinstance(v, Real) and not isinstance(v, bool) for v in band)):
+            raise TypeError("gaussian_width_range must be null or a numeric pair")
+        if not all(isfinite(v) for v in band) or not 0 <= band[0] < band[1]:
+            raise ValueError("gaussian_width_range requires finite bounds with 0 <= low < high")
+
     value = parameters.get("moments_frequency_ranges", False)
     if value is not False:
         if not isinstance(value, (list, tuple)) or not all(
