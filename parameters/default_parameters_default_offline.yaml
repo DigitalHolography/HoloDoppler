@@ -45,7 +45,6 @@ welch_stride: 32 # Spacing between segment starts in selected frames.
 
 # Gaussian spectral width after SVD, before frequency filtering
 compute_gaussian_width: true
-gaussian_width_range: null # Whole spectrum; e.g. [6000, 18500] selects both frequency signs in Hz.
 
 # Temporal sampling
 sampling_freq: "use_metadata" # Sampling frequency in Hz

@@ -2,19 +2,18 @@ import numpy as np
 import pytest
 from holodoppler.core.moments import gaussian_width
 
-@pytest.mark.parametrize("band", [None, [100, 300]])
-def test_matches_integral_sums(band):
-    fs = 800
-    f = np.fft.fftfreq(16, 1/fs)
-    psd = np.random.default_rng(2).uniform(.1, 2, (16, 3, 5))
-    mask = np.ones(16, bool) if band is None else ((abs(f) >= band[0]) & (abs(f) <= band[1]))
-    a, b = [abs(np.sum(psd[mask] * np.exp(-2j*np.pi*k*f[mask]/fs)[:, None, None], axis=0)) for k in (1, 2)]
-    ratio = np.log(a/b)
-    expected = np.where(ratio >= 0, fs/np.pi*np.sqrt(np.maximum(ratio, 0)/3), np.nan)
-    np.testing.assert_allclose(gaussian_width(np, psd, fs, band), expected)
+def test_periodic_gaussian_fwhm_with_center_and_baseline():
+    fs, sigma = 800, 70
+    f = np.fft.fftfreq(256, 1/fs)
+    psd = sum(np.exp(-.5*((f-110+k*fs)/sigma)**2) for k in range(-5, 6))
+    psd = (3*psd+17)[:, None, None].astype(np.complex128)
+    expected = 2*np.sqrt(2*np.log(2))*sigma
+    np.testing.assert_allclose(gaussian_width(np, psd, fs), expected, rtol=1e-10)
 
-def test_zero_and_empty_band():
-    with np.errstate(all="raise"):
-        assert np.isnan(gaussian_width(np, np.zeros((8, 2, 2)), 800)).all()
-    with pytest.raises(ValueError, match="no FFT bins"):
-        gaussian_width(np, np.ones((8, 2, 2)), 800, [1, 2])
+@pytest.mark.parametrize("value", [0., 1., np.nan, np.inf])
+def test_invalid_returns_zero(value):
+    assert (gaussian_width(np, np.full((8, 2, 2), value), 800) == 0).all()
+
+def test_too_few_bins():
+    with pytest.raises(ValueError, match="at least 5"):
+        gaussian_width(np, np.ones((4, 2, 2)), 800)

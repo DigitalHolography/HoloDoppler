@@ -362,12 +362,16 @@ of `pca_sum`. Both PCA variants support numerical and media exports.
 
 
 Gaussian spectral width is enabled by `compute_gaussian_width: true`. The output
-`gaussian_width` is in Hz and uses the post-SVD PSD (Welch when enabled), before
-corner compensation and moment cutoffs. `gaussian_width_range: null` uses every
-FFT bin; `[6000, 18500]` selects inclusive bounds on absolute frequency.
+`gaussian_width` is intrinsic Gaussian FWHM in Hz, using the magnitude of the
+post-SVD PSD in double precision (Welch when enabled), before corner compensation
+and moment cutoffs. At least five FFT bins are required.
+The estimator always uses every FFT bin of the complete spectrum.
 For effective sampling frequency fs (accounting for frame skipping), define
-Ik = sum PSD(f) exp(-i 2 pi k f/fs). The width is
-fs/pi * sqrt((log(abs(I1)) - log(abs(I2)))/3).
-Zero/nonfinite integral magnitudes or a negative log difference produce NaN;
-a zero log difference produces zero. Outputs are registered and saved alongside
-other scalar maps, including numerical HDF5 data.
+Hk = sum abs(PSD(f)) exp(-i 2 pi k f/fs).
+Then sigma = fs/(pi*sqrt(6)) * sqrt(log(abs(H1))-log(abs(H2))) and
+FWHM = 2*sqrt(2*log(2))*sigma. No flat-field correction is applied.
+An estimate is valid only for finite positive spectral sums, finite harmonic
+magnitudes exceeding 100*double-epsilon*sum(abs(PSD)), and abs(H1)>abs(H2).
+Invalid estimates return zero, matching the MATLAB implementation (despite its
+comment promising NaN). Outputs are registered and saved alongside other scalar
+maps, including numerical HDF5 data.

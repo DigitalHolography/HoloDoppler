@@ -245,7 +245,6 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     ):
         output_dict["gaussian_width"] = gaussian_width(
             xp, psd, parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
-            parameters.get("gaussian_width_range"),
         )
 
     # ------------------------------------------------------------
