@@ -515,7 +515,7 @@ def _process_one_batch(
     return res, moment0_reg
 
 
-def _run(file_path, parameters, preview=False, progress_callback=None):
+def _run(file_path, parameters, preview=False, progress_callback=None, *, save_output=True):
     reader, p = prepare_input(file_path, parameters)
     if not batch_indices(reader, p):
         return None
@@ -537,11 +537,11 @@ def _run(file_path, parameters, preview=False, progress_callback=None):
     return run_pipeline(reader, p, process_batch, preview=preview, reference=reference,
                         static=static, stateful=stateful,
                         ecc_keys={"moment0", "moment0ff", "moment1", "moment2"},
-                        progress_callback=progress_callback)
+                        progress_callback=progress_callback, save_output=save_output)
 
 
-def preview(file_path, parameters):
-    return _run(file_path, parameters, preview=True)
+def preview(file_path, parameters, *, save_outputs=True):
+    return _run(file_path, parameters, preview=True, save_output=save_outputs)
 
 
 def process(file_path, parameters, progress_callback=None):

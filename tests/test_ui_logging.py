@@ -43,6 +43,8 @@ def test_gui_can_toggle_logs_during_processing_and_logs_worker_errors(tmp_path):
             print('TK_UNAVAILABLE:', exc)
             raise SystemExit(77)
         ui.withdraw()
+        # Automatic preview scheduling is exercised in test_ui_previews.
+        ui._queue_previews = lambda paths: None
         try:
             ui.session_parameters = {
                 'pipeline_name': 'test_logging',
@@ -75,8 +77,8 @@ def test_gui_can_toggle_logs_during_processing_and_logs_worker_errors(tmp_path):
                 return None
 
             pipelines['preview_test_logging'] = preview_pipeline
-            ui.preview_path(ui.input_paths[0])
-            ui.worker.join(timeout=5)
+            from holodoppler.cli import preview
+            preview(ui.input_paths[0], ui.session_parameters)
             assert not ui._busy()
             while not ui.events.empty():
                 ui._handle_event(ui.events.get_nowait())

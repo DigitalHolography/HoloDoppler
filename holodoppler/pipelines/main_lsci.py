@@ -234,7 +234,7 @@ def _small_frame(frame, factor):
     return np.asarray(frame[::step, ::step], dtype=np.float32)
 
 
-def _run(file_path, parameters, preview_mode=False, progress_callback=None):
+def _run(file_path, parameters, preview_mode=False, progress_callback=None, *, save_output=True):
     parameters = dict(parameters)
     size = parameters.get("batch_size", parameters.get("lsci_nbh_t", 40))
     parameters.update(batch_size=size, batch_stride=size, lsci_nbh_t=size)
@@ -253,13 +253,13 @@ def _run(file_path, parameters, preview_mode=False, progress_callback=None):
                     result = calculator.add(_small_frame(frame, factor), emit=index == len(frames) - 1)
                 return result, reference
             return run_pipeline(reader, p, process_batch, preview=preview_mode,
-                preview_key=_keys(p)[0], stateful=True, progress_callback=progress_callback)
+                preview_key=_keys(p)[0], stateful=True, progress_callback=progress_callback, save_output=save_output)
         finally:
             calculator.history = None
 
 
-def preview(file_path, parameters):
-    return _run(file_path, parameters, preview_mode=True)
+def preview(file_path, parameters, *, save_outputs=True):
+    return _run(file_path, parameters, preview_mode=True, save_output=save_outputs)
 
 
 def process(file_path, parameters, progress_callback=None):

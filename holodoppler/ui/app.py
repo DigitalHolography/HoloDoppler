@@ -18,7 +18,7 @@ except ImportError:
     DND_FILES = "DND_Files"
     TkinterDnD = None
 
-from holodoppler.cli import preview, process
+from holodoppler.cli import process
 from holodoppler.core.progress import ProgressReporter, ProcessingCancelled
 from holodoppler.logging import configure_logging, get_log_path, logger
 
@@ -30,6 +30,7 @@ from .log_window import LogWindow
 from .minimal import MinimalView
 from .paths import logo_path, get_package_version
 from .settings_store import SettingsStore
+from .preview_scheduler import PreviewScheduler
 from .theme import apply_theme
 
 
@@ -101,6 +102,11 @@ class UI(BaseTk):
         self.worker: threading.Thread | None = None
         self.worker_kind: str | None = None
         self.poll_after_id: str | None = None
+        self.preview_scheduler = None
+        self.preview_tokens = {}
+        self.preview_sequence = 0
+        self.preview_after_id = None
+        self.closing = False
 
         self._build()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -138,16 +144,24 @@ class UI(BaseTk):
         if self._busy():
             return
         self.input_paths = []
+        self.preview_tokens.clear()
+        if self.preview_scheduler is not None:
+            self.preview_scheduler.retain([])
         self._sync_views()
         self._set_status("Inputs cleared")
 
     def set_input_paths(self, paths: list[Path]) -> None:
+        if self._busy():
+            return
+        previous = set(self.input_paths)
         selection = expand_input_paths(paths)
         self.input_paths = list(dict.fromkeys([*self.input_paths, *selection.paths]))
         if self.input_paths:
             self.store.set_last_input_dir(self.input_paths[-1].parent)
             self.store.remember_inputs(self.input_paths)
         self._sync_views()
+
+        self._queue_previews([p for p in self.input_paths if p not in previous])
 
         if selection.paths and selection.rejected:
             self._set_status(f"Loaded {len(self.input_paths)} input file(s); ignored {len(selection.rejected)} unsupported or missing path(s).")
@@ -171,10 +185,20 @@ class UI(BaseTk):
             return
 
         self.stop_event.clear()
+        if self.preview_after_id is not None:
+            self.after_cancel(self.preview_after_id)
+            self.preview_after_id = None
+        # Invalidate active images before draining; processing owns the cards.
+        self.preview_tokens.clear()
+        drained = None
+        if self.preview_scheduler is not None and self.preview_scheduler.thread.is_alive():
+            self.preview_scheduler.retain([])
+            drained = self.preview_scheduler.pause()
+            self._set_status("Waiting for previews to finish…")
         self._start_worker(
             kind="process",
-            target=self._process_worker,
-            args=(list(self.input_paths), parameters),
+            target=self._process_after_previews,
+            args=(list(self.input_paths), parameters, drained),
         )
 
     def stop_processing(self) -> None:
@@ -184,20 +208,66 @@ class UI(BaseTk):
             self._set_status("Stopping...")
             self._sync_views()
 
+    def _process_after_previews(self, paths, parameters, drained):
+        if drained is not None:
+            while not drained.wait(.05):
+                if self.preview_scheduler is not None and not self.preview_scheduler.thread.is_alive():
+                    break
+                if self.stop_event.is_set() or self.closing:
+                    self.events.put({"kind": "status", "message": "Stopped"})
+                    self.events.put({"kind": "worker_done"})
+                    return
+        if self.stop_event.is_set() or self.closing:
+            self.events.put({"kind": "status", "message": "Stopped"})
+            self.events.put({"kind": "worker_done"})
+            return
+        self._process_worker(paths, parameters)
+
+    def _ensure_preview_scheduler(self):
+        if (self.preview_scheduler is None or not self.preview_scheduler.thread.is_alive()
+                or getattr(self.preview_scheduler, "closed", False)):
+            self.preview_scheduler = PreviewScheduler(self.events)
+        return self.preview_scheduler
+
+    def _queue_previews(self, paths):
+        if self.closing or self._busy() or not paths:
+            return
+        tasks = []
+        for path in paths:
+            self.preview_sequence += 1
+            token = self.preview_sequence
+            self.preview_tokens[path] = token
+            self.advanced.gallery.set_state(path, "queued")
+            tasks.append((token, path, copy.deepcopy(self.session_parameters)))
+        scheduler = self._ensure_preview_scheduler()
+        scheduler.retain(self.preview_tokens.values())
+        scheduler.submit(tasks)
+
     def preview_path(self, path: Path) -> None:
+        if path in self.input_paths:
+            self._queue_previews([path])
+
+    def refresh_previews(self) -> None:
         if self._busy():
             return
-        try:
-            parameters = copy.deepcopy(self.session_parameters)
-        except Exception as exc:
-            logger.exception("Could not load preview settings")
-            messagebox.showerror("Settings", str(exc), parent=self)
-            return
-        self._start_worker(
-            kind="preview",
-            target=self._preview_worker,
-            args=(path, parameters),
-        )
+        if self.preview_after_id is not None:
+            self.after_cancel(self.preview_after_id)
+            self.preview_after_id = None
+        self._queue_previews(list(self.input_paths))
+
+    def _settings_changed(self) -> None:
+        self.preview_tokens.clear()
+        if self.preview_scheduler is not None:
+            self.preview_scheduler.retain([])
+        if self.preview_after_id is not None:
+            self.after_cancel(self.preview_after_id)
+        for path in self.input_paths:
+            self.advanced.gallery.set_state(path, "queued")
+        self.preview_after_id = self.after(300, self._refresh_after_settings)
+
+    def _refresh_after_settings(self):
+        self.preview_after_id = None
+        self.refresh_previews()
 
     def select_parameter_file(self, path: Path) -> None:
         try:
@@ -209,6 +279,7 @@ class UI(BaseTk):
             messagebox.showerror("Settings", str(exc), parent=self)
             return
         self.session_parameters = copy.deepcopy(data)
+        self._settings_changed()
         self.advanced.refresh_parameter_choices(load_selected=True)
         self.minimal.set_parameter_label(self.store.current_parameters_label())
         self._set_status(f"Loaded settings: {selected_path.name}")
@@ -223,6 +294,7 @@ class UI(BaseTk):
             messagebox.showerror("Settings", str(exc), parent=self)
             return
         self.session_parameters = copy.deepcopy(data)
+        self._settings_changed()
         self.advanced.refresh_parameter_choices(load_selected=True)
         self.minimal.set_parameter_label(self.store.current_parameters_label())
         self._set_status(f"Imported and loaded settings: {imported_path.name}")
@@ -235,6 +307,7 @@ class UI(BaseTk):
             messagebox.showerror("Settings", str(exc), parent=self)
             return
         self.session_parameters = copy.deepcopy(data)
+        self._settings_changed()
         self._set_status(status_message or f"Loaded settings: {self.store.current_parameters_label()}")
 
     def save_current_parameters(self, data: dict[str, Any]) -> None:
@@ -246,6 +319,7 @@ class UI(BaseTk):
             messagebox.showerror("Settings", str(exc), parent=self)
             return
         self.session_parameters = copy.deepcopy(data)
+        self._settings_changed()
         self.advanced.refresh_parameter_choices(load_selected=True)
         self.minimal.set_parameter_label(self.store.current_parameters_label())
         self._set_status(f"Saved settings: {saved_path.name}")
@@ -259,6 +333,7 @@ class UI(BaseTk):
             messagebox.showerror("Settings", str(exc), parent=self)
             return
         self.session_parameters = copy.deepcopy(data)
+        self._settings_changed()
         self.advanced.refresh_parameter_choices(load_selected=True)
         self.minimal.set_parameter_label(self.store.current_parameters_label())
         self._set_status(f"Saved settings: {saved_path.name}")
@@ -435,17 +510,6 @@ class UI(BaseTk):
                 return frame.copy()
         return None
 
-    def _preview_worker(self, path: Path, parameters: dict[str, Any]) -> None:
-        self.events.put({"kind": "preview_started", "path": path})
-        try:
-            image = preview(str(path), parameters)
-            self.events.put({"kind": "preview_result", "path": path, "image": image})
-        except Exception as exc:
-            logger.exception("Preview failed: %s", path)
-            self.events.put({"kind": "error", "message": str(exc)})
-        finally:
-            self.events.put({"kind": "worker_done"})
-
     def _poll_events(self) -> None:
         try:
             while True:
@@ -487,11 +551,18 @@ class UI(BaseTk):
             self.advanced.set_batch_progress(completed, total)
         elif kind == "processed_preview":
             self.advanced.show_processed_preview(event["path"], event.get("image"))
-        elif kind == "preview_started":
+        elif kind in {"gallery_started", "gallery_result", "gallery_error"}:
             path = event["path"]
-            self._set_status(f"Loading preview: {path.name}")
-        elif kind == "preview_result":
-            self.advanced.show_preview(event["path"], event["image"])
+            if path not in self.input_paths or self.preview_tokens.get(path) != event["token"]:
+                return
+            if kind == "gallery_started":
+                self.advanced.gallery.set_state(path, "computing")
+            elif kind == "gallery_result":
+                self.advanced.show_preview(path, event.get("image"))
+            else:
+                self.advanced.gallery.set_state(path, "error", f"Preview failed: {event['message']}")
+        elif kind == "gallery_scheduler_closed":
+            pass
         elif kind == "status":
             self._set_status(str(event["message"]))
         elif kind == "pulse_detection_summary":
@@ -518,6 +589,11 @@ class UI(BaseTk):
             self.worker = None
             self.worker_kind = None
             self._sync_views()
+            if self.preview_scheduler is not None:
+                self.preview_scheduler.resume()
+            # Completed processing images are already the latest results.
+            self._queue_previews([p for p in self.input_paths
+                                  if self.advanced.gallery.cards[p]["state"] in {"queued", "computing", "processing"}])
 
     def _sync_views(self) -> None:
         busy = self._busy()
@@ -567,6 +643,13 @@ class UI(BaseTk):
         self.update_idletasks()
 
     def _on_close(self) -> None:
+        self.closing = True
+        self.stop_event.set()
+        if self.preview_after_id is not None:
+            self.after_cancel(self.preview_after_id)
+            self.preview_after_id = None
+        if self.preview_scheduler is not None:
+            self.preview_scheduler.close()
         self.store.save_active_tab(self.active_tab_name)
         if self.poll_after_id is not None:
             try:

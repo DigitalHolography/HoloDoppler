@@ -216,7 +216,7 @@ def _process_one_batch(
     return res, PROJ_reg
 
 
-def _run(file_path, parameters, preview=False, progress_callback=None):
+def _run(file_path, parameters, preview=False, progress_callback=None, *, save_output=True):
     reader, p = prepare_input(file_path, parameters)
     if not batch_indices(reader, p):
         return None
@@ -234,11 +234,11 @@ def _run(file_path, parameters, preview=False, progress_callback=None):
     static = {} if coefs is None else {"shack_hartmann_autofocus_zernike_coefs": backend.to_numpy(coefs)}
     return run_pipeline(reader, p, process_batch, preview=preview, preview_key="PROJff",
                         reference=reference, static=static, accumulation=p.get("accumulation", 1),
-                        ecc_keys={"PROJ", "PROJff"}, progress_callback=progress_callback)
+                        ecc_keys={"PROJ", "PROJff"}, progress_callback=progress_callback, save_output=save_output)
 
 
-def preview(file_path, parameters):
-    return _run(file_path, parameters, preview=True)
+def preview(file_path, parameters, *, save_outputs=True):
+    return _run(file_path, parameters, preview=True, save_output=save_outputs)
 
 
 def process(file_path, parameters, progress_callback=None):

@@ -839,7 +839,11 @@ def _square_spectrum(spectrum, parameters):
     return spectrum
 
 
-def preview(file_path, parameters):
+def preview(file_path, parameters, *, save_outputs=True):
+    return _preview(file_path, parameters, save_output=save_outputs)
+
+
+def _preview(file_path, parameters, *, save_output=True):
     file_reader, parameters, _ = _prepare_input(file_path, parameters, preview=True)
 
     # ------------------------------------------------------------
@@ -889,14 +893,15 @@ def preview(file_path, parameters):
     backend.clear_gpu_memory()
 
     res_np.update(autofocus_diagnostics)
-    save_outputs(
-        file_reader=file_reader,
-        output=res_np,
-        parameters=parameters,
-        custom_relative_path="preview",
-        num_saving_workers=parameters.get("num_saving_workers", 0),
-        saving_queue_depth=parameters.get("saving_queue_depth"),
-    )
+    if save_output:
+        save_outputs(
+            file_reader=file_reader,
+            output=res_np,
+            parameters=parameters,
+            custom_relative_path="preview",
+            num_saving_workers=parameters.get("num_saving_workers", 0),
+            saving_queue_depth=parameters.get("saving_queue_depth"),
+        )
 
     return res_np["moment0ff"]
 

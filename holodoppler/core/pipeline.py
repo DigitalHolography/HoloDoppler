@@ -74,7 +74,7 @@ def prepare_result(result, parameters):
 
 def run_pipeline(reader, parameters, process_batch, *, preview=False,
                  preview_key="moment0ff", reference=None, static=None,
-                 stateful=False, accumulation=1, ecc_keys=None, progress_callback=None):
+                 stateful=False, accumulation=1, ecc_keys=None, progress_callback=None, save_output=True):
     """Consume batches in order, averaging groups before output and optional ECC.
 
     Stateful processors run without CPU workers. CUDA compute calls remain ordered
@@ -176,7 +176,7 @@ def run_pipeline(reader, parameters, process_batch, *, preview=False,
                 for index in range(emitted):
                     check_cancelled(progress_callback)
                     destination.add_batch({key: value[index] for key, value in output.items()}, index)
-            else:
+            elif not preview or save_output:
                 to_save = ({key: value[0] for key, value in output.items()}
                            if preview else dict(output))
                 to_save.update(static)
