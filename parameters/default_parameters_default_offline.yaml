@@ -37,7 +37,7 @@ svd_filter_by_bloc: false # Apply overlapping local SVD after global SVD.
 svd_filter_by_bloc_window_size: 5 # Square side in pixels.
 svd_filter_by_bloc_window_stride: 1 # Window step in both axes; 1 to window size.
 svd_filter_by_bloc_parallel: false # Process all windows together when true.
- + parse: 8 # Temporary memory target; null batches all windows.
+svd_filter_by_bloc_mib_block_size: 8 # Temporary memory target; null batches all windows.
 svd_filter_by_bloc_threshold: 0 # Leading components removed; zero skips SVD.
 svd_threshold: 16
 svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold"
@@ -51,6 +51,8 @@ welch_stride: 32 # Spacing between segment starts in selected frames.
 
 # Gaussian spectral width after SVD, before frequency filtering
 compute_gaussian_width: true
+compute_gaussian_width_prefilter_low_freq: 3000
+compute_gaussian_width_prefilter_order: 4
 
 # Temporal sampling
 sampling_freq: "use_metadata" # Sampling frequency in Hz

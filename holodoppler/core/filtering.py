@@ -27,6 +27,46 @@ def filter_2d(xp, fft, frames, filter2d_low):
 
     return F
 
+def butterworth_high_pass_filter(xp, psd, low_freq, order, fs):
+    """
+    Applies a Butterworth high-pass filter to a PSD along axis 0 (fftfreq ordering)
+    using a specified array namespace (e.g., numpy or cupy).
+    
+    Parameters:
+    -----------
+    xp : module
+        Array module/namespace (e.g., numpy or cupy).
+    psd : ndarray
+        Power Spectral Density array where axis 0 is the frequency axis.
+    low_freq : float
+        Cutoff frequency of the high-pass filter.
+    order : int
+        Order of the Butterworth filter.
+    fs : float
+        Sampling frequency.
+        
+    Returns:
+    --------
+    ndarray
+        Filtered PSD with the same shape as the input.
+    """
+    n = psd.shape[0]
+    
+    # Get frequencies corresponding to fftfreq ordering using xp
+    freqs = xp.fft.fftfreq(n, d=1.0/fs)
+    abs_freqs = xp.abs(freqs)
+    
+    # Compute Butterworth high-pass squared magnitude response: |H(f)|^2
+    h_squared = xp.zeros_like(abs_freqs)
+    mask = abs_freqs > 0
+    h_squared[mask] = 1.0 / (1.0 + (low_freq / abs_freqs[mask]) ** (2 * order))
+    # DC component (f = 0) automatically remains 0.0
+    
+    # Reshape h_squared to broadcast correctly along axis 0 for any N-D psd shape
+    broadcast_shape = (n,) + (1,) * (psd.ndim - 1)
+    h_squared = h_squared.reshape(broadcast_shape)
+    
+    return psd * h_squared
 
 
 

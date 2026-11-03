@@ -52,6 +52,8 @@ welch_stride: 32 # Spacing between segment starts in selected frames.
 
 # Gaussian spectral width after SVD, before frequency filtering
 compute_gaussian_width: true
+compute_gaussian_width_prefilter_low_freq: 1000
+compute_gaussian_width_prefilter_order: 4
 
 # Temporal sampling
 sampling_freq: "use_holovibes" # Sampling frequency in Hz

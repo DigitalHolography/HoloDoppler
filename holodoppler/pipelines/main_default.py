@@ -18,6 +18,7 @@ from holodoppler.core.filtering import (
     svd_filter,
     svd_filter_by_bloc,
     welch_power_spectrum,
+    butterworth_high_pass_filter
 )
 from holodoppler.core.image_utils import (
     gaussian_flatfield,
@@ -289,6 +290,8 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
             psd = xp.abs(spectrum)
             del spectrum
             xp.square(psd, out=psd)
+        if parameters.get("compute_gaussian_width_prefilter_low_freq", 1000.0) >0:
+            psd = butterworth_high_pass_filter(xp, psd, parameters.get("compute_gaussian_width_prefilter_low_freq", 1000.0), parameters.get("compute_gaussian_width_prefilter_order", 4), parameters["sampling_freq"] / (parameters.get("skip_every") or 1))
         output_dict["gaussian_width"] = gaussian_width(xp, psd, parameters["sampling_freq"] / (parameters.get("skip_every") or 1),)
         del psd
         if reference_only and target == "gaussian_width":
