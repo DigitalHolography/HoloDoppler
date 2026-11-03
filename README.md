@@ -65,7 +65,17 @@ finishes and resources close, then **Stopped**. Completed files are kept;
 the cancelled file is not finalized as a partial result.
 
 The Advanced **Inputs & Preview** panel automatically computes a preview for each
-loaded file. 
+loaded file.
+
+For the default pipeline, display-only previews compute just the configured
+`registration_image` and its dependencies. Autofocus fitting, correction, and
+acceptance checks are preserved, while unused output images and diagnostic plots
+are skipped. When registration is enabled, previews use
+`registration_ref_first_frame` and `registration_ref_batch_size`; otherwise they
+use the first processing batch. The returned image is the raw registration
+reference before shifts or square resizing. The gallery retains it after
+processing. Saved previews still produce their full first-batch output bundle,
+but return the registration-reference image too.
 
 ### Run a Batch of Files in CLI
 

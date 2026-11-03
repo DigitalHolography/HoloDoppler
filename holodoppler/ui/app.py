@@ -550,7 +550,12 @@ class UI(BaseTk):
                 self.advanced.set_file_completed(completed)
             self.advanced.set_batch_progress(completed, total)
         elif kind == "processed_preview":
-            self.advanced.show_processed_preview(event["path"], event.get("image"))
+            if self.session_parameters.get("pipeline_name") == "default":
+                card = self.advanced.gallery.cards.get(event["path"])
+                if card is not None and card["image"] is None:
+                    self.advanced.gallery.set_state(event["path"], "queued")
+            else:
+                self.advanced.show_processed_preview(event["path"], event.get("image"))
         elif kind in {"gallery_started", "gallery_result", "gallery_error"}:
             path = event["path"]
             if path not in self.input_paths or self.preview_tokens.get(path) != event["token"]:

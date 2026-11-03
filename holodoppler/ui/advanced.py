@@ -97,7 +97,10 @@ class AdvancedView(ttk.Frame):
         self.active_input_index = index - 1
         self._set_input_state(self.active_input_index, "processing")
         self._select_input(self.active_input_index)
-        self.gallery.set_state(path, "processing")
+        card = self.gallery.cards.get(path)
+        if (getattr(self.controller, "session_parameters", {}).get("pipeline_name") != "default"
+                or card is None or card["image"] is None):
+            self.gallery.set_state(path, "processing")
 
     def set_file_progress(self, completed: int, total: int, message: str = "") -> None:
         value = 0 if total <= 0 else max(0, min(100, completed / total * 100))

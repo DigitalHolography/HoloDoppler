@@ -262,6 +262,10 @@ def test_gallery_controller_selection_refresh_and_processing(tmp_path, theme):
                 calls.append(path)
                 return {'moment0': np.full((1, 8, 10), len(calls), dtype=float)}
             app.process = process
+            ui.session_parameters['pipeline_name'] = 'default'
+            for path in paths:
+                gallery.show(path, np.ones((8, 10)))
+            reference_images = {p: c['image'] for p, c in gallery.cards.items()}
             ui.run_processing()
             time.sleep(.1)
             assert not calls, 'processing must wait for active previews'
@@ -271,6 +275,17 @@ def test_gallery_controller_selection_refresh_and_processing(tmp_path, theme):
             while not ui.events.empty(): ui._handle_event(ui.events.get_nowait())
             assert len(calls) == len(paths)
             assert all(c['state'] == 'ready' for c in gallery.cards.values())
+            assert all(gallery.cards[p]['image'] is image for p, image in reference_images.items())
+            # A missing reference is refreshed after processing instead of using moment0.
+            gallery.set_state(paths[0], 'processing')
+            ui._handle_event(dict(kind='processed_preview', path=paths[0], image=np.ones((8, 10))))
+            assert gallery.cards[paths[0]]['state'] == 'queued'
+            ui._handle_event(dict(kind='worker_done'))
+            assert fake.tasks[-1][1] == paths[0]
+            # Other pipelines continue displaying their processed moment images.
+            ui.session_parameters['pipeline_name'] = 'lsci'
+            ui._handle_event(dict(kind='processed_preview', path=paths[0], image=np.ones((8, 10))))
+            assert gallery.cards[paths[0]]['state'] == 'ready'
             assert ui.minimal.status_var.get() == 'Processing complete'
             ui.clear_inputs()
             assert not gallery.cards and not ui.preview_tokens

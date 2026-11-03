@@ -71,7 +71,13 @@ def _validate_reference_batch(reader, first, size, label, skip_every=None):
         )
 
 
-def _prepare_input(file_path, parameters, *, preview=False):
+def _reference_batch(parameters):
+    if parameters.get("image_registration", False):
+        return parameters["registration_ref_first_frame"], parameters["registration_ref_batch_size"]
+    return parameters["first_frame"], parameters["batch_size"]
+
+
+def _prepare_input(file_path, parameters, *, preview=False, preview_reference=False):
     backend.set_backend(parameters.get("backend", "auto"))
     reader = get_reader(file_path)
     if reader.extension == ".holo":
@@ -90,9 +96,10 @@ def _prepare_input(file_path, parameters, *, preview=False):
                                                  parameters["batch_size"]),
                                   "Autofocus reference", skip)
     if preview:
-        _validate_reference_batch(reader, parameters["first_frame"],
-                                  parameters["batch_size"], "Preview", skip)
-        indices = range(parameters["first_frame"], parameters["first_frame"] + 1)
+        first, size = (_reference_batch(parameters) if preview_reference else
+                       (parameters["first_frame"], parameters["batch_size"]))
+        _validate_reference_batch(reader, first, size, "Preview", skip)
+        indices = range(first, first + 1)
     else:
         indices = calculate_batch_indices(
             parameters["first_frame"], parameters.get("end_frame", 0),
@@ -103,18 +110,90 @@ def _prepare_input(file_path, parameters, *, preview=False):
 
 
 
-def _registration_image(result, parameters):
+def _registration_image(result, parameters, *, stacked=False):
     key = parameters.get("registration_image", "moment0ff")
-    if key not in result or result[key].ndim not in (2, 3):
+    if getattr(result.get(key), "ndim", None) not in ((2, 3) if stacked else (2,)):
         logger.warning("Registration image %r unavailable; using moment0ff", key)
         key = "moment0ff"
     return result[key]
+
+
+def _reference_output_key(parameters, result):
+    """Resolve against outputs that a normal, unregistered batch can produce."""
+    key = parameters.get("registration_image", "moment0ff")
+    if getattr(result.get(key), "ndim", None) == 2:
+        return key
+    available = {"moment0", "moment0ff", "moment1", "moment2"}
+    if parameters.get("compute_gaussian_width", True):
+        available.add("gaussian_width")
+    if parameters.get("pca_compute", False):
+        available.add("pca_sum_ff" if parameters.get("pca_flatfield", False) else "pca_sum")
+    if parameters.get("directional_Doppler_image", False):
+        available.update({"_directional_Doppler_pos", "_directional_Doppler_neg"})
+    if parameters.get("color_Doppler_image", False):
+        available.update({"_color_Doppler_low", "_color_Doppler_high"})
+    for index, (low, high) in enumerate(parameters.get("frequency_bands", [])):
+        available.add(f"band_{index}_{low}_{high}")
+    for index, (low, high) in enumerate(parameters.get("moments_frequency_ranges") or ()):
+        available.update(f"{name}_range_{index}_{low}_{high}"
+                         for name in ("moment0", "moment1", "moment0ff"))
+    return key if key in available else "moment0ff"
+
+
+def _reference_from_psd(parameters, psd, target):
+    """Compute just the selected image, retaining normal-batch precision."""
+    xp = backend.xp
+    fs = parameters["sampling_freq"] / (parameters.get("skip_every") or 1)
+
+    def selected_moment(low, high, order):
+        indices, frequencies = frequency_symmetric_filtering(
+            xp, backend.fft, psd.shape[0], fs, low, high)
+        return moments(xp, psd[indices], frequencies, [order])[0]
+
+    def flatfield(image):
+        return gaussian_flatfield(image, parameters.get("registration_flatfield_gw", 1.0),
+                                  backend.gaussian_filter)
+
+    if target in {"moment0", "moment0ff", "moment1", "moment2"}:
+        order = 0 if target == "moment0ff" else int(target[-1])
+        image = selected_moment(parameters["low_freq"], parameters.get("high_freq"), order)
+        return ({"moment0": image, "moment0ff": flatfield(image)}
+                if target == "moment0ff" else {target: image})
+    if target.startswith("_directional_Doppler_"):
+        band = parameters.get("directional_Doppler_frequency_band") or (
+            parameters["low_freq"], parameters.get("high_freq"))
+        positive, negative = directional(xp, backend.gaussian_filter, psd, *band, fs,
+                                        parameters.get("directional_Doppler_gaussian_width", 35.))
+        return {target: positive if target.endswith("pos") else negative}
+    if target.startswith("_color_Doppler_"):
+        name = target.rsplit("_", 1)[1]
+        band = parameters.get(f"color_Doppler_{name}_frequency_band",
+                              [3000, 9000] if name == "low" else [9000, 18000])
+        return {target: _band_moments(psd, fs, *band, [0])[0]}
+    for index, (low, high) in enumerate(parameters.get("frequency_bands", [])):
+        if target == f"band_{index}_{low}_{high}":
+            slices = symmetric_frequency_slices(psd.shape[0], fs, low, high)
+            count = sum(part.stop - part.start for part in slices)
+            image = _band_moments(psd, fs, low, high, [0])[0]
+            return {target: image / count if count else xp.full_like(image, xp.nan)}
+    for index, (low, high) in enumerate(parameters.get("moments_frequency_ranges") or ()):
+        if target.endswith(f"_range_{index}_{low}_{high}"):
+            order = 1 if target.startswith("moment1_") else 0
+            image = selected_moment(low, high, order)
+            return {target: flatfield(image) if target.startswith("moment0ff_") else image}
+    raise ValueError(f"Unsupported registration image: {target}")
 
 
 def _process_batch(parameters, frames, phase_term=None, output_dict=None,
                    reference_only=False, propagation_kernel=None):
     xp = backend.xp
     fft = backend.fft
+
+    if output_dict is None:
+        output_dict = {}
+    target = _reference_output_key(parameters, output_dict) if reference_only else None
+    if reference_only and target in output_dict:
+        return output_dict
 
     prop_method = parameters["spatial_propagation"]
 
@@ -184,10 +263,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
                 f"Unknown propagation method: {prop_method!r}"
             )
 
-    if output_dict is None:
-        output_dict = {}
-
-    if parameters.get("pca_compute", False) and (not reference_only or parameters.get("registration_image", "moment0ff") in {"pca_sum", "pca_sum_ff"}):
+    if parameters.get("pca_compute", False) and (not reference_only or target in {"pca_sum", "pca_sum_ff"}):
         window = parameters.get("pca_time_window", 32)
         start, end = parameters.get("pca_index_range", [0, 16])
         count = holograms.shape[0] // window
@@ -208,6 +284,9 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
                 backend.gaussian_filter)
         else:
             output_dict["pca_sum"] = total / count
+
+        if reference_only and target in output_dict:
+            return output_dict
 
     # ------------------------------------------------------------
     # SVD filtering
@@ -232,9 +311,6 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
 
     del holograms
 
-    if output_dict is None:
-        output_dict = {}
-
     # ------------------------------------------------------------
     # Temporal Fourier transform
     # ------------------------------------------------------------
@@ -258,6 +334,8 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
         output_dict["gaussian_width"] = gaussian_width(
             xp, psd, parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
         )
+        if reference_only and target == "gaussian_width":
+            return output_dict
 
     # ------------------------------------------------------------
     # Frequency filtering
@@ -265,7 +343,11 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     if parameters.get("corner_compensation", False):
         psd = corner_compensation(xp, psd)
 
-    if not reference_only and parameters.get("directional_Doppler_image", False):
+    if reference_only:
+        output_dict.update(_reference_from_psd(parameters, psd, target))
+        return output_dict
+
+    if parameters.get("directional_Doppler_image", False):
         band = parameters.get("directional_Doppler_frequency_band") or (
             parameters["low_freq"], parameters.get("high_freq"))
         output_dict["_directional_Doppler_pos"], output_dict["_directional_Doppler_neg"] = directional(
@@ -275,19 +357,12 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
         )
 
     fs = parameters["sampling_freq"] / (parameters.get("skip_every") or 1)
-    orders = [0] if reference_only else [0, 1, 2]
+    orders = [0, 1, 2]
     indices, selected_freqs = frequency_symmetric_filtering(
         xp, fft, nt_sub, fs, parameters["low_freq"], parameters.get("high_freq"),
     )
     images = moments(xp, psd[indices], selected_freqs, orders)
     output_dict.update(zip(("moment0", "moment1", "moment2"), images))
-    if reference_only and parameters.get("registration_image", "moment0ff") == "moment0ff":
-        output_dict["moment0ff"] = gaussian_flatfield(
-            output_dict["moment0"], parameters.get("registration_flatfield_gw", 1.0),
-            backend.gaussian_filter,
-        )
-        return output_dict
-
     output_dict["spectrum_line"] = xp.mean(
         psd,
         axis=(-2, -1),
@@ -368,6 +443,8 @@ def _process_shack_hartmann(
     frames,
     output_dict=None,
     diagnostics=None,
+    *,
+    collect_diagnostics=True,
 ):
     """
     Compute Shack-Hartmann displacements and fit the Zernike wavefront.
@@ -435,7 +512,7 @@ def _process_shack_hartmann(
     # ------------------------------------------------------------
     # Calculate Shack-Hartmann displacements
     # ------------------------------------------------------------
-    shift_diagnostics = {} if output_dict is not None else None
+    shift_diagnostics = {} if output_dict is not None and collect_diagnostics else None
     if parameters.get("shack_hartmann_graph_laplacian", False):
         shifts_y, shifts_x = calculate_displacements_graph_laplacian(
             xp,
@@ -479,7 +556,7 @@ def _process_shack_hartmann(
     # ------------------------------------------------------------
     # Optional diagnostic output
     # ------------------------------------------------------------
-    if output_dict is not None:
+    if output_dict is not None and collect_diagnostics:
         output_dict.update(shift_diagnostics or {})
         sy, sx, numy, numx = U.shape
 
@@ -629,6 +706,7 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None,
         ref_frames,
         output_dict=autofocus_result,
         diagnostics=diagnostics,
+        **({"collect_diagnostics": False} if diagnostics is None else {}),
     )
 
     coefs = autofocus_result.get("shack_hartmann_zernike_coefs")
@@ -677,24 +755,8 @@ def _get_autofocus_phase_term(parameters, file_reader, diagnostics=None,
     return phase_term, coefs
 
 
-def _process_one_batch(
-    parameters,
-    frames,
-    registration_ref=None,
-    phase_term=None,
-    propagation_kernel=None,
-):
-    """
-    Process one batch.
-
-    If `phase_term` is supplied, that fixed wavefront correction is
-    applied to the batch.
-
-    If live `shack_hartmann` processing is enabled and no phase term
-    was supplied, a new Shack-Hartmann correction is calculated for
-    this batch.
-    """
-
+def _prepare_batch_frames(parameters, frames, phase_term, result, *, reference_only=False):
+    """Apply identical filtering and wavefront corrections to previews and batches."""
     if parameters.get("filter2d", False):
         frames = filter_2d(
             backend.xp,
@@ -702,8 +764,6 @@ def _process_one_batch(
             frames,
             parameters["filter2d_low"],
         )
-
-    res = {}
 
     # A fixed autofocus correction takes precedence. Rejected autofocus must
     # continue uncorrected rather than falling back to live Shack-Hartmann.
@@ -714,8 +774,32 @@ def _process_one_batch(
         phase_term = _process_shack_hartmann(
             parameters,
             frames,
-            output_dict=res,
+            output_dict=result,
+            **({"collect_diagnostics": parameters.get("registration_image") == "shack_hartmann_sub_images"}
+               if reference_only else {}),
         )
+    return frames, phase_term
+
+
+def _compute_reference_image(parameters, frames, phase_term=None, propagation_kernel=None):
+    result = {}
+    frames, phase_term = _prepare_batch_frames(parameters, frames, phase_term, result,
+                                               reference_only=True)
+    result = _process_batch(parameters, frames, phase_term=phase_term, output_dict=result,
+                            reference_only=True, propagation_kernel=propagation_kernel)
+    return _registration_image(result, parameters)
+
+
+def _process_one_batch(
+    parameters,
+    frames,
+    registration_ref=None,
+    phase_term=None,
+    propagation_kernel=None,
+):
+    """Process a batch, using fixed autofocus or the configured live correction."""
+    res = {}
+    frames, phase_term = _prepare_batch_frames(parameters, frames, phase_term, res)
 
     _process_batch(
         parameters,
@@ -840,70 +924,67 @@ def _square_spectrum(spectrum, parameters):
 
 
 def preview(file_path, parameters, *, save_outputs=True):
+    """Return the raw registration image; display-only calls omit unrelated work."""
     return _preview(file_path, parameters, save_output=save_outputs)
 
 
 def _preview(file_path, parameters, *, save_output=True):
-    file_reader, parameters, _ = _prepare_input(file_path, parameters, preview=True)
+    reader, parameters, _ = _prepare_input(
+        file_path, parameters, preview=True, preview_reference=not save_output)
+    try:
+        return _preview_prepared(reader, parameters, save_output=save_output)
+    finally:
+        close = getattr(reader, "close", None)
+        if close is not None:
+            close()
+        backend.clear_gpu_memory()
 
-    # ------------------------------------------------------------
-    # Build autofocus phase once from the configured reference batch
-    # ------------------------------------------------------------
-    autofocus_diagnostics = {}
-    autofocus_phase_term, auto_coefs = _get_autofocus_phase_term(
-        parameters,
-        file_reader,
-        diagnostics=autofocus_diagnostics,
-    )
 
-    # ------------------------------------------------------------
-    # Preview frames
-    # ------------------------------------------------------------
-    frames = file_reader.read_frames(
-        first_frame=parameters["first_frame"],
-        batch_size=parameters["batch_size"],
-        skip_every=parameters.get("skip_every"),
-    )
+def _preview_prepared(reader, parameters, *, save_output):
+    first, size = _reference_batch(parameters)
+    raw_frames = reader.read_frames(
+        first_frame=first, batch_size=size, skip_every=parameters.get("skip_every"))
+    autofocus_frames = None
+    if (parameters.get("shack_hartmann_autofocus", False)
+            and first == parameters["registration_ref_first_frame"]
+            and size == parameters.get("shack_hartmann_autofocus_batch_size", parameters["batch_size"])):
+        autofocus_frames = raw_frames
+    diagnostics = {} if save_output else None
+    phase, coefs = _get_autofocus_phase_term(
+        parameters, reader, diagnostics=diagnostics, reference_frames=autofocus_frames)
+    kernel = _fixed_fresnel_kernel(parameters, phase)
+    frames = backend.to_backend(_frame_stack(raw_frames)).astype(backend.xp.float32, copy=False)
+    if not save_output:
+        reference = _compute_reference_image(parameters, frames, phase, kernel)
+        return backend.to_numpy(reference).copy()
 
-    frames = backend.to_backend(_frame_stack(frames)).astype(
-        backend.xp.float32,
-        copy=False,
-    )
-
-    # If autofocus is active, reuse the reference correction here.
-    # Otherwise live Shack-Hartmann is handled by _process_one_batch().
-    res, _ = _process_one_batch(
-        parameters,
-        frames,
-        registration_ref=None,
-        phase_term=autofocus_phase_term,
-    )
-
-    if auto_coefs is not None:
-        res["shack_hartmann_autofocus_zernike_coefs"] = backend.to_numpy(auto_coefs)
-
-    res = _finalize_spatial_result(res, parameters)
-    if "sh_psd" in res:
-        res["sh_psd"] = _square_spectrum(res["sh_psd"], parameters)
-    res_np = {key: backend.to_numpy(value) for key, value in res.items()}
-
-    del res
-    del autofocus_phase_term
-
-    backend.clear_gpu_memory()
-
-    res_np.update(autofocus_diagnostics)
-    if save_output:
-        save_outputs(
-            file_reader=file_reader,
-            output=res_np,
-            parameters=parameters,
-            custom_relative_path="preview",
-            num_saving_workers=parameters.get("num_saving_workers", 0),
-            saving_queue_depth=parameters.get("saving_queue_depth"),
-        )
-
-    return res_np["moment0ff"]
+    # Saved previews keep the full first-batch output bundle. The returned
+    # image still describes the actual registration reference, on its raw grid.
+    same_batch = (first, size) == (parameters["first_frame"], parameters["batch_size"])
+    reference = None
+    if not same_batch:
+        reference = backend.to_numpy(_compute_reference_image(parameters, frames, phase, kernel)).copy()
+        frames = backend.to_backend(_frame_stack(reader.read_frames(
+            first_frame=parameters["first_frame"], batch_size=parameters["batch_size"],
+            skip_every=parameters.get("skip_every"),
+        ))).astype(backend.xp.float32, copy=False)
+    result, batch_reference = _process_one_batch(
+        parameters, frames, phase_term=phase, propagation_kernel=kernel)
+    if reference is None:
+        reference = backend.to_numpy(batch_reference if batch_reference is not None
+                                     else _registration_image(result, parameters)).copy()
+    if coefs is not None:
+        result["shack_hartmann_autofocus_zernike_coefs"] = backend.to_numpy(coefs)
+    result = _finalize_spatial_result(result, parameters)
+    if "sh_psd" in result:
+        result["sh_psd"] = _square_spectrum(result["sh_psd"], parameters)
+    output = {key: backend.to_numpy(value) for key, value in result.items()}
+    output.update(diagnostics)
+    save_outputs(file_reader=reader, output=output, parameters=parameters,
+                 custom_relative_path="preview",
+                 num_saving_workers=parameters.get("num_saving_workers", 0),
+                 saving_queue_depth=parameters.get("saving_queue_depth"))
+    return reference
 
 
 def process(file_path, parameters, progress_callback=None):
@@ -954,18 +1035,8 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
     )
     propagation_kernel = _fixed_fresnel_kernel(parameters, autofocus_phase_term)
     if explicit_reference:
-        if parameters.get("filter2d", False):
-            ref_frames = filter_2d(backend.xp, backend.fft, ref_frames,
-                                   parameters["filter2d_low"])
-        reference_phase = autofocus_phase_term
-        if (reference_phase is None and not parameters.get("shack_hartmann_autofocus", False)
-                and parameters.get("shack_hartmann", False)):
-            reference_phase = _process_shack_hartmann(parameters, ref_frames)
-        reference_result = _process_batch(
-            parameters, ref_frames, phase_term=reference_phase,
-            reference_only=True, propagation_kernel=propagation_kernel,
-        )
-        registration_ref = _registration_image(reference_result, parameters)
+        registration_ref = _compute_reference_image(
+            parameters, ref_frames, autofocus_phase_term, propagation_kernel)
     del ref_frames, autofocus_frames
 
     def process_batch(frames, reference):
@@ -1045,7 +1116,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
 
     if parameters.get("image_registration_with_ecc", False):
         logger.info("Running Registration ECC algo:")
-        registration_ecc = register_with_ecc(_registration_image(output, parameters),radius=parameters.get("registration_ecc_radius",0.8),iterations=300,eps=1e-6, progress_callback=progress_callback, ecc_min_threshold=parameters.get("registration_ecc_min_threshold",0.7))
+        registration_ecc = register_with_ecc(_registration_image(output, parameters, stacked=True),radius=parameters.get("registration_ecc_radius",0.8),iterations=300,eps=1e-6, progress_callback=progress_callback, ecc_min_threshold=parameters.get("registration_ecc_min_threshold",0.7))
 
 
         for key in output :
