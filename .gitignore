@@ -16,3 +16,6 @@ uv.lock
 
 .debug_paths.json
 .local
+
+.test-access-check
+.pytest_cache

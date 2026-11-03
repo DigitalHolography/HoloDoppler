@@ -1,4 +1,5 @@
 """Saving API. Implementations live in policy, data, media, scheduler and session."""
+from .filesystem import check_output_access
 
 from .policy import (
     is_grayscale_video,
@@ -65,6 +66,7 @@ from .session import (
 from .media import VideoWriter
 
 __all__ = [
+    "check_output_access",
     "is_grayscale_video",
     "is_color_video",
     "is_image",

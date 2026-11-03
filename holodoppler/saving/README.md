@@ -3,6 +3,12 @@
 Pipelines continue to import `OutputClass`, `save_outputs`, and standalone
 save helpers from `holodoppler.saving`.
 
+Before erasing or archiving existing results, `check_output_access(path)` checks
+the entire tree without modifying it. Windows delete-sharing conflicts raise
+`PermissionError` naming the blocked path. Links and junctions are not traversed.
+Other platforms check directory permissions. This is best effort: another
+application can change access after the check, so replacement is not atomic.
+
 | Module | Owns |
 | --- | --- |
 | `policy` | Shape classification and shared output-format selection |

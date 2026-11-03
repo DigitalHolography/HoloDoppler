@@ -13,6 +13,7 @@ import numpy as np
 
 from holodoppler.logging import logger
 from . import data, media, policy, scheduler
+from .filesystem import check_output_access
 
 
 def create_directories(
@@ -126,6 +127,8 @@ def _prepare_output_directory(file_reader, parameters, custom_path, custom_relat
     if option not in {"overwrite", "erase", "archive_old"}:
         raise ValueError(f"Unknown overwrite_option: {option}")
     if target.exists():
+        if option in {"erase", "archive_old"}:
+            check_output_access(target)
         if option == "archive_old":
             archive = data.ensure_directory(target.parent / "archive")
             destination = archive / target.name
