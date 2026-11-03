@@ -288,6 +288,22 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
         if reference_only and target in output_dict:
             return output_dict
 
+
+    # ------------------------------------------------------------
+    # Gaussian Width
+    # ------------------------------------------------------------
+    if parameters.get("compute_gaussian_width", True) and (not reference_only or parameters.get("registration_image") == "gaussian_width"):
+        if parameters.get("welch_enabled", False):
+            psd = welch_power_spectrum(xp, fft, holograms,batch_size=parameters.get("welch_batch_size", 32),stride=parameters.get("welch_stride", 32),windowing=parameters.get("welch_windowing"))
+        else:
+            spectrum = fourier_time_transform(xp, fft, holograms)
+            psd = xp.abs(spectrum)
+            del spectrum
+            xp.square(psd, out=psd)
+        output_dict["gaussian_width"] = gaussian_width(xp, psd, parameters["sampling_freq"] / (parameters.get("skip_every") or 1),)
+        del psd
+        if reference_only and target == "gaussian_width":
+            return output_dict
     # ------------------------------------------------------------
     # SVD filtering
     # ------------------------------------------------------------
@@ -328,14 +344,6 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
         xp.square(psd, out=psd)
     del holograms_f
     nt_sub = psd.shape[0]
-    if parameters.get("compute_gaussian_width", True) and (
-        not reference_only or parameters.get("registration_image") == "gaussian_width"
-    ):
-        output_dict["gaussian_width"] = gaussian_width(
-            xp, psd, parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
-        )
-        if reference_only and target == "gaussian_width":
-            return output_dict
 
     # ------------------------------------------------------------
     # Frequency filtering
