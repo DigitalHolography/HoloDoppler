@@ -71,16 +71,15 @@ def test_streamed_and_buffered_outputs_match(tmp_path, monkeypatch, name, propag
     frames = np.random.default_rng(123).uniform(10, 100, (17, 8, 10)).astype(np.float32)
     reader, _ = reader_for(tmp_path, frames)
     monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
+    monkeypatch.setattr(import_module("holodoppler.pipelines.main_lsci"), "get_reader", lambda _: reader)
     monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
     monkeypatch.setattr(saving_media, "save_video", lambda *args, **kwargs: None)
     module_name = "sliding_shack_hart" if name == "sliding_shack_hartmann" else name
     module = import_module(f"holodoppler.pipelines.main_{module_name}")
     p = parameters(name, spatial_propagation=propagation, image_registration=registration)
     if name == "lsci":
-        p.update(batch_size=3, batch_stride=2, image_registration=False, lsci_resize_factor=1,
-                 lsci_enable_spatial=True, lsci_enable_temporal=True,
-                 lsci_enable_spatiotemporal=True, lsci_nbh_s=3, lsci_nbh_t=99,
-                 lsci_history_dtype="float16")
+        p.update(lsci_time_window_size=3, lsci_time_window_stride=3,
+                 lsci_pixel_window_size=3, image_registration=False)
     snapshots = []
     for live in (True, False):
         progress = []
@@ -183,42 +182,27 @@ def test_skip_and_reference_bounds(tmp_path):
         pipeline.read_reference(reader, p, 9, 3, "Registration")
 
 
-@pytest.mark.parametrize("skip,expected,starts", [(1, [6, 37.5, 96], [1, 4, 7]), (2, [3.375, 13.5], [1, 4])])
-def test_lsci_full_batches_and_forced_window(tmp_path, monkeypatch, skip, expected, starts):
-    from holodoppler.pipelines import main_lsci as lsci
-    frames = np.arange(10, dtype=np.float32)[:, None, None] * np.ones((10, 3, 4))
-    reader, calls = reader_for(tmp_path, frames)
-    monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
-    saved = []
-    monkeypatch.setattr(pipeline, "save_outputs", lambda **kw: saved.append(kw) or tmp_path)
-    p = parameters("lsci", batch_size=3, batch_stride=99, first_frame=1, end_frame=10,
-                   skip_every=skip, live_saving=False, lsci_nbh_s=1, lsci_nbh_t=99,
-                   lsci_resize_factor=1, lsci_history_dtype="float16",
-                   lsci_enable_spatial=False, lsci_enable_temporal=True,
-                   lsci_enable_spatiotemporal=False)
-    assert lsci.process(reader.file_path, p) == str(tmp_path)
-    assert calls == [(start, 3, skip) for start in starts]
-    result = saved[0]["output"]["temporal_flow_index"]
-    np.testing.assert_allclose(result[:, 0, 0], expected, rtol=1e-5)
-    effective = saved[0]["parameters"]
-    assert effective["lsci_nbh_t"] == effective["batch_size"] == effective["batch_stride"] == 3
-    assert p["batch_stride"] == p["lsci_nbh_t"] == 99
-    preview = lsci.preview(reader.file_path, p)
-    np.testing.assert_allclose(preview, expected[0], rtol=1e-5)
-
-
-@pytest.mark.parametrize("name", ["default", "lsci", "pca_accumulation", "sliding_shack_hartmann", "split_apertures"])
 @pytest.mark.parametrize("changes,match", [
     ({"live_saving": "yes"}, "live_saving"),
     ({"numpy_num_workers": "two"}, "numpy_num_workers"),
     ({"skip_every": 0}, "skip_every"),
     ({"pixel_pitch": "use_holovibes"}, "pixel_pitch"),
 ])
-def test_all_pipelines_use_main_validation(tmp_path, monkeypatch, name, changes, match):
+def test_default_pipeline_uses_main_validation(tmp_path, monkeypatch, changes, match):
+    from holodoppler.pipelines import main_default as default
     reader, _ = reader_for(tmp_path, np.ones((4, 3, 4), np.float32))
     monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
+    monkeypatch.setattr(default, "get_reader", lambda _: reader)
     with pytest.raises((ValueError, TypeError), match=match):
-        pipeline.prepare_input(reader.file_path, parameters(name, **changes))
+        default._prepare_input(reader.file_path, parameters("default", **changes))
+
+
+@pytest.mark.parametrize("name", ["pca_accumulation", "sliding_shack_hartmann", "split_apertures"])
+def test_shared_input_does_not_apply_default_validation(tmp_path, monkeypatch, name):
+    reader, _ = reader_for(tmp_path, np.ones((4, 3, 4), np.float32))
+    monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
+    p = parameters(name, pixel_pitch="unused default-only setting")
+    assert pipeline.prepare_input(reader.file_path, p) == (reader, p)
 
 
 def test_ui_uses_canonical_presets():
@@ -246,11 +230,10 @@ def test_profiles_follow_default_order_and_comments():
                 assert comment == comments[key], (path.name, key)
 
 
-def test_lsci_profile_links_temporal_window_to_batch_size():
-    text = (ROOT / "parameters/default_parameters_lsci.yaml").read_text()
-    for size in (1, 16, 40):
-        p = yaml.safe_load(text.replace("&lsci_batch_size 40", f"&lsci_batch_size {size}"))
-        assert p["batch_size"] == p["batch_stride"] == p["lsci_nbh_t"] == size
+def test_lsci_profile_window_defaults():
+    p = yaml.safe_load((ROOT / "parameters/default_parameters_lsci.yaml").read_text())
+    assert p["lsci_time_window_size"] == 5
+    assert p["lsci_time_window_stride"] == 64
 
 
 @pytest.mark.parametrize("failure", ["processing", "saving"])

@@ -9,26 +9,17 @@ cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more 
 # saving management
 live_saving: true # false saves all outputs after processing; ECC still buffers when true.
 overwrite_option: "erase"
-num_saving_workers: 0
+num_saving_workers: 2
 saving_queue_depth: null # Outstanding batches/jobs, including active writes; null = twice the worker count.
 
 # Core parameters
-batch_size: &lsci_batch_size 40
 first_frame: 0
-batch_stride: *lsci_batch_size
 end_frame: -1 # -1 means process all frames
-lsci_nbh_t: *lsci_batch_size # Always equals batch_size and batch_stride; batch_size takes precedence.
 
 # LSCI calculations
-lsci_enable_spatial: true
-lsci_enable_temporal: false
-lsci_enable_spatiotemporal: false
+lsci_time_window_size: 32
+lsci_time_window_stride: 32
 
-# LSCI spatial neighborhood
-lsci_nbh_s: 15
-lsci_boundary_mode: "reflect"
-lsci_boundary_cval: 0.0
-
-# LSCI numerical stability
-lsci_eps: 1e-6
-lsci_flow_eps: 1e-4
+lsci_pixel_window_size: 5
+lsci_pixel_window_boundary_mode: "reflect"
+lsci_pixel_window_boundary_cval: 0.0

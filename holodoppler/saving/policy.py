@@ -44,7 +44,7 @@ def is_csv_output(name: str) -> bool:
 
 def save_to_hdf5(name: str) -> bool:
     """Select numerical outputs; Doppler images and per-range moments stay in media exports."""
-    return (name in {"gaussian_width", "pca_sum", "pca_sum_ff", "moment0ff", "moment0", "moment1", "moment2",
+    return (name in {"STD", "MEAN", "RATIO", "gaussian_width", "pca_sum", "pca_sum_ff", "moment0ff", "moment0", "moment1", "moment2",
                     "spectrum_line", "sh_psd", "averaged_spectrogram",
                     "spectrograms", "PROJ", "PROJff", "QSum_moment0", "J0_moment0"}
             or name.startswith(("NW_", "NE_", "SW_", "SE_", "NWxSE_", "NExSW_"))

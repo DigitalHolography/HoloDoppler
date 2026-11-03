@@ -6,7 +6,6 @@ import numpy as np
 
 from holodoppler import backend
 from holodoppler.config import update_from_cine_metadata, update_from_holo_footer
-from holodoppler.config.validation import validate_main_parameters
 from holodoppler.core.batching import calculate_batch_indices
 from holodoppler.core.image_utils import resize_frames
 from holodoppler.core.processing import run_batches
@@ -41,7 +40,6 @@ def prepare_input(file_path, parameters):
         parameters = update_from_holo_footer(parameters, reader.footer)
     elif reader.extension == ".cine":
         parameters = update_from_cine_metadata(parameters, reader.header)
-    validate_main_parameters(parameters)
     return reader, parameters
 
 
