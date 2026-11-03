@@ -110,7 +110,7 @@ def test_display_only_moment0_skips_unrelated_work(tmp_path, monkeypatch):
     p = settings(shack_hartmann_autofocus=False, pca_compute=True, color_Doppler_image=True,
                  directional_Doppler_image=True, frequency_bands=[[0, 200]],
                  moments_frequency_ranges=[[0, 300]], save_spectograms=True, square=True)
-    for name in ('pca_time_transform', 'gaussian_width', 'directional', 'finish_doppler_images',
+    for name in ('pca_packet_mean', 'gaussian_width', 'directional', 'finish_doppler_images',
                  '_process_one_batch', '_finalize_spatial_result', '_square_spectrum',
                  'register_images_shifts', 'apply_register_images_shifts', 'save_outputs',
                  'plot_phase_with_slopes_rgb'):

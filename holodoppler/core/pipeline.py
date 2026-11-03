@@ -74,14 +74,18 @@ def prepare_result(result, parameters):
 
 def run_pipeline(reader, parameters, process_batch, *, preview=False,
                  preview_key="moment0ff", reference=None, static=None,
-                 stateful=False, accumulation=1, ecc_keys=None, progress_callback=None, save_output=True):
+                 stateful=False, accumulation=1, ecc_keys=None, progress_callback=None, save_output=True,
+                 read_batch_size=None):
     """Consume batches in order, averaging groups before output and optional ECC.
 
     Stateful processors run without CPU workers. CUDA compute calls remain ordered
     on the shared runner's single compute stream. Only the caller owns group sums.
     """
     check_cancelled(progress_callback)
-    indices = batch_indices(reader, parameters)
+    # A processor may consume several packets per output without changing the
+    # user-facing packet size or output stride stored in saving metadata.
+    read_batch_size = parameters["batch_size"] if read_batch_size is None else read_batch_size
+    indices = batch_indices(reader, {**parameters, "batch_size": read_batch_size})
     if not indices:
         return None
     if preview:
@@ -139,7 +143,7 @@ def run_pipeline(reader, parameters, process_batch, *, preview=False,
                 emit()
 
         run_batches(
-            reader, indices, parameters["batch_size"], process_batch, consume,
+            reader, indices, read_batch_size, process_batch, consume,
             registration_ref=reference,
             registration_enabled=parameters.get("image_registration", False),
             workers=0 if stateful else parameters.get("numpy_num_workers", 8),

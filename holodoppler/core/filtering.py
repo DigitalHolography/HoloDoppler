@@ -408,6 +408,24 @@ def welch_power_spectrum(xp, fft, H, batch_size=32, stride=32, windowing=None):
     return total
 
 
+def pca_packet_mean(xp, holograms, window, index_range):
+    """Average PCA magnitude sums over complete, consecutive time packets."""
+    start, end = index_range
+    count = holograms.shape[0] // window
+    if count == 0:
+        raise ValueError("pca_time_window must fit within the supplied frame stack")
+    total = None
+    for offset in range(0, count * window, window):
+        projected = pca_time_transform(
+            xp, holograms[offset:offset + window], remove_dc=False)
+        image = xp.sum(xp.abs(projected[start:end]), axis=0)
+        if total is None:
+            total = image
+        else:
+            total += image
+    return total / count
+
+
 def pca_time_transform(xp, H, remove_dc=False):
     if remove_dc:
         dc = xp.mean(H, axis=0)

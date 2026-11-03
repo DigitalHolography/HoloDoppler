@@ -9,7 +9,7 @@ from holodoppler.config import (
 from holodoppler.core.batching import calculate_batch_indices
 from holodoppler.core.doppler_images import directional, finish_doppler_images
 from holodoppler.core.filtering import (
-    pca_time_transform,
+    pca_packet_mean,
     corner_compensation,
     filter_2d,
     fourier_time_transform,
@@ -265,25 +265,14 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
 
     if parameters.get("pca_compute", False) and (not reference_only or target in {"pca_sum", "pca_sum_ff"}):
         window = parameters.get("pca_time_window", 32)
-        start, end = parameters.get("pca_index_range", [0, 16])
-        count = holograms.shape[0] // window
-        if count == 0:
-            raise ValueError("pca_time_window must fit within the supplied frame stack")
-        total = None
-        for offset in range(0, count * window, window):
-            projected = pca_time_transform(
-                xp, holograms[offset:offset + window], remove_dc=False)
-            image = xp.sum(xp.abs(projected[start:end]), axis=0)
-            if total is None:
-                total = image
-            else:
-                total += image
+        image = pca_packet_mean(
+            xp, holograms, window, parameters.get("pca_index_range", [0, 16]))
         if parameters.get("pca_flatfield", False):
             output_dict["pca_sum_ff"] = gaussian_flatfield(
-                total / count, parameters.get("registration_flatfield_gw", 1.0),
+                image, parameters.get("registration_flatfield_gw", 1.0),
                 backend.gaussian_filter)
         else:
-            output_dict["pca_sum"] = total / count
+            output_dict["pca_sum"] = image
 
         if reference_only and target in output_dict:
             return output_dict

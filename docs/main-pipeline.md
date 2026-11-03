@@ -360,6 +360,21 @@ With `pca_compute: true`, setting `pca_flatfield: true` applies Gaussian flatfie
 correction using `registration_flatfield_gw` and emits only `pca_sum_ff` instead
 of `pca_sum`. Both PCA variants support numerical and media exports.
 
+The `pca_accumulation` pipeline always emits both `pca_sum` and `pca_sum_ff`.
+Each output averages PCA magnitude sums from `accumulation` consecutive
+`batch_size`-frame packets, using the `pca_range` component slice. Flatfield
+correction is applied after averaging. Output starts advance by `batch_stride`
+source frames, independently of accumulation; only full accumulation groups are
+processed. With `skip_every`, packet sizes count sampled frames.
+Live registration uses the first accumulated `pca_sum_ff` as a fixed reference
+and shifts both accumulated outputs. Optional ECC runs on the completed
+`pca_sum_ff` sequence and transforms both outputs before square resizing.
+Preview returns the first accumulated `pca_sum_ff`. This pipeline does not run
+Doppler moments, spectral filtering, or Shack-Hartmann correction.
+Saved metadata retains the packet `batch_size` and `accumulation`, with
+`output_frame_stride` equal to `batch_stride`. Unless explicitly configured,
+video FPS is `sampling_freq / batch_stride` when sampling frequency is available.
+
 
 Gaussian spectral width is enabled by `compute_gaussian_width: true`. The output
 `gaussian_width` is intrinsic Gaussian FWHM in Hz, using the magnitude of the
