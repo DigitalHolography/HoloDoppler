@@ -165,3 +165,30 @@ def test_pca_sum_averages_full_packets_before_svd(monkeypatch):
 def test_invalid_pca_parameters(updates):
     with pytest.raises((TypeError, ValueError), match="pca_"):
         validate_main_parameters(parameters(**updates))
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("dc", [False, True])
+@pytest.mark.parametrize("global_threshold", [-1, 0, 1])
+def test_block_svd_follows_global(monkeypatch, enabled, dc, global_threshold):
+    from holodoppler.core.filtering import svd_filter, svd_filter_by_bloc
+    data = (np.random.default_rng(7).normal(size=(8, 3, 5)) + 2j).astype(np.complex64)
+    monkeypatch.setattr(pipeline, "fresnel_transform", lambda *a, **k: data)
+    global_filter = Mock(wraps=svd_filter)
+    local_filter = Mock(wraps=svd_filter_by_bloc)
+    transform = Mock(wraps=pipeline.fourier_time_transform)
+    monkeypatch.setattr(pipeline, "svd_filter", global_filter)
+    monkeypatch.setattr(pipeline, "svd_filter_by_bloc", local_filter)
+    monkeypatch.setattr(pipeline, "fourier_time_transform", transform)
+    pipeline._process_batch(parameters(svd_filter_by_bloc=enabled,
+        svd_filter_by_bloc_window_size=2, svd_filter_by_bloc_threshold=0,
+        svd_threshold=global_threshold, svd_remove_dc=dc), data)
+    expected = svd_filter(np, np.linalg, data, global_threshold, remove_dc=dc)
+    global_filter.assert_called_once()
+    assert local_filter.call_count == int(enabled)
+    if enabled:
+        np.testing.assert_allclose(local_filter.call_args.args[2], expected, atol=1e-6)
+        assert local_filter.call_args.kwargs["remove_dc"] == dc
+        expected = svd_filter_by_bloc(np, np.linalg, expected, 2, 0, dc)
+    np.testing.assert_allclose(transform.call_args.args[2], expected, atol=1e-6)
+

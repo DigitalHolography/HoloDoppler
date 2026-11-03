@@ -30,6 +30,91 @@ def filter_2d(xp, fft, frames, filter2d_low):
 
 
 
+def svd_filter_by_bloc(xp, linalg, images, window_size=5, threshold=0,
+                       remove_dc=False, svd_filter_by_bloc_window_stride=1, *,
+                       svd_filter_by_bloc_parallel=False,
+                       svd_filter_by_bloc_mib_block_size=8):
+    """Local SVD with overlap averaging, preserving complex data.
+
+    DC removal subtracts each pixel's temporal mean, even at threshold zero.
+    The stride is in pixels along both spatial axes and cannot exceed the
+    window size. Final windows align with the image edges for full coverage.
+    """
+    for name, value, minimum in (("window_size", window_size, 1),
+                                  ("threshold", threshold, 0),
+                                  ("svd_filter_by_bloc_window_stride", svd_filter_by_bloc_window_stride, 1)):
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+            raise TypeError(f"{name} must be an integer")
+        if value < minimum:
+            raise ValueError(f"{name} must be >= {minimum}")
+    if svd_filter_by_bloc_window_stride > window_size:
+        raise ValueError("svd_filter_by_bloc_window_stride must be <= window_size")
+    if not isinstance(svd_filter_by_bloc_parallel, bool):
+        raise TypeError("svd_filter_by_bloc_parallel must be a boolean")
+    budget = svd_filter_by_bloc_mib_block_size
+    if budget is not None:
+        if isinstance(budget, (bool, np.bool_)) or not isinstance(budget, (int, float, np.integer, np.floating)):
+            raise TypeError("svd_filter_by_bloc_mib_block_size must be a real number or null")
+        if not np.isfinite(budget) or budget <= 0:
+            raise ValueError("svd_filter_by_bloc_mib_block_size must be finite and positive")
+    if images.ndim != 3:
+        raise ValueError("images must have shape (T, H, W)")
+    nt, height, width = images.shape
+    if window_size > min(height, width):
+        raise ValueError("window_size exceeds image dimensions")
+    work = images if images.dtype.kind in "fc" else images.astype(xp.float32)
+    if remove_dc:
+        work = work - work.mean(axis=0, keepdims=True)
+    if threshold == 0:
+        return work.copy()
+    output = xp.zeros_like(work)
+    weights = xp.zeros((height, width), dtype=xp.float32)
+    def window_starts(size):
+        last = size - window_size
+        starts = list(range(0, last + 1, svd_filter_by_bloc_window_stride))
+        if starts[-1] != last:
+            starts.append(last)
+        return starts
+
+    pixels = window_size**2
+    count = min(threshold, nt, pixels)
+    if count == min(nt, pixels):
+        return output
+    ys = xp.asarray(window_starts(height))
+    xs = xp.asarray(window_starts(width))
+    origins = (ys[:, None] * width + xs[None, :]).reshape(-1)
+    offsets = (xp.arange(window_size)[:, None] * width
+               + xp.arange(window_size)[None, :]).reshape(-1)
+    n_windows = origins.size
+    # Estimate explicit temporaries; backend eigensolver workspace is additional.
+    bytes_per_window = ((3 * nt * pixels + 2 * pixels**2 + nt * count)
+                        * work.dtype.itemsize + pixels * 8)
+    batch_size = n_windows if svd_filter_by_bloc_parallel or budget is None else max(
+        1, int(budget * 1024**2) // bytes_per_window)
+    flat = work.reshape(nt, -1)
+    flat_output = output.reshape(nt, -1)
+    times = xp.arange(nt)[:, None, None]
+    for start in range(0, n_windows, batch_size):
+        indices = origins[start:start + batch_size, None] + offsets[None, :]
+        matrix = flat[:, indices].transpose(1, 0, 2)
+        covariance = matrix.conj().swapaxes(-1, -2) @ matrix
+        _, vectors = linalg.eigh(covariance)
+        selected = vectors[..., -count:]
+        filtered = matrix - (matrix @ selected) @ selected.conj().swapaxes(-1, -2)
+        target = (times, indices[None, ...])
+        values = filtered.transpose(1, 0, 2)
+        if work.dtype.kind == "c":
+            # CuPy scatter-add supports real types only. These are writable
+            # views, so both additions update the original complex output.
+            xp.add.at(flat_output.real, target, values.real)
+            xp.add.at(flat_output.imag, target, values.imag)
+        else:
+            xp.add.at(flat_output, target, values)
+        xp.add.at(weights.reshape(-1), indices, 1)
+    output /= weights[None]
+    return output
+
+
 def svd_filter(
     xp,
     linalg,

@@ -375,3 +375,25 @@ magnitudes exceeding 100*double-epsilon*sum(abs(PSD)), and abs(H1)>abs(H2).
 Invalid estimates return zero, matching the MATLAB implementation (despite its
 comment promising NaN). Outputs are registered and saved alongside other scalar
 maps, including numerical HDF5 data.
+
+### Local block SVD
+
+Set `svd_filter_by_bloc: true` to apply local SVD after global SVD in the default pipeline.
+`svd_filter_by_bloc_window_size` is the square window side in pixels (default 5);
+`svd_filter_by_bloc_window_stride` sets the window step along both spatial axes (default 1).
+Increase it to run fewer local SVDs. It must be an integer between 1 and the
+window size. Overlapping estimates are averaged, and final windows align with
+the image edges so every pixel is covered. Windows must fit the image.
+`svd_filter_by_bloc_threshold` counts leading singular components to remove
+(default 0, disabling SVD). This count is independent of `svd_filter_mode`.
+In both modes, `svd_remove_dc` subtracts each pixel's temporal mean before SVD,
+including at threshold zero. The existing negative global threshold bypass remains unchanged.
+
+Local block filtering uses spatial covariance `M?M` with `M` shaped
+`(time, window_size?)`, removing the largest eigenvalue modes via projection.
+`svd_filter_by_bloc_parallel: true` processes all windows in one batched solve.
+The default `false` uses vectorized batches controlled by
+`svd_filter_by_bloc_mib_block_size` (default 8 MiB; null processes all windows).
+This is an estimated temporary-memory target, excluding input/output arrays
+and eigensolver workspace; at least one window is processed per batch.
+Parallel mode ignores this memory target and can require substantial RAM/VRAM.

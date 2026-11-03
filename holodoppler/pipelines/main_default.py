@@ -16,6 +16,7 @@ from holodoppler.core.filtering import (
     frequency_symmetric_filtering,
     symmetric_frequency_slices,
     svd_filter,
+    svd_filter_by_bloc,
     welch_power_spectrum,
 )
 from holodoppler.core.image_utils import (
@@ -217,6 +218,16 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
         remove_dc=parameters["svd_remove_dc"],
         block_size_mib=parameters.get("svd_block_size_mib", 8),
     )
+    if parameters.get("svd_filter_by_bloc", False):
+        holograms_f = svd_filter_by_bloc(
+            xp, backend.linalg, holograms_f,
+            window_size=parameters.get("svd_filter_by_bloc_window_size", 5),
+            threshold=parameters.get("svd_filter_by_bloc_threshold", 0),
+            svd_filter_by_bloc_parallel=parameters.get("svd_filter_by_bloc_parallel", False),
+            svd_filter_by_bloc_mib_block_size=parameters.get("svd_filter_by_bloc_mib_block_size", 8),
+            svd_filter_by_bloc_window_stride=parameters.get("svd_filter_by_bloc_window_stride", 1),
+            remove_dc=parameters["svd_remove_dc"],
+        )
 
     del holograms
 
