@@ -223,6 +223,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
             xp, backend.linalg, holograms_f,
             window_size=parameters.get("svd_filter_by_bloc_window_size", 5),
             threshold=parameters.get("svd_filter_by_bloc_threshold", 0),
+            svd_filter_by_bloc_window_stride=parameters.get("svd_filter_by_bloc_window_stride", 1),
             remove_dc=parameters["svd_remove_dc"],
         )
 

@@ -1,6 +1,35 @@
 import numpy as np
 import pytest
 from holodoppler.core.filtering import svd_filter, svd_filter_by_bloc
+from unittest.mock import Mock
+
+
+@pytest.mark.parametrize('stride, starts', [(1, [0, 1, 2, 3, 4, 5]),
+                                           (2, [0, 2, 4, 5]), (3, [0, 3, 5])])
+def test_stride_matches_reference_and_covers_edges(stride, starts):
+    data = np.random.default_rng(8).normal(size=(4, 8, 8)).astype(complex)
+    expected = np.zeros_like(data)
+    weights = np.zeros((8, 8))
+    for y in starts:
+        for x in starts:
+            patch = data[:, y:y+3, x:x+3]
+            u, s, vh = np.linalg.svd(patch.reshape(4, -1).T, full_matrices=False)
+            s[0] = 0
+            expected[:, y:y+3, x:x+3] += ((u*s)@vh).T.reshape(patch.shape)
+            weights[y:y+3, x:x+3] += 1
+    solver = Mock()
+    solver.svd = Mock(wraps=np.linalg.svd)
+    actual = svd_filter_by_bloc(np, solver, data, 3, 1, svd_filter_by_bloc_window_stride=stride)
+    assert solver.svd.call_count == len(starts)**2
+    assert np.all(weights > 0)
+    np.testing.assert_allclose(actual, expected/weights, atol=1e-13)
+
+
+@pytest.mark.parametrize('stride', [0, -1, 1.5, True, None, 4])
+def test_invalid_stride(stride):
+    with pytest.raises((TypeError, ValueError), match='svd_filter_by_bloc_window_stride'):
+        svd_filter_by_bloc(np, np.linalg, np.ones((4, 8, 8)), 3,
+                           svd_filter_by_bloc_window_stride=stride)
 
 @pytest.mark.parametrize('dc', [False, True])
 @pytest.mark.parametrize('rank', [0, 1, 20])

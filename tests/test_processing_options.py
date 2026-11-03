@@ -43,6 +43,26 @@ def test_reject_invalid_regularization(parameters, value):
         validate_main_parameters(parameters)
 
 
+@pytest.mark.parametrize('value', [0, -1, 1.5, True, None, 6])
+def test_reject_invalid_local_svd_stride(parameters, value):
+    parameters['svd_filter_by_bloc_window_stride'] = value
+    with pytest.raises((TypeError, ValueError), match='svd_filter_by_bloc_window_stride'):
+        validate_main_parameters(parameters)
+
+
+def test_main_forwards_local_svd_stride(parameters, monkeypatch):
+    manager = backend.BackendManager('numpy')
+    for name in ('xp', 'fft', 'linalg', 'gaussian_filter'):
+        monkeypatch.setattr(backend, name, getattr(manager, name))
+    parameters.update(svd_filter_by_bloc=True, svd_filter_by_bloc_window_stride=3,
+                      shack_hartmann_autofocus=False, image_registration=False)
+    local_svd = Mock(wraps=filtering.svd_filter_by_bloc)
+    monkeypatch.setattr(main_default, 'svd_filter_by_bloc', local_svd)
+    frames = np.random.default_rng(15).random((8, 6, 8)).astype(np.float32)
+    main_default._process_one_batch(parameters, frames)
+    assert local_svd.call_args.kwargs['svd_filter_by_bloc_window_stride'] == 3
+
+
 @pytest.mark.parametrize('value', ['auto', 'threaded', '', True, None, []])
 def test_reject_invalid_subaperture_mode(parameters, value):
     parameters['shack_hartmann_sub_aps_process'] = value

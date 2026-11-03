@@ -35,7 +35,8 @@ filter2d_low: 0.03
 
 # SVD filtering
 svd_filter_by_bloc: false # Apply overlapping local SVD after global SVD.
-svd_filter_by_bloc_window_size: 5 # Square side in pixels; stride is one.
+svd_filter_by_bloc_window_size: 5 # Square side in pixels.
+svd_filter_by_bloc_window_stride: 1 # Window step in both axes; 1 to window size.
 svd_filter_by_bloc_threshold: 0 # Leading components removed; zero skips SVD.
 svd_threshold: 23
 svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold"

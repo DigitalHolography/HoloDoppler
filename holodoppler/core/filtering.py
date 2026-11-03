@@ -31,31 +31,43 @@ def filter_2d(xp, fft, frames, filter2d_low):
 
 
 def svd_filter_by_bloc(xp, linalg, images, window_size=5, threshold=0,
-                       remove_dc=False):
-    """Stride-one local SVD with overlap averaging, preserving complex data.
+                       remove_dc=False, svd_filter_by_bloc_window_stride=1):
+    """Local SVD with overlap averaging, preserving complex data.
 
     DC removal subtracts each pixel's temporal mean, even at threshold zero.
+    The stride is in pixels along both spatial axes and cannot exceed the
+    window size. Final windows align with the image edges for full coverage.
     """
     for name, value, minimum in (("window_size", window_size, 1),
-                                  ("threshold", threshold, 0)):
+                                  ("threshold", threshold, 0),
+                                  ("svd_filter_by_bloc_window_stride", svd_filter_by_bloc_window_stride, 1)):
         if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
             raise TypeError(f"{name} must be an integer")
         if value < minimum:
             raise ValueError(f"{name} must be >= {minimum}")
+    if svd_filter_by_bloc_window_stride > window_size:
+        raise ValueError("svd_filter_by_bloc_window_stride must be <= window_size")
     if images.ndim != 3:
         raise ValueError("images must have shape (T, H, W)")
     nt, height, width = images.shape
     if window_size > min(height, width):
         raise ValueError("window_size exceeds image dimensions")
-    work = images if images.dtype.kind in "fc" else images.astype(xp.float64)
+    work = images if images.dtype.kind in "fc" else images.astype(xp.float32)
     if remove_dc:
         work = work - work.mean(axis=0, keepdims=True)
     if threshold == 0:
         return work.copy()
     output = xp.zeros_like(work)
     weights = xp.zeros((height, width), dtype=xp.float32)
-    for y in range(height - window_size + 1):
-        for x in range(width - window_size + 1):
+    def window_starts(size):
+        last = size - window_size
+        starts = list(range(0, last + 1, svd_filter_by_bloc_window_stride))
+        if starts[-1] != last:
+            starts.append(last)
+        return starts
+
+    for y in window_starts(height):
+        for x in window_starts(width):
             patch = work[:, y:y + window_size, x:x + window_size]
             matrix = patch.reshape(nt, -1).T
             u, singular, vh = linalg.svd(matrix, full_matrices=False)

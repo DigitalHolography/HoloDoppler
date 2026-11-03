@@ -380,7 +380,10 @@ maps, including numerical HDF5 data.
 
 Set `svd_filter_by_bloc: true` to apply local SVD after global SVD in the default pipeline.
 `svd_filter_by_bloc_window_size` is the square window side in pixels (default 5);
-stride is one and overlapping estimates are averaged. Windows must fit the image.
+`svd_filter_by_bloc_window_stride` sets the window step along both spatial axes (default 1).
+Increase it to run fewer local SVDs. It must be an integer between 1 and the
+window size. Overlapping estimates are averaged, and final windows align with
+the image edges so every pixel is covered. Windows must fit the image.
 `svd_filter_by_bloc_threshold` counts leading singular components to remove
 (default 0, disabling SVD). This count is independent of `svd_filter_mode`.
 In both modes, `svd_remove_dc` subtracts each pixel's temporal mean before SVD,
