@@ -26,6 +26,7 @@ from holodoppler.core.image_utils import (
 from holodoppler.core.moments import moments, gaussian_width
 from holodoppler.core.plots import plot_phase_with_slopes_rgb
 from holodoppler.core.processing import run_batches
+from holodoppler.core.progress import check_cancelled
 from holodoppler.core.propagation import (
     angular_spectrum_transform,
     angular_spectrum_transform_with_phase,
@@ -901,6 +902,7 @@ def preview(file_path, parameters):
 
 
 def process(file_path, parameters, progress_callback=None):
+    check_cancelled(progress_callback)
     file_reader, parameters, batch_indices = _prepare_input(file_path, parameters)
     if not batch_indices:
         return
@@ -916,6 +918,7 @@ def process(file_path, parameters, progress_callback=None):
 
 def _process_to_output(file_reader, parameters, batch_indices, destination,
                        progress_callback):
+    check_cancelled(progress_callback)
     batch_size = parameters["batch_size"]
     first_frame = parameters["first_frame"]
     buffered = destination is None or parameters.get("image_registration_with_ecc", False)
@@ -1012,6 +1015,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
         progress_callback=progress_callback,
     )
 
+    check_cancelled(progress_callback)
     if "averaged_spectrogram" in aggregates:
         output["averaged_spectrogram"] = backend.to_numpy(_square_spectrum(
             aggregates.pop("averaged_spectrogram"), parameters))
@@ -1040,6 +1044,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
 
 
         for key in output :
+            check_cancelled(progress_callback)
             if (
                 key in {"gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "pca_sum", "pca_sum_ff"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
@@ -1059,6 +1064,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
         temporal = {key: value for key, value in output.items() if key not in static_names}
         finished = {}
         for index in range(len(batch_indices)):
+            check_cancelled(progress_callback)
             current = {key: backend.to_backend(value[index]) for key, value in temporal.items()}
             for key, value in _finalize_spatial_result(current, parameters).items():
                 _store_batch_result(finished, key, value, index, len(batch_indices))
@@ -1070,6 +1076,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
 
     backend.clear_gpu_memory()
 
+    check_cancelled(progress_callback)
     if destination is None:
         output.update(autofocus_diagnostics)
         save_outputs(file_reader=file_reader, output=output, parameters=parameters,
@@ -1081,9 +1088,13 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
     if buffered:
         temporal = {key: value for key, value in output.items() if key not in static_names}
         for t in range(len(batch_indices)):
+            check_cancelled(progress_callback)
             destination.add_batch({key: value[t] for key, value in temporal.items()}, t)
     for key, value in output.items():
+        check_cancelled(progress_callback)
         if not buffered or key in static_names:
             destination.write_static(key, value)
     for key, value in autofocus_diagnostics.items():
+        check_cancelled(progress_callback)
         destination.write_static(key, value)
+    check_cancelled(progress_callback)

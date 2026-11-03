@@ -10,6 +10,7 @@ from holodoppler.config.validation import validate_main_parameters
 from holodoppler.core.batching import calculate_batch_indices
 from holodoppler.core.image_utils import resize_frames
 from holodoppler.core.processing import run_batches
+from holodoppler.core.progress import check_cancelled
 from holodoppler.core.registration import apply_ecc_registration, register_with_ecc
 from holodoppler.file_reader import get_reader
 from holodoppler.saving import OutputClass, save_outputs, calculate_fps
@@ -79,6 +80,7 @@ def run_pipeline(reader, parameters, process_batch, *, preview=False,
     Stateful processors run without CPU workers. CUDA compute calls remain ordered
     on the shared runner's single compute stream. Only the caller owns group sums.
     """
+    check_cancelled(progress_callback)
     indices = batch_indices(reader, parameters)
     if not indices:
         return None
@@ -145,6 +147,7 @@ def run_pipeline(reader, parameters, process_batch, *, preview=False,
             cupy_prefetch_depth=parameters.get("cupy_prefetch_depth", 4),
             skip_every=parameters.get("skip_every"), progress_callback=progress_callback,
         )
+        check_cancelled(progress_callback)
         if count:
             emit()
         if buffered:
@@ -156,12 +159,14 @@ def run_pipeline(reader, parameters, process_batch, *, preview=False,
                     ecc_min_threshold=parameters.get("registration_ecc_min_threshold", .7),
                 )
                 for key in output:
+                    check_cancelled(progress_callback)
                     spatial = output[key].ndim == 3 and not key.startswith("shack_hartmann_")
                     if ((ecc_keys is None and spatial)
                             or (ecc_keys is not None and key in ecc_keys) or "band_" in key):
                         output[key] = apply_ecc_registration(output[key], registration, background="mean")
                 if parameters.get("square", False):
                     for key, value in output.items():
+                        check_cancelled(progress_callback)
                         if value.ndim == 3:
                             size = max(value.shape[-2:])
                             output[key] = backend.to_numpy(resize_frames(
@@ -169,11 +174,13 @@ def run_pipeline(reader, parameters, process_batch, *, preview=False,
                 output["registration_ecc"] = registration
             if destination is not None:
                 for index in range(emitted):
+                    check_cancelled(progress_callback)
                     destination.add_batch({key: value[index] for key, value in output.items()}, index)
             else:
                 to_save = ({key: value[0] for key, value in output.items()}
                            if preview else dict(output))
                 to_save.update(static)
+                check_cancelled(progress_callback)
                 target_dir = save_outputs(
                     file_reader=reader, output=to_save, parameters=saving_parameters,
                     custom_relative_path="preview" if preview else None,
@@ -182,7 +189,9 @@ def run_pipeline(reader, parameters, process_batch, *, preview=False,
                 )
         if destination is not None:
             for key, value in static.items():
+                check_cancelled(progress_callback)
                 destination.write_static(key, backend.to_numpy(value))
+        check_cancelled(progress_callback)
         if preview:
             return output[preview_key][0]
         return str(destination.target_dir if destination is not None else target_dir)

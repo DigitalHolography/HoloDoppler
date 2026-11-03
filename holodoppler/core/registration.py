@@ -2,10 +2,13 @@
 Image registration using phase correlation for Translation, Rotation, and Scale (TRS).
 """
 import os
+from collections import deque
 import cv2
 import numpy as np
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor
+
+from holodoppler.core.progress import check_cancelled
 
 from .image_utils import elliptical_mask
 
@@ -574,6 +577,7 @@ def register_with_ecc(
     progress_callback(completed, total, message) reports registered frames.
     """
 
+    check_cancelled(progress_callback)
     N, H, W = video.shape
 
     # --------------------------------------------------------
@@ -624,15 +628,32 @@ def register_with_ecc(
     )
 
     with ProcessPoolExecutor(max_workers=n_workers) as executor:
+        pending = deque()
+        jobs = iter(jobs)
 
-        for i, result in tqdm(
-            executor.map(_ecc_worker, jobs),
-            total=N - 1,
-            desc="ECC registration"
-        ):
-            reg[i] = result
-            if progress_callback is not None:
-                progress_callback(i + 1, N, f"Frame {i + 1}/{N}")
+        def admit():
+            check_cancelled(progress_callback)
+            job = next(jobs, None)
+            if job is not None:
+                pending.append(executor.submit(_ecc_worker, job))
+
+        try:
+            for _ in range(min(n_workers, N - 1)):
+                admit()
+            with tqdm(total=N - 1, desc="ECC registration") as progress:
+                while pending:
+                    check_cancelled(progress_callback)
+                    future = pending.popleft()
+                    i, result = future.result()
+                    check_cancelled(progress_callback)
+                    reg[i] = result
+                    progress.update(1)
+                    if progress_callback is not None:
+                        progress_callback(i + 1, N, f"Frame {i + 1}/{N}")
+                    admit()
+        finally:
+            for future in pending:
+                future.cancel()
 
     return reg
 

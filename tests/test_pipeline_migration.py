@@ -330,3 +330,38 @@ def test_live_wavefront_fitting_on_numpy(name, method, monkeypatch):
     result, _ = module._process_one_batch(p, frames)
     assert "shack_hartmann_zernike_coefs" in result
     assert result["shack_hartmann_wavefront_phase"].shape == (8, 10)
+
+
+@pytest.mark.parametrize("live", [False, True])
+def test_cancellation_aborts_output_without_finalizing(tmp_path, monkeypatch, live):
+    import threading
+    from holodoppler.core.progress import ProgressReporter, ProcessingCancelled
+
+    reader, _ = reader_for(tmp_path, np.ones((5, 3, 4), dtype=np.float32))
+    stop = threading.Event()
+    destinations, saved = [], []
+
+    class Destination(saving.OutputClass):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            destinations.append(self)
+
+        def close(self, *, finalize=True):
+            self.finalized = finalize
+            return super().close(finalize=finalize)
+
+    monkeypatch.setattr(pipeline, "OutputClass", Destination)
+    monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
+    monkeypatch.setattr(pipeline, "save_outputs", lambda **kw: saved.append(kw))
+    p = parameters("pca_accumulation", batch_size=1, batch_stride=1,
+                   live_saving=live, numpy_num_workers=0)
+    with pytest.raises(ProcessingCancelled):
+        pipeline.run_pipeline(
+            reader, p, lambda frames, ref: ({"PROJ": frames[0]}, ref),
+            progress_callback=ProgressReporter(lambda *args: stop.set(), stop),
+        )
+    assert not saved
+    if live:
+        assert destinations[0]._closed
+        assert not destinations[0]._h5.id.valid
+        assert destinations[0].finalized is False

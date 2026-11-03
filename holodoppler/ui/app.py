@@ -19,6 +19,7 @@ except ImportError:
     TkinterDnD = None
 
 from holodoppler.cli import preview, process
+from holodoppler.core.progress import ProgressReporter, ProcessingCancelled
 from holodoppler.logging import configure_logging, get_log_path, logger
 
 from .advanced import AdvancedView
@@ -177,10 +178,11 @@ class UI(BaseTk):
         )
 
     def stop_processing(self) -> None:
-        if self.worker_kind == "process":
+        if self.worker_kind == "process" and not self.stop_event.is_set():
             self.stop_event.set()
-            logger.info("Stopping after the current file finishes")
-            self._set_status("Stopping after the current file finishes")
+            logger.info("Stopping processing")
+            self._set_status("Stopping...")
+            self._sync_views()
 
     def preview_path(self, path: Path) -> None:
         if self._busy():
@@ -356,9 +358,11 @@ class UI(BaseTk):
                 results = process(
                     str(path),
                     copy.deepcopy(parameters),
-                    progress_callback=on_progress,
+                    progress_callback=ProgressReporter(on_progress, self.stop_event),
                     warning_callback=on_warning,
                 )
+                if self.stop_event.is_set():
+                    raise ProcessingCancelled()
                 if pulse_not_detected:
                     pulse_not_detected_paths.append(path)
                 image = self._first_m0_frame(results)
@@ -396,6 +400,9 @@ class UI(BaseTk):
                     )
                 else:
                     self.events.put({"kind": "status", "message": "Processing complete"})
+        except ProcessingCancelled:
+            logger.info("Processing stopped")
+            self.events.put({"kind": "status", "message": "Stopped"})
         except Exception as exc:
             logger.exception("Processing failed")
             self.events.put({"kind": "error", "message": str(exc)})
@@ -453,15 +460,17 @@ class UI(BaseTk):
         if kind == "process_started":
             self.minimal.reset_progress()
             self.advanced.reset_progress()
-            self._set_status("Processing started")
+            self._set_status("Stopping..." if self.stop_event.is_set() else "Processing started")
         elif kind == "file_started":
             index = int(event["index"])
             total = int(event["total"])
             path = event["path"]
             self.minimal.set_current_file(index, total, path)
             self.advanced.set_current_file(index, total, path)
-            self._set_status(f"Processing {index}/{total}: {path.name}")
+            self._set_status("Stopping..." if self.stop_event.is_set() else f"Processing {index}/{total}: {path.name}")
         elif kind == "file_progress":
+            if self.stop_event.is_set():
+                return
             completed = int(event["completed"])
             total = int(event["total"])
             message = str(event.get("message") or "")

@@ -104,7 +104,12 @@ def process(
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
     warning_callback: Optional[Callable[[str, str], None]] = None,
 ) -> Any:
-    """Run the process pipeline."""
+    """Run the process pipeline.
+
+    ``progress_callback`` can be a callable ``ProgressReporter`` carrying a stop
+    event. Cancellation raises ``ProcessingCancelled`` after resource cleanup.
+    Ordinary progress callbacks retain their existing behavior.
+    """
     return _run_pipeline(
         file_path,
         parameters,

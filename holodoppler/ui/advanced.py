@@ -89,7 +89,12 @@ class AdvancedView(ttk.Frame):
         self.raw_button.configure(state=state)
         self.preview_button.configure(state="disabled" if busy else "normal")
         self.run_button.configure(state="disabled" if busy or not can_run else "normal")
-        self.stop_button.configure(state="normal" if busy else "disabled")
+        is_processing = busy and self.controller.worker_kind == "process"
+        stopping = self.controller.stop_event.is_set()
+        self.stop_button.configure(
+            text="Stopping..." if is_processing and stopping else "Stop",
+            state="normal" if is_processing and not stopping else "disabled",
+        )
 
     def set_status(self, message: str) -> None:
         self.status_var.set(message)

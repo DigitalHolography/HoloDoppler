@@ -59,6 +59,11 @@ or explicitly:
 holodoppler gui
 ```
 
+During processing, click **Stop** in either UI mode to cancel the current file
+and skip the remaining inputs. The UI shows **Stopping...** while active work
+finishes and resources close, then **Stopped**. Completed files are kept;
+the cancelled file is not finalized as a partial result. Preview is not cancellable.
+
 ### Run a Batch of Files in CLI
 
 ```bash

@@ -192,3 +192,25 @@ def test_block_svd_follows_global(monkeypatch, enabled, dc, global_threshold):
         expected = svd_filter_by_bloc(np, np.linalg, expected, 2, 0, dc)
     np.testing.assert_allclose(transform.call_args.args[2], expected, atol=1e-6)
 
+
+
+@pytest.mark.parametrize("live", [False, True])
+def test_cancellation_after_batches_skips_default_finalization(monkeypatch, live):
+    from threading import Event
+    from holodoppler.core.progress import ProgressReporter, ProcessingCancelled
+
+    stop = Event()
+    p = parameters(live_saving=live, numpy_num_workers=0)
+    monkeypatch.setattr(pipeline, "run_batches", lambda *args, **kwargs: stop.set())
+    save = Mock()
+    monkeypatch.setattr(pipeline, "save_outputs", save)
+    destination = Mock() if live else None
+    with pytest.raises(ProcessingCancelled):
+        pipeline._process_to_output(
+            SimpleNamespace(), p, [0], destination,
+            ProgressReporter(lambda *args: None, stop),
+        )
+    save.assert_not_called()
+    if live:
+        destination.add_batch.assert_not_called()
+        destination.write_static.assert_not_called()

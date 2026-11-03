@@ -100,6 +100,47 @@ def test_gui_can_toggle_logs_during_processing_and_logs_worker_errors(tmp_path):
             assert saved.count('Traceback (most recent call last)') == 1
             assert 'ValueError: Pipeline failure details' in saved
             assert str(get_log_path()) in popups[0]
+
+            # Both Stop controls interrupt a file through the progress object.
+            for mode in ("minimal", "advanced"):
+                entered, release = threading.Event(), threading.Event()
+                calls = []
+                def cancellable_pipeline(file_path, parameters, progress_callback=None, warning_callback=None):
+                    calls.append(file_path)
+                    entered.set()
+                    assert release.wait(5)
+                    progress_callback(1, 10, 'checkpoint')
+                    return {}
+                pipelines['test_logging'] = cancellable_pipeline
+                ui.input_paths = [task_dir / 'first.holo', task_dir / 'second.holo']
+                ui._sync_views()
+                ui.run_processing()
+                assert entered.wait(5)
+                while not ui.events.empty():
+                    ui._handle_event(ui.events.get_nowait())
+                button = ui.minimal.action_button if mode == 'minimal' else ui.advanced.stop_button
+                button.invoke()
+                assert button.instate(['disabled'])
+                assert ui.minimal.status_var.get() == 'Stopping...'
+                release.set()
+                ui.worker.join(timeout=5)
+                assert not ui._busy()
+                while not ui.events.empty():
+                    ui._handle_event(ui.events.get_nowait())
+                assert len(calls) == 1
+                assert ui.minimal.status_var.get() == 'Stopped'
+                assert ui.minimal.batch_progress['value'] == 0
+                assert len(popups) == 1
+                assert not ui.advanced.run_button.instate(['disabled'])
+
+            # Starting again clears the previous cancellation request.
+            pipelines['test_logging'] = lambda *args, **kwargs: {}
+            ui.run_processing()
+            ui.worker.join(timeout=5)
+            while not ui.events.empty():
+                ui._handle_event(ui.events.get_nowait())
+            assert not ui.stop_event.is_set()
+            assert ui.minimal.status_var.get() == 'Processing complete'
         finally:
             finish.set()
             if ui.worker is not None:

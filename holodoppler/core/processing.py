@@ -10,6 +10,7 @@ import numpy as np
 from tqdm import tqdm
 
 from holodoppler import backend
+from holodoppler.core.progress import check_cancelled
 
 
 def _worker_count(workers):
@@ -27,7 +28,7 @@ def _pinned_array(shape, dtype):
 
 def _run_cupy_batches(
     file_reader, batch_indices, batch_size, process_batch, consume,
-    registration_ref, prepare_result, depth, read_options,
+    registration_ref, prepare_result, depth, read_options, progress_callback=None,
 ):
     """Bound all admitted batches, including queued reads, by ``depth``.
 
@@ -46,6 +47,7 @@ def _run_cupy_batches(
     executor = ThreadPoolExecutor(max_workers=1)
 
     def admit():
+        check_cancelled(progress_callback)
         item = next(starts, None)
         if item is None:
             return False
@@ -59,7 +61,9 @@ def _run_cupy_batches(
         return True
 
     def schedule(slot, reference):
+        check_cancelled(progress_callback)
         frames = slot["read"].result()
+        check_cancelled(progress_callback)
         if frames.ndim == 2:
             frames = frames[None, ...]
         host = slot["input_host"] = _pinned_array(frames.shape, frames.dtype)
@@ -155,6 +159,9 @@ def run_batches(
     bounds all admitted GPU batches, including queued reads. ``prepare_result``
     runs on the compute stream before download (or inline on CPU/sequential GPU).
     Asynchronous GPU results passed to the consumer are NumPy arrays.
+    A progress callback may expose ``check_cancelled()`` to interrupt execution
+    at safe boundaries. Queued work is cancelled and active work drains before
+    the cancellation exception propagates.
     """
     if not isinstance(cupy_async, bool):
         raise TypeError("cupy_async must be a boolean")
@@ -162,6 +169,7 @@ def run_batches(
         raise TypeError("cupy_prefetch_depth must be an integer")
     if cupy_prefetch_depth < 1:
         raise ValueError("cupy_prefetch_depth must be at least one")
+    check_cancelled(progress_callback)
     read_options = {} if skip_every is None else {"skip_every": skip_every}
     total = len(batch_indices)
     if not total:
@@ -170,6 +178,7 @@ def run_batches(
     starts = iter(batch_indices)
 
     def execute(start, reference):
+        check_cancelled(progress_callback)
         frames = file_reader.read_frames(first_frame=start, batch_size=batch_size, **read_options)
         if frames.ndim == 2:
             frames = frames[None, ...]
@@ -177,6 +186,7 @@ def run_batches(
         if not backend.is_gpu:
             frames = frames.astype(backend.xp.float32, copy=False)
         try:
+            check_cancelled(progress_callback)
             result, reference = process_batch(frames, reference)
             if prepare_result is not None:
                 result = prepare_result(result)
@@ -188,6 +198,7 @@ def run_batches(
 
     with tqdm(total=total, desc=f"Processing ({backend.get_backend_name()})") as progress:
         def consume(index, result):
+            check_cancelled(progress_callback)
             consume_result(index, result)
             progress.update(1)
             if progress_callback is not None:
@@ -197,7 +208,7 @@ def run_batches(
         if backend.is_gpu and cupy_async:
             return _run_cupy_batches(
                 file_reader, batch_indices, batch_size, process_batch, consume,
-                registration_ref, prepare_result, cupy_prefetch_depth, read_options,
+                registration_ref, prepare_result, cupy_prefetch_depth, read_options, progress_callback,
             )
 
         completed = 0
@@ -219,6 +230,7 @@ def run_batches(
                 pending = deque()
                 try:
                     for _ in range(min(workers, total - completed)):
+                        check_cancelled(progress_callback)
                         pending.append(executor.submit(execute, next(starts), registration_ref))
                     while pending:
                         future = pending.popleft()
@@ -231,6 +243,7 @@ def run_batches(
                         completed += 1
                         start = next(starts, None)
                         if start is not None:
+                            check_cancelled(progress_callback)
                             pending.append(executor.submit(execute, start, registration_ref))
                 finally:
                     for future in pending:
