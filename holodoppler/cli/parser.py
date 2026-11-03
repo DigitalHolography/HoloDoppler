@@ -17,8 +17,11 @@ def _existing_file(value: str) -> Path:
     return path
 
 
-def _convert_dynamic_value(value: str) -> Union[int, float, str]:
-    """Convert numeric strings to int or float; preserve other strings."""
+def _convert_dynamic_value(value: str) -> Union[int, float, bool, str, None]:
+    """Convert numeric, boolean, and null values; preserve other strings."""
+    if value.lower() == "null":
+        return None
+
     try:
         return int(value)
     except ValueError:
@@ -136,6 +139,7 @@ def _add_dynamic_options_note(parser: argparse.ArgumentParser) -> None:
         "  --option value    Sets the parameter to a converted value\n"
         "  --option=value    Equivalent key/value syntax\n"
         "  Numeric values are converted to int or float.\n"
+        "  true/false become booleans; null becomes None (case-insensitive).\n"
         "Example: --threshold 0.5 --batch-size 512 --output-dir ./results"
     )
 

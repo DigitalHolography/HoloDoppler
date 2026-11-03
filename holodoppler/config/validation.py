@@ -195,7 +195,7 @@ def validate_main_parameters(parameters):
             f"Parameter 'filter2d_low' must be a real number; got {value!r} ({type(value).__name__})."
         )
 
-    for key in ("svd_block_size_mib", "registration_block_size_mib"):
+    for key in ("svd_block_size_mib", "registration_block_size_mib", "svd_filter_by_bloc_mib_block_size"):
         value = parameters.get(key, 8)
         if value is None:
             continue
@@ -204,6 +204,8 @@ def validate_main_parameters(parameters):
         if not isfinite(value) or value <= 0:
             raise ValueError(f"{key} must be finite and positive")
 
+    if not isinstance(parameters.get("svd_filter_by_bloc_parallel", False), bool):
+        raise TypeError("svd_filter_by_bloc_parallel must be a boolean")
     if not isinstance(parameters.get("svd_filter_by_bloc", False), bool):
         raise TypeError("svd_filter_by_bloc must be a boolean")
     for key, default, minimum in (("svd_filter_by_bloc_window_size", 5, 1),

@@ -18,9 +18,9 @@ def test_stride_matches_reference_and_covers_edges(stride, starts):
             expected[:, y:y+3, x:x+3] += ((u*s)@vh).T.reshape(patch.shape)
             weights[y:y+3, x:x+3] += 1
     solver = Mock()
-    solver.svd = Mock(wraps=np.linalg.svd)
+    solver.eigh = Mock(wraps=np.linalg.eigh)
     actual = svd_filter_by_bloc(np, solver, data, 3, 1, svd_filter_by_bloc_window_stride=stride)
-    assert solver.svd.call_count == len(starts)**2
+    assert solver.eigh.call_count == 1
     assert np.all(weights > 0)
     np.testing.assert_allclose(actual, expected/weights, atol=1e-13)
 
@@ -31,9 +31,10 @@ def test_invalid_stride(stride):
         svd_filter_by_bloc(np, np.linalg, np.ones((4, 8, 8)), 3,
                            svd_filter_by_bloc_window_stride=stride)
 
+@pytest.mark.parametrize('parallel,budget', [(False, .001), (False, None), (True, 8)])
 @pytest.mark.parametrize('dc', [False, True])
 @pytest.mark.parametrize('rank', [0, 1, 20])
-def test_local_matches_reference(dc, rank):
+def test_local_matches_reference(dc, rank, parallel, budget):
     rng = np.random.default_rng(12)
     data = rng.normal(size=(4, 4, 5)) + 1j*rng.normal(size=(4, 4, 5))
     original = data.copy()
@@ -47,7 +48,8 @@ def test_local_matches_reference(dc, rank):
             s[:rank] = 0
             expected[:, y:y+2, x:x+2] += ((u*s)@vh).T.reshape(patch.shape)
             weights[y:y+2, x:x+2] += 1
-    actual = svd_filter_by_bloc(np, np.linalg, data, 2, rank, dc)
+    actual = svd_filter_by_bloc(np, np.linalg, data, 2, rank, dc, svd_filter_by_bloc_parallel=parallel,
+                                svd_filter_by_bloc_mib_block_size=budget)
     np.testing.assert_allclose(actual, expected/weights, atol=1e-13)
     np.testing.assert_array_equal(data, original)
 
@@ -59,3 +61,24 @@ def test_zero_threshold_dc(local):
     else:
         actual = svd_filter(np, np.linalg, data, 0, remove_dc=True)
     np.testing.assert_allclose(actual, data-data.mean(axis=0))
+
+
+@pytest.mark.parametrize('parallel', [False, True])
+@pytest.mark.parametrize('dtype', [np.complex64, np.complex128])
+def test_cupy_complex_overlap_accumulation(parallel, dtype):
+    cp = pytest.importorskip('cupy')
+    try:
+        if cp.cuda.runtime.getDeviceCount() == 0:
+            pytest.skip('No CUDA device')
+    except cp.cuda.runtime.CUDARuntimeError as exc:
+        pytest.skip(f'CUDA unavailable: {exc}')
+    rng = np.random.default_rng(81)
+    data = (rng.normal(size=(6, 7, 8)) + 1j*rng.normal(size=(6, 7, 8))).astype(dtype)
+    options = dict(window_size=3, threshold=1, remove_dc=True,
+                   svd_filter_by_bloc_window_stride=2,
+                   svd_filter_by_bloc_parallel=parallel,
+                   svd_filter_by_bloc_mib_block_size=.001)
+    expected = svd_filter_by_bloc(np, np.linalg, data, **options)
+    actual = svd_filter_by_bloc(cp, cp.linalg, cp.asarray(data), **options)
+    tolerance = 2e-5 if dtype == np.complex64 else 1e-12
+    np.testing.assert_allclose(cp.asnumpy(actual), expected, atol=tolerance, rtol=tolerance)

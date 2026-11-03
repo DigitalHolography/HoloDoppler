@@ -388,3 +388,12 @@ the image edges so every pixel is covered. Windows must fit the image.
 (default 0, disabling SVD). This count is independent of `svd_filter_mode`.
 In both modes, `svd_remove_dc` subtracts each pixel's temporal mean before SVD,
 including at threshold zero. The existing negative global threshold bypass remains unchanged.
+
+Local block filtering uses spatial covariance `M?M` with `M` shaped
+`(time, window_size?)`, removing the largest eigenvalue modes via projection.
+`svd_filter_by_bloc_parallel: true` processes all windows in one batched solve.
+The default `false` uses vectorized batches controlled by
+`svd_filter_by_bloc_mib_block_size` (default 8 MiB; null processes all windows).
+This is an estimated temporary-memory target, excluding input/output arrays
+and eigensolver workspace; at least one window is processed per batch.
+Parallel mode ignores this memory target and can require substantial RAM/VRAM.
