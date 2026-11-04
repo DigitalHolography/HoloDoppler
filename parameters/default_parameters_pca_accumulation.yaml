@@ -10,6 +10,8 @@ registration_block_size_mib: null # 8 # Target MiB per complex FFT work array fo
 shack_hartmann_sub_aps_process: "parallel" # "sequential": lower RAM/VRAM; "parallel": batched SVD/FFTs, potentially faster but uses more RAM/VRAM.
 
 # saving management
+h5_datasets: [] # Optional H5 contrast outputs: [MEAN, RATIO, STD]. These are produced by LSCI.
+h5compression: null # Gzip compression level for these datasets: 0-9; null disables compression.
 live_saving: true # false saves all outputs after processing; ECC still buffers when true.
 overwrite_option: "erase"
 num_saving_workers: 2

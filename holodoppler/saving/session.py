@@ -278,7 +278,7 @@ class OutputClass:
             raise
 
     def _write_add(self, name, value, t):
-        formats = policy.output_formats(name, value, temporal=True)
+        formats = policy.output_formats(name, value, temporal=True, parameters=self.parameters)
         if self._hdf5_writer is not None and "h5" in formats:
             self._hdf5_writer.append(name, value, t)
         state = self._streams.setdefault(name, {"csv": None, "media": None})
@@ -294,7 +294,7 @@ class OutputClass:
             state["media"].append(value)
 
     def _write_static(self, name, value):
-        formats = policy.output_formats(name, value)
+        formats = policy.output_formats(name, value, parameters=self.parameters)
         if self._hdf5_writer is not None and "h5" in formats:
             self._hdf5_writer.write_static(name, value)
         if "csv" in formats:
@@ -418,7 +418,7 @@ def save_outputs(
     )
 
     if save_to_h5:
-        h5_names = [name for name in output if policy.save_to_hdf5(name)]
+        h5_names = [name for name in output if policy.save_to_hdf5(name, parameters)]
 
         data.save_h5(
             target_dir,
@@ -446,6 +446,6 @@ def _bundle_saving_jobs(target_dir, file_reader, output, parameters, fps, save_t
     if save_to_h5:
         yield data.save_h5, (target_dir, output), {
             "parameters": parameters,
-            "save_only_list": [name for name in output if policy.save_to_hdf5(name)],
+            "save_only_list": [name for name in output if policy.save_to_hdf5(name, parameters)],
             "git_commit": data.get_git_version(),
         }

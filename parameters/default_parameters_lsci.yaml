@@ -7,6 +7,8 @@ cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and down
 cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM.
 
 # saving management
+h5_datasets: [] # Optional H5 contrast outputs: [MEAN, RATIO, STD]. These are produced by LSCI.
+h5compression: null # Gzip compression level for these datasets: 0-9; null disables compression.
 live_saving: true # false saves all outputs after processing; ECC still buffers when true.
 overwrite_option: "erase"
 num_saving_workers: 2

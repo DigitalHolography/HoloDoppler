@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import json
 import subprocess
+from numbers import Integral
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from threading import Lock
@@ -355,6 +356,13 @@ class Hdf5Writer:
 
     def __init__(self, path: Path, parameters=None, *, git_commit=None):
         path = Path(path)
+        self.parameters = parameters or {}
+        level = self.parameters.get("h5compression")
+        if level is not None:
+            if isinstance(level, bool) or not isinstance(level, Integral):
+                raise TypeError("h5compression must be an integer from 0 to 9 or null")
+            if not 0 <= level <= 9:
+                raise ValueError("h5compression must be between 0 and 9")
         ensure_directory(path.parent)
         self.lock = Lock()
         self.file = h5py.File(path, "w")
@@ -377,7 +385,8 @@ class Hdf5Writer:
         with self.lock:
             if t == 0:
                 self.file.create_dataset(name, shape=(0, *value.shape),
-                                         maxshape=(None, *value.shape), dtype=value.dtype)
+                                         maxshape=(None, *value.shape), dtype=value.dtype,
+                                         **self._dataset_options(name))
             dataset = self.file[name]
             dataset.resize(t + 1, axis=0)
             dataset[t] = value
@@ -385,8 +394,14 @@ class Hdf5Writer:
 
     def write_static(self, name: str, value: np.ndarray) -> None:
         with self.lock:
-            self.file.create_dataset(name, data=h5_value(value))
+            self.file.create_dataset(name, data=h5_value(value), **self._dataset_options(name))
             self.file.flush()
+
+    def _dataset_options(self, name):
+        level = self.parameters.get("h5compression")
+        if name in {"MEAN", "RATIO", "STD"} and level is not None:
+            return {"compression": "gzip", "compression_opts": int(level)}
+        return {}
 
     def close(self) -> None:
         with self.lock:

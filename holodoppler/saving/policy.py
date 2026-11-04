@@ -42,22 +42,28 @@ def is_csv_output(name: str) -> bool:
     return "coefs" in name or "registration" in name or name.endswith("shack_hartmann_shifts")
 
 
-def save_to_hdf5(name: str) -> bool:
+def save_to_hdf5(name: str, parameters=None) -> bool:
     """Select numerical outputs; Doppler images and per-range moments stay in media exports."""
-    return (name in {"STD", "MEAN", "RATIO", "gaussian_width", "pca_sum", "pca_sum_ff", "moment0ff", "moment0", "moment1", "moment2",
+    parameters = parameters or {}
+    if name in {"STD", "MEAN", "RATIO"}:
+        selected = parameters.get("h5_datasets") or []
+        if isinstance(selected, str):
+            selected = [selected]
+        return name in selected
+    return (name in {"gaussian_width", "pca_sum", "pca_sum_ff", "moment0ff", "moment0", "moment1", "moment2",
                     "spectrum_line", "sh_psd", "averaged_spectrogram",
                     "spectrograms", "PROJ", "PROJff", "QSum_moment0", "J0_moment0"}
             or name.startswith(("NW_", "NE_", "SW_", "SE_", "NWxSE_", "NExSW_"))
             or name.endswith("_flow_index") or "band_" in name or is_csv_output(name))
 
 
-def output_formats(name: str, value: np.ndarray, *, temporal: bool = False) -> frozenset[str]:
+def output_formats(name: str, value: np.ndarray, *, temporal: bool = False, parameters=None) -> frozenset[str]:
     """Resolve formats once for a static array or one temporal batch result.
 
     CSV outputs are numerical even when their shape resembles an image.
     Temporal results are individual frames, whereas static arrays may be videos.
     """
-    formats = {"h5"} if save_to_hdf5(name) else set()
+    formats = {"h5"} if save_to_hdf5(name, parameters) else set()
     if is_csv_output(name):
         formats.add("csv")
     elif temporal:

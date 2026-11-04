@@ -89,3 +89,56 @@ def test_encoder_open_failure_closes_partial_media_and_hdf5(tmp_path, monkeypatc
     writer.close.assert_called_once()
     assert not output._h5.id.valid
     assert not list(output.target_dir.rglob("*.png"))
+
+
+@pytest.mark.parametrize("mode", ["legacy", "bundle", "stream", "static"])
+@pytest.mark.parametrize("selected", [None, [], "MEAN", ["RATIO", "STD"]])
+@pytest.mark.parametrize("compression", [None, 0, 4, 9])
+def test_optional_contrast_h5(tmp_path, monkeypatch, mode, selected, compression):
+    monkeypatch.setattr(data, "get_git_version", lambda: "test")
+    monkeypatch.setattr(media, "save_video", lambda *a, **kw: None)
+    monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *a: Mock())
+    reader = SimpleNamespace(file_path=tmp_path / "input.raw", extension=".raw")
+    parameters = {"h5compression": compression}
+    if selected is not None:
+        parameters["h5_datasets"] = selected
+    frame = np.arange(48, dtype=np.float32).reshape(6, 8)
+    outputs = {name: np.stack([frame, frame + 1]) for name in ("MEAN", "RATIO", "STD")}
+    outputs["registration"] = np.zeros((2, 2), np.float32)
+    if mode in {"stream", "static"}:
+        with saving.OutputClass(reader, parameters, custom_path=tmp_path / "out") as dest:
+            if mode == "static":
+                for name, value in outputs.items():
+                    dest.write_static(name, value)
+            else:
+                for t in range(2):
+                    dest.add_batch({name: value[t] for name, value in outputs.items()}, t)
+        target = dest.target_dir
+    else:
+        target = saving.save_outputs(reader, outputs, parameters,
+                                     custom_path=tmp_path / "out",
+                                     num_saving_workers=0 if mode == "bundle" else None)
+    expected = {selected} if isinstance(selected, str) else set(selected or [])
+    with h5py.File(next(target.rglob("*.h5"))) as handle:
+        for name in ("MEAN", "RATIO", "STD"):
+            assert (name in handle) == (name in expected)
+            if name in expected:
+                np.testing.assert_equal(handle[name][:], outputs[name])
+                assert handle[name].compression == (None if compression is None else "gzip")
+                assert handle[name].compression_opts == compression
+        assert handle["registration"].compression is None
+    assert (target / "png/MEAN.png").exists()
+
+
+@pytest.mark.parametrize("level", [-1, 10, True, 1.5, "gzip"])
+def test_invalid_h5_compression_level(tmp_path, level):
+    path = tmp_path / "invalid.h5"
+    with pytest.raises((TypeError, ValueError), match="h5compression"):
+        data.Hdf5Writer(path, {"h5compression": level})
+    assert not path.exists()
+
+
+def test_default_h5_selection_unchanged():
+    parameters = {"pipeline_name": "default", "h5_datasets": []}
+    for name in ("moment0", "moment0ff", "moment1", "moment2", "registration"):
+        assert policy.save_to_hdf5(name, parameters)
