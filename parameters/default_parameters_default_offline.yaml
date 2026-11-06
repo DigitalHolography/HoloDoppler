@@ -149,4 +149,4 @@ outputs:
   "registration*": [h5, csv]
   "shack_hartmann_autofocus_*": [h5]
   shack_hartmann_autofocus_zernike_coefs: [h5, csv]
-  shack_hartmann_autofocus_wavefront_color_image: [h5, png]
+  shack_hartmann_autofocus_wavefront_color_image: [png]
