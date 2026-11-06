@@ -133,3 +133,24 @@ pca_compute: false
 pca_flatfield: false # Emit pca_sum_ff instead of pca_sum, using registration_flatfield_gw.
 pca_time_window: 32
 pca_index_range: [0, 16] # Python slice: exclusive upper bound
+
+# Explicit exports. Exact names override globs; last matching glob wins.
+# Empty lists disable an output. Omitted outputs are not exported.
+# Selecting optional outputs enables their computation; legacy compute flags are
+# used only when this section is absent. Projections are means of output batches.
+outputs:
+  "moment*": [h5, avi, mp4]
+  "moment*_time_projection": [png]
+  "band_*": [h5, avi, mp4]
+  "band_*_time_projection": [png]
+  spectrum_line: [h5, csv]
+  spectrograms: [h5]
+  averaged_spectrogram: [h5]
+  color_Doppler_image: [avi, mp4]
+  color_Doppler_image_time_projection: [png]
+  directional_Doppler_image: [avi, mp4]
+  directional_Doppler_image_time_projection: [png]
+  "registration*": [h5, csv]
+  "shack_hartmann_autofocus_*": [h5]
+  shack_hartmann_autofocus_zernike_coefs: [h5, csv]
+  shack_hartmann_autofocus_wavefront_color_image: [h5, png]

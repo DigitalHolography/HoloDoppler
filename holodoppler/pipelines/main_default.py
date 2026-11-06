@@ -52,9 +52,11 @@ from holodoppler.core.zernike import (
     fit_zernike_fresnel,
 )
 from holodoppler.file_reader import get_reader
+from holodoppler.saving.default_output import needed as _output_needed
 from holodoppler.logging import logger
 from holodoppler.saving import (
     OutputClass,
+    DefaultOutput,
     save_outputs,
 )
 
@@ -79,6 +81,8 @@ def _reference_batch(parameters):
 
 
 def _prepare_input(file_path, parameters, *, preview=False, preview_reference=False):
+    from holodoppler.saving.default_output import computation_parameters
+    parameters = computation_parameters(parameters)
     backend.set_backend(parameters.get("backend", "auto"))
     reader = get_reader(file_path)
     if reader.extension == ".holo":
@@ -380,10 +384,8 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     )
     images = moments(xp, psd[indices], selected_freqs, orders)
     output_dict.update(zip(("moment0", "moment1", "moment2"), images))
-    output_dict["spectrum_line"] = xp.mean(
-        psd,
-        axis=(-2, -1),
-    )
+    if "outputs" not in parameters or _output_needed(parameters, "spectrum_line"):
+        output_dict["spectrum_line"] = xp.mean(psd, axis=(-2, -1))
 
     if parameters.get("color_Doppler_image", False):
         for name, default in (("low", [3000, 9000]), ("high", [9000, 18000])):
@@ -401,6 +403,8 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     for k, (f1, f2) in enumerate(
         parameters.get("frequency_bands", [])
     ):
+        if "outputs" in parameters and not _output_needed(parameters, f"band_{k}_{f1}_{f2}"):
+            continue
         slices = symmetric_frequency_slices(nt_sub, fs, f1, f2)
         count = sum(part.stop - part.start for part in slices)
         summed = _band_moments(psd, fs, f1, f2, [0])[0]
@@ -409,6 +413,11 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
         )
 
     for k, (f1, f2) in enumerate(parameters.get("moments_frequency_ranges") or ()):
+        if "outputs" in parameters and not any(
+            _output_needed(parameters, f"{name}_range_{k}_{f1}_{f2}")
+            for name in ("moment0", "moment1", "moment0ff")
+        ):
+            continue
         band_moments = _band_moments(psd, fs, f1, f2, [0, 1])
         for order, image in enumerate(band_moments):
             suffix = f"range_{k}_{f1}_{f2}"
@@ -994,14 +1003,27 @@ def _preview_prepared(reader, parameters, *, save_output):
     if coefs is not None:
         result["shack_hartmann_autofocus_zernike_coefs"] = backend.to_numpy(coefs)
     result = _finalize_spatial_result(result, parameters)
-    if "sh_psd" in result:
+    if "sh_psd" in result and "outputs" not in parameters:
         result["sh_psd"] = _square_spectrum(result["sh_psd"], parameters)
     output = {key: backend.to_numpy(value) for key, value in result.items()}
     output.update(diagnostics)
-    save_outputs(file_reader=reader, output=output, parameters=parameters,
-                 custom_relative_path="preview",
-                 num_saving_workers=parameters.get("num_saving_workers", 0),
-                 saving_queue_depth=parameters.get("saving_queue_depth"))
+    if "outputs" in parameters:
+        output = _prepare_batch_results(result, parameters)
+        with DefaultOutput(reader, parameters, custom_relative_path="preview") as destination:
+            destination.add_batch({key: backend.to_numpy(value) for key, value in output.items()
+                                   if key not in {"sh_psd", "shack_hartmann_autofocus_zernike_coefs"}}, 0)
+            if "sh_psd" in output:
+                destination.write_static("averaged_spectrogram", backend.to_numpy(
+                    _square_spectrum(output["sh_psd"], parameters)))
+            if coefs is not None:
+                destination.write_static("shack_hartmann_autofocus_zernike_coefs", backend.to_numpy(coefs))
+            for key, value in (diagnostics or {}).items():
+                destination.write_static(key, backend.to_numpy(value))
+    else:
+        save_outputs(file_reader=reader, output=output, parameters=parameters,
+                     custom_relative_path="preview",
+                     num_saving_workers=parameters.get("num_saving_workers", 0),
+                     saving_queue_depth=parameters.get("saving_queue_depth"))
     return reference
 
 
@@ -1011,7 +1033,11 @@ def process(file_path, parameters, progress_callback=None):
     if not batch_indices:
         return
 
-    if parameters.get("live_saving", True):
+    if "outputs" in parameters:
+        with DefaultOutput(file_reader, parameters) as destination:
+            _process_to_output(file_reader, parameters, batch_indices,
+                               destination, progress_callback)
+    elif parameters.get("live_saving", True):
         with OutputClass(file_reader, parameters) as destination:
             _process_to_output(file_reader, parameters, batch_indices,
                                destination, progress_callback)
@@ -1025,7 +1051,8 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
     check_cancelled(progress_callback)
     batch_size = parameters["batch_size"]
     first_frame = parameters["first_frame"]
-    buffered = destination is None or parameters.get("image_registration_with_ecc", False)
+    buffered = (destination is None or not parameters.get("live_saving", True)
+                or parameters.get("image_registration_with_ecc", False))
     output = {}
 
     registration_ref = None
@@ -1079,6 +1106,9 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
         return result
 
     def consume_result(index, result):
+        if "outputs" in parameters and not ecc_enabled:
+            result = {key: value for key, value in result.items()
+                      if key == "sh_psd" or _output_needed(parameters, key)}
         if buffered:
             _append_numpy_results(output, result, parameters, index, len(batch_indices))
             return

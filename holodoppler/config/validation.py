@@ -10,6 +10,9 @@ from holodoppler.core.filtering import _welch_window
 def validate_main_parameters(parameters):
     """Check each main-pipeline parameter after metadata resolution without mutation."""
 
+    from holodoppler.saving.default_output import validate_outputs
+    validate_outputs(parameters)
+
     value = parameters.get("skip_every")
     if value is not None:
         if isinstance(value, bool) or not isinstance(value, Integral):
