@@ -46,9 +46,9 @@ class MinimalView(ttk.Frame):
 
         if is_processing:
             self.action_button.configure(
-                text="Stop",
+                text="Stopping..." if self.controller.stop_event.is_set() else "Stop",
                 command=self.controller.stop_processing,
-                state="normal",
+                state="disabled" if self.controller.stop_event.is_set() else "normal",
                 style="TButton",
             )
             return

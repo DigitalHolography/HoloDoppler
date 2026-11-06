@@ -60,6 +60,8 @@ def test_append_formats_and_fixed_range(output_factory, monkeypatch):
     with h5py.File(output.target_dir / "h5/output_output.h5") as h5:
         assert h5["moment0"].shape == (2, 5, 7)
         assert h5["spectrograms"].shape == (1, 8, 5, 7)
+        assert h5["moment0"].chunks == (1, 5, 7)
+        assert h5["spectrograms"].chunks == (1, 8, 5, 7)
         assert h5["shack_hartmann_autofocus_zernike_coefs"].shape == (2,)
         assert h5["git_commit"][()] == b"test"
         assert "HD_parameters" in h5 and "HD_version" in h5
@@ -195,6 +197,7 @@ def test_pipeline_streaming_and_ecc_order(tmp_path, monkeypatch, ecc, gpu):
 
     monkeypatch.setattr(backend, "is_gpu", gpu)
     monkeypatch.setattr(backend, "to_numpy", np.asarray)
+    monkeypatch.setattr(backend, "to_backend", np.asarray)
     monkeypatch.setattr(backend, "clear_gpu_memory", lambda: None)
     monkeypatch.setattr(main_default, "_get_autofocus_phase_term", lambda *args, **kw: (None, None))
     destination = Mock()
@@ -214,6 +217,9 @@ def test_pipeline_streaming_and_ecc_order(tmp_path, monkeypatch, ecc, gpu):
                 assert "averaged_spectrogram" not in result
             consume(t, result)
             assert len(calls) == (0 if ecc else 4 * (t + 1))
+            # The running average stays in memory until all batches finish.
+            destination.write_static.assert_not_called()
+            assert all(call[0] != "averaged_spectrogram" for call in calls)
 
     monkeypatch.setattr(main_default, "run_batches", batches)
     monkeypatch.setattr(main_default, "register_with_ecc", lambda *args, **kw: np.zeros((2, 2, 3)))
@@ -226,6 +232,7 @@ def test_pipeline_streaming_and_ecc_order(tmp_path, monkeypatch, ecc, gpu):
     assert [call[2] for call in moments] == [0, 1]
     np.testing.assert_equal(moments[0][1], np.full((6, 8), 10 if ecc else 0))
     aggregate = destination.write_static.call_args_list[0]
+    destination.write_static.assert_called_once()
     assert aggregate.args[0] == "averaged_spectrogram"
     np.testing.assert_equal(aggregate.args[1], np.full((8, 6, 8), 2))
 
@@ -252,6 +259,7 @@ def test_default_process_h5_with_square_and_spectrograms(tmp_path, monkeypatch, 
     monkeypatch.setattr(main_default, "get_reader", lambda path: reader)
     params = yaml.safe_load((Path(__file__).resolve().parents[1] /
         "parameters/default_parameters_default.yaml").read_text())
+    params.pop("outputs", None)  # Exercise the legacy YAML saving contract.
     params.update(backend="numpy", batch_size=8, batch_stride=8, first_frame=0,
         end_frame=-1, numpy_num_workers=1, shack_hartmann_autofocus=False,
         shack_hartmann=False, image_registration=True, registration_ref_first_frame=0,

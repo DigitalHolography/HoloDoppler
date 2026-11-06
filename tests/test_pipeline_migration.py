@@ -71,16 +71,15 @@ def test_streamed_and_buffered_outputs_match(tmp_path, monkeypatch, name, propag
     frames = np.random.default_rng(123).uniform(10, 100, (17, 8, 10)).astype(np.float32)
     reader, _ = reader_for(tmp_path, frames)
     monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
+    monkeypatch.setattr(import_module("holodoppler.pipelines.main_lsci"), "get_reader", lambda _: reader)
     monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
     monkeypatch.setattr(saving_media, "save_video", lambda *args, **kwargs: None)
     module_name = "sliding_shack_hart" if name == "sliding_shack_hartmann" else name
     module = import_module(f"holodoppler.pipelines.main_{module_name}")
     p = parameters(name, spatial_propagation=propagation, image_registration=registration)
     if name == "lsci":
-        p.update(batch_size=3, batch_stride=2, image_registration=False, lsci_resize_factor=1,
-                 lsci_enable_spatial=True, lsci_enable_temporal=True,
-                 lsci_enable_spatiotemporal=True, lsci_nbh_s=3, lsci_nbh_t=99,
-                 lsci_history_dtype="float16")
+        p.update(lsci_time_window_size=3, lsci_time_window_stride=3,
+                 lsci_pixel_window_size=3, image_registration=False)
     snapshots = []
     for live in (True, False):
         progress = []
@@ -93,10 +92,10 @@ def test_streamed_and_buffered_outputs_match(tmp_path, monkeypatch, name, propag
             data = {key: handle[key][()] for key in handle if key not in
                     {"HD_parameters", "HD_version", "git_commit"}}
         assert data
-        expected_count = 2 if name == "pca_accumulation" else 5 if name == "lsci" else 4
+        expected_count = 3 if name == "pca_accumulation" else 5 if name == "lsci" else 4
         assert all(value.shape[0] == expected_count for value in data.values())
         assert all(np.isfinite(value).all() for value in data.values())
-        assert progress[-1][:2] == ((5, 5) if name == "lsci" else (4, 4))
+        assert progress[-1][:2] == ((5, 5) if name == "lsci" else (3, 3) if name == "pca_accumulation" else (4, 4))
         snapshots.append(data)
     assert snapshots[0].keys() == snapshots[1].keys()
     for key in snapshots[0]:
@@ -105,26 +104,37 @@ def test_streamed_and_buffered_outputs_match(tmp_path, monkeypatch, name, propag
     assert preview.ndim == 2
 
 
-@pytest.mark.parametrize("accumulation,expected", [(1, [0, 1, 2, 3, 4]), (2, [.5, 2.5, 4]), (8, [2])])
-def test_pca_means_and_partial_group(tmp_path, monkeypatch, accumulation, expected):
+@pytest.mark.parametrize("accumulation,stride,expected", [
+    (1, 1, [0, 1, 2, 3, 4]), (2, 2, [.5, 2.5]), (2, 1, [.5, 1.5, 2.5, 3.5]),
+    (2, 3, [.5, 3.5]), (8, 8, []),
+])
+def test_pca_means_full_groups_and_stride(tmp_path, monkeypatch, accumulation, stride, expected):
     from holodoppler.pipelines import main_pca_accumulation as pca
     frames = np.arange(5, dtype=np.float32)[:, None, None] * np.ones((5, 3, 4), np.float32)
-    reader, _ = reader_for(tmp_path, frames)
+    reader, calls = reader_for(tmp_path, frames)
     monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
-    monkeypatch.setattr(pca, "_process_one_batch", lambda p, frames, PROJ_reg=None, phase_term=None:
-                        ({"PROJ": frames[0], "PROJff": frames[0], "registration": frames[0, 0, :2]}, PROJ_reg))
+    monkeypatch.setattr(pca, "fresnel_transform", lambda xp, fft, frames, *a, **k: frames)
+    monkeypatch.setattr(pca, "gaussian_flatfield", lambda image, *a: image + 10)
     saved = []
     monkeypatch.setattr(pipeline, "save_outputs", lambda **kwargs: saved.append(kwargs) or tmp_path)
-    p = parameters("pca_accumulation", batch_size=1, batch_stride=1, pca_range=[0, 1],
+    p = parameters("pca_accumulation", batch_size=1, batch_stride=stride, pca_range=[0, 1],
                    accumulation=accumulation, live_saving=False)
-    pca.process(reader.file_path, p)
-    result = saved[-1]["output"]
-    np.testing.assert_allclose(result["PROJ"][:, 0, 0], expected)
-    np.testing.assert_allclose(result["registration"][:, 0], expected)
-    assert result["PROJ"].shape == (len(expected), 3, 4)
-    assert pca.preview(reader.file_path, p)[0, 0] == pytest.approx(expected[0])
-    if accumulation > 1:
-        assert saved[0]["parameters"]["output_fps"] == 1000 / accumulation
+    result = pca.process(reader.file_path, p)
+    if not expected:
+        assert result is None
+        assert not saved and not calls
+        assert pca.preview(reader.file_path, p) is None
+        return
+    output = saved[-1]["output"]
+    assert set(output) == {"pca_sum", "pca_sum_ff"}
+    np.testing.assert_allclose(output["pca_sum"][:, 0, 0], expected)
+    np.testing.assert_allclose(output["pca_sum_ff"][:, 0, 0], np.array(expected) + 10)
+    assert sorted(calls) == [(start, accumulation, None) for start in range(0, 6 - accumulation, stride)]
+    assert saved[0]["parameters"]["batch_size"] == p["batch_size"] == 1
+    assert saved[0]["parameters"]["accumulation"] == accumulation
+    assert saved[0]["parameters"]["output_frame_stride"] == stride
+    assert saving.calculate_fps(saved[0]["parameters"]) == 1000 / stride
+    assert pca.preview(reader.file_path, p)[0, 0] == pytest.approx(expected[0] + 10)
 
 
 def test_sliding_history_includes_only_current_window(monkeypatch):
@@ -172,42 +182,27 @@ def test_skip_and_reference_bounds(tmp_path):
         pipeline.read_reference(reader, p, 9, 3, "Registration")
 
 
-@pytest.mark.parametrize("skip,expected,starts", [(1, [6, 37.5, 96], [1, 4, 7]), (2, [3.375, 13.5], [1, 4])])
-def test_lsci_full_batches_and_forced_window(tmp_path, monkeypatch, skip, expected, starts):
-    from holodoppler.pipelines import main_lsci as lsci
-    frames = np.arange(10, dtype=np.float32)[:, None, None] * np.ones((10, 3, 4))
-    reader, calls = reader_for(tmp_path, frames)
-    monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
-    saved = []
-    monkeypatch.setattr(pipeline, "save_outputs", lambda **kw: saved.append(kw) or tmp_path)
-    p = parameters("lsci", batch_size=3, batch_stride=99, first_frame=1, end_frame=10,
-                   skip_every=skip, live_saving=False, lsci_nbh_s=1, lsci_nbh_t=99,
-                   lsci_resize_factor=1, lsci_history_dtype="float16",
-                   lsci_enable_spatial=False, lsci_enable_temporal=True,
-                   lsci_enable_spatiotemporal=False)
-    assert lsci.process(reader.file_path, p) == str(tmp_path)
-    assert calls == [(start, 3, skip) for start in starts]
-    result = saved[0]["output"]["temporal_flow_index"]
-    np.testing.assert_allclose(result[:, 0, 0], expected, rtol=1e-5)
-    effective = saved[0]["parameters"]
-    assert effective["lsci_nbh_t"] == effective["batch_size"] == effective["batch_stride"] == 3
-    assert p["batch_stride"] == p["lsci_nbh_t"] == 99
-    preview = lsci.preview(reader.file_path, p)
-    np.testing.assert_allclose(preview, expected[0], rtol=1e-5)
-
-
-@pytest.mark.parametrize("name", ["default", "lsci", "pca_accumulation", "sliding_shack_hartmann", "split_apertures"])
 @pytest.mark.parametrize("changes,match", [
     ({"live_saving": "yes"}, "live_saving"),
     ({"numpy_num_workers": "two"}, "numpy_num_workers"),
     ({"skip_every": 0}, "skip_every"),
     ({"pixel_pitch": "use_holovibes"}, "pixel_pitch"),
 ])
-def test_all_pipelines_use_main_validation(tmp_path, monkeypatch, name, changes, match):
+def test_default_pipeline_uses_main_validation(tmp_path, monkeypatch, changes, match):
+    from holodoppler.pipelines import main_default as default
     reader, _ = reader_for(tmp_path, np.ones((4, 3, 4), np.float32))
     monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
+    monkeypatch.setattr(default, "get_reader", lambda _: reader)
     with pytest.raises((ValueError, TypeError), match=match):
-        pipeline.prepare_input(reader.file_path, parameters(name, **changes))
+        default._prepare_input(reader.file_path, parameters("default", **changes))
+
+
+@pytest.mark.parametrize("name", ["pca_accumulation", "sliding_shack_hartmann", "split_apertures"])
+def test_shared_input_does_not_apply_default_validation(tmp_path, monkeypatch, name):
+    reader, _ = reader_for(tmp_path, np.ones((4, 3, 4), np.float32))
+    monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
+    p = parameters(name, pixel_pitch="unused default-only setting")
+    assert pipeline.prepare_input(reader.file_path, p) == (reader, p)
 
 
 def test_ui_uses_canonical_presets():
@@ -235,11 +230,10 @@ def test_profiles_follow_default_order_and_comments():
                 assert comment == comments[key], (path.name, key)
 
 
-def test_lsci_profile_links_temporal_window_to_batch_size():
-    text = (ROOT / "parameters/default_parameters_lsci.yaml").read_text()
-    for size in (1, 16, 40):
-        p = yaml.safe_load(text.replace("&lsci_batch_size 40", f"&lsci_batch_size {size}"))
-        assert p["batch_size"] == p["batch_stride"] == p["lsci_nbh_t"] == size
+def test_lsci_profile_window_defaults():
+    p = yaml.safe_load((ROOT / "parameters/default_parameters_lsci.yaml").read_text())
+    assert p["lsci_time_window_size"] == 5
+    assert p["lsci_time_window_stride"] == 64
 
 
 @pytest.mark.parametrize("failure", ["processing", "saving"])
@@ -293,29 +287,30 @@ def test_stateful_processor_ignores_cpu_worker_setting(tmp_path, monkeypatch):
 @pytest.mark.parametrize("live", [False, True])
 def test_pca_ecc_runs_after_averaging_before_resizing(tmp_path, monkeypatch, live):
     from holodoppler.pipelines import main_pca_accumulation as pca
-    frames = np.arange(3, dtype=np.float32)[:, None, None] * np.ones((3, 3, 4))
+    frames = np.arange(5, dtype=np.float32)[:, None, None] * np.ones((5, 3, 4))
     reader, _ = reader_for(tmp_path, frames)
     monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
     monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
     monkeypatch.setattr(saving_media, "save_video", lambda *args, **kwargs: None)
-    monkeypatch.setattr(pca, "_process_one_batch", lambda p, frames, PROJ_reg=None, phase_term=None:
-                        ({"PROJ": frames[0], "PROJff": frames[0]}, PROJ_reg))
+    monkeypatch.setattr(pca, "fresnel_transform", lambda xp, fft, frames, *a, **k: frames)
+    monkeypatch.setattr(pca, "gaussian_flatfield", lambda image, *a: image + 1)
     def estimate(images, **kwargs):
         assert images.shape == (2, 3, 4)
-        np.testing.assert_allclose(images[:, 0, 0], [.5, 2])
+        np.testing.assert_allclose(images[:, 0, 0], [1.5, 3.5])
         return np.repeat(np.eye(2, 3)[None], 2, axis=0)
     monkeypatch.setattr(pipeline, "register_with_ecc", estimate)
     monkeypatch.setattr(pipeline, "apply_ecc_registration", lambda values, *args, **kwargs: values + 10)
-    p = parameters("pca_accumulation", batch_size=1, batch_stride=1, pca_range=[0, 1],
+    p = parameters("pca_accumulation", batch_size=1, batch_stride=2, pca_range=[0, 1],
                    accumulation=2, square=True, image_registration_with_ecc=True, live_saving=live)
     pca.process(reader.file_path, p)
     with h5py.File(next(tmp_path.rglob("*_output.h5"))) as handle:
-        assert handle["PROJ"].shape == (2, 4, 4)
-        np.testing.assert_allclose(handle["PROJ"][:, 0, 0], [10.5, 12])
+        assert handle["pca_sum"].shape == (2, 4, 4)
+        np.testing.assert_allclose(handle["pca_sum"][:, 0, 0], [10.5, 12.5])
+        np.testing.assert_allclose(handle["pca_sum_ff"][:, 0, 0], [11.5, 13.5])
         assert handle["registration_ecc"].shape == (2, 2, 3)
 
 
-@pytest.mark.parametrize("name", ["pca_accumulation", "sliding_shack_hart", "split_apertures"])
+@pytest.mark.parametrize("name", ["sliding_shack_hart", "split_apertures"])
 @pytest.mark.parametrize("method", ["Fresnel", "AngularSpectrum"])
 def test_live_wavefront_fitting_on_numpy(name, method, monkeypatch):
     module = import_module(f"holodoppler.pipelines.main_{name}")
@@ -330,3 +325,38 @@ def test_live_wavefront_fitting_on_numpy(name, method, monkeypatch):
     result, _ = module._process_one_batch(p, frames)
     assert "shack_hartmann_zernike_coefs" in result
     assert result["shack_hartmann_wavefront_phase"].shape == (8, 10)
+
+
+@pytest.mark.parametrize("live", [False, True])
+def test_cancellation_aborts_output_without_finalizing(tmp_path, monkeypatch, live):
+    import threading
+    from holodoppler.core.progress import ProgressReporter, ProcessingCancelled
+
+    reader, _ = reader_for(tmp_path, np.ones((5, 3, 4), dtype=np.float32))
+    stop = threading.Event()
+    destinations, saved = [], []
+
+    class Destination(saving.OutputClass):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            destinations.append(self)
+
+        def close(self, *, finalize=True):
+            self.finalized = finalize
+            return super().close(finalize=finalize)
+
+    monkeypatch.setattr(pipeline, "OutputClass", Destination)
+    monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
+    monkeypatch.setattr(pipeline, "save_outputs", lambda **kw: saved.append(kw))
+    p = parameters("pca_accumulation", batch_size=1, batch_stride=1,
+                   live_saving=live, numpy_num_workers=0)
+    with pytest.raises(ProcessingCancelled):
+        pipeline.run_pipeline(
+            reader, p, lambda frames, ref: ({"PROJ": frames[0]}, ref),
+            progress_callback=ProgressReporter(lambda *args: stop.set(), stop),
+        )
+    assert not saved
+    if live:
+        assert destinations[0]._closed
+        assert not destinations[0]._h5.id.valid
+        assert destinations[0].finalized is False

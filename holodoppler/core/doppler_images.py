@@ -3,6 +3,24 @@
 from math import ceil
 
 
+def composite_band(xp, gaussian_filter, psd, f1, f2, fs, gaussian_width):
+    """MATLAB composite integration, adapted to frequency-first power spectra.
+
+    Integrate magnitudes over positive bins round(f1*N/fs)+1 through
+    round(f2*N/fs), inclusive in MATLAB indexing, then divide by the
+    Gaussian background. Use half-up rounding for nonnegative frequencies.
+    """
+    n = psd.shape[0]
+    limit = ceil(n / 2)
+    first = max(1, min(int(f1 * n / fs + .5) + 1, limit))
+    last = max(1, min(int(f2 * n / fs + .5), limit))
+    image = xp.sum(xp.sqrt(xp.maximum(psd[first - 1:last], 0)), axis=0)
+    width = max(gaussian_width, 20.)
+    background = gaussian_filter(image, width, mode="nearest",
+                                 truncate=ceil(2 * width) / width)
+    return xp.where(background > 0, image / xp.where(background > 0, background, 1), 0)
+
+
 def directional(xp, gaussian_filter, psd, f1, f2, fs, gaussian_width):
     """Zeroth moments of PSD in directional bins, with energy-preserving flatfield.
 

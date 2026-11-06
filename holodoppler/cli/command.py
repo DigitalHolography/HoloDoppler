@@ -36,6 +36,7 @@ def _run_pipeline(
     *,
     progress_callback=None,
     warning_callback=None,
+    save_outputs=True,
 ) -> Any:
     """Execute a pipeline with the given parameters."""
     configure_logging()
@@ -82,20 +83,22 @@ def _run_pipeline(
         raise ValueError(error_msg)
 
     logger.debug("Using pipeline: %s", pipeline_name)
+    preview_options = {"save_outputs": False} if mode == PipelineMode.PREVIEW and not save_outputs else {}
     result = pipeline_func(
         file_path,
         parameters,
         progress_callback=progress_callback,
         warning_callback=warning_callback,
+        **preview_options,
     )
     logger.info("%s complete: %s", action, file_path)
     logger.debug("Pipeline result type: %s", type(result).__name__)
     return result
 
 
-def preview(file_path: Path, parameters: Union[dict, Path, str]) -> Any:
-    """Run the preview pipeline."""
-    return _run_pipeline(file_path, parameters, PipelineMode.PREVIEW)
+def preview(file_path: Path, parameters: Union[dict, Path, str], *, save_outputs: bool = True) -> Any:
+    """Run a preview, optionally omitting all saved preview outputs."""
+    return _run_pipeline(file_path, parameters, PipelineMode.PREVIEW, save_outputs=save_outputs)
 
 
 def process(
@@ -104,7 +107,12 @@ def process(
     progress_callback: Optional[Callable[[int, int, str], None]] = None,
     warning_callback: Optional[Callable[[str, str], None]] = None,
 ) -> Any:
-    """Run the process pipeline."""
+    """Run the process pipeline.
+
+    ``progress_callback`` can be a callable ``ProgressReporter`` carrying a stop
+    event. Cancellation raises ``ProcessingCancelled`` after resource cleanup.
+    Ordinary progress callbacks retain their existing behavior.
+    """
     return _run_pipeline(
         file_path,
         parameters,

@@ -384,3 +384,74 @@ def test_default_pipeline_scheduled_equivalence(device, registration, fixed_phas
                                        err_msg=key)
     finally:
         backend.set_backend(previous)
+
+
+@pytest.mark.parametrize("workers", [0, 3])
+@pytest.mark.parametrize("when", ["before", "compute", "progress"])
+def test_cpu_cancellation_stops_consumption_and_admission(monkeypatch, workers, when):
+    from holodoppler.core.progress import ProgressReporter, ProcessingCancelled
+
+    monkeypatch.setattr(backend, "is_gpu", False)
+    monkeypatch.setattr(backend, "xp", np)
+    monkeypatch.setattr(backend, "to_backend", np.asarray)
+    stop = threading.Event()
+    reads, consumed = [], []
+
+    class Reader:
+        def read_frames(self, first_frame, batch_size):
+            reads.append(first_frame)
+            return np.ones((1, 2, 2))
+
+    def process(frames, reference):
+        if when == "compute":
+            stop.set()
+        return {"value": frames}, reference
+
+    def report(*args):
+        stop.set()
+
+    if when == "before":
+        stop.set()
+    with pytest.raises(ProcessingCancelled):
+        processing.run_batches(
+            Reader(), list(range(20)), 1, process,
+            lambda index, result: consumed.append(index), workers=workers,
+            progress_callback=ProgressReporter(report, stop),
+        )
+    assert consumed == ([0] if when == "progress" else [])
+    assert len(reads) <= max(1, workers)
+    if when == "before":
+        assert not reads
+
+
+@pytest.mark.parametrize("when", ["compute", "progress"])
+def test_gpu_cancellation_synchronizes_streams(cuda, when):
+    from holodoppler.core.progress import ProgressReporter, ProcessingCancelled
+
+    state, log = cuda
+    stop = threading.Event()
+    reads, consumed, computed = [], [], []
+
+    class Reader:
+        def read_frames(self, first_frame, batch_size):
+            reads.append(first_frame)
+            return np.ones((1, 2, 2), dtype=np.float32)
+
+    def process(frames, reference):
+        computed.append(1)
+        if when == "compute":
+            stop.set()
+        return {"value": frames}, reference
+
+    with pytest.raises(ProcessingCancelled):
+        processing.run_batches(
+            Reader(), list(range(20)), 1, process,
+            lambda index, result: consumed.append(index), cupy_prefetch_depth=3,
+            progress_callback=ProgressReporter(lambda *args: stop.set(), stop),
+        )
+    assert consumed == ([0] if when == "progress" else [])
+    assert len(reads) <= 3
+    assert len(computed) == (3 if when == "progress" else 1)
+    assert [entry for entry in log if entry[0] == "sync"] == [
+        ("sync", 1), ("sync", 2), ("sync", 3)
+    ]

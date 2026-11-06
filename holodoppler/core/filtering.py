@@ -4,6 +4,9 @@ Filtering operations: SVD, frequency filtering
 
 from functools import cache
 
+import numpy as np
+from scipy.signal.windows import get_window
+
 from .image_utils import elliptical_mask
 
 
@@ -24,7 +27,132 @@ def filter_2d(xp, fft, frames, filter2d_low):
 
     return F
 
+def butterworth_high_pass_filter(xp, psd, low_freq, order, fs):
+    """
+    Applies a Butterworth high-pass filter to a PSD along axis 0 (fftfreq ordering)
+    using a specified array namespace (e.g., numpy or cupy).
+    
+    Parameters:
+    -----------
+    xp : module
+        Array module/namespace (e.g., numpy or cupy).
+    psd : ndarray
+        Power Spectral Density array where axis 0 is the frequency axis.
+    low_freq : float
+        Cutoff frequency of the high-pass filter.
+    order : int
+        Order of the Butterworth filter.
+    fs : float
+        Sampling frequency.
+        
+    Returns:
+    --------
+    ndarray
+        Filtered PSD with the same shape as the input.
+    """
+    n = psd.shape[0]
+    
+    # Get frequencies corresponding to fftfreq ordering using xp
+    freqs = xp.fft.fftfreq(n, d=1.0/fs)
+    abs_freqs = xp.abs(freqs)
+    
+    # Compute Butterworth high-pass squared magnitude response: |H(f)|^2
+    h_squared = xp.zeros_like(abs_freqs)
+    mask = abs_freqs > 0
+    h_squared[mask] = 1.0 / (1.0 + (low_freq / abs_freqs[mask]) ** (2 * order))
+    # DC component (f = 0) automatically remains 0.0
+    
+    # Reshape h_squared to broadcast correctly along axis 0 for any N-D psd shape
+    broadcast_shape = (n,) + (1,) * (psd.ndim - 1)
+    h_squared = h_squared.reshape(broadcast_shape)
+    
+    return psd * h_squared
 
+
+
+def svd_filter_by_bloc(xp, linalg, images, window_size=5, threshold=0,
+                       remove_dc=False, svd_filter_by_bloc_window_stride=1, *,
+                       svd_filter_by_bloc_parallel=False,
+                       svd_filter_by_bloc_mib_block_size=8):
+    """Local SVD with overlap averaging, preserving complex data.
+
+    DC removal subtracts each pixel's temporal mean, even at threshold zero.
+    The stride is in pixels along both spatial axes and cannot exceed the
+    window size. Final windows align with the image edges for full coverage.
+    """
+    for name, value, minimum in (("window_size", window_size, 1),
+                                  ("threshold", threshold, 0),
+                                  ("svd_filter_by_bloc_window_stride", svd_filter_by_bloc_window_stride, 1)):
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+            raise TypeError(f"{name} must be an integer")
+        if value < minimum:
+            raise ValueError(f"{name} must be >= {minimum}")
+    if svd_filter_by_bloc_window_stride > window_size:
+        raise ValueError("svd_filter_by_bloc_window_stride must be <= window_size")
+    if not isinstance(svd_filter_by_bloc_parallel, bool):
+        raise TypeError("svd_filter_by_bloc_parallel must be a boolean")
+    budget = svd_filter_by_bloc_mib_block_size
+    if budget is not None:
+        if isinstance(budget, (bool, np.bool_)) or not isinstance(budget, (int, float, np.integer, np.floating)):
+            raise TypeError("svd_filter_by_bloc_mib_block_size must be a real number or null")
+        if not np.isfinite(budget) or budget <= 0:
+            raise ValueError("svd_filter_by_bloc_mib_block_size must be finite and positive")
+    if images.ndim != 3:
+        raise ValueError("images must have shape (T, H, W)")
+    nt, height, width = images.shape
+    if window_size > min(height, width):
+        raise ValueError("window_size exceeds image dimensions")
+    work = images if images.dtype.kind in "fc" else images.astype(xp.float32)
+    if remove_dc:
+        work = work - work.mean(axis=0, keepdims=True)
+    if threshold == 0:
+        return work.copy()
+    output = xp.zeros_like(work)
+    weights = xp.zeros((height, width), dtype=xp.float32)
+    def window_starts(size):
+        last = size - window_size
+        starts = list(range(0, last + 1, svd_filter_by_bloc_window_stride))
+        if starts[-1] != last:
+            starts.append(last)
+        return starts
+
+    pixels = window_size**2
+    count = min(threshold, nt, pixels)
+    if count == min(nt, pixels):
+        return output
+    ys = xp.asarray(window_starts(height))
+    xs = xp.asarray(window_starts(width))
+    origins = (ys[:, None] * width + xs[None, :]).reshape(-1)
+    offsets = (xp.arange(window_size)[:, None] * width
+               + xp.arange(window_size)[None, :]).reshape(-1)
+    n_windows = origins.size
+    # Estimate explicit temporaries; backend eigensolver workspace is additional.
+    bytes_per_window = ((3 * nt * pixels + 2 * pixels**2 + nt * count)
+                        * work.dtype.itemsize + pixels * 8)
+    batch_size = n_windows if svd_filter_by_bloc_parallel or budget is None else max(
+        1, int(budget * 1024**2) // bytes_per_window)
+    flat = work.reshape(nt, -1)
+    flat_output = output.reshape(nt, -1)
+    times = xp.arange(nt)[:, None, None]
+    for start in range(0, n_windows, batch_size):
+        indices = origins[start:start + batch_size, None] + offsets[None, :]
+        matrix = flat[:, indices].transpose(1, 0, 2)
+        covariance = matrix.conj().swapaxes(-1, -2) @ matrix
+        _, vectors = linalg.eigh(covariance)
+        selected = vectors[..., -count:]
+        filtered = matrix - (matrix @ selected) @ selected.conj().swapaxes(-1, -2)
+        target = (times, indices[None, ...])
+        values = filtered.transpose(1, 0, 2)
+        if work.dtype.kind == "c":
+            # CuPy scatter-add supports real types only. These are writable
+            # views, so both additions update the original complex output.
+            xp.add.at(flat_output.real, target, values.real)
+            xp.add.at(flat_output.imag, target, values.imag)
+        else:
+            xp.add.at(flat_output, target, values)
+        xp.add.at(weights.reshape(-1), indices, 1)
+    output /= weights[None]
+    return output
 
 
 def svd_filter(
@@ -275,6 +403,67 @@ def frequency_symmetric_filtering(
 def fourier_time_transform(xp, fft, H):
     """FFT along time axis"""
     return fft.fft(H, axis=0, norm="ortho")
+
+
+@cache
+def _welch_window(name, length):
+    """Return immutable CPU taper weights and their mean squared weight."""
+    if not isinstance(name, str):
+        raise TypeError("welch_windowing must be a window name or null")
+    try:
+        weights = get_window(name, length, fftbins=True)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"Invalid welch_windowing: {name!r}") from exc
+    energy = float(np.mean(weights ** 2))
+    if not np.isfinite(energy) or energy <= 0:
+        raise ValueError("welch_windowing must have finite positive mean squared weight")
+    weights.setflags(write=False)
+    return weights, energy
+
+
+def welch_power_spectrum(xp, fft, H, batch_size=32, stride=32, windowing=None):
+    """Average complete, time-first segment periodograms without detrending."""
+    if batch_size > H.shape[0]:
+        raise ValueError("welch_batch_size must fit within the supplied frame stack")
+    taper, energy = None, 1.0
+    if windowing is not None:
+        weights, energy = _welch_window(windowing, batch_size)
+        taper = xp.asarray(weights, dtype=H.real.dtype).reshape(
+            (batch_size,) + (1,) * (H.ndim - 1))
+    total = None
+    starts = range(0, H.shape[0] - batch_size + 1, stride)
+    for start in starts:
+        segment = H[start:start + batch_size]
+        if taper is not None:
+            segment = segment * taper
+        spectrum = fourier_time_transform(xp, fft, segment)
+        power = xp.abs(spectrum)
+        del spectrum
+        xp.square(power, out=power)
+        if total is None:
+            total = power
+        else:
+            total += power
+    total /= len(starts) * energy
+    return total
+
+
+def pca_packet_mean(xp, holograms, window, index_range):
+    """Average PCA magnitude sums over complete, consecutive time packets."""
+    start, end = index_range
+    count = holograms.shape[0] // window
+    if count == 0:
+        raise ValueError("pca_time_window must fit within the supplied frame stack")
+    total = None
+    for offset in range(0, count * window, window):
+        projected = pca_time_transform(
+            xp, holograms[offset:offset + window], remove_dc=False)
+        image = xp.sum(xp.abs(projected[start:end]), axis=0)
+        if total is None:
+            total = image
+        else:
+            total += image
+    return total / count
 
 
 def pca_time_transform(xp, H, remove_dc=False):

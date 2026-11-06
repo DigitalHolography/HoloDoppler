@@ -5,7 +5,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from .image_utils import array_to_photo_image
+from .preview_gallery import PreviewGallery
 from .settings_store import SettingsStore
 from .theme import configure_plain_widget, plain_widget_colors
 from .widgets import RawJsonDialog, SettingsEditor
@@ -35,10 +35,8 @@ class AdvancedView(ttk.Frame):
         self.current_file_name = ""
         self.file_progress_var = tk.StringVar(value="Current file progress")
         self.batch_progress_var = tk.StringVar(value="Overall progress")
-        self.preview_file_var = tk.StringVar()
         self.parameter_var = tk.StringVar()
         self.parameter_paths: dict[str, Path] = {}
-        self.preview_image: tk.PhotoImage | None = None
         self.displayed_input_paths: list[Path] = []
         self.input_states: dict[Path, str] = {}
         self.active_input_index: int | None = None
@@ -55,27 +53,20 @@ class AdvancedView(ttk.Frame):
 
     def refresh_inputs(self, paths: list[Path]) -> None:
         paths = list(paths)
-        if paths != self.displayed_input_paths:
-            self.input_states.clear()
-            self.active_input_index = None
+        if paths == self.displayed_input_paths:
+            return
+        selected = self.gallery.selected_path
+        self.input_states = {p: state for p, state in self.input_states.items() if p in paths}
         self.displayed_input_paths = paths
-
         self.input_list.delete(0, "end")
         for index, path in enumerate(paths):
             self.input_list.insert("end", str(path))
             self._apply_input_state(index, self.input_states.get(path))
-        names = [path.name for path in paths]
-        self.preview_combo.configure(values=names)
+        self.gallery.set_paths(paths)
         if paths:
-            index = self.active_input_index if self.active_input_index is not None else 0
-            index = min(index, len(paths) - 1)
-            self.preview_combo.current(index)
-            self.preview_file_var.set(names[index])
-            if self.active_input_index is not None:
-                self._select_input(index)
+            self.select_preview(selected if selected in paths else paths[0])
         else:
-            self.preview_file_var.set("")
-            self.preview_label.configure(text="Load inputs to preview files.", image="")
+            self.active_input_index = None
 
     def set_busy(self, busy: bool, can_run: bool) -> None:
         state = "disabled" if busy else "normal"
@@ -89,7 +80,12 @@ class AdvancedView(ttk.Frame):
         self.raw_button.configure(state=state)
         self.preview_button.configure(state="disabled" if busy else "normal")
         self.run_button.configure(state="disabled" if busy or not can_run else "normal")
-        self.stop_button.configure(state="normal" if busy else "disabled")
+        is_processing = busy and self.controller.worker_kind == "process"
+        stopping = self.controller.stop_event.is_set()
+        self.stop_button.configure(
+            text="Stopping..." if is_processing and stopping else "Stop",
+            state="normal" if is_processing and not stopping else "disabled",
+        )
 
     def set_status(self, message: str) -> None:
         self.status_var.set(message)
@@ -100,13 +96,11 @@ class AdvancedView(ttk.Frame):
         self.file_progress.configure(value=0)
         self.active_input_index = index - 1
         self._set_input_state(self.active_input_index, "processing")
-        keep_completed_preview = self.preview_image is not None
-        self._select_input(self.active_input_index, update_preview_choice=not keep_completed_preview)
-        if not keep_completed_preview:
-            self.preview_label.configure(
-                text=f"Processing {path.name}...\nmoment0 preview will appear when complete.",
-                image="",
-            )
+        self._select_input(self.active_input_index)
+        card = self.gallery.cards.get(path)
+        if (getattr(self.controller, "session_parameters", {}).get("pipeline_name") != "default"
+                or card is None or card["image"] is None):
+            self.gallery.set_state(path, "processing")
 
     def set_file_progress(self, completed: int, total: int, message: str = "") -> None:
         value = 0 if total <= 0 else max(0, min(100, completed / total * 100))
@@ -146,39 +140,22 @@ class AdvancedView(ttk.Frame):
             self._apply_input_state(index, None)
 
     def show_preview(self, path: Path, array: object) -> None:
-        if not self._display_preview(path, array):
-            return
-        self.status_var.set(f"Preview loaded: {path.name}")
+        self.gallery.show(path, array)
 
     def show_processed_preview(self, path: Path, array: object) -> None:
-        if not self._display_preview(path, array):
-            return
-        try:
-            index = self.displayed_input_paths.index(path)
-        except ValueError:
-            return
-        self.preview_combo.current(index)
-        self.preview_file_var.set(path.name)
+        self.gallery.show(path, array)
 
-    def _display_preview(self, path: Path, array: object) -> bool:
-        image = array_to_photo_image(array, (760, 460), self)
-        if image is None:
-            self.preview_image = None
-            self.preview_label.configure(text=f"No preview available for {path.name}", image="")
-            return False
-        self.preview_image = image
-        self.preview_label.configure(image=image, text="")
-        return True
+    def select_preview(self, path: Path) -> None:
+        if path in self.displayed_input_paths:
+            self._select_input(self.displayed_input_paths.index(path))
 
-    def _select_input(self, index: int, *, update_preview_choice: bool = True) -> None:
+    def _select_input(self, index: int) -> None:
         if not 0 <= index < len(self.displayed_input_paths):
             return
-        if update_preview_choice:
-            self.preview_combo.current(index)
-            self.preview_file_var.set(self.displayed_input_paths[index].name)
         self.input_list.selection_clear(0, "end")
         self.input_list.selection_set(index)
         self.input_list.see(index)
+        self.gallery.select(self.displayed_input_paths[index], reveal=True)
 
     def _set_input_state(self, index: int, state: str) -> None:
         if not 0 <= index < len(self.displayed_input_paths):
@@ -214,17 +191,6 @@ class AdvancedView(ttk.Frame):
             self.editor.load(data)
         except ValueError as exc:
             self.status_var.set(str(exc))
-
-    def selected_preview_path(self) -> Path | None:
-        index = self.preview_combo.current()
-        paths = getattr(self.controller, "input_paths", [])
-        if index < 0 or index >= len(paths):
-            selection = self.input_list.curselection()
-            if selection:
-                index = selection[0]
-        if 0 <= index < len(paths):
-            return paths[index]
-        return None
 
     def current_editor_values(self) -> dict:
         return self.editor.values()
@@ -286,21 +252,17 @@ class AdvancedView(ttk.Frame):
 
         controls = ttk.Frame(preview_panel)
         controls.grid(row=0, column=0, sticky="ew", pady=(0, 10))
-        controls.columnconfigure(1, weight=1)
-        ttk.Button(controls, text="Previous", command=self._select_previous_preview).grid(row=0, column=0, padx=(0, 6))
-        self.preview_combo = ttk.Combobox(controls, textvariable=self.preview_file_var, state="readonly")
-        self.preview_combo.grid(row=0, column=1, sticky="ew", padx=(0, 6))
-        self.preview_combo.bind("<<ComboboxSelected>>", self._sync_list_from_preview_selection)
-        ttk.Button(controls, text="Next", command=self._select_next_preview).grid(row=0, column=2, padx=(0, 6))
-        self.preview_button = ttk.Button(controls, text="Preview", command=self._preview_selected, style="Accent.TButton")
-        self.preview_button.grid(row=0, column=3)
+        self.preview_button = ttk.Button(controls, text="Refresh previews", command=self.controller.refresh_previews,
+                                         style="Accent.TButton")
+        self.preview_button.grid(row=0, column=0)
 
-        self.preview_frame = ttk.Frame(preview_panel, style="Preview.TFrame", padding=12)
+        self.preview_frame = ttk.Frame(preview_panel, style="Preview.TFrame")
         self.preview_frame.grid(row=1, column=0, sticky="nsew")
         self.preview_frame.columnconfigure(0, weight=1)
         self.preview_frame.rowconfigure(0, weight=1)
-        self.preview_label = ttk.Label(self.preview_frame, text="Load inputs to preview files.", anchor="center")
-        self.preview_label.grid(row=0, column=0, sticky="nsew")
+        self.gallery = PreviewGallery(self.preview_frame, theme=self.theme,
+                                      on_select=self.select_preview, on_retry=self.controller.preview_path)
+        self.gallery.grid(row=0, column=0, sticky="nsew")
 
         progress = ttk.Frame(preview_panel)
         progress.grid(row=2, column=0, sticky="ew", pady=(10, 0))
@@ -344,37 +306,7 @@ class AdvancedView(ttk.Frame):
     def _sync_preview_selection_from_list(self, _event: tk.Event) -> None:
         selection = self.input_list.curselection()
         if selection:
-            self.preview_combo.current(selection[0])
-
-    def _sync_list_from_preview_selection(self, _event: tk.Event) -> None:
-        index = self.preview_combo.current()
-        if index >= 0:
-            self.input_list.selection_clear(0, "end")
-            self.input_list.selection_set(index)
-            self.input_list.see(index)
-
-    def _select_previous_preview(self) -> None:
-        values = self.preview_combo.cget("values")
-        if not values:
-            return
-        index = max(0, self.preview_combo.current() - 1)
-        self.preview_combo.current(index)
-        self._sync_list_from_preview_selection(tk.Event())
-
-    def _select_next_preview(self) -> None:
-        values = self.preview_combo.cget("values")
-        if not values:
-            return
-        index = min(len(values) - 1, self.preview_combo.current() + 1)
-        self.preview_combo.current(index)
-        self._sync_list_from_preview_selection(tk.Event())
-
-    def _preview_selected(self) -> None:
-        path = self.selected_preview_path()
-        if path is None:
-            messagebox.showinfo("Preview", "Load an input file first.", parent=self)
-            return
-        self.controller.preview_path(path)
+            self.gallery.select(self.displayed_input_paths[selection[0]], reveal=True)
 
     def _select_parameter(self, _event: tk.Event) -> None:
         path = self.parameter_paths.get(self.parameter_var.get())

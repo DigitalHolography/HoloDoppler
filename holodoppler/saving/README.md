@@ -3,6 +3,12 @@
 Pipelines continue to import `OutputClass`, `save_outputs`, and standalone
 save helpers from `holodoppler.saving`.
 
+Before erasing or archiving existing results, `check_output_access(path)` checks
+the entire tree without modifying it. Windows delete-sharing conflicts raise
+`PermissionError` naming the blocked path. Links and junctions are not traversed.
+Other platforms check directory permissions. This is best effort: another
+application can change access after the check, so replacement is not atomic.
+
 | Module | Owns |
 | --- | --- |
 | `policy` | Shape classification and shared output-format selection |
@@ -21,6 +27,12 @@ low-level export: its optional selection list controls which arrays it writes.
 writes. Numerical exports preserve NaNs and infinities; floating arrays use
 float32 HDF5 storage. Rendered color and directional Doppler outputs remain
 excluded from pipeline HDF5 exports. Shift arrays go to CSV and HDF5.
+Appended datasets use one-batch chunks `(1, *batch_shape)` so each append
+avoids rewriting earlier batches. `averaged_spectrogram` is exported only
+to HDF5, with no AVI, MP4, or PNG exports.
+For the default pipeline, `h5compression: 0` disables HDF5 compression (the
+default); levels 1–9 enable gzip for numerical array datasets, including
+`averaged_spectrogram`. Metadata and scalar datasets remain uncompressed.
 
 `MediaStream` owns encoder handles, first-frame display levels, and the
 unquantized temporal sum used for the final PNG. `CsvStream` writes one

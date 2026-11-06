@@ -1,4 +1,5 @@
 pipeline_name: "default"
+h5compression: 0 # HDF5 gzip level: 0 disables compression; 1-9 compress numerical outputs.
 
 # backend management
 backend: "auto" # auto, numpy (CPU), or cupy (GPU; falls back to CPU if unavailable)
@@ -33,9 +34,30 @@ filter2d: false
 filter2d_low: 0.03
 
 # SVD filtering
+svd_filter_by_bloc: false # Apply overlapping local SVD after global SVD.
+svd_filter_by_bloc_window_size: 5 # Square side in pixels.
+svd_filter_by_bloc_window_stride: 1 # Window step in both axes; 1 to window size.
+svd_filter_by_bloc_parallel: false # Process all windows together when true.
+svd_filter_by_bloc_mib_block_size: 8 # Temporary memory target; null batches all windows.
+svd_filter_by_bloc_threshold: 0 # Leading components removed; zero skips SVD.
 svd_threshold: 16
 svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold"
 svd_remove_dc: true
+
+# Welch spectral averaging (after SVD; input batching stays unchanged)
+welch_enabled: false
+welch_windowing: null # Named periodic taper (e.g. hann, hamming); null applies no taper.
+welch_batch_size: 32 # FFT segment length in selected frames; positive integer, never null.
+welch_stride: 32 # Spacing between segment starts in selected frames.
+
+# Gaussian spectral width before SVD, before frequency filtering
+compute_gaussian_width: false
+compute_gaussian_width_prefilter_low_freq: 4000
+compute_gaussian_width_prefilter_order: 4
+compute_gaussian_width_svd_filter: false # SVD on complex time data after frequency prefiltering; Gaussian width uses FFT, not Welch.
+compute_gaussian_width_svd_threshold: 2 # Leading modes removed; used only when the filter is enabled.
+compute_gaussian_width_svd_remove_dc: true # Subtract the temporal mean before Gaussian-width SVD.
+compute_gaussian_width_svd_filter_mode: "number_of_values" # Or "amplitude_threshold"; independent of main SVD.
 
 # Temporal sampling
 sampling_freq: "use_metadata" # Sampling frequency in Hz
@@ -52,6 +74,7 @@ moments_frequency_ranges:
   - [30000, 39000]
 
 # Image registration
+registration_image: moment0ff # Exact computed image key; unavailable keys warn and fall back to moment0ff.
 registration_flatfield_gw: 35.0 # Gaussian width for flatfield normalization
 
 # Image registration Live
@@ -72,11 +95,6 @@ corner_compensation: false
 square: true
 resize_averaged_images: true # Double temporal-average PNG width and height only.
 
-# Image contrast (rendered outputs only; raw H5 remains unchanged)
-contrast: false
-contrast_low_max_percent: [0.5, 99.5] # Applied only to rendered avi/png/report outputs, not raw h5.
-contrast_gamma: 1.0
-
 # Shack-Hartmann wavefront sensing
 shack_hartmann_autofocus: true # Compute correction once using registration_ref_first_frame and shack_hartmann_autofocus_batch_size, then reuse it for following batches
 shack_hartmann_autofocus_z4_threshold_rad: null # Reject autofocus when abs(Z4) exceeds this limit in radians
@@ -96,8 +114,8 @@ shack_hartmann_zernike_fit_modes: [4,5,6] # Number of the Zernike modes to use i
 # Doppler images
 color_Doppler_image: true # Save color Doppler video and its temporal-average PNG.
 color_Doppler_use_lab: false # false: decorrelation stretch of [high, low, low]; true: Lab composite using moment0 lightness.
-color_Doppler_low_frequency_band: [6000, 19500] # Symmetric low-frequency power band in Hz.
-color_Doppler_high_frequency_band: [19500, 39000] # Symmetric high-frequency power band in Hz.
+color_Doppler_low_frequency_band: [6000, 22500] # Symmetric low-frequency magnitude band in Hz.
+color_Doppler_high_frequency_band: [22500, 39000] # Symmetric high-frequency magnitude band in Hz.
 directional_Doppler_image: true # Save HSV directional Doppler video and its temporal-average PNG.
 directional_Doppler_frequency_band: null # null uses [low_freq, high_freq]; otherwise [low, high] in Hz.
 directional_Doppler_gaussian_width: 35.0 # Gaussian flatfield sigma in pixels; 0 disables smoothing.
@@ -105,3 +123,30 @@ directional_Doppler_hues: [1.0, 0.66] # [positive, negative] HSV hues; red / blu
 
 # spectrograms
 save_averaged_spectrogram: true # this outputs a powerspectrum density averaged over all the batches and registered (with translation only if image_registration is on, it doesn't work with ecc registration)
+
+# PCA magnitude projection before SVD (full nonoverlapping packets only)
+pca_compute: false
+pca_flatfield: false # Emit pca_sum_ff instead of pca_sum, using registration_flatfield_gw.
+pca_time_window: 32
+pca_index_range: [0, 16] # Python slice: exclusive upper bound
+
+# Explicit exports. Exact names override globs; last matching glob wins.
+# Empty lists disable an output. Omitted outputs are not exported.
+# Selecting optional outputs enables their computation; legacy compute flags are
+# used only when this section is absent. Projections are means of output batches.
+outputs:
+  "moment*": [h5, avi, mp4]
+  "moment*_time_projection": [png]
+  "band_*": [h5, avi, mp4]
+  "band_*_time_projection": [png]
+  spectrum_line: [h5, csv]
+  spectrograms: [h5]
+  averaged_spectrogram: [h5]
+  color_Doppler_image: [avi, mp4]
+  color_Doppler_image_time_projection: [png]
+  directional_Doppler_image: [avi, mp4]
+  directional_Doppler_image_time_projection: [png]
+  "registration*": [h5, csv]
+  "shack_hartmann_autofocus_*": [h5]
+  shack_hartmann_autofocus_zernike_coefs: [h5, csv]
+  shack_hartmann_autofocus_wavefront_color_image: [png]

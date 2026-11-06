@@ -19,6 +19,7 @@ from holodoppler.pipelines import main_default as pipeline
 def parameters(**updates):
     path = Path(__file__).resolve().parents[1] / "parameters/default_parameters_default.yaml"
     result = yaml.safe_load(path.read_text())
+    result.pop("outputs", None)
     result.update(
         backend="numpy", sampling_freq=800, pixel_pitch=[1e-6, 1e-6], z=.1,
         batch_size=8, batch_stride=8, first_frame=0, end_frame=-1,
@@ -39,6 +40,59 @@ def cpu_backend():
     backend.set_backend("numpy")
     yield
     backend.set_backend(previous)
+
+
+@pytest.mark.parametrize("level", [None, 0, 1, 9])
+def test_h5_compression_parameter_valid(level):
+    validate_main_parameters(parameters(h5compression=level))
+
+
+@pytest.mark.parametrize("level, error", [(-1, ValueError), (10, ValueError),
+                                         (True, TypeError), (1.5, TypeError), ("4", TypeError)])
+def test_h5_compression_parameter_invalid(level, error):
+    with pytest.raises(error, match="h5compression"):
+        validate_main_parameters(parameters(h5compression=level))
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("welch", [False, True])
+@pytest.mark.parametrize("remove_dc", [False, True])
+def test_gaussian_width_svd_follows_prefilter(monkeypatch, enabled, welch, remove_dc):
+    rng = np.random.default_rng(42)
+    holograms = (rng.normal(size=(8, 3, 5)) + 1j * rng.normal(size=(8, 3, 5))).astype(np.complex64)
+    monkeypatch.setattr(pipeline, "fresnel_transform", lambda *a, **k: holograms)
+    p = parameters(
+        compute_gaussian_width=True, registration_image="gaussian_width",
+        compute_gaussian_width_prefilter_low_freq=100,
+        compute_gaussian_width_svd_filter=enabled,
+        compute_gaussian_width_svd_threshold=1,
+        compute_gaussian_width_svd_remove_dc=remove_dc,
+        welch_enabled=welch, welch_batch_size=8, welch_stride=8,
+    )
+    frequencies = np.fft.fftfreq(8, 1 / 800)
+    response = np.zeros(8)
+    nonzero = frequencies != 0
+    response[nonzero] = 1 / (1 + (100 / abs(frequencies[nonzero])) ** 8)
+    spectrum = backend.fft.fft(holograms, axis=0, norm="ortho") * np.sqrt(response[:, None, None])
+    if enabled:
+        temporal = backend.fft.ifft(spectrum, axis=0, norm="ortho")
+        filtered = pipeline.svd_filter(np, backend.linalg, temporal, 1, remove_dc=remove_dc)
+        spectrum = backend.fft.fft(filtered, axis=0, norm="ortho")
+    expected = abs(spectrum) ** 2
+    svd = Mock(wraps=pipeline.svd_filter)
+    monkeypatch.setattr(pipeline, "svd_filter", svd)
+    welch_filter = Mock(side_effect=AssertionError("Gaussian width must not use Welch"))
+    monkeypatch.setattr(pipeline, "welch_power_spectrum", welch_filter)
+    width = Mock(return_value=np.ones((3, 5)))
+    monkeypatch.setattr(pipeline, "gaussian_width", width)
+    pipeline._process_batch(p, holograms, reference_only=True)
+    np.testing.assert_allclose(width.call_args.args[1], expected, rtol=1e-5, atol=1e-5)
+    assert svd.call_count == int(enabled)
+    if enabled:
+        assert svd.call_args.kwargs["remove_dc"] is remove_dc
+        assert np.iscomplexobj(svd.call_args.args[2])
+        np.testing.assert_allclose(svd.call_args.args[2], temporal, rtol=1e-5, atol=1e-5)
+    welch_filter.assert_not_called()
 
 
 @pytest.mark.parametrize("sigma", [0, 1])
@@ -135,3 +189,82 @@ def test_temporal_transform_is_no_longer_configurable():
     validate_main_parameters(parameters())
     with pytest.raises(ValueError, match="removed"):
         validate_main_parameters(parameters(temporal_transformation="None"))
+
+
+def test_pca_sum_averages_full_packets_before_svd(monkeypatch):
+    from holodoppler.core.filtering import pca_time_transform
+    from holodoppler.saving.policy import save_to_hdf5
+    rng = np.random.default_rng(12)
+    frames = (rng.normal(size=(10, 3, 5)) + 1j * rng.normal(size=(10, 3, 5))).astype(np.complex64)
+    monkeypatch.setattr(pipeline, "fresnel_transform", lambda *a, **k: frames.copy())
+    def svd(xp, linalg, holograms, *args, **kwargs):
+        holograms[:] = 0
+        return holograms
+    monkeypatch.setattr(pipeline, "svd_filter", svd)
+    expected = np.mean([np.abs(pca_time_transform(np, frames[i:i+4]))[:2].sum(axis=0)
+                        for i in (0, 4)], axis=0)
+    p = parameters(pca_compute=True, pca_time_window=4, pca_index_range=[0, 2])
+    result = pipeline._process_batch(p, frames)
+    np.testing.assert_allclose(result["pca_sum"], expected)
+    assert save_to_hdf5("pca_sum")
+    assert "pca_sum" not in pipeline._process_batch(dict(p, pca_compute=False), frames)
+    assert "pca_sum" not in pipeline._process_batch(p, frames, reference_only=True)
+
+
+@pytest.mark.parametrize("updates", [
+    {"pca_compute": 1}, {"pca_time_window": 0},
+    {"pca_index_range": [0, 33]}, {"pca_index_range": [2, 2]},
+    {"pca_compute": True, "pca_time_window": 32},
+])
+def test_invalid_pca_parameters(updates):
+    with pytest.raises((TypeError, ValueError), match="pca_"):
+        validate_main_parameters(parameters(**updates))
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("dc", [False, True])
+@pytest.mark.parametrize("global_threshold", [-1, 0, 1])
+def test_block_svd_follows_global(monkeypatch, enabled, dc, global_threshold):
+    from holodoppler.core.filtering import svd_filter, svd_filter_by_bloc
+    data = (np.random.default_rng(7).normal(size=(8, 3, 5)) + 2j).astype(np.complex64)
+    monkeypatch.setattr(pipeline, "fresnel_transform", lambda *a, **k: data)
+    global_filter = Mock(wraps=svd_filter)
+    local_filter = Mock(wraps=svd_filter_by_bloc)
+    transform = Mock(wraps=pipeline.fourier_time_transform)
+    monkeypatch.setattr(pipeline, "svd_filter", global_filter)
+    monkeypatch.setattr(pipeline, "svd_filter_by_bloc", local_filter)
+    monkeypatch.setattr(pipeline, "fourier_time_transform", transform)
+    pipeline._process_batch(parameters(svd_filter_by_bloc=enabled,
+        svd_filter_by_bloc_window_size=2, svd_filter_by_bloc_threshold=0,
+        svd_threshold=global_threshold, svd_remove_dc=dc), data)
+    expected = svd_filter(np, np.linalg, data, global_threshold, remove_dc=dc)
+    global_filter.assert_called_once()
+    assert local_filter.call_count == int(enabled)
+    if enabled:
+        np.testing.assert_allclose(local_filter.call_args.args[2], expected, atol=1e-6)
+        assert local_filter.call_args.kwargs["remove_dc"] == dc
+        expected = svd_filter_by_bloc(np, np.linalg, expected, 2, 0, dc)
+    np.testing.assert_allclose(transform.call_args.args[2], expected, atol=1e-6)
+
+
+
+@pytest.mark.parametrize("live", [False, True])
+def test_cancellation_after_batches_skips_default_finalization(monkeypatch, live):
+    from threading import Event
+    from holodoppler.core.progress import ProgressReporter, ProcessingCancelled
+
+    stop = Event()
+    p = parameters(live_saving=live, numpy_num_workers=0)
+    monkeypatch.setattr(pipeline, "run_batches", lambda *args, **kwargs: stop.set())
+    save = Mock()
+    monkeypatch.setattr(pipeline, "save_outputs", save)
+    destination = Mock() if live else None
+    with pytest.raises(ProcessingCancelled):
+        pipeline._process_to_output(
+            SimpleNamespace(), p, [0], destination,
+            ProgressReporter(lambda *args: None, stop),
+        )
+    save.assert_not_called()
+    if live:
+        destination.add_batch.assert_not_called()
+        destination.write_static.assert_not_called()

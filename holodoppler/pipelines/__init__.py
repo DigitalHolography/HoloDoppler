@@ -26,6 +26,7 @@ def _lazy_function(module_name: str, function_name: str):
         *,
         progress_callback=None,
         warning_callback=None,
+        save_outputs=True,
     ):
         module = import_module(f".{module_name}", package=__name__)
         func = getattr(module, function_name)
@@ -35,6 +36,10 @@ def _lazy_function(module_name: str, function_name: str):
             kwargs["progress_callback"] = progress_callback
         if "warning_callback" in signature.parameters:
             kwargs["warning_callback"] = warning_callback
+        if "save_outputs" in signature.parameters:
+            kwargs["save_outputs"] = save_outputs
+        elif not save_outputs:
+            raise ValueError(f"Pipeline {module_name} does not support display-only previews")
         return func(file_path, parameters, **kwargs)
 
     wrapper.__name__ = function_name

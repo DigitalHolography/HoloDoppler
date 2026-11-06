@@ -166,9 +166,20 @@ is estimated per processing batch, and for a separately processed reference.
    bypasses the entire filter, including mean removal. Pixel blocks limit
    intermediate work arrays, not total memory.
 5. **Temporal FFT:** `fft(..., axis=0, norm="ortho")` always produces the complex
-   spectrum. No temporal window is applied here.
+   spectrum. By default no temporal window is applied. With `welch_enabled: true`,
+   complete segments of `welch_batch_size` selected frames (default 32) start every
+   `welch_stride` selected frames (default 32); incomplete trailing segments are
+   discarded. Both sizes must be positive integers; neither accepts null.
+   `welch_windowing: null` applies no taper; a name such as `hann` or `hamming`
+   selects a SciPy periodic taper. No additional detrending is performed.
 6. **Power spectrum:** `P = abs(spectrum)**2`, optionally followed by corner
-   compensation.
+   compensation. Welch averages segment powers, normalized by the taper's mean
+   squared weight when present, using one segment at a time. Frequency bins use
+   the segment FFT length; all moments, Doppler maps and saved spectra use this
+   averaged spectrum. Registration reference images use the same Welch settings
+   and must contain at least one complete segment. Shack-Hartmann wavefront
+   estimation is unchanged. Input `batch_size`, `batch_stride`, and output cadence
+   remain unchanged; strides larger than the segment length leave gaps.
 7. **Directional intermediates:** optional positive/negative maps are zeroth
    moments (sums of power) over directional PSD bins, with energy-preserving
    flat-field normalization. The existing inclusive directional bin intervals
@@ -207,7 +218,7 @@ additional calibration and conventions outside this function.
 | `spectrograms` | Spatially resized, frequency-selected and frequency-binned PSD per batch |
 | `averaged_spectrogram` | Full PSD averaged over the number of completed batches |
 | `registration`, `registration_ecc` | Translation shifts and optional ECC transformations |
-| `color_Doppler_image` | RGB composite from low/high symmetric power bands |
+| `color_Doppler_image` | RGB composite from Gaussian-normalized low/high positive-frequency magnitude bands |
 | `directional_Doppler_image` | HSV-derived RGB encoding of positive/negative spectrum maps |
 | `shack_hartmann_*` | Optional wavefront, subaperture, coefficient and shift diagnostics |
 
@@ -216,6 +227,11 @@ to `(max(H,W), max(H,W))`, then renders color/directional composites and removes
 their internal intermediates. This stretches rectangular maps; it is not padding.
 The default color mode decorrelation-stretches `[high, low, low]`; an alternative
 uses Lab color with `moment0` lightness.
+Each color band sums spectral magnitudes over MATLAB-style bins
+`round(low*N/fs)+1:round(high*N/fs)`, clamped to `1:ceil(N/2)`.
+Its Gaussian background uses `max(registration_flatfield_gw, 20)` with
+replicate padding; zero backgrounds produce zero. With Welch enabled,
+magnitudes are obtained from the square root of the Welch power spectrum.
 
 ECC runs after all batches on the CPU, using the first computed `moment0ff` as
 reference. It can follow translation registration if both are enabled. It warps
@@ -263,6 +279,13 @@ and retained for all batches. **ECC forces this buffering even with live saving
 enabled.** On GPU, the full-PSD aggregate stays on device until finalization;
 on CPU it is accumulated by the consumer. Both paths divide the accumulated PSD
 by the number of completed batches once, before saving.
+`averaged_spectrogram` is written to HDF5 only once at finalization; batch
+updates modify the in-memory accumulator, never an HDF5 dataset.
+The aggregate is exported only to HDF5; it produces no AVI, MP4, or PNG.
+Streaming HDF5 datasets use one-batch chunks to avoid rewriting previous batches.
+`h5compression` defaults to `0` (uncompressed); levels `1`–`9` enable gzip
+for numerical HDF5 arrays, including the final averaged spectrogram, in both
+live and buffered saving. Higher levels trade saving CPU time for smaller files.
 
 For `B` completed batches, the saved aggregate is:
 
@@ -338,3 +361,119 @@ come from code review, not scientific validation against experimental recordings
 8. **`_process_to_output()` has many responsibilities.** It owns reference setup,
    GPU aggregation, callbacks, ECC, and static/temporal saving. Explicit run state
    and finalization functions could clarify ownership and failure cleanup.
+
+### Registration image and PCA flatfield
+
+`registration_image` defaults to `moment0ff` and selects the computed scalar image
+used for translation and ECC, including separately computed references. Examples
+are `pca_sum`, `pca_sum_ff`, and `band_0_3000_6000`. Enable the corresponding
+computation first; unavailable keys log a warning and fall back to `moment0ff`.
+With `pca_compute: true`, setting `pca_flatfield: true` applies Gaussian flatfield
+correction using `registration_flatfield_gw` and emits only `pca_sum_ff` instead
+of `pca_sum`. Both PCA variants support numerical and media exports.
+
+The `pca_accumulation` pipeline always emits both `pca_sum` and `pca_sum_ff`.
+Each output averages PCA magnitude sums from `accumulation` consecutive
+`batch_size`-frame packets, using the `pca_range` component slice. Flatfield
+correction is applied after averaging. Output starts advance by `batch_stride`
+source frames, independently of accumulation; only full accumulation groups are
+processed. With `skip_every`, packet sizes count sampled frames.
+Live registration uses the first accumulated `pca_sum_ff` as a fixed reference
+and shifts both accumulated outputs. Optional ECC runs on the completed
+`pca_sum_ff` sequence and transforms both outputs before square resizing.
+Preview returns the first accumulated `pca_sum_ff`. This pipeline does not run
+Doppler moments, spectral filtering, or Shack-Hartmann correction.
+Saved metadata retains the packet `batch_size` and `accumulation`, with
+`output_frame_stride` equal to `batch_stride`. Unless explicitly configured,
+video FPS is `sampling_freq / batch_stride` when sampling frequency is available.
+
+
+Gaussian spectral width is enabled by `compute_gaussian_width: true`. The output
+`gaussian_width` is intrinsic Gaussian FWHM in Hz, using the magnitude of the
+post-SVD PSD in double precision (Welch when enabled), before corner compensation
+and moment cutoffs. At least five FFT bins are required.
+The estimator always uses every FFT bin of the complete spectrum.
+For effective sampling frequency fs (accounting for frame skipping), define
+Hk = sum abs(PSD(f)) exp(-i 2 pi k f/fs).
+Then sigma = fs/(pi*sqrt(6)) * sqrt(log(abs(H1))-log(abs(H2))) and
+FWHM = 2*sqrt(2*log(2))*sigma. No flat-field correction is applied.
+An estimate is valid only for finite positive spectral sums, finite harmonic
+magnitudes exceeding 100*double-epsilon*sum(abs(PSD)), and abs(H1)>abs(H2).
+Invalid estimates return zero, matching the MATLAB implementation (despite its
+comment promising NaN). Outputs are registered and saved alongside other scalar
+maps, including numerical HDF5 data.
+
+### Local block SVD
+
+Set `svd_filter_by_bloc: true` to apply local SVD after global SVD in the default pipeline.
+`svd_filter_by_bloc_window_size` is the square window side in pixels (default 5);
+`svd_filter_by_bloc_window_stride` sets the window step along both spatial axes (default 1).
+Increase it to run fewer local SVDs. It must be an integer between 1 and the
+window size. Overlapping estimates are averaged, and final windows align with
+the image edges so every pixel is covered. Windows must fit the image.
+`svd_filter_by_bloc_threshold` counts leading singular components to remove
+(default 0, disabling SVD). This count is independent of `svd_filter_mode`.
+In both modes, `svd_remove_dc` subtracts each pixel's temporal mean before SVD,
+including at threshold zero. The existing negative global threshold bypass remains unchanged.
+
+Local block filtering uses spatial covariance `M?M` with `M` shaped
+`(time, window_size?)`, removing the largest eigenvalue modes via projection.
+`svd_filter_by_bloc_parallel: true` processes all windows in one batched solve.
+The default `false` uses vectorized batches controlled by
+`svd_filter_by_bloc_mib_block_size` (default 8 MiB; null processes all windows).
+This is an estimated temporary-memory target, excluding input/output arrays
+and eigensolver workspace; at least one window is processed per batch.
+Parallel mode ignores this memory target and can require substantial RAM/VRAM.
+
+
+## Explicit default output configuration
+
+The default profiles use `DefaultOutput` and an `outputs` mapping. For example:
+
+```yaml
+outputs:
+  moment0: [h5, avi]
+  moment0_time_projection: [h5, png]
+  "band_*": [h5, mp4]
+  "band_*_time_projection": [png]
+  spectrum_line: [h5, csv]
+  spectrograms: [h5]
+  averaged_spectrogram: [h5]
+```
+
+Exact names override glob rules, including an empty list to disable a dataset.
+Otherwise the last matching glob wins. Omitted datasets are not exported.
+Format lists accept `h5`, `avi`, `mp4`, `csv`, and `png`; paths retain the usual
+format subdirectories and shared HDF5 file. Invalid configuration fails before
+processing. Unknown or unavailable exact output names warn at finalization.
+
+Selecting an optional output enables its computation regardless of its legacy
+compute/save flag. This includes Gaussian width, PCA, Doppler colors, live
+Shack-Hartmann diagnostics, and spectra. Algorithm settings still configure the
+computation: for example `pca_flatfield` determines whether PCA produces `pca_sum`
+or `pca_sum_ff`. Autofocus and registration remain controlled by their processing
+flags, and registration dependencies are retained even when not exported.
+
+Every temporal output can have an independently selected `_time_projection`
+dataset: an arithmetic mean over completed output batches, after registration,
+resizing, and rendering. Projection-only selection does not save the source
+stack. Streaming accumulates a running sum; buffered and ECC processing use the
+same writer after correction. There are no implicit average PNGs. Cancellation
+and writer failures do not finalize projections. `resize_averaged_images` applies
+to projection PNGs. The existing full-spectrum temporal mean retains its name
+`averaged_spectrogram`; no automatic renamed alias is generated. Explicitly
+selecting `spectrograms_time_projection` averages the cropped/binned spectrograms,
+which differ from the full-spectrum aggregate.
+
+HDF5 accepts numerical datasets. AVI/MP4 accept temporal grayscale or RGB/RGBA
+images; PNG accepts static images and image projections. CSV accepts scalar,
+vector, and table datasets, including spectrum lines and registration traces;
+spatial images and spectral cubes are not flattened into CSV. A spectral cube
+cannot become a video merely because its last axis happens to have length 3 or 4.
+Incompatible dataset/format pairs warn once with their name, shape, and reason,
+while compatible exports continue. Actual encoder and filesystem failures raise.
+
+YAML without `outputs` retains the legacy saving behavior. Other pipelines keep
+their existing interfaces. The default pipeline uses the new selection in saved
+previews as well as streaming and buffered processing; display-only previews
+continue computing only their registration reference.

@@ -4,10 +4,14 @@ from numbers import Integral, Real
 from math import isfinite
 
 from holodoppler.logging import logger
+from holodoppler.core.filtering import _welch_window
 
 
 def validate_main_parameters(parameters):
     """Check each main-pipeline parameter after metadata resolution without mutation."""
+
+    from holodoppler.saving.default_output import validate_outputs
+    validate_outputs(parameters)
 
     value = parameters.get("skip_every")
     if value is not None:
@@ -25,6 +29,13 @@ def validate_main_parameters(parameters):
     value = parameters.get("live_saving", True)
     if not isinstance(value, bool):
         raise TypeError("Parameter 'live_saving' must be a boolean.")
+
+    value = parameters.get("h5compression", 0)
+    if value is not None:
+        if isinstance(value, bool) or not isinstance(value, Integral):
+            raise TypeError("Parameter 'h5compression' must be an integer from 0 to 9 or null.")
+        if not 0 <= value <= 9:
+            raise ValueError("Parameter 'h5compression' must be between 0 and 9.")
 
     value = parameters.get("num_saving_workers", 0)
     if isinstance(value, bool) or not isinstance(value, Integral):
@@ -68,6 +79,47 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'batch_size' must be an integer; got {value!r} ({type(value).__name__})."
         )
+
+    if not isinstance(parameters.get("registration_image", "moment0ff"), str):
+        raise TypeError("registration_image must be a string")
+    if not isinstance(parameters.get("pca_flatfield", False), bool):
+        raise TypeError("pca_flatfield must be a boolean")
+    if not isinstance(parameters.get("pca_compute", False), bool):
+        raise TypeError("pca_compute must be a boolean")
+    window = parameters.get("pca_time_window", 32)
+    if isinstance(window, bool) or not isinstance(window, Integral):
+        raise TypeError("pca_time_window must be a positive integer")
+    if window <= 0:
+        raise ValueError("pca_time_window must be positive")
+    bounds = parameters.get("pca_index_range", [0, 16])
+    if (not isinstance(bounds, (list, tuple)) or len(bounds) != 2
+            or any(isinstance(v, bool) or not isinstance(v, Integral) for v in bounds)):
+        raise TypeError("pca_index_range must contain two integers")
+    if not 0 <= bounds[0] < bounds[1] <= window:
+        raise ValueError("pca_index_range must satisfy 0 <= start < end <= pca_time_window")
+    if parameters.get("pca_compute", False) and window > parameters.get("batch_size", 256):
+        raise ValueError("pca_time_window must not exceed batch_size")
+
+    if not isinstance(parameters.get("welch_enabled", False), bool):
+        raise TypeError("welch_enabled must be a boolean")
+    for key in ("welch_batch_size", "welch_stride"):
+        value = parameters.get(key, 32)
+        if isinstance(value, bool) or not isinstance(value, Integral):
+            raise TypeError(f"{key} must be a positive integer")
+        if value <= 0:
+            raise ValueError(f"{key} must be positive")
+    window = parameters.get("welch_windowing")
+    if window is not None:
+        if not isinstance(window, str):
+            raise TypeError("welch_windowing must be a window name or null")
+        _welch_window(window, parameters.get("welch_batch_size", 32))
+    if parameters.get("welch_enabled", False):
+        length = parameters.get("welch_batch_size", 32)
+        if length > parameters.get("batch_size", 256):
+            raise ValueError("welch_batch_size must not exceed batch_size")
+        if (parameters.get("image_registration", False)
+                and length > parameters.get("registration_ref_batch_size", 512)):
+            raise ValueError("welch_batch_size must not exceed registration_ref_batch_size")
 
     value = parameters.get("first_frame", 0)
     if not (isinstance(value, Integral) and not isinstance(value, bool)):
@@ -153,7 +205,7 @@ def validate_main_parameters(parameters):
             f"Parameter 'filter2d_low' must be a real number; got {value!r} ({type(value).__name__})."
         )
 
-    for key in ("svd_block_size_mib", "registration_block_size_mib"):
+    for key in ("svd_block_size_mib", "registration_block_size_mib", "svd_filter_by_bloc_mib_block_size"):
         value = parameters.get(key, 8)
         if value is None:
             continue
@@ -161,6 +213,22 @@ def validate_main_parameters(parameters):
             raise TypeError(f"{key} must be a real number or null")
         if not isfinite(value) or value <= 0:
             raise ValueError(f"{key} must be finite and positive")
+
+    if not isinstance(parameters.get("svd_filter_by_bloc_parallel", False), bool):
+        raise TypeError("svd_filter_by_bloc_parallel must be a boolean")
+    if not isinstance(parameters.get("svd_filter_by_bloc", False), bool):
+        raise TypeError("svd_filter_by_bloc must be a boolean")
+    for key, default, minimum in (("svd_filter_by_bloc_window_size", 5, 1),
+                                   ("svd_filter_by_bloc_window_stride", 1, 1),
+                                   ("svd_filter_by_bloc_threshold", 0, 0)):
+        value = parameters.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, Integral):
+            raise TypeError(f"{key} must be an integer")
+        if value < minimum:
+            raise ValueError(f"{key} must be >= {minimum}")
+
+    if parameters.get("svd_filter_by_bloc_window_stride", 1) > parameters.get("svd_filter_by_bloc_window_size", 5):
+        raise ValueError("svd_filter_by_bloc_window_stride must be <= svd_filter_by_bloc_window_size")
 
     value = parameters.get("svd_threshold", 39)
     if not (isinstance(value, Real) and not isinstance(value, bool)):
@@ -224,6 +292,13 @@ def validate_main_parameters(parameters):
     value = parameters.get("resize_averaged_images", False)
     if not isinstance(value, bool):
         raise TypeError("Parameter 'resize_averaged_images' must be a boolean.")
+
+    if not isinstance(parameters.get("compute_gaussian_width", True), bool):
+        raise TypeError("compute_gaussian_width must be a boolean")
+    if not isinstance(parameters.get("compute_gaussian_width_prefilter_low_freq", 1000.0), Real):
+        raise TypeError("compute_gaussian_width_prefilter_low_freq must be a Real")
+    if not isinstance(parameters.get("compute_gaussian_width_prefilter_order", 4), int):
+        raise TypeError("compute_gaussian_width_prefilter_order must be an int")
 
     value = parameters.get("moments_frequency_ranges", False)
     if value is not False:
