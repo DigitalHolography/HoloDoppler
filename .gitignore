@@ -19,3 +19,4 @@ uv.lock
 
 .test-access-check
 .pytest_cache
+/profiling_default_saving/

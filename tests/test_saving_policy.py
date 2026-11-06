@@ -16,7 +16,8 @@ from holodoppler.get_version import get_version
     ("moment0", (6, 8), {"h5", "png"}, {"h5", "avi", "mp4", "png"}),
     ("moment0", (2, 6, 8), {"h5", "avi", "mp4", "png"}, {"h5"}),
     ("spectrum_line", (8,), {"h5"}, {"h5"}),
-    ("averaged_spectrogram", (6, 8), {"h5", "png"}, {"h5", "avi", "mp4", "png"}),
+    ("averaged_spectrogram", (6, 8), {"h5"}, {"h5"}),
+    ("averaged_spectrogram", (16, 6, 8), {"h5"}, {"h5"}),
     ("NW_moment0", (6, 8), {"h5", "png"}, {"h5", "avi", "mp4", "png"}),
     ("spatial_flow_index", (6, 8), {"h5", "png"}, {"h5", "avi", "mp4", "png"}),
     ("band_0", (6, 8), {"h5", "png"}, {"h5", "avi", "mp4", "png"}),
@@ -75,6 +76,29 @@ def test_all_saving_paths_share_formats(tmp_path, monkeypatch, mode, workers):
             np.testing.assert_equal(np.asarray(image), np.full((6, 8, 3), 64, dtype=np.uint8))
 
 
+@pytest.mark.parametrize("mode, workers", [("legacy", None), ("bundle", 0), ("bundle", 2), ("stream", 0), ("stream", 2)])
+def test_averaged_spectrogram_is_hdf5_only(tmp_path, monkeypatch, mode, workers):
+    monkeypatch.setattr(data, "get_git_version", lambda: "test")
+    video = Mock()
+    monkeypatch.setattr(media, "save_video", video)
+    reader = SimpleNamespace(file_path=tmp_path / "input.raw", extension=".raw")
+    average = np.arange(16 * 6 * 8, dtype=np.float32).reshape(16, 6, 8)
+    if mode == "stream":
+        with saving.OutputClass(reader, {"num_saving_workers": workers},
+                                custom_path=tmp_path / "output") as destination:
+            destination.write_static("averaged_spectrogram", average)
+        target = destination.target_dir
+    else:
+        target = saving.save_outputs(reader, {"averaged_spectrogram": average},
+                                     custom_path=tmp_path / "output", num_saving_workers=workers)
+    with h5py.File(next(target.rglob("*.h5"))) as handle:
+        np.testing.assert_array_equal(handle["averaged_spectrogram"][:], average)
+    video.assert_not_called()
+    assert list(media.media_jobs(target, "averaged_spectrogram", average, 10)) == []
+    for fmt in ("avi", "mp4", "png"):
+        assert not list((target / fmt).iterdir())
+
+
 def test_encoder_open_failure_closes_partial_media_and_hdf5(tmp_path, monkeypatch):
     writer = Mock()
     def open_video(self, name, fmt):
@@ -126,6 +150,8 @@ def test_optional_contrast_h5(tmp_path, monkeypatch, mode, selected, compression
                 np.testing.assert_equal(handle[name][:], outputs[name])
                 assert handle[name].compression == (None if compression is None else "gzip")
                 assert handle[name].compression_opts == compression
+                if mode == "stream":
+                    assert handle[name].chunks == (1, *frame.shape)
         assert handle["registration"].compression is None
     assert (target / "png/MEAN.png").exists()
 

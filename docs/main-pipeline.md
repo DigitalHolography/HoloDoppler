@@ -279,6 +279,10 @@ and retained for all batches. **ECC forces this buffering even with live saving
 enabled.** On GPU, the full-PSD aggregate stays on device until finalization;
 on CPU it is accumulated by the consumer. Both paths divide the accumulated PSD
 by the number of completed batches once, before saving.
+`averaged_spectrogram` is written to HDF5 only once at finalization; batch
+updates modify the in-memory accumulator, never an HDF5 dataset.
+The aggregate is exported only to HDF5; it produces no AVI, MP4, or PNG.
+Streaming HDF5 datasets use one-batch chunks to avoid rewriting previous batches.
 
 For `B` completed batches, the saved aggregate is:
 

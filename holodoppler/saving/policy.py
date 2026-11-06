@@ -64,6 +64,8 @@ def output_formats(name: str, value: np.ndarray, *, temporal: bool = False, para
     Temporal results are individual frames, whereas static arrays may be videos.
     """
     formats = {"h5"} if save_to_hdf5(name, parameters) else set()
+    if name == "averaged_spectrogram":
+        return frozenset(formats)
     if is_csv_output(name):
         formats.add("csv")
     elif temporal:

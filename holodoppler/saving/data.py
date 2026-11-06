@@ -386,6 +386,9 @@ class Hdf5Writer:
             if t == 0:
                 self.file.create_dataset(name, shape=(0, *value.shape),
                                          maxshape=(None, *value.shape), dtype=value.dtype,
+                                         # Append and flush one batch without rewriting
+                                         # chunks spanning previous/future batches.
+                                         chunks=(1, *value.shape),
                                          **self._dataset_options(name))
             dataset = self.file[name]
             dataset.resize(t + 1, axis=0)

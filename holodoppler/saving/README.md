@@ -27,6 +27,9 @@ low-level export: its optional selection list controls which arrays it writes.
 writes. Numerical exports preserve NaNs and infinities; floating arrays use
 float32 HDF5 storage. Rendered color and directional Doppler outputs remain
 excluded from pipeline HDF5 exports. Shift arrays go to CSV and HDF5.
+Appended datasets use one-batch chunks `(1, *batch_shape)` so each append
+avoids rewriting earlier batches. `averaged_spectrogram` is exported only
+to HDF5, with no AVI, MP4, or PNG exports.
 
 `MediaStream` owns encoder handles, first-frame display levels, and the
 unquantized temporal sum used for the final PNG. `CsvStream` writes one
