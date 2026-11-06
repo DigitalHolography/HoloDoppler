@@ -49,9 +49,9 @@ welch_windowing: null # Named periodic taper (e.g. hann, hamming); null applies 
 welch_batch_size: 32 # FFT segment length in selected frames; positive integer, never null.
 welch_stride: 32 # Spacing between segment starts in selected frames.
 
-# Gaussian spectral width after SVD, before frequency filtering
+# Gaussian spectral width before SVD, before frequency filtering
 compute_gaussian_width: true
-compute_gaussian_width_prefilter_low_freq: 3000
+compute_gaussian_width_prefilter_low_freq: 4000
 compute_gaussian_width_prefilter_order: 4
 
 # Temporal sampling
@@ -90,11 +90,6 @@ corner_compensation: false
 square: true
 resize_averaged_images: true # Double temporal-average PNG width and height only.
 
-# Image contrast (rendered outputs only; raw H5 remains unchanged)
-contrast: false
-contrast_low_max_percent: [0.5, 99.5] # Applied only to rendered avi/png/report outputs, not raw h5.
-contrast_gamma: 1.0
-
 # Shack-Hartmann wavefront sensing
 shack_hartmann_autofocus: true # Compute correction once using registration_ref_first_frame and shack_hartmann_autofocus_batch_size, then reuse it for following batches
 shack_hartmann_autofocus_z4_threshold_rad: null # Reject autofocus when abs(Z4) exceeds this limit in radians
@@ -114,8 +109,8 @@ shack_hartmann_zernike_fit_modes: [4,5,6] # Number of the Zernike modes to use i
 # Doppler images
 color_Doppler_image: true # Save color Doppler video and its temporal-average PNG.
 color_Doppler_use_lab: false # false: decorrelation stretch of [high, low, low]; true: Lab composite using moment0 lightness.
-color_Doppler_low_frequency_band: [6000, 19500] # Positive low-frequency magnitude band in Hz.
-color_Doppler_high_frequency_band: [19500, 39000] # Positive high-frequency magnitude band in Hz.
+color_Doppler_low_frequency_band: [6000, 22500] # Symmetric low-frequency magnitude band in Hz.
+color_Doppler_high_frequency_band: [22500, 39000] # Symmetric high-frequency magnitude band in Hz.
 directional_Doppler_image: true # Save HSV directional Doppler video and its temporal-average PNG.
 directional_Doppler_frequency_band: null # null uses [low_freq, high_freq]; otherwise [low, high] in Hz.
 directional_Doppler_gaussian_width: 35.0 # Gaussian flatfield sigma in pixels; 0 disables smoothing.

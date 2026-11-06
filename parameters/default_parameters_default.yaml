@@ -50,7 +50,7 @@ welch_windowing: null # Named periodic taper (e.g. hann, hamming); null applies 
 welch_batch_size: 32 # FFT segment length in selected frames; positive integer, never null.
 welch_stride: 32 # Spacing between segment starts in selected frames.
 
-# Gaussian spectral width after SVD, before frequency filtering
+# Gaussian spectral width before SVD, before frequency filtering
 compute_gaussian_width: true
 compute_gaussian_width_prefilter_low_freq: 1000
 compute_gaussian_width_prefilter_order: 4
@@ -107,8 +107,8 @@ shack_hartmann_zernike_fit_modes: [4,5,6] # Number of the Zernike modes to use i
 # Doppler images
 color_Doppler_image: true # Save color Doppler video and its temporal-average PNG.
 color_Doppler_use_lab: false # false: decorrelation stretch of [high, low, low]; true: Lab composite using moment0 lightness.
-color_Doppler_low_frequency_band: [6000, 12150] # Positive low-frequency magnitude band in Hz.
-color_Doppler_high_frequency_band: [12150, 18300] # Positive high-frequency magnitude band in Hz.
+color_Doppler_low_frequency_band: [6000, 12150] # Symmetric low-frequency power band in Hz.
+color_Doppler_high_frequency_band: [12150, 18300] # Symmetric high-frequency power band in Hz.
 directional_Doppler_image: true # Save HSV directional Doppler video and its temporal-average PNG.
 directional_Doppler_frequency_band: null # null uses [low_freq, high_freq]; otherwise [low, high] in Hz.
 directional_Doppler_gaussian_width: 35.0 # Gaussian flatfield sigma in pixels; 0 disables smoothing.
