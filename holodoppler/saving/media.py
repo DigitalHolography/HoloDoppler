@@ -672,7 +672,10 @@ def open_video(target_dir: Path, name: str, fmt: str, fps: float):
 class MediaStream:
     """Own encoders, first-frame display levels, and an unquantized average."""
 
-    def __init__(self, target_dir: Path, name: str, open_encoder, *, resize_averaged_images: bool = False):
+    def __init__(self, target_dir: Path, name: str, open_encoder, *, resize_averaged_images: bool = False,
+                 formats=("avi", "mp4"), save_average=True):
+        self.formats = formats
+        self.save_average = save_average
         self.target_dir = target_dir
         self.name = name
         self.open_encoder = open_encoder
@@ -688,8 +691,9 @@ class MediaStream:
         if self.count == 0:
             self.dtype = value.dtype
             self.display_range = (float(clean.min()), float(clean.max()))
-            self.total = np.zeros_like(clean)
-            for fmt in ("avi", "mp4"):
+            if self.save_average:
+                self.total = np.zeros_like(clean)
+            for fmt in self.formats:
                 self.writers.append(self.open_encoder(fmt))
         low, high = self.display_range
         if value.dtype == np.uint8:
@@ -708,7 +712,8 @@ class MediaStream:
         frame = make_even_dimensions(frame[None, ..., :3])[0]
         for writer in self.writers:
             writer.append_data(np.ascontiguousarray(frame))
-        self.total += value
+        if self.save_average:
+            self.total += value
         self.count += 1
 
     def close(self, *, finalize: bool = True) -> None:
@@ -719,7 +724,7 @@ class MediaStream:
             except Exception as exc:
                 errors.append(exc)
         self.writers.clear()
-        if finalize and self.count:
+        if finalize and self.count and self.save_average:
             try:
                 average = self.total / self.count
                 if self.dtype == np.uint8 and average.ndim == 3:

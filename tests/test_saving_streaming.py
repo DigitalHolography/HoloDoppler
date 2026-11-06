@@ -259,6 +259,7 @@ def test_default_process_h5_with_square_and_spectrograms(tmp_path, monkeypatch, 
     monkeypatch.setattr(main_default, "get_reader", lambda path: reader)
     params = yaml.safe_load((Path(__file__).resolve().parents[1] /
         "parameters/default_parameters_default.yaml").read_text())
+    params.pop("outputs", None)  # Exercise the legacy YAML saving contract.
     params.update(backend="numpy", batch_size=8, batch_stride=8, first_frame=0,
         end_frame=-1, numpy_num_workers=1, shack_hartmann_autofocus=False,
         shack_hartmann=False, image_registration=True, registration_ref_first_frame=0,

@@ -424,3 +424,56 @@ The default `false` uses vectorized batches controlled by
 This is an estimated temporary-memory target, excluding input/output arrays
 and eigensolver workspace; at least one window is processed per batch.
 Parallel mode ignores this memory target and can require substantial RAM/VRAM.
+
+
+## Explicit default output configuration
+
+The default profiles use `DefaultOutput` and an `outputs` mapping. For example:
+
+```yaml
+outputs:
+  moment0: [h5, avi]
+  moment0_time_projection: [h5, png]
+  "band_*": [h5, mp4]
+  "band_*_time_projection": [png]
+  spectrum_line: [h5, csv]
+  spectrograms: [h5]
+  averaged_spectrogram: [h5]
+```
+
+Exact names override glob rules, including an empty list to disable a dataset.
+Otherwise the last matching glob wins. Omitted datasets are not exported.
+Format lists accept `h5`, `avi`, `mp4`, `csv`, and `png`; paths retain the usual
+format subdirectories and shared HDF5 file. Invalid configuration fails before
+processing. Unknown or unavailable exact output names warn at finalization.
+
+Selecting an optional output enables its computation regardless of its legacy
+compute/save flag. This includes Gaussian width, PCA, Doppler colors, live
+Shack-Hartmann diagnostics, and spectra. Algorithm settings still configure the
+computation: for example `pca_flatfield` determines whether PCA produces `pca_sum`
+or `pca_sum_ff`. Autofocus and registration remain controlled by their processing
+flags, and registration dependencies are retained even when not exported.
+
+Every temporal output can have an independently selected `_time_projection`
+dataset: an arithmetic mean over completed output batches, after registration,
+resizing, and rendering. Projection-only selection does not save the source
+stack. Streaming accumulates a running sum; buffered and ECC processing use the
+same writer after correction. There are no implicit average PNGs. Cancellation
+and writer failures do not finalize projections. `resize_averaged_images` applies
+to projection PNGs. The existing full-spectrum temporal mean retains its name
+`averaged_spectrogram`; no automatic renamed alias is generated. Explicitly
+selecting `spectrograms_time_projection` averages the cropped/binned spectrograms,
+which differ from the full-spectrum aggregate.
+
+HDF5 accepts numerical datasets. AVI/MP4 accept temporal grayscale or RGB/RGBA
+images; PNG accepts static images and image projections. CSV accepts scalar,
+vector, and table datasets, including spectrum lines and registration traces;
+spatial images and spectral cubes are not flattened into CSV. A spectral cube
+cannot become a video merely because its last axis happens to have length 3 or 4.
+Incompatible dataset/format pairs warn once with their name, shape, and reason,
+while compatible exports continue. Actual encoder and filesystem failures raise.
+
+YAML without `outputs` retains the legacy saving behavior. Other pipelines keep
+their existing interfaces. The default pipeline uses the new selection in saved
+previews as well as streaming and buffered processing; display-only previews
+continue computing only their registration reference.

@@ -66,6 +66,7 @@ from .session import (
 from .media import VideoWriter
 
 __all__ = [
+    "DefaultOutput",
     "check_output_access",
     "is_grayscale_video",
     "is_color_video",
@@ -111,3 +112,5 @@ __all__ = [
     "save_outputs",
     "VideoWriter",
 ]
+
+from .default_output import DefaultOutput
