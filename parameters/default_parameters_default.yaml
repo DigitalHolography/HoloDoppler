@@ -51,9 +51,13 @@ welch_batch_size: 32 # FFT segment length in selected frames; positive integer, 
 welch_stride: 32 # Spacing between segment starts in selected frames.
 
 # Gaussian spectral width before SVD, before frequency filtering
-compute_gaussian_width: true
+compute_gaussian_width: false
 compute_gaussian_width_prefilter_low_freq: 1000
 compute_gaussian_width_prefilter_order: 4
+compute_gaussian_width_svd_filter: false # SVD on complex time data after frequency prefiltering; Gaussian width uses FFT, not Welch.
+compute_gaussian_width_svd_threshold: 0 # Leading modes removed; used only when the filter is enabled.
+compute_gaussian_width_svd_remove_dc: false # Subtract the temporal mean before Gaussian-width SVD.
+compute_gaussian_width_svd_filter_mode: "number_of_values" # Or "amplitude_threshold"; independent of main SVD.
 
 # Temporal sampling
 sampling_freq: "use_holovibes" # Sampling frequency in Hz

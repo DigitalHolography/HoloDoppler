@@ -285,16 +285,31 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     # Gaussian Width
     # ------------------------------------------------------------
     if parameters.get("compute_gaussian_width", True) and (not reference_only or parameters.get("registration_image") == "gaussian_width"):
-        if parameters.get("welch_enabled", False):
-            psd = welch_power_spectrum(xp, fft, holograms,batch_size=parameters.get("welch_batch_size", 32),stride=parameters.get("welch_stride", 32),windowing=parameters.get("welch_windowing"))
-        else:
-            spectrum = fourier_time_transform(xp, fft, holograms)
-            psd = xp.abs(spectrum)
-            del spectrum
-            xp.square(psd, out=psd)
-        if parameters.get("compute_gaussian_width_prefilter_low_freq", 1000.0) >0:
-            psd = butterworth_high_pass_filter(xp, psd, parameters.get("compute_gaussian_width_prefilter_low_freq", 1000.0), parameters.get("compute_gaussian_width_prefilter_order", 4), parameters["sampling_freq"] / (parameters.get("skip_every") or 1))
-        output_dict["gaussian_width"] = gaussian_width(xp, psd, parameters["sampling_freq"] / (parameters.get("skip_every") or 1),)
+        fs = parameters["sampling_freq"] / (parameters.get("skip_every") or 1)
+        spectrum = fourier_time_transform(xp, fft, holograms)
+        cutoff = parameters.get("compute_gaussian_width_prefilter_low_freq", 1000.0)
+        if cutoff > 0:
+            # Apply the amplitude response to preserve phase and the existing
+            # Butterworth power response when constructing the final PSD.
+            response = butterworth_high_pass_filter(
+                xp, xp.ones((spectrum.shape[0], 1, 1), dtype=spectrum.real.dtype),
+                cutoff, parameters.get("compute_gaussian_width_prefilter_order", 4), fs,
+            )
+            spectrum *= xp.sqrt(response)
+        if parameters.get("compute_gaussian_width_svd_filter", False):
+            filtered = svd_filter(
+                xp, backend.linalg, fft.ifft(spectrum, axis=0, norm="ortho"),
+                parameters.get("compute_gaussian_width_svd_threshold", 0),
+                filter_mode=parameters.get("compute_gaussian_width_svd_filter_mode", "number_of_values"),
+                remove_dc=parameters.get("compute_gaussian_width_svd_remove_dc", False),
+                block_size_mib=parameters.get("svd_block_size_mib", 8),
+            )
+            spectrum = fourier_time_transform(xp, fft, filtered)
+            del filtered
+        psd = xp.abs(spectrum)
+        del spectrum
+        xp.square(psd, out=psd)
+        output_dict["gaussian_width"] = gaussian_width(xp, psd, fs)
         del psd
         if reference_only and target == "gaussian_width":
             return output_dict

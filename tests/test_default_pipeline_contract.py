@@ -41,6 +41,47 @@ def cpu_backend():
     backend.set_backend(previous)
 
 
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("welch", [False, True])
+@pytest.mark.parametrize("remove_dc", [False, True])
+def test_gaussian_width_svd_follows_prefilter(monkeypatch, enabled, welch, remove_dc):
+    rng = np.random.default_rng(42)
+    holograms = (rng.normal(size=(8, 3, 5)) + 1j * rng.normal(size=(8, 3, 5))).astype(np.complex64)
+    monkeypatch.setattr(pipeline, "fresnel_transform", lambda *a, **k: holograms)
+    p = parameters(
+        compute_gaussian_width=True, registration_image="gaussian_width",
+        compute_gaussian_width_prefilter_low_freq=100,
+        compute_gaussian_width_svd_filter=enabled,
+        compute_gaussian_width_svd_threshold=1,
+        compute_gaussian_width_svd_remove_dc=remove_dc,
+        welch_enabled=welch, welch_batch_size=8, welch_stride=8,
+    )
+    frequencies = np.fft.fftfreq(8, 1 / 800)
+    response = np.zeros(8)
+    nonzero = frequencies != 0
+    response[nonzero] = 1 / (1 + (100 / abs(frequencies[nonzero])) ** 8)
+    spectrum = backend.fft.fft(holograms, axis=0, norm="ortho") * np.sqrt(response[:, None, None])
+    if enabled:
+        temporal = backend.fft.ifft(spectrum, axis=0, norm="ortho")
+        filtered = pipeline.svd_filter(np, backend.linalg, temporal, 1, remove_dc=remove_dc)
+        spectrum = backend.fft.fft(filtered, axis=0, norm="ortho")
+    expected = abs(spectrum) ** 2
+    svd = Mock(wraps=pipeline.svd_filter)
+    monkeypatch.setattr(pipeline, "svd_filter", svd)
+    welch_filter = Mock(side_effect=AssertionError("Gaussian width must not use Welch"))
+    monkeypatch.setattr(pipeline, "welch_power_spectrum", welch_filter)
+    width = Mock(return_value=np.ones((3, 5)))
+    monkeypatch.setattr(pipeline, "gaussian_width", width)
+    pipeline._process_batch(p, holograms, reference_only=True)
+    np.testing.assert_allclose(width.call_args.args[1], expected, rtol=1e-5, atol=1e-5)
+    assert svd.call_count == int(enabled)
+    if enabled:
+        assert svd.call_args.kwargs["remove_dc"] is remove_dc
+        assert np.iscomplexobj(svd.call_args.args[2])
+        np.testing.assert_allclose(svd.call_args.args[2], temporal, rtol=1e-5, atol=1e-5)
+    welch_filter.assert_not_called()
+
+
 @pytest.mark.parametrize("sigma", [0, 1])
 def test_flatfield_zero_background_has_no_divide_warnings(sigma):
     image = np.zeros((5, 7), np.float32)
