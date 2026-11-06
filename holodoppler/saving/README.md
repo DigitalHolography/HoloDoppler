@@ -30,6 +30,9 @@ excluded from pipeline HDF5 exports. Shift arrays go to CSV and HDF5.
 Appended datasets use one-batch chunks `(1, *batch_shape)` so each append
 avoids rewriting earlier batches. `averaged_spectrogram` is exported only
 to HDF5, with no AVI, MP4, or PNG exports.
+For the default pipeline, `h5compression: 0` disables HDF5 compression (the
+default); levels 1–9 enable gzip for numerical array datasets, including
+`averaged_spectrogram`. Metadata and scalar datasets remain uncompressed.
 
 `MediaStream` owns encoder handles, first-frame display levels, and the
 unquantized temporal sum used for the final PNG. `CsvStream` writes one

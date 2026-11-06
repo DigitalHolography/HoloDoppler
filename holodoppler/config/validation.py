@@ -27,6 +27,13 @@ def validate_main_parameters(parameters):
     if not isinstance(value, bool):
         raise TypeError("Parameter 'live_saving' must be a boolean.")
 
+    value = parameters.get("h5compression", 0)
+    if value is not None:
+        if isinstance(value, bool) or not isinstance(value, Integral):
+            raise TypeError("Parameter 'h5compression' must be an integer from 0 to 9 or null.")
+        if not 0 <= value <= 9:
+            raise ValueError("Parameter 'h5compression' must be between 0 and 9.")
+
     value = parameters.get("num_saving_workers", 0)
     if isinstance(value, bool) or not isinstance(value, Integral):
         raise TypeError("Parameter 'num_saving_workers' must be an integer.")

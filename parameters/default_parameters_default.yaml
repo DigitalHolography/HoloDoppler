@@ -11,6 +11,7 @@ shack_hartmann_sub_aps_process: "parallel" # "sequential": lower RAM/VRAM; "para
 
 # saving management
 live_saving: true # false saves all outputs after processing; ECC still buffers when true.
+h5compression: 0 # HDF5 gzip level: 0 disables compression; 1-9 compress numerical outputs.
 overwrite_option: "erase"
 num_saving_workers: 2
 saving_queue_depth: null # Outstanding batches/jobs, including active writes; null = twice the worker count.

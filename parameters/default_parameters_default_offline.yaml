@@ -1,4 +1,5 @@
 pipeline_name: "default"
+h5compression: 0 # HDF5 gzip level: 0 disables compression; 1-9 compress numerical outputs.
 
 # backend management
 backend: "auto" # auto, numpy (CPU), or cupy (GPU; falls back to CPU if unavailable)

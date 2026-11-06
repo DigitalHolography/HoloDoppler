@@ -168,3 +168,32 @@ def test_default_h5_selection_unchanged():
     parameters = {"pipeline_name": "default", "h5_datasets": []}
     for name in ("moment0", "moment0ff", "moment1", "moment2", "registration"):
         assert policy.save_to_hdf5(name, parameters)
+
+
+@pytest.mark.parametrize("level", ["omitted", None, 0, 1, 4, 9])
+@pytest.mark.parametrize("streaming", [False, True])
+def test_default_pipeline_h5_compression(tmp_path, level, streaming):
+    parameters = {"pipeline_name": "default"}
+    if level != "omitted":
+        parameters["h5compression"] = level
+    frames = np.arange(2 * 6 * 8, dtype=np.float32).reshape(2, 6, 8)
+    average = np.ones((16, 6, 8), dtype=np.float32)
+    path = tmp_path / "output.h5"
+    with data.Hdf5Writer(path, parameters, git_commit="test") as writer:
+        if streaming:
+            for t, frame in enumerate(frames):
+                writer.append("moment0", frame, t)
+        else:
+            writer.write_static("moment0", frames)
+        writer.write_static("averaged_spectrogram", average)
+        writer.write_static("scalar", np.array(3.0))
+    compressed = isinstance(level, int) and level > 0
+    with h5py.File(path) as handle:
+        for name, expected in (("moment0", frames), ("averaged_spectrogram", average)):
+            np.testing.assert_array_equal(handle[name][:], expected)
+            assert handle[name].compression == ("gzip" if compressed else None)
+            assert handle[name].compression_opts == (level if compressed else None)
+        if streaming:
+            assert handle["moment0"].chunks == (1, 6, 8)
+        assert handle["scalar"].compression is None
+        assert handle["HD_parameters"].compression is None

@@ -41,6 +41,18 @@ def cpu_backend():
     backend.set_backend(previous)
 
 
+@pytest.mark.parametrize("level", [None, 0, 1, 9])
+def test_h5_compression_parameter_valid(level):
+    validate_main_parameters(parameters(h5compression=level))
+
+
+@pytest.mark.parametrize("level, error", [(-1, ValueError), (10, ValueError),
+                                         (True, TypeError), (1.5, TypeError), ("4", TypeError)])
+def test_h5_compression_parameter_invalid(level, error):
+    with pytest.raises(error, match="h5compression"):
+        validate_main_parameters(parameters(h5compression=level))
+
+
 @pytest.mark.parametrize("enabled", [False, True])
 @pytest.mark.parametrize("welch", [False, True])
 @pytest.mark.parametrize("remove_dc", [False, True])

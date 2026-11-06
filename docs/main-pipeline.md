@@ -283,6 +283,9 @@ by the number of completed batches once, before saving.
 updates modify the in-memory accumulator, never an HDF5 dataset.
 The aggregate is exported only to HDF5; it produces no AVI, MP4, or PNG.
 Streaming HDF5 datasets use one-batch chunks to avoid rewriting previous batches.
+`h5compression` defaults to `0` (uncompressed); levels `1`–`9` enable gzip
+for numerical HDF5 arrays, including the final averaged spectrogram, in both
+live and buffered saving. Higher levels trade saving CPU time for smaller files.
 
 For `B` completed batches, the saved aggregate is:
 

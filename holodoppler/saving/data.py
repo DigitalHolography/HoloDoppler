@@ -397,11 +397,14 @@ class Hdf5Writer:
 
     def write_static(self, name: str, value: np.ndarray) -> None:
         with self.lock:
-            self.file.create_dataset(name, data=h5_value(value), **self._dataset_options(name))
+            options = self._dataset_options(name) if value.ndim else {}
+            self.file.create_dataset(name, data=h5_value(value), **options)
             self.file.flush()
 
     def _dataset_options(self, name):
         level = self.parameters.get("h5compression")
+        if self.parameters.get("pipeline_name") == "default":
+            return {"compression": "gzip", "compression_opts": int(level)} if level else {}
         if name in {"MEAN", "RATIO", "STD"} and level is not None:
             return {"compression": "gzip", "compression_opts": int(level)}
         return {}
