@@ -7,7 +7,7 @@ from holodoppler.config import (
     validate_main_parameters,
 )
 from holodoppler.core.batching import calculate_batch_indices
-from holodoppler.core.doppler_images import directional, finish_doppler_images
+from holodoppler.core.doppler_images import composite_band, directional, finish_doppler_images
 from holodoppler.core.filtering import (
     pca_packet_mean,
     corner_compensation,
@@ -170,7 +170,9 @@ def _reference_from_psd(parameters, psd, target):
         name = target.rsplit("_", 1)[1]
         band = parameters.get(f"color_Doppler_{name}_frequency_band",
                               [3000, 9000] if name == "low" else [9000, 18000])
-        return {target: _band_moments(psd, fs, *band, [0])[0]}
+        return {target: composite_band(
+            xp, backend.gaussian_filter, psd, *band, fs,
+            parameters.get("registration_flatfield_gw", 1.0))}
     for index, (low, high) in enumerate(parameters.get("frequency_bands", [])):
         if target == f"band_{index}_{low}_{high}":
             slices = symmetric_frequency_slices(psd.shape[0], fs, low, high)
@@ -371,8 +373,9 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     if parameters.get("color_Doppler_image", False):
         for name, default in (("low", [3000, 9000]), ("high", [9000, 18000])):
             band = parameters.get(f"color_Doppler_{name}_frequency_band", default)
-            output_dict[f"_color_Doppler_{name}"] = _band_moments(
-                psd, fs, *band, [0])[0]
+            output_dict[f"_color_Doppler_{name}"] = composite_band(
+                xp, backend.gaussian_filter, psd, *band, fs,
+                parameters.get("registration_flatfield_gw", 1.0))
 
     if parameters.get("save_spectograms",False) or parameters.get("save_averaged_spectrogram",False):
         output_dict["sh_psd"] = psd # the power spectrum density

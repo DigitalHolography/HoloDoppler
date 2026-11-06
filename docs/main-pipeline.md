@@ -218,7 +218,7 @@ additional calibration and conventions outside this function.
 | `spectrograms` | Spatially resized, frequency-selected and frequency-binned PSD per batch |
 | `averaged_spectrogram` | Full PSD averaged over the number of completed batches |
 | `registration`, `registration_ecc` | Translation shifts and optional ECC transformations |
-| `color_Doppler_image` | RGB composite from low/high symmetric power bands |
+| `color_Doppler_image` | RGB composite from Gaussian-normalized low/high positive-frequency magnitude bands |
 | `directional_Doppler_image` | HSV-derived RGB encoding of positive/negative spectrum maps |
 | `shack_hartmann_*` | Optional wavefront, subaperture, coefficient and shift diagnostics |
 
@@ -227,6 +227,11 @@ to `(max(H,W), max(H,W))`, then renders color/directional composites and removes
 their internal intermediates. This stretches rectangular maps; it is not padding.
 The default color mode decorrelation-stretches `[high, low, low]`; an alternative
 uses Lab color with `moment0` lightness.
+Each color band sums spectral magnitudes over MATLAB-style bins
+`round(low*N/fs)+1:round(high*N/fs)`, clamped to `1:ceil(N/2)`.
+Its Gaussian background uses `max(registration_flatfield_gw, 20)` with
+replicate padding; zero backgrounds produce zero. With Welch enabled,
+magnitudes are obtained from the square root of the Welch power spectrum.
 
 ECC runs after all batches on the CPU, using the first computed `moment0ff` as
 reference. It can follow translation registration if both are enabled. It warps

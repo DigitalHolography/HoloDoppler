@@ -13,7 +13,7 @@ import yaml
 from holodoppler import backend, saving
 from holodoppler.saving import media as saving_media
 from holodoppler.config import validate_main_parameters
-from holodoppler.core.doppler_images import directional, construct_colored_image, construct_colored_image_lab, construct_directional_image
+from holodoppler.core.doppler_images import composite_band, directional, construct_colored_image, construct_colored_image_lab, construct_directional_image
 from holodoppler.pipelines import main_default
 
 
@@ -44,6 +44,32 @@ def params(**updates):
              directional_Doppler_gaussian_width=1, overwrite_option="erase")
     p.update(updates)
     return p
+
+
+@pytest.mark.parametrize("n", [7, 8])
+@pytest.mark.parametrize("width", [1, 21.2])
+def test_composite_matches_matlab_magnitude_bins_and_flatfield(n, width):
+    magnitude = np.random.default_rng(52).uniform(1, 10, (n, 4, 6))
+    # Half-bin endpoints exercise MATLAB rounding; negative bins must be ignored.
+    magnitude[(n + 1) // 2:] *= 100
+    image = magnitude[1:3].sum(axis=0)
+    sigma = max(width, 20)
+    expected = image / gaussian_filter(image, sigma, mode="nearest",
+                                       radius=int(np.ceil(2 * sigma)))
+    actual = composite_band(np, gaussian_filter, magnitude ** 2, .5, 2.5, n, width)
+    np.testing.assert_allclose(actual, expected)
+    reference = main_default._reference_from_psd(
+        params(sampling_freq=n, registration_flatfield_gw=width,
+               color_Doppler_low_frequency_band=[.5, 2.5]),
+        magnitude ** 2, "_color_Doppler_low")
+    np.testing.assert_allclose(reference["_color_Doppler_low"], expected)
+
+
+def test_composite_empty_and_zero_bands_are_finite():
+    psd = np.zeros((8, 2, 3))
+    for band in [(0, 4), (3, 1)]:
+        np.testing.assert_array_equal(
+            composite_band(np, gaussian_filter, psd, *band, 8, 1), np.zeros((2, 3)))
 
 
 @pytest.mark.parametrize("n", [7, 8])
