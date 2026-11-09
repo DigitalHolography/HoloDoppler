@@ -39,7 +39,8 @@ def is_video(data: np.ndarray) -> bool:
 def is_csv_output(name: str) -> bool:
     """Return True if an output must be saved to both CSV and HDF5."""
     name = name.lower()
-    return "coefs" in name or "registration" in name or name.endswith("shack_hartmann_shifts")
+    return (name == "svd_eigenvalues" or "coefs" in name or "registration" in name
+            or name.endswith("shack_hartmann_shifts"))
 
 
 def save_to_hdf5(name: str, parameters=None) -> bool:
@@ -51,7 +52,7 @@ def save_to_hdf5(name: str, parameters=None) -> bool:
             selected = [selected]
         return name in selected
     return (name in {"gaussian_width", "pca_sum", "pca_sum_ff", "moment0ff", "moment0", "moment1", "moment2",
-                    "spectrum_line", "sh_psd", "averaged_spectrogram",
+                    "static_pc_sum", "dynamic_pc_sum", "spectrum_line", "sh_psd", "averaged_spectrogram",
                     "spectrograms", "PROJ", "PROJff", "QSum_moment0", "J0_moment0"}
             or name.startswith(("NW_", "NE_", "SW_", "SE_", "NWxSE_", "NExSW_"))
             or name.endswith("_flow_index") or "band_" in name or is_csv_output(name))

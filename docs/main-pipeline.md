@@ -403,7 +403,44 @@ Invalid estimates return zero, matching the MATLAB implementation (despite its
 comment promising NaN). Outputs are registered and saved alongside other scalar
 maps, including numerical HDF5 data.
 
-### Local block SVD
+### Global and Local block SVD
+
+The global SVD also provides `static_pc_sum` and `dynamic_pc_sum`: real images
+summing absolute temporal PC coefficients over removed and retained components,
+respectively. These use the input after optional temporal DC subtraction, before
+local SVD or spectral processing. They sum amplitudes, rather than powers.
+`svd_eigenvalues` contains descending, unnormalized covariance eigenvalues;
+HDF5 and CSV use shape `(batches, temporal_components)`, with one batch per row.
+The default and offline profiles enable these exports. Existing explicit `outputs`
+configurations must select the new names, for example:
+
+```yaml
+outputs:
+  static_pc_sum: [avi]
+  static_pc_sum_time_projection: [png]
+  dynamic_pc_sum: [avi]
+  dynamic_pc_sum_time_projection: [png]
+  svd_eigenvalues: [h5, csv]
+```
+
+The `_time_projection` PNGs average the component-sum images across batches.
+Negative `svd_threshold` still disables filtering; requested diagnostics then use
+uncentered input, with zero static projection and all components in dynamic.
+
+Adaptive global SVD modes can replace `number_of_values`:
+
+- `svd_filter_mode: effective_rank` removes
+  `ceil(svd_effective_rank_multiplier * exp(-sum(p * log(p))))` components,
+  capped at the temporal dimension. The multiplier defaults to `1.0` and must
+  be finite and nonnegative.
+- `svd_filter_mode: energy_fraction` removes the smallest leading count reaching
+  `svd_energy_fraction` of total covariance energy (default `0.9`, range `(0, 1]`).
+
+Here `p` is the normalized nonnegative eigenvalue spectrum; zero entries do not
+contribute to entropy. Numerical negative eigenvalues are clipped only for rank
+selection; exported values remain raw. Zero-energy input removes zero modes.
+Both modes ignore a nonnegative `svd_threshold`. The shared filter supports these
+modes in other pipelines too; the new saved summaries belong to the default pipeline.
 
 Set `svd_filter_by_bloc: true` to apply local SVD after global SVD in the default pipeline.
 `svd_filter_by_bloc_window_size` is the square window side in pixels (default 5);

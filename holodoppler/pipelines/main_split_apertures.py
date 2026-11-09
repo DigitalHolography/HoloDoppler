@@ -173,6 +173,8 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             backend.linalg, U_q,
             parameters["svd_threshold"],
             filter_mode=parameters["svd_filter_mode"],
+            effective_rank_multiplier=parameters.get("svd_effective_rank_multiplier", 1.0),
+            energy_fraction=parameters.get("svd_energy_fraction", 0.9),
             remove_dc=parameters["svd_remove_dc"],
         )
     U_quadrants.clear()  # free memory
@@ -183,6 +185,8 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         backend.linalg, U_main,
         parameters["svd_threshold"],
         filter_mode=parameters["svd_filter_mode"],
+        effective_rank_multiplier=parameters.get("svd_effective_rank_multiplier", 1.0),
+        energy_fraction=parameters.get("svd_energy_fraction", 0.9),
         remove_dc=parameters["svd_remove_dc"],
     )
 

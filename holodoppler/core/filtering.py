@@ -164,6 +164,10 @@ def svd_filter(
     remove_dc=False,
     diagnostic=None,
     block_size_mib=8,
+    *,
+    summary=None,
+    effective_rank_multiplier=1.0,
+    energy_fraction=0.9,
 ):
     """SVD clutter filtering using temporal covariance eigendecomposition.
 
@@ -175,11 +179,19 @@ def svd_filter(
         Number of leading modes to remove, or eigenvalue threshold.
         Negative values disable filtering.
     filter_mode : str
-        "number_of_values" or "amplitude_threshold".
+        "number_of_values", "amplitude_threshold", "effective_rank", or
+        "energy_fraction". Adaptive modes ignore a nonnegative svd_threshold.
     remove_dc : bool
         Subtract the temporal mean before filtering.
     diagnostic : dict, optional
         Dictionary populated with intermediate results when provided.
+    summary : dict, optional
+        Requested keys (with arbitrary initial values): static_pc_sum,
+        dynamic_pc_sum, svd_eigenvalues. Images sum absolute PC coefficients.
+    effective_rank_multiplier : float
+        Nonnegative multiplier of entropy effective rank, rounded up.
+    energy_fraction : float
+        Fraction of covariance energy removed in energy_fraction mode, in (0, 1].
 
     block_size_mib : positive float or None, optional
         Target size in MiB for each pixel-block work array, not total memory.
@@ -191,7 +203,7 @@ def svd_filter(
     H_filtered : array
         Filtered data with the same shape as H.
     """
-    if svd_threshold < 0:
+    if svd_threshold < 0 and summary is None:
         return H
 
     filtered = xp.empty(H.shape, dtype=H.dtype)
@@ -199,15 +211,34 @@ def svd_filter(
         xp, linalg, H.reshape(H.shape[0], -1) if H.flags.c_contiguous else H,
         filtered.reshape(H.shape[0], -1), svd_threshold,
         filter_mode, remove_dc, diagnostic, H.shape, block_size_mib=block_size_mib,
+        summary=summary, effective_rank_multiplier=effective_rank_multiplier,
+        energy_fraction=energy_fraction,
     )
-    return filtered
+    return H if svd_threshold < 0 else filtered
+
+
+def _validate_adaptive_svd(effective_rank_multiplier, energy_fraction):
+    from numbers import Real
+    from math import isfinite
+
+    for name, value in (("effective_rank_multiplier", effective_rank_multiplier),
+                        ("energy_fraction", energy_fraction)):
+        if isinstance(value, bool) or not isinstance(value, Real):
+            raise TypeError(f"{name} must be a real number")
+        if not isfinite(value) or (value < 0 if name == "effective_rank_multiplier"
+                                  else not 0 < value <= 1):
+            raise ValueError(f"Invalid {name}: {value}")
 
 
 def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
                        remove_dc=False, diagnostic=None, shape=None, regularization=0,
-                       block_size_mib=8):
+                       block_size_mib=8, *, summary=None,
+                       effective_rank_multiplier=1.0, energy_fraction=0.9):
     """Filter time-first data into a time-by-pixel output without changing input."""
     nt, pixels = output.shape
+    _validate_adaptive_svd(effective_rank_multiplier, energy_fraction)
+    if threshold < 0:
+        remove_dc = False
     block_size = (max(1, pixels) if block_size_mib is None else
                   max(1, int(block_size_mib * 1024**2) // (nt * data.dtype.itemsize)))
     cov = xp.zeros((nt, nt), dtype=data.dtype)
@@ -236,19 +267,47 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
         cov[xp.diag_indices(nt)] += regularization
     values, vectors = linalg.eigh(cov)
     values, vectors = values[::-1], vectors[:, ::-1]
-    if mode == "number_of_values":
+    if threshold < 0:
+        selected = vectors[:, :0]
+    elif mode == "number_of_values":
         selected = vectors[:, :min(int(threshold), nt)]
     elif mode == "amplitude_threshold":
         selected = vectors[:, values > threshold]
+    elif mode in {"effective_rank", "energy_fraction"}:
+        energy = xp.maximum(values, 0)
+        total = float(xp.sum(energy))
+        count = 0
+        if total > 0:
+            p = energy / total
+            if mode == "effective_rank":
+                positive = p[p > 0]
+                rank = float(xp.exp(-xp.sum(positive * xp.log(positive))))
+                from math import ceil
+                count = min(nt, ceil(effective_rank_multiplier * rank))
+            else:
+                tolerance = xp.finfo(values.dtype).eps * nt
+                count = min(nt, int(xp.searchsorted(xp.cumsum(p), energy_fraction - tolerance)) + 1)
+        selected = vectors[:, :count]
     else:
         raise ValueError(f"Unknown filter_mode: {mode}")
 
     removed_features = (xp.empty((pixels, selected.shape[1]), dtype=data.dtype)
                         if diagnostic is not None else None)
     conjugate = selected.conj()
+    projections = {}
+    if summary is not None:
+        if "svd_eigenvalues" in summary:
+            summary["svd_eigenvalues"] = values
+        for name in ("static_pc_sum", "dynamic_pc_sum"):
+            if name in summary:
+                projections[name] = xp.empty(pixels, dtype=values.dtype)
     for start in range(0, pixels, block_size):
         stop = min(start + block_size, pixels)
         block = output[:, start:stop]
+        count = selected.shape[1]
+        for name, projection in projections.items():
+            basis = vectors[:, :count] if name == "static_pc_sum" else vectors[:, count:]
+            projection[start:stop] = xp.sum(xp.abs(basis.T @ block), axis=0)
         if selected.shape[1]:
             removed = selected.T @ block
             block -= conjugate @ removed
@@ -257,6 +316,8 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
         elif removed_features is not None:
             removed_features[start:stop] = 0
 
+    for name, projection in projections.items():
+        summary[name] = projection.reshape(shape[1:])
     if diagnostic is not None:
         diagnostic.update({
             "removed_features": removed_features.reshape(*shape[1:], -1),

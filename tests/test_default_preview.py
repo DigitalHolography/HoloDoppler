@@ -171,6 +171,15 @@ def test_autofocus_keeps_phase_without_diagnostic_allocations(monkeypatch):
     assert set(result) == {'shack_hartmann_zernike_coefs', 'shack_hartmann_wavefront_phase'}
 
 
+def test_legacy_preview_eigenvalues_have_batch_axis(tmp_path, monkeypatch):
+    reader = input_reader(tmp_path, monkeypatch)
+    saved = Mock()
+    monkeypatch.setattr(pipeline, 'save_outputs', saved)
+    pipeline.preview(reader.file_path, settings(shack_hartmann_autofocus=False))
+    values = saved.call_args.kwargs['output']['svd_eigenvalues']
+    assert values.ndim == 2 and values.shape[0] == 1
+
+
 def test_saved_preview_preserves_outputs_but_returns_raw_reference(tmp_path, monkeypatch):
     reader = input_reader(tmp_path, monkeypatch)
     p = settings(registration_ref_first_frame=4, registration_ref_batch_size=16,

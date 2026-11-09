@@ -4,7 +4,7 @@ from numbers import Integral, Real
 from math import isfinite
 
 from holodoppler.logging import logger
-from holodoppler.core.filtering import _welch_window
+from holodoppler.core.filtering import _welch_window, _validate_adaptive_svd
 
 
 def validate_main_parameters(parameters):
@@ -243,6 +243,11 @@ def validate_main_parameters(parameters):
         )
 
     value = parameters.get("svd_remove_dc", True)
+    if parameters.get("svd_filter_mode", "number_of_values") not in {
+            "number_of_values", "amplitude_threshold", "effective_rank", "energy_fraction"}:
+        raise ValueError("Unknown svd_filter_mode")
+    _validate_adaptive_svd(parameters.get("svd_effective_rank_multiplier", 1.0),
+                           parameters.get("svd_energy_fraction", 0.9))
     if not (isinstance(value, bool)):
         raise TypeError(
             f"Parameter 'svd_remove_dc' must be a boolean; got {value!r} ({type(value).__name__})."

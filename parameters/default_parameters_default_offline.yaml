@@ -41,7 +41,9 @@ svd_filter_by_bloc_parallel: false # Process all windows together when true.
 svd_filter_by_bloc_mib_block_size: 8 # Temporary memory target; null batches all windows.
 svd_filter_by_bloc_threshold: 0 # Leading components removed; zero skips SVD.
 svd_threshold: 16
-svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold"
+svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold", "effective_rank", "energy_fraction"
+svd_effective_rank_multiplier: 1.0 # Leading count = ceil(multiplier * entropy effective rank).
+svd_energy_fraction: 0.9 # Cumulative covariance energy removed in energy_fraction mode.
 svd_remove_dc: true
 
 # Welch spectral averaging (after SVD; input batching stays unchanged)
@@ -139,10 +141,15 @@ outputs:
   "moment*_time_projection": [png]
   gaussian_width: [h5, avi]
   gaussian_width_time_projection: [png]
-  pca_sum: [[h5, avi]
+  pca_sum: [h5, avi]
   "pca_sum_time_projection": [png]
   "band_*": [h5, avi, mp4]
   "band_*_time_projection": [png]
+  static_pc_sum: [avi]
+  static_pc_sum_time_projection: [png]
+  dynamic_pc_sum: [avi]
+  dynamic_pc_sum_time_projection: [png]
+  svd_eigenvalues: [h5, csv]
   spectrum_line: [h5, csv]
   spectrograms: [h5]
   averaged_spectrogram: [h5]

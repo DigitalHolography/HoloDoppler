@@ -129,6 +129,7 @@ def _reference_output_key(parameters, result):
     if getattr(result.get(key), "ndim", None) == 2:
         return key
     available = {"moment0", "moment0ff", "moment1", "moment2"}
+    available.update({"static_pc_sum", "dynamic_pc_sum"})
     if parameters.get("compute_gaussian_width", True):
         available.add("gaussian_width")
     if parameters.get("pca_compute", False):
@@ -328,13 +329,24 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     # ------------------------------------------------------------
     # SVD filtering
     # ------------------------------------------------------------
+    svd_summary = {name: None for name in
+                   ("static_pc_sum", "dynamic_pc_sum", "svd_eigenvalues")
+                   if ((reference_only and target == name) or
+                       (not reference_only and ("outputs" not in parameters or
+                                                _output_needed(parameters, name))))}
     holograms_f = svd_filter(
         backend.xp, backend.linalg, holograms.astype(xp.complex64, copy=False),
         parameters["svd_threshold"],
         filter_mode=parameters["svd_filter_mode"],
         remove_dc=parameters["svd_remove_dc"],
         block_size_mib=parameters.get("svd_block_size_mib", 8),
+        summary=svd_summary if svd_summary else None,
+        effective_rank_multiplier=parameters.get("svd_effective_rank_multiplier", 1.0),
+        energy_fraction=parameters.get("svd_energy_fraction", 0.9),
     )
+    output_dict.update({name: value for name, value in svd_summary.items() if value is not None})
+    if reference_only and target in svd_summary:
+        return output_dict
     if parameters.get("svd_filter_by_bloc", False):
         holograms_f = svd_filter_by_bloc(
             xp, backend.linalg, holograms_f,
@@ -867,7 +879,7 @@ def _process_one_batch(
         for key, value in list(res.items()):
 
             if (
-                key in {"gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "sh_psd", "pca_sum", "pca_sum_ff"}
+                key in {"gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "sh_psd", "pca_sum", "pca_sum_ff", "static_pc_sum", "dynamic_pc_sum"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                            "_directional_Doppler_pos", "_directional_Doppler_neg"}
@@ -1028,6 +1040,8 @@ def _preview_prepared(reader, parameters, *, save_output):
             for key, value in (diagnostics or {}).items():
                 destination.write_static(key, backend.to_numpy(value))
     else:
+        if "svd_eigenvalues" in output:
+            output["svd_eigenvalues"] = output["svd_eigenvalues"][None, :]
         save_outputs(file_reader=reader, output=output, parameters=parameters,
                      custom_relative_path="preview",
                      num_saving_workers=parameters.get("num_saving_workers", 0),
@@ -1178,7 +1192,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
         for key in output :
             check_cancelled(progress_callback)
             if (
-                key in {"gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "pca_sum", "pca_sum_ff"}
+                key in {"gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "pca_sum", "pca_sum_ff", "static_pc_sum", "dynamic_pc_sum"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                                             "_directional_Doppler_pos", "_directional_Doppler_neg"}

@@ -115,7 +115,8 @@ def test_main_svd_and_registration_receive_budgets(parameters, monkeypatch, budg
     frames = np.random.default_rng(15).random((8, 6, 8)).astype(np.float32)
     main_default._process_one_batch(parameters, frames)
     assert svd.call_args.kwargs['block_size_mib'] == budget
-    assert shifts.call_count == 4
+    # Four existing scalar maps plus the two global SVD component projections.
+    assert shifts.call_count == 6
     assert all(call.kwargs['block_size_mib'] == budget for call in shifts.call_args_list)
 
 
