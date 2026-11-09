@@ -269,7 +269,9 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
             raise ValueError(
                 f"Unknown propagation method: {prop_method!r}"
             )
-
+    # ------------------------------------------------------------
+    # PCA accumulation
+    # ------------------------------------------------------------
     if parameters.get("pca_compute", False) and (not reference_only or target in {"pca_sum", "pca_sum_ff"}):
         window = parameters.get("pca_time_window", 32)
         image = pca_packet_mean(
@@ -292,6 +294,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
         fs = parameters["sampling_freq"] / (parameters.get("skip_every") or 1)
         spectrum = fourier_time_transform(xp, fft, holograms)
         cutoff = parameters.get("compute_gaussian_width_prefilter_low_freq", 1000.0)
+        max_freq = parameters.get("compute_gaussian_width_prefilter_max_freq", 18300.0)
         if cutoff > 0:
             # Apply the amplitude response to preserve phase and the existing
             # Butterworth power response when constructing the final PSD.
@@ -300,6 +303,11 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
                 cutoff, parameters.get("compute_gaussian_width_prefilter_order", 4), fs,
             )
             spectrum *= xp.sqrt(response)
+            if max_freq is not None:
+                n = spectrum.shape[0]
+                freqs = xp.fft.fftfreq(n, d=1.0/fs)
+                mask = xp.abs(freqs) < max_freq
+                spectrum *= mask[:,None,None]
         if parameters.get("compute_gaussian_width_svd_filter", False):
             filtered = svd_filter(
                 xp, backend.linalg, fft.ifft(spectrum, axis=0, norm="ortho"),

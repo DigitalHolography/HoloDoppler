@@ -137,6 +137,10 @@ pca_index_range: [0, 16] # Python slice: exclusive upper bound
 outputs:
   "moment*": [h5, avi, mp4]
   "moment*_time_projection": [png]
+  gaussian_width: [h5, avi]
+  gaussian_width_time_projection: [png]
+  pca_sum: [[h5, avi]
+  "pca_sum_time_projection": [png]
   "band_*": [h5, avi, mp4]
   "band_*_time_projection": [png]
   spectrum_line: [h5, csv]

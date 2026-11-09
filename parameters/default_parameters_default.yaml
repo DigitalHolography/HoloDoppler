@@ -53,8 +53,9 @@ welch_stride: 32 # Spacing between segment starts in selected frames.
 
 # Gaussian spectral width before SVD, before frequency filtering
 compute_gaussian_width: false
-compute_gaussian_width_prefilter_low_freq: 1000
+compute_gaussian_width_prefilter_low_freq: 1000 # zero means no high pass filtering
 compute_gaussian_width_prefilter_order: 4
+compute_gaussian_width_prefilter_max_freq: 18300 # option to reject high freqs, null is none
 compute_gaussian_width_svd_filter: false # SVD on complex time data after frequency prefiltering; Gaussian width uses FFT, not Welch.
 compute_gaussian_width_svd_threshold: 0 # Leading modes removed; used only when the filter is enabled.
 compute_gaussian_width_svd_remove_dc: false # Subtract the temporal mean before Gaussian-width SVD.
@@ -141,6 +142,10 @@ pca_index_range: [0, 16] # Python slice: exclusive upper bound
 outputs:
   "moment*": [h5, avi, mp4]
   "moment*_time_projection": [png]
+  gaussian_width: [h5, avi]
+  gaussian_width_time_projection: [png]
+  pca_sum: [h5, avi]
+  "pca_sum_time_projection": [png]
   "band_*": [h5, avi, mp4]
   "band_*_time_projection": [png]
   spectrum_line: [h5, csv]
