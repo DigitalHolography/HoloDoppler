@@ -248,6 +248,8 @@ def validate_main_parameters(parameters):
         raise ValueError("Unknown svd_filter_mode")
     _validate_adaptive_svd(parameters.get("svd_effective_rank_multiplier", 1.0),
                            parameters.get("svd_energy_fraction", 0.9))
+    if not isinstance(parameters.get("svd_pc_sum_eigenvalue_weighting", True), bool):
+        raise TypeError("svd_pc_sum_eigenvalue_weighting must be a boolean")
     if not (isinstance(value, bool)):
         raise TypeError(
             f"Parameter 'svd_remove_dc' must be a boolean; got {value!r} ({type(value).__name__})."

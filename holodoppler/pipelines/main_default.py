@@ -343,6 +343,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
         summary=svd_summary if svd_summary else None,
         effective_rank_multiplier=parameters.get("svd_effective_rank_multiplier", 1.0),
         energy_fraction=parameters.get("svd_energy_fraction", 0.9),
+        eigenvalue_weighting=parameters.get("svd_pc_sum_eigenvalue_weighting", True),
     )
     output_dict.update({name: value for name, value in svd_summary.items() if value is not None})
     if reference_only and target in svd_summary:

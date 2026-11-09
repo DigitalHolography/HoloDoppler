@@ -168,6 +168,7 @@ def svd_filter(
     summary=None,
     effective_rank_multiplier=1.0,
     energy_fraction=0.9,
+    eigenvalue_weighting=True,
 ):
     """SVD clutter filtering using temporal covariance eigendecomposition.
 
@@ -192,6 +193,9 @@ def svd_filter(
         Nonnegative multiplier of entropy effective rank, rounded up.
     energy_fraction : float
         Fraction of covariance energy removed in energy_fraction mode, in (0, 1].
+    eigenvalue_weighting : bool
+        Weight absolute PC coefficients by nonnegative covariance eigenvalues
+        in both summary images (default True). Does not change filtered data.
 
     block_size_mib : positive float or None, optional
         Target size in MiB for each pixel-block work array, not total memory.
@@ -213,6 +217,7 @@ def svd_filter(
         filter_mode, remove_dc, diagnostic, H.shape, block_size_mib=block_size_mib,
         summary=summary, effective_rank_multiplier=effective_rank_multiplier,
         energy_fraction=energy_fraction,
+        eigenvalue_weighting=eigenvalue_weighting,
     )
     return H if svd_threshold < 0 else filtered
 
@@ -233,10 +238,13 @@ def _validate_adaptive_svd(effective_rank_multiplier, energy_fraction):
 def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
                        remove_dc=False, diagnostic=None, shape=None, regularization=0,
                        block_size_mib=8, *, summary=None,
-                       effective_rank_multiplier=1.0, energy_fraction=0.9):
+                       effective_rank_multiplier=1.0, energy_fraction=0.9,
+                       eigenvalue_weighting=True):
     """Filter time-first data into a time-by-pixel output without changing input."""
     nt, pixels = output.shape
     _validate_adaptive_svd(effective_rank_multiplier, energy_fraction)
+    if not isinstance(eigenvalue_weighting, bool):
+        raise TypeError("eigenvalue_weighting must be a boolean")
     if threshold < 0:
         remove_dc = False
     block_size = (max(1, pixels) if block_size_mib is None else
@@ -307,7 +315,11 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
         count = selected.shape[1]
         for name, projection in projections.items():
             basis = vectors[:, :count] if name == "static_pc_sum" else vectors[:, count:]
-            projection[start:stop] = xp.sum(xp.abs(basis.T @ block), axis=0)
+            amplitudes = xp.abs(basis.T @ block)
+            if eigenvalue_weighting:
+                weights = values[:count] if name == "static_pc_sum" else values[count:]
+                amplitudes *= xp.maximum(weights, 0)[:, None]
+            projection[start:stop] = xp.sum(amplitudes, axis=0)
         if selected.shape[1]:
             removed = selected.T @ block
             block -= conjugate @ removed

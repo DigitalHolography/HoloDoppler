@@ -13,7 +13,8 @@ from holodoppler.saving.default_output import DefaultOutput
 @pytest.mark.parametrize("dc", [False, True])
 @pytest.mark.parametrize("count", [-1, 0, 2, 5])
 @pytest.mark.parametrize("budget", [None, .0002])
-def test_amplitude_summaries(dc, count, budget):
+@pytest.mark.parametrize("weighted", [False, True])
+def test_amplitude_summaries(dc, count, budget, weighted):
     rng = np.random.default_rng(80)
     source = rng.normal(size=(5, 3, 7)) + 1j * rng.normal(size=(5, 3, 7))
     source = source.swapaxes(1, 2)  # noncontiguous input
@@ -27,16 +28,34 @@ def test_amplitude_summaries(dc, count, budget):
     k = max(count, 0)
     summary = dict.fromkeys(("static_pc_sum", "dynamic_pc_sum", "svd_eigenvalues"))
     actual = svd_filter(np, np.linalg, source, count, remove_dc=dc,
-                        block_size_mib=budget, summary=summary)
+                        block_size_mib=budget, summary=summary,
+                        eigenvalue_weighting=weighted)
     np.testing.assert_allclose(summary["svd_eigenvalues"], values[::-1], atol=1e-12)
+    amplitudes = np.abs(coefficients)
+    if weighted:
+        amplitudes *= np.maximum(values[::-1], 0)[:, None]
     np.testing.assert_allclose(summary["static_pc_sum"],
-                               np.abs(coefficients[:k]).sum(axis=0).reshape(source.shape[1:]), atol=1e-12)
+                               amplitudes[:k].sum(axis=0).reshape(source.shape[1:]), atol=1e-12)
     np.testing.assert_allclose(summary["dynamic_pc_sum"],
-                               np.abs(coefficients[k:]).sum(axis=0).reshape(source.shape[1:]), atol=1e-12)
+                               amplitudes[k:].sum(axis=0).reshape(source.shape[1:]), atol=1e-12)
     expected = centered - (vectors[:, :k].conj() @ coefficients[:k]).reshape(source.shape)
     np.testing.assert_allclose(actual, expected, atol=1e-12)
     if count < 0:
         assert actual is source
+
+
+def test_weighting_defaults_to_true():
+    data = np.diag([3., 2.]).reshape(2, 1, 2)
+    summary = {"static_pc_sum": None, "dynamic_pc_sum": None}
+    svd_filter(np, np.linalg, data, 1, summary=summary)
+    np.testing.assert_array_equal(summary["static_pc_sum"], [[27., 0.]])
+    np.testing.assert_array_equal(summary["dynamic_pc_sum"], [[0., 8.]])
+
+
+@pytest.mark.parametrize("value", [1, "true", None])
+def test_weighting_requires_boolean(value):
+    with pytest.raises(TypeError, match="eigenvalue_weighting"):
+        svd_filter(np, np.linalg, np.ones((2, 1, 2)), 1, eigenvalue_weighting=value)
 
 
 @pytest.mark.parametrize("mode,options,k", [
