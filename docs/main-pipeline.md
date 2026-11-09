@@ -405,7 +405,7 @@ maps, including numerical HDF5 data.
 
 ### Global and Local block SVD
 
-The global SVD also provides `static_pc_sum` and `dynamic_pc_sum`: real images
+The global SVD also provides `pc_sum_static` and `pc_sum_dynamic`: real images
 summing absolute temporal PC coefficients over removed and retained components,
 respectively. These use the input after optional temporal DC subtraction, before
 local SVD or spectral processing. They sum amplitudes, rather than powers.
@@ -416,10 +416,10 @@ configurations must select the new names, for example:
 
 ```yaml
 outputs:
-  static_pc_sum: [avi]
-  static_pc_sum_time_projection: [png]
-  dynamic_pc_sum: [avi]
-  dynamic_pc_sum_time_projection: [png]
+  pc_sum_static: [avi]
+  pc_sum_static_time_projection: [png]
+  pc_sum_dynamic: [avi]
+  pc_sum_dynamic_time_projection: [png]
   svd_eigenvalues: [h5, csv]
 ```
 

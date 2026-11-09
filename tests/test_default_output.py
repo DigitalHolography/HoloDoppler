@@ -116,7 +116,7 @@ def test_real_default_entrypoint(tmp_path, monkeypatch, preview):
     from holodoppler.pipelines import main_default as pipeline
     from test_default_pipeline_contract import parameters
     p = parameters(outputs={"moment0_time_projection": ["h5", "png"],
-                            "static_pc_sum": ["h5"], "dynamic_pc_sum": ["h5"],
+                            "pc_sum_static": ["h5"], "pc_sum_dynamic": ["h5"],
                             "svd_eigenvalues": ["h5", "csv"],
                             "spectrograms": ["h5"], "averaged_spectrogram": ["h5"]},
                    numpy_num_workers=0, spectrogram_resize_shape=[4, 6],
@@ -134,8 +134,8 @@ def test_real_default_entrypoint(tmp_path, monkeypatch, preview):
     with h5py.File(next(tmp_path.rglob("*_output.h5"))) as h5:
         count = 1 if preview else 2
         assert h5["svd_eigenvalues"].shape == (count, 8)
-        assert h5["static_pc_sum"].shape == (count, 4, 6)
-        assert h5["dynamic_pc_sum"].shape == (count, 4, 6)
+        assert h5["pc_sum_static"].shape == (count, 4, 6)
+        assert h5["pc_sum_dynamic"].shape == (count, 4, 6)
         csv = next(tmp_path.rglob("svd_eigenvalues.csv"))
         np.testing.assert_allclose(np.loadtxt(csv, delimiter=",", ndmin=2), h5["svd_eigenvalues"])
         assert "moment0" not in h5

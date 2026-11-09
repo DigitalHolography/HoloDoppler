@@ -129,7 +129,7 @@ def _reference_output_key(parameters, result):
     if getattr(result.get(key), "ndim", None) == 2:
         return key
     available = {"moment0", "moment0ff", "moment1", "moment2"}
-    available.update({"static_pc_sum", "dynamic_pc_sum"})
+    available.update({"pc_sum_static", "pc_sum_dynamic"})
     if parameters.get("compute_gaussian_width", True):
         available.add("gaussian_width")
     if parameters.get("pca_compute", False):
@@ -330,7 +330,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     # SVD filtering
     # ------------------------------------------------------------
     svd_summary = {name: None for name in
-                   ("static_pc_sum", "dynamic_pc_sum", "svd_eigenvalues")
+                   ("pc_sum_static", "pc_sum_dynamic", "svd_eigenvalues")
                    if ((reference_only and target == name) or
                        (not reference_only and ("outputs" not in parameters or
                                                 _output_needed(parameters, name))))}
@@ -881,7 +881,7 @@ def _process_one_batch(
         for key, value in list(res.items()):
 
             if (
-                key in {"gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "sh_psd", "pca_sum", "pca_sum_ff", "static_pc_sum", "dynamic_pc_sum"}
+                key in {"gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "sh_psd", "pca_sum", "pca_sum_ff", "pc_sum_static", "pc_sum_dynamic"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                            "_directional_Doppler_pos", "_directional_Doppler_neg"}
@@ -1194,7 +1194,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
         for key in output :
             check_cancelled(progress_callback)
             if (
-                key in {"gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "pca_sum", "pca_sum_ff", "static_pc_sum", "dynamic_pc_sum"}
+                key in {"gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "pca_sum", "pca_sum_ff", "pc_sum_static", "pc_sum_dynamic"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                                             "_directional_Doppler_pos", "_directional_Doppler_neg"}

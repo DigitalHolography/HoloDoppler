@@ -26,7 +26,7 @@ def test_amplitude_summaries(dc, count, budget, weighted):
     vectors = vectors[:, ::-1]
     coefficients = vectors.T @ matrix
     k = max(count, 0)
-    summary = dict.fromkeys(("static_pc_sum", "dynamic_pc_sum", "svd_eigenvalues"))
+    summary = dict.fromkeys(("pc_sum_static", "pc_sum_dynamic", "svd_eigenvalues"))
     actual = svd_filter(np, np.linalg, source, count, remove_dc=dc,
                         block_size_mib=budget, summary=summary,
                         eigenvalue_weighting=weighted)
@@ -34,9 +34,9 @@ def test_amplitude_summaries(dc, count, budget, weighted):
     amplitudes = np.abs(coefficients)
     if weighted:
         amplitudes *= np.maximum(values[::-1], 0)[:, None]
-    np.testing.assert_allclose(summary["static_pc_sum"],
+    np.testing.assert_allclose(summary["pc_sum_static"],
                                amplitudes[:k].sum(axis=0).reshape(source.shape[1:]), atol=1e-12)
-    np.testing.assert_allclose(summary["dynamic_pc_sum"],
+    np.testing.assert_allclose(summary["pc_sum_dynamic"],
                                amplitudes[k:].sum(axis=0).reshape(source.shape[1:]), atol=1e-12)
     expected = centered - (vectors[:, :k].conj() @ coefficients[:k]).reshape(source.shape)
     np.testing.assert_allclose(actual, expected, atol=1e-12)
@@ -46,10 +46,10 @@ def test_amplitude_summaries(dc, count, budget, weighted):
 
 def test_weighting_defaults_to_true():
     data = np.diag([3., 2.]).reshape(2, 1, 2)
-    summary = {"static_pc_sum": None, "dynamic_pc_sum": None}
+    summary = {"pc_sum_static": None, "pc_sum_dynamic": None}
     svd_filter(np, np.linalg, data, 1, summary=summary)
-    np.testing.assert_array_equal(summary["static_pc_sum"], [[27., 0.]])
-    np.testing.assert_array_equal(summary["dynamic_pc_sum"], [[0., 8.]])
+    np.testing.assert_array_equal(summary["pc_sum_static"], [[27., 0.]])
+    np.testing.assert_array_equal(summary["pc_sum_dynamic"], [[0., 8.]])
 
 
 @pytest.mark.parametrize("value", [1, "true", None])
@@ -81,7 +81,7 @@ def test_adaptive_counts(mode, options, k):
 
 @pytest.mark.parametrize("mode", ["effective_rank", "participation_ratio", "energy_fraction"])
 def test_zero_energy(mode):
-    summary = {"static_pc_sum": None, "dynamic_pc_sum": None}
+    summary = {"pc_sum_static": None, "pc_sum_dynamic": None}
     data = np.zeros((4, 2, 3), dtype=np.complex64)
     np.testing.assert_array_equal(svd_filter(np, np.linalg, data, 0, mode, summary=summary), data)
     for image in summary.values():
@@ -119,7 +119,7 @@ def test_gpu_summaries(mode):
         pytest.skip("CUDA device unavailable")
     rng = np.random.default_rng(4)
     data = rng.normal(size=(6, 3, 5)) + 1j * rng.normal(size=(6, 3, 5))
-    expected_summary = dict.fromkeys(("static_pc_sum", "dynamic_pc_sum", "svd_eigenvalues"))
+    expected_summary = dict.fromkeys(("pc_sum_static", "pc_sum_dynamic", "svd_eigenvalues"))
     actual_summary = expected_summary.copy()
     expected = svd_filter(np, np.linalg, data, 0, mode, summary=expected_summary)
     actual = svd_filter(cp, cp.linalg, cp.asarray(data), 0, mode, summary=actual_summary)

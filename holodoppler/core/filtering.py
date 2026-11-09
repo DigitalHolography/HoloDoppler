@@ -188,8 +188,8 @@ def svd_filter(
     diagnostic : dict, optional
         Dictionary populated with intermediate results when provided.
     summary : dict, optional
-        Requested keys (with arbitrary initial values): static_pc_sum,
-        dynamic_pc_sum, svd_eigenvalues. Images sum absolute PC coefficients.
+        Requested keys (with arbitrary initial values): pc_sum_static,
+        pc_sum_dynamic, svd_eigenvalues. Images sum absolute PC coefficients.
     effective_rank_multiplier : float
         Nonnegative multiplier of entropy effective rank, rounded up.
     participation_ratio_multiplier : float
@@ -318,7 +318,7 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
     if summary is not None:
         if "svd_eigenvalues" in summary:
             summary["svd_eigenvalues"] = values
-        for name in ("static_pc_sum", "dynamic_pc_sum"):
+        for name in ("pc_sum_static", "pc_sum_dynamic"):
             if name in summary:
                 projections[name] = xp.empty(pixels, dtype=values.dtype)
     for start in range(0, pixels, block_size):
@@ -326,10 +326,10 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
         block = output[:, start:stop]
         count = selected.shape[1]
         for name, projection in projections.items():
-            basis = vectors[:, :count] if name == "static_pc_sum" else vectors[:, count:]
+            basis = vectors[:, :count] if name == "pc_sum_static" else vectors[:, count:]
             amplitudes = xp.abs(basis.T @ block)
             if eigenvalue_weighting:
-                weights = values[:count] if name == "static_pc_sum" else values[count:]
+                weights = values[:count] if name == "pc_sum_static" else values[count:]
                 amplitudes *= xp.maximum(weights, 0)[:, None]
             projection[start:stop] = xp.sum(amplitudes, axis=0)
         if selected.shape[1]:

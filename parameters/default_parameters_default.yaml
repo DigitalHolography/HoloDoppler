@@ -43,8 +43,8 @@ svd_filter_by_bloc_mib_block_size: 8 # Temporary memory target; null batches all
 svd_filter_by_bloc_threshold: 0 # Leading components removed; zero skips SVD.
 svd_threshold: 23
 svd_filter_mode: "effective_rank" # Options: "number_of_values", "amplitude_threshold", "effective_rank", "participation_ratio", "energy_fraction"
-svd_effective_rank_multiplier: 1.0 # Leading count = ceil(multiplier * entropy effective rank).
-svd_participation_ratio_multiplier: 1.0 # Leading count = ceil(multiplier * participation ratio).
+svd_effective_rank_multiplier: 0.05 # Leading count = ceil(multiplier * entropy effective rank).
+svd_participation_ratio_multiplier: 0.05 # Leading count = ceil(multiplier * participation ratio).
 svd_energy_fraction: 0.9 # Cumulative covariance energy removed in energy_fraction mode.
 svd_pc_sum_eigenvalue_weighting: true # Weight static/dynamic PC amplitudes by covariance eigenvalues.
 svd_remove_dc: true
@@ -146,18 +146,18 @@ pca_index_range: [0, 16] # Python slice: exclusive upper bound
 outputs:
   "moment*": [h5, avi, mp4]
   "moment*_time_projection": [png]
-  gaussian_width: [h5, avi]
-  gaussian_width_time_projection: [png]
+  gaussian_width: []
+  gaussian_width_time_projection: []
   pca_sum: [h5, avi]
   "pca_sum_time_projection": [png]
   "band_*": [h5, avi, mp4]
   "band_*_time_projection": [png]
-  static_pc_sum: [h5, avi]
-  static_pc_sum_time_projection: [png]
-  dynamic_pc_sum: [h5, avi]
-  dynamic_pc_sum_time_projection: [png]
-  svd_eigenvalues: [h5, csv]
-  spectrum_line: [h5, csv]
+  pc_sum_static: [avi]
+  pc_sum_static_time_projection: [png]
+  pc_sum_dynamic: [avi]
+  pc_sum_dynamic_time_projection: [png]
+  svd_eigenvalues: [h5, csv, png]
+  spectrum_line: [h5, csv, png]
   spectrograms: [h5]
   averaged_spectrogram: [h5]
   color_Doppler_image: [avi, mp4]
