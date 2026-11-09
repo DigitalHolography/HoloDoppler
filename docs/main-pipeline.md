@@ -420,7 +420,7 @@ outputs:
   pc_sum_static_time_projection: [png]
   pc_sum_dynamic: [avi]
   pc_sum_dynamic_time_projection: [png]
-  svd_eigenvalues: [h5, csv]
+  svd_eigenvalues: [h5, csv, png]
 ```
 
 The `_time_projection` PNGs average the component-sum images across batches.
@@ -477,7 +477,7 @@ outputs:
   moment0_time_projection: [h5, png]
   "band_*": [h5, mp4]
   "band_*_time_projection": [png]
-  spectrum_line: [h5, csv]
+  spectrum_line: [h5, csv, png]
   spectrograms: [h5]
   averaged_spectrogram: [h5]
 ```
@@ -507,7 +507,12 @@ selecting `spectrograms_time_projection` averages the cropped/binned spectrogram
 which differ from the full-spectrum aggregate.
 
 HDF5 accepts numerical datasets. AVI/MP4 accept temporal grayscale or RGB/RGBA
-images; PNG accepts static images and image projections. CSV accepts scalar,
+images; PNG accepts real-valued static vectors, tables, images, and image
+projections. Any real-valued temporal vector also supports PNG: rows are completed
+batches and columns are vector entries (for example, frequency bins for
+`spectrum_line` or components for `svd_eigenvalues`). These grayscale images are
+saved at finalization in both live and buffered modes; a single batch has shape
+`(1, N)`. Vector time projections likewise become one-row images. CSV accepts scalar,
 vector, and table datasets, including spectrum lines and registration traces;
 spatial images and spectral cubes are not flattened into CSV. A spectral cube
 cannot become a video merely because its last axis happens to have length 3 or 4.
