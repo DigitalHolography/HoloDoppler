@@ -174,6 +174,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
             parameters["svd_threshold"],
             filter_mode=parameters["svd_filter_mode"],
             effective_rank_multiplier=parameters.get("svd_effective_rank_multiplier", 1.0),
+            participation_ratio_multiplier=parameters.get("svd_participation_ratio_multiplier", 1.0),
             energy_fraction=parameters.get("svd_energy_fraction", 0.9),
             remove_dc=parameters["svd_remove_dc"],
         )
@@ -186,6 +187,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None):
         parameters["svd_threshold"],
         filter_mode=parameters["svd_filter_mode"],
         effective_rank_multiplier=parameters.get("svd_effective_rank_multiplier", 1.0),
+        participation_ratio_multiplier=parameters.get("svd_participation_ratio_multiplier", 1.0),
         energy_fraction=parameters.get("svd_energy_fraction", 0.9),
         remove_dc=parameters["svd_remove_dc"],
     )

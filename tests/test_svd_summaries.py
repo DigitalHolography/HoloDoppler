@@ -63,6 +63,10 @@ def test_weighting_requires_boolean(value):
     ("effective_rank", {"effective_rank_multiplier": .5}, 2),
     ("effective_rank", {"effective_rank_multiplier": 0}, 0),
     ("effective_rank", {"effective_rank_multiplier": 100}, 4),
+    ("participation_ratio", {}, 2),
+    ("participation_ratio", {"participation_ratio_multiplier": .5}, 1),
+    ("participation_ratio", {"participation_ratio_multiplier": 0}, 0),
+    ("participation_ratio", {"participation_ratio_multiplier": 100}, 4),
     ("energy_fraction", {}, 2),
     ("energy_fraction", {"energy_fraction": .7}, 1),
     ("energy_fraction", {"energy_fraction": 1}, 3),
@@ -75,7 +79,7 @@ def test_adaptive_counts(mode, options, k):
     np.testing.assert_allclose(actual, expected, atol=1e-12)
 
 
-@pytest.mark.parametrize("mode", ["effective_rank", "energy_fraction"])
+@pytest.mark.parametrize("mode", ["effective_rank", "participation_ratio", "energy_fraction"])
 def test_zero_energy(mode):
     summary = {"static_pc_sum": None, "dynamic_pc_sum": None}
     data = np.zeros((4, 2, 3), dtype=np.complex64)
@@ -84,17 +88,31 @@ def test_zero_energy(mode):
         np.testing.assert_array_equal(image, 0)
 
 
+@pytest.mark.parametrize("spectrum,k", [([4., 0., 0., 0.], 1),
+                                       ([1., 1., 1., 1.], 4)])
+def test_participation_ratio_spectral_extremes(spectrum, k):
+    data = np.diag(np.sqrt(spectrum)).reshape(4, 2, 2)
+    actual = svd_filter(np, np.linalg, data, 23, "participation_ratio")
+    expected = data.copy()
+    expected[:k] = 0
+    np.testing.assert_allclose(actual, expected, atol=1e-12)
+    assert svd_filter(np, np.linalg, data, -1, "participation_ratio") is data
+
+
 @pytest.mark.parametrize("options", [
     {"effective_rank_multiplier": -1}, {"effective_rank_multiplier": np.inf},
     {"effective_rank_multiplier": True}, {"energy_fraction": 0},
     {"energy_fraction": 1.1}, {"energy_fraction": np.nan},
+    {"participation_ratio_multiplier": -1}, {"participation_ratio_multiplier": np.inf},
+    {"participation_ratio_multiplier": np.nan}, {"participation_ratio_multiplier": True},
+    {"participation_ratio_multiplier": "1"},
 ])
 def test_invalid_adaptive_options(options):
     with pytest.raises((ValueError, TypeError)):
         svd_filter(np, np.linalg, np.ones((4, 2, 3)), 1, **options)
 
 
-@pytest.mark.parametrize("mode", ["effective_rank", "energy_fraction"])
+@pytest.mark.parametrize("mode", ["effective_rank", "participation_ratio", "energy_fraction"])
 def test_gpu_summaries(mode):
     cp = pytest.importorskip("cupy")
     if not cp.cuda.is_available():

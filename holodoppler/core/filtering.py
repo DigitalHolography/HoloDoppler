@@ -167,6 +167,7 @@ def svd_filter(
     *,
     summary=None,
     effective_rank_multiplier=1.0,
+    participation_ratio_multiplier=1.0,
     energy_fraction=0.9,
     eigenvalue_weighting=True,
 ):
@@ -180,7 +181,7 @@ def svd_filter(
         Number of leading modes to remove, or eigenvalue threshold.
         Negative values disable filtering.
     filter_mode : str
-        "number_of_values", "amplitude_threshold", "effective_rank", or
+        "number_of_values", "amplitude_threshold", "effective_rank", "participation_ratio", or
         "energy_fraction". Adaptive modes ignore a nonnegative svd_threshold.
     remove_dc : bool
         Subtract the temporal mean before filtering.
@@ -191,6 +192,8 @@ def svd_filter(
         dynamic_pc_sum, svd_eigenvalues. Images sum absolute PC coefficients.
     effective_rank_multiplier : float
         Nonnegative multiplier of entropy effective rank, rounded up.
+    participation_ratio_multiplier : float
+        Nonnegative multiplier of (sum(lambda)**2 / sum(lambda**2)), rounded up.
     energy_fraction : float
         Fraction of covariance energy removed in energy_fraction mode, in (0, 1].
     eigenvalue_weighting : bool
@@ -216,21 +219,24 @@ def svd_filter(
         filtered.reshape(H.shape[0], -1), svd_threshold,
         filter_mode, remove_dc, diagnostic, H.shape, block_size_mib=block_size_mib,
         summary=summary, effective_rank_multiplier=effective_rank_multiplier,
+        participation_ratio_multiplier=participation_ratio_multiplier,
         energy_fraction=energy_fraction,
         eigenvalue_weighting=eigenvalue_weighting,
     )
     return H if svd_threshold < 0 else filtered
 
 
-def _validate_adaptive_svd(effective_rank_multiplier, energy_fraction):
+def _validate_adaptive_svd(effective_rank_multiplier, energy_fraction,
+                           participation_ratio_multiplier=1.0):
     from numbers import Real
     from math import isfinite
 
     for name, value in (("effective_rank_multiplier", effective_rank_multiplier),
+                        ("participation_ratio_multiplier", participation_ratio_multiplier),
                         ("energy_fraction", energy_fraction)):
         if isinstance(value, bool) or not isinstance(value, Real):
             raise TypeError(f"{name} must be a real number")
-        if not isfinite(value) or (value < 0 if name == "effective_rank_multiplier"
+        if not isfinite(value) or (value < 0 if name.endswith("_multiplier")
                                   else not 0 < value <= 1):
             raise ValueError(f"Invalid {name}: {value}")
 
@@ -239,10 +245,11 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
                        remove_dc=False, diagnostic=None, shape=None, regularization=0,
                        block_size_mib=8, *, summary=None,
                        effective_rank_multiplier=1.0, energy_fraction=0.9,
-                       eigenvalue_weighting=True):
+                       eigenvalue_weighting=True, participation_ratio_multiplier=1.0):
     """Filter time-first data into a time-by-pixel output without changing input."""
     nt, pixels = output.shape
-    _validate_adaptive_svd(effective_rank_multiplier, energy_fraction)
+    _validate_adaptive_svd(effective_rank_multiplier, energy_fraction,
+                           participation_ratio_multiplier)
     if not isinstance(eigenvalue_weighting, bool):
         raise TypeError("eigenvalue_weighting must be a boolean")
     if threshold < 0:
@@ -281,17 +288,22 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
         selected = vectors[:, :min(int(threshold), nt)]
     elif mode == "amplitude_threshold":
         selected = vectors[:, values > threshold]
-    elif mode in {"effective_rank", "energy_fraction"}:
+    elif mode in {"effective_rank", "participation_ratio", "energy_fraction"}:
         energy = xp.maximum(values, 0)
         total = float(xp.sum(energy))
         count = 0
         if total > 0:
             p = energy / total
-            if mode == "effective_rank":
-                positive = p[p > 0]
-                rank = float(xp.exp(-xp.sum(positive * xp.log(positive))))
+            if mode in {"effective_rank", "participation_ratio"}:
+                if mode == "effective_rank":
+                    positive = p[p > 0]
+                    rank = float(xp.exp(-xp.sum(positive * xp.log(positive))))
+                    multiplier = effective_rank_multiplier
+                else:
+                    rank = 1.0 / float(xp.sum(p * p))
+                    multiplier = participation_ratio_multiplier
                 from math import ceil
-                count = min(nt, ceil(effective_rank_multiplier * rank))
+                count = min(nt, ceil(multiplier * rank))
             else:
                 tolerance = xp.finfo(values.dtype).eps * nt
                 count = min(nt, int(xp.searchsorted(xp.cumsum(p), energy_fraction - tolerance)) + 1)

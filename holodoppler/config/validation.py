@@ -244,10 +244,11 @@ def validate_main_parameters(parameters):
 
     value = parameters.get("svd_remove_dc", True)
     if parameters.get("svd_filter_mode", "number_of_values") not in {
-            "number_of_values", "amplitude_threshold", "effective_rank", "energy_fraction"}:
+            "number_of_values", "amplitude_threshold", "effective_rank", "participation_ratio", "energy_fraction"}:
         raise ValueError("Unknown svd_filter_mode")
     _validate_adaptive_svd(parameters.get("svd_effective_rank_multiplier", 1.0),
-                           parameters.get("svd_energy_fraction", 0.9))
+                           parameters.get("svd_energy_fraction", 0.9),
+                           parameters.get("svd_participation_ratio_multiplier", 1.0))
     if not isinstance(parameters.get("svd_pc_sum_eigenvalue_weighting", True), bool):
         raise TypeError("svd_pc_sum_eigenvalue_weighting must be a boolean")
     if not (isinstance(value, bool)):

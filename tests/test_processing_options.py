@@ -106,6 +106,7 @@ def test_main_svd_and_registration_receive_budgets(parameters, monkeypatch, budg
     for name in ('xp', 'fft', 'linalg', 'gaussian_filter'):
         monkeypatch.setattr(backend, name, getattr(manager, name))
     parameters.update(svd_block_size_mib=budget, registration_block_size_mib=budget,
+                      svd_filter_mode='participation_ratio', svd_participation_ratio_multiplier=.5,
                       shack_hartmann_autofocus=False, image_registration=True)
     svd = Mock(wraps=filtering.svd_filter)
     shifts = Mock(wraps=registration.apply_register_images_shifts)
@@ -115,9 +116,18 @@ def test_main_svd_and_registration_receive_budgets(parameters, monkeypatch, budg
     frames = np.random.default_rng(15).random((8, 6, 8)).astype(np.float32)
     main_default._process_one_batch(parameters, frames)
     assert svd.call_args.kwargs['block_size_mib'] == budget
+    assert svd.call_args.kwargs['participation_ratio_multiplier'] == .5
     # Four existing scalar maps plus the two global SVD component projections.
     assert shifts.call_count == 6
     assert all(call.kwargs['block_size_mib'] == budget for call in shifts.call_args_list)
+
+
+@pytest.mark.parametrize('value', [-1, float('nan'), float('inf'), True, 'one'])
+def test_reject_invalid_participation_ratio_multiplier(parameters, value):
+    parameters['svd_filter_mode'] = 'participation_ratio'
+    parameters['svd_participation_ratio_multiplier'] = value
+    with pytest.raises((TypeError, ValueError), match='participation_ratio_multiplier'):
+        validate_main_parameters(parameters)
 
 
 @pytest.mark.parametrize('budget', [.001, None])

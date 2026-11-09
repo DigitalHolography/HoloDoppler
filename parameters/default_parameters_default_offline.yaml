@@ -41,8 +41,9 @@ svd_filter_by_bloc_parallel: false # Process all windows together when true.
 svd_filter_by_bloc_mib_block_size: 8 # Temporary memory target; null batches all windows.
 svd_filter_by_bloc_threshold: 0 # Leading components removed; zero skips SVD.
 svd_threshold: 16
-svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold", "effective_rank", "energy_fraction"
+svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold", "effective_rank", "participation_ratio", "energy_fraction"
 svd_effective_rank_multiplier: 1.0 # Leading count = ceil(multiplier * entropy effective rank).
+svd_participation_ratio_multiplier: 1.0 # Leading count = ceil(multiplier * participation ratio).
 svd_energy_fraction: 0.9 # Cumulative covariance energy removed in energy_fraction mode.
 svd_pc_sum_eigenvalue_weighting: true # Weight static/dynamic PC amplitudes by covariance eigenvalues.
 svd_remove_dc: true

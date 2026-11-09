@@ -433,13 +433,17 @@ Adaptive global SVD modes can replace `number_of_values`:
   `ceil(svd_effective_rank_multiplier * exp(-sum(p * log(p))))` components,
   capped at the temporal dimension. The multiplier defaults to `1.0` and must
   be finite and nonnegative.
+- `svd_filter_mode: participation_ratio` removes
+  `ceil(svd_participation_ratio_multiplier / sum(p**2))` leading components,
+  capped at the temporal dimension. This rank equals `(sum(lambda)**2) / sum(lambda**2)`.
+  The multiplier defaults to `1.0` and must be finite and nonnegative; zero removes no modes.
 - `svd_filter_mode: energy_fraction` removes the smallest leading count reaching
   `svd_energy_fraction` of total covariance energy (default `0.9`, range `(0, 1]`).
 
 Here `p` is the normalized nonnegative eigenvalue spectrum; zero entries do not
 contribute to entropy. Numerical negative eigenvalues are clipped only for rank
 selection; exported values remain raw. Zero-energy input removes zero modes.
-Both modes ignore a nonnegative `svd_threshold`. The shared filter supports these
+All three modes ignore a nonnegative `svd_threshold`. The shared filter supports these
 modes in other pipelines too; the new saved summaries belong to the default pipeline.
 
 Set `svd_filter_by_bloc: true` to apply local SVD after global SVD in the default pipeline.
