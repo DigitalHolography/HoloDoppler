@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +31,7 @@ def _create_params_file() -> None:
 
     params = {
         "pipeline_name": "default",
+        "backend": "numpy",
         # optional backend management
         "numpy_num_workers": 8,  # in numpy mode, the number of parallel workers to be used
         # Core parameters
@@ -112,6 +114,7 @@ def _create_synthetic_holo() -> None:
             str(TEST_ROOT),
         ],
         cwd=PROJECT_ROOT,
+        env={**os.environ, "APPDATA": str(TEST_ROOT)},
         capture_output=True,
         text=True,
     )
@@ -129,9 +132,14 @@ def _create_synthetic_holo() -> None:
 
 
 @pytest.fixture(scope="session")
-def cli_test_data() -> tuple[Path, Path]:
+def cli_test_data(tmp_path_factory) -> tuple[Path, Path]:
     """Prepare isolated input files for the CLI integration test."""
-    TEST_ROOT.mkdir(parents=True, exist_ok=True)
+    global TEST_ROOT, HOLO_PATH, PARAMS_PATH, OUTPUT_PATH, OUTPUT_PREVIEW_PATH
+    TEST_ROOT = tmp_path_factory.mktemp("cli")
+    HOLO_PATH = TEST_ROOT / "test.holo"
+    PARAMS_PATH = TEST_ROOT / "tmp.yaml"
+    OUTPUT_PATH = TEST_ROOT / "test" / "test_HD" / "h5" / "test_HD_output.h5"
+    OUTPUT_PREVIEW_PATH = TEST_ROOT / "test" / "test_HD" / "preview" / "h5" / "preview_output.h5"
 
     _create_synthetic_holo()
     _create_params_file()
@@ -156,12 +164,13 @@ def test_process_cli_creates_expected_h5(cli_test_data: tuple[Path, Path]) -> No
     # use from the temporary test directory.
     result = subprocess.run(
         [
-            "holodoppler",
+            sys.executable, "-m", "holodoppler",
             "process",
             holo_path.name,
             params_path.name,
         ],
         cwd=TEST_ROOT,
+        env={**os.environ, "APPDATA": str(TEST_ROOT)},
         capture_output=True,
         text=True,
     )
@@ -219,12 +228,13 @@ def test_preview_cli_creates_expected_h5(cli_test_data: tuple[Path, Path]) -> No
     # use from the temporary test directory.
     result = subprocess.run(
         [
-            "holodoppler",
+            sys.executable, "-m", "holodoppler",
             "preview",
             holo_path.name,
             params_path.name,
         ],
         cwd=TEST_ROOT,
+        env={**os.environ, "APPDATA": str(TEST_ROOT)},
         capture_output=True,
         text=True,
     )

@@ -51,8 +51,11 @@ def test_reference_shifts():
 
 @pytest.mark.parametrize("z4, accepted", [(1.49, True), (1.5, True), (-1.5, True), (1.51, False), (-1.51, False), (np.nan, False)])
 @pytest.mark.parametrize("failure", [None, "missing_z4", "nonfinite_phase"])
+@pytest.mark.parametrize("threshold", [1.5, None])
 @pytest.mark.parametrize("modes", [[4, 5, 6], [6, 4, 5]])
-def test_autofocus_guard(monkeypatch, z4, accepted, modes, failure):
+def test_autofocus_guard(monkeypatch, z4, accepted, modes, failure, threshold):
+    if threshold is None:
+        accepted = bool(np.isfinite(z4))
     monkeypatch.setattr(backend, "to_backend", np.asarray)
     monkeypatch.setattr(backend, "to_numpy", np.asarray)
     monkeypatch.setattr(backend, "xp", np)
@@ -74,7 +77,7 @@ def test_autofocus_guard(monkeypatch, z4, accepted, modes, failure):
         return np.ones((2, 2), dtype=complex)
     monkeypatch.setattr(main_default, "_process_shack_hartmann", sense)
     reader = SimpleNamespace(total_frames=4, read_frames=Mock(return_value=np.ones((4, 2, 2))))
-    params = dict(shack_hartmann_autofocus=True, registration_ref_first_frame=0,
+    params = dict(shack_hartmann_autofocus_z4_threshold_rad=threshold, shack_hartmann_autofocus=True, registration_ref_first_frame=0,
                   batch_size=4, shack_hartmann_zernike_fit_modes=modes)
     diagnostics = {}
     phase, coefs = main_default._get_autofocus_phase_term(params, reader, diagnostics)

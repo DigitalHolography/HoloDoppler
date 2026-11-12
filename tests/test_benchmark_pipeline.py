@@ -97,6 +97,8 @@ def recording(tmp_path):
     normal_output = tmp_path / 'normal-output'
     normal_output.mkdir()
     (normal_output / 'keep.txt').write_text('Do not overwrite')
+    params.pop("outputs", None)  # Exercise the legacy computation and saving contract.
+    params.update(pca_compute=False, compute_gaussian_width=False)
     params.update(backend="numpy", custom_path=str(normal_output),
                   batch_size=8, batch_stride=8, first_frame=0, end_frame=-1,
                   sampling_freq=1000, low_freq=100, high_freq=400,
@@ -106,6 +108,7 @@ def recording(tmp_path):
                   frequency_bands=[], color_Doppler_image=False, directional_Doppler_image=False,
                   save_spectograms=False, save_averaged_spectrogram=False,
                   lsci_enable_temporal=False, lsci_enable_spatiotemporal=False)
+    params.update(h5_datasets=["RATIO"], lsci_time_window_size=8, lsci_time_window_stride=8)
     parameters = tmp_path / 'parameters.yaml'
     parameters.write_text(yaml.safe_dump(params))
     return path, parameters, normal_output
@@ -145,7 +148,7 @@ def test_real_preview_process_report_and_end_frame_override(recording, tmp_path,
         assert (directory / f'{stage}.log').stat().st_size > 0
         assert (directory / f'{stage}.parameters.json').is_file()
     with h5py.File(directory / 'process-output/h5/process-output_output.h5') as handle:
-        key = 'moment0' if pipeline == 'default' else 'spatial_flow_index'
+        key = 'moment0' if pipeline == 'default' else 'RATIO'
         assert handle[key].shape[0] == 2  # 16 source frames / 8 frames per batch.
     assert hashlib.sha256(path.read_bytes()).hexdigest() == before
     assert (normal_output / 'keep.txt').read_text() == 'Do not overwrite'

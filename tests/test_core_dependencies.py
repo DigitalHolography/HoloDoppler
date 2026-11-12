@@ -26,7 +26,7 @@ assert 'holodoppler.backend' not in sys.modules
 
 
 @pytest.mark.parametrize('mode,threshold', [('number_of_values', 0), ('number_of_values', 2),
-    ('number_of_values', 10), ('amplitude_threshold', 20.), ('relative_amplitude_threshold', .5)])
+    ('number_of_values', 10), ('amplitude_threshold', 20.)])
 @pytest.mark.parametrize('remove_dc', [False, True])
 def test_svd_matches_projection(mode, threshold, remove_dc):
     rng = np.random.default_rng(15)
@@ -43,15 +43,21 @@ def test_svd_matches_projection(mode, threshold, remove_dc):
     expected = (matrix - (matrix @ removed) @ removed.conj().T).T.reshape(data.shape)
     actual = filtering.svd_filter(np, linalg, data, threshold, mode, remove_dc)
     np.testing.assert_allclose(actual, expected, atol=1e-13)
-    debug = filtering.svd_filter(np, linalg, data, threshold, mode, remove_dc, debug=True)
-    assert len(debug) == 7
-    np.testing.assert_allclose(debug[0], actual)
-    np.testing.assert_allclose(debug[4], cov)
+    diagnostic = {}
+    filtered = filtering.svd_filter(np, linalg, data, threshold, mode, remove_dc, diagnostic=diagnostic)
+    np.testing.assert_allclose(filtered, actual)
+    np.testing.assert_allclose(diagnostic["covariance"], cov)
     if remove_dc:
-        np.testing.assert_allclose(debug[-1], data.mean(axis=0))
+        np.testing.assert_allclose(diagnostic["dc"], data.mean(axis=0))
     else:
-        assert debug[-1] is None
+        assert diagnostic["dc"] is None
     assert filtering.svd_filter(np, linalg, data, -1) is data
+
+
+def test_svd_rejects_removed_relative_amplitude_mode():
+    with pytest.raises(ValueError, match="Unknown filter_mode"):
+        filtering.svd_filter(np, linalg, np.ones((5, 3, 4)), .5,
+                             filter_mode="relative_amplitude_threshold")
 
 
 def test_gaussian_and_temporal_filter_dependencies():

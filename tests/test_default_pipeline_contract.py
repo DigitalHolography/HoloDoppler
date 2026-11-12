@@ -20,6 +20,7 @@ def parameters(**updates):
     path = Path(__file__).resolve().parents[1] / "parameters/default_parameters_default.yaml"
     result = yaml.safe_load(path.read_text())
     result.pop("outputs", None)
+    result.update(pca_compute=False, compute_gaussian_width=False)
     result.update(
         backend="numpy", sampling_freq=800, pixel_pitch=[1e-6, 1e-6], z=.1,
         batch_size=8, batch_stride=8, first_frame=0, end_frame=-1,

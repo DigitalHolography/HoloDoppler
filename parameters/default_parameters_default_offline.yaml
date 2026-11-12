@@ -1,17 +1,17 @@
 pipeline_name: "default"
-h5compression: 0 # HDF5 gzip level: 0 disables compression; 1-9 compress numerical outputs.
 
 # backend management
 backend: "auto" # auto, numpy (CPU), or cupy (GPU; falls back to CPU if unavailable)
 numpy_num_workers: 8 # CPU workers; 0 or 1 runs sequentially
-cupy_async: false # GPU pipeline: overlap reading, uploads, computation, and downloads.
-cupy_prefetch_depth: 1 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM.
+cupy_async: false # GPU pipeline: overlap reading, uploads, computation, and downloads. (cupy)
+cupy_prefetch_depth: 1 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM. (cupy)
 svd_block_size_mib: null # 8 # Target MiB per SVD pixel-block work array (main filtering and sequential SH); null processes all pixels at once.
 registration_block_size_mib: null # 8 # Target MiB per complex FFT work array for shifting stacks; at least one spatial plane. null transforms the full stack at once.
 shack_hartmann_sub_aps_process: "sequential" # "sequential": lower RAM/VRAM; "parallel": batched SVD/FFTs, potentially faster but uses more RAM/VRAM.
 
 # saving management
 live_saving: false # false saves all outputs after processing; ECC still buffers when true.
+h5compression: 0 # HDF5 gzip level: 0 disables compression; 1-9 compress numerical outputs.
 num_saving_workers: 3
 saving_queue_depth: null # Outstanding batches/jobs, including active writes; null = twice the worker count.
 
@@ -56,7 +56,7 @@ welch_batch_size: 32 # FFT segment length in selected frames; positive integer, 
 welch_stride: 32 # Spacing between segment starts in selected frames.
 
 # Gaussian spectral width filtering
-compute_gaussian_width_prefilter_low_freq: 4000
+compute_gaussian_width_prefilter_low_freq: 4000 # zero means no high pass filtering
 compute_gaussian_width_prefilter_order: 4
 compute_gaussian_width_svd_filter: false # SVD on complex time data after frequency prefiltering; Gaussian width uses FFT, not Welch.
 compute_gaussian_width_svd_threshold: 2 # Leading modes removed; used only when the filter is enabled.
@@ -66,7 +66,7 @@ compute_gaussian_width_svd_filter_mode: "number_of_values" # Or "amplitude_thres
 # Temporal sampling
 sampling_freq: "use_metadata" # Sampling frequency in Hz
 low_freq: 6000 # Low frequency cutoff in Hz
-high_freq: "use_metadata" # High frequency cutoff in Hz "use_metadata" is sampling_freq/2
+high_freq: "use_metadata" # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
 
 # Output moment0, moment1 and moment0ff for each symmetric range in Hz (media only, no H5).
 moments_frequency_ranges:
@@ -118,8 +118,8 @@ shack_hartmann_zernike_fit_modes: [4,5,6] # Number of the Zernike modes to use i
 
 # Doppler images
 color_Doppler_use_lab: false # false: decorrelation stretch of [high, low, low]; true: Lab composite using moment0 lightness.
-color_Doppler_low_frequency_band: [6000, 22500] # Symmetric low-frequency magnitude band in Hz.
-color_Doppler_high_frequency_band: [22500, 39000] # Symmetric high-frequency magnitude band in Hz.
+color_Doppler_low_frequency_band: [6000, 22500] # Symmetric low-frequency power band in Hz.
+color_Doppler_high_frequency_band: [22500, 39000] # Symmetric high-frequency power band in Hz.
 directional_Doppler_frequency_band: null # null uses [low_freq, high_freq]; otherwise [low, high] in Hz.
 directional_Doppler_gaussian_width: 35.0 # Gaussian flatfield sigma in pixels; 0 disables smoothing.
 directional_Doppler_hues: [1.0, 0.66] # [positive, negative] HSV hues; red / blue (default).

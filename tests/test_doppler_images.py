@@ -28,6 +28,8 @@ def cpu():
 def params(**updates):
     p = yaml.safe_load((Path(__file__).resolve().parents[1] /
                        "parameters/default_parameters_default.yaml").read_text())
+    p.pop("outputs", None)  # Exercise the legacy computation and saving contract.
+    p.update(pca_compute=False, compute_gaussian_width=False)
     p.update(backend="numpy", batch_size=8, batch_stride=8, first_frame=0,
              end_frame=-1, skip_every=1, sampling_freq=1000, low_freq=0, high_freq=450,
              pixel_pitch=[1e-6, 1e-6], z=.1, numpy_num_workers=2,

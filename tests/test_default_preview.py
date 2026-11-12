@@ -184,6 +184,7 @@ def test_saved_preview_preserves_outputs_but_returns_raw_reference(tmp_path, mon
     reader = input_reader(tmp_path, monkeypatch)
     p = settings(registration_ref_first_frame=4, registration_ref_batch_size=16,
                  registration_image='moment1', shack_hartmann_autofocus=False, square=True,
+                 compute_gaussian_width=True,
                  color_Doppler_image=True, color_Doppler_low_frequency_band=[0, 200],
                  color_Doppler_high_frequency_band=[200, 400])
     expected = pipeline.preview(reader.file_path, copy.deepcopy(p), save_outputs=False)

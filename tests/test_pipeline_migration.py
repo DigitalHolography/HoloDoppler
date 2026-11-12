@@ -28,6 +28,8 @@ def cpu_backend():
 
 def parameters(name, **changes):
     p = yaml.safe_load((ROOT / "parameters/default_parameters_default.yaml").read_text())
+    p.pop("outputs", None)  # Exercise the legacy computation and saving contract.
+    p.update(pca_compute=False, compute_gaussian_width=False)
     p.update(pipeline_name=name, backend="numpy", batch_size=4, batch_stride=4,
              first_frame=0, end_frame=-1, skip_every=None, numpy_num_workers=2,
              shack_hartmann=False, shack_hartmann_autofocus=False,
@@ -78,7 +80,7 @@ def test_streamed_and_buffered_outputs_match(tmp_path, monkeypatch, name, propag
     module = import_module(f"holodoppler.pipelines.main_{module_name}")
     p = parameters(name, spatial_propagation=propagation, image_registration=registration)
     if name == "lsci":
-        p.update(lsci_time_window_size=3, lsci_time_window_stride=3,
+        p.update(h5_datasets=["STD", "MEAN", "RATIO"], lsci_time_window_size=3, lsci_time_window_stride=3,
                  lsci_pixel_window_size=3, image_registration=False)
     snapshots = []
     for live in (True, False):
@@ -232,8 +234,8 @@ def test_profiles_follow_default_order_and_comments():
 
 def test_lsci_profile_window_defaults():
     p = yaml.safe_load((ROOT / "parameters/default_parameters_lsci.yaml").read_text())
-    assert p["lsci_time_window_size"] == 5
-    assert p["lsci_time_window_stride"] == 64
+    assert p["lsci_time_window_size"] == 32
+    assert p["lsci_time_window_stride"] == 32
 
 
 @pytest.mark.parametrize("failure", ["processing", "saving"])

@@ -30,6 +30,8 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every,
 
     defaults = Path(__file__).resolve().parents[1] / "parameters/default_parameters_default.yaml"
     parameters = yaml.safe_load(defaults.read_text(encoding="utf-8"))
+    parameters.pop("outputs", None)  # Exercise the legacy computation and saving contract.
+    parameters.update(pca_compute=False, compute_gaussian_width=False)
     parameters.update(
         live_saving=live_saving, skip_every=skip_every, batch_size=4, batch_stride=4, first_frame=0, end_frame=-1,
         registration_ref_first_frame=0, shack_hartmann_autofocus_batch_size=4,
@@ -37,7 +39,7 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every,
         pixel_pitch=[1e-6, 1e-6], wavelength=852e-9, z=0.1,
         sampling_freq=1000, low_freq=100, high_freq=400,
         image_registration=False, image_registration_with_ecc=False,
-        filter2d=False, square=True, backend="auto",
+        filter2d=False, square=True, backend="numpy",
         numpy_num_workers=1,
     )
     frames = np.ones((4, 12, 18), dtype=np.float32)

@@ -2,9 +2,9 @@ pipeline_name: "split_apertures"
 
 # backend management
 backend: "auto" # auto, numpy (CPU), or cupy (GPU; falls back to CPU if unavailable)
-numpy_num_workers: 8 # Numpy only, the number of parallel workers to be used
-cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and downloads.
-cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM.
+numpy_num_workers: 8 # CPU workers; 0 or 1 runs sequentially
+cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and downloads. (cupy)
+cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM. (cupy)
 
 # saving management
 live_saving: true # false saves all outputs after processing; ECC still buffers when true.
@@ -30,7 +30,7 @@ filter2d_low: 0.02
 
 # SVD filtering
 svd_threshold: 2
-svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold"
+svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold", "effective_rank", "participation_ratio", "energy_fraction"
 svd_remove_dc: true
 
 # Temporal sampling

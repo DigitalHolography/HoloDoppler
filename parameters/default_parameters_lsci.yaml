@@ -2,14 +2,14 @@ pipeline_name: "lsci"
 
 # backend management
 backend: "auto" # auto, numpy (CPU), or cupy (GPU; falls back to CPU if unavailable)
-numpy_num_workers: 8 # Numpy only, the number of parallel workers to be used
-cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and downloads.
-cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM.
+numpy_num_workers: 8 # CPU workers; 0 or 1 runs sequentially
+cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and downloads. (cupy)
+cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM. (cupy)
 
 # saving management
 h5_datasets: [] # Optional H5 contrast outputs: [MEAN, RATIO, STD]. These are produced by LSCI.
-h5compression: null # Gzip compression level for these datasets: 0-9; null disables compression.
 live_saving: true # false saves all outputs after processing; ECC still buffers when true.
+h5compression: null # HDF5 gzip level: 0 disables compression; 1-9 compress numerical outputs.
 overwrite_option: "erase"
 num_saving_workers: 2
 saving_queue_depth: null # Outstanding batches/jobs, including active writes; null = twice the worker count.

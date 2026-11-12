@@ -24,6 +24,8 @@ def numpy_backend():
 def params(**changes):
     values = yaml.safe_load((Path(__file__).resolve().parents[1]
                             / "parameters/default_parameters_default.yaml").read_text())
+    values.pop("outputs", None)  # Exercise the legacy computation and saving contract.
+    values.update(pca_compute=False, compute_gaussian_width=False)
     values.update(batch_size=4, batch_stride=4, first_frame=0, end_frame=-1,
                   sampling_freq=1000, low_freq=0, high_freq=500,
                   pixel_pitch=[1e-6, 1e-6], z=.1, numpy_num_workers=1,

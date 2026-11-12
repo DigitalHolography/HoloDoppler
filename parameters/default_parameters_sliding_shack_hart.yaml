@@ -2,10 +2,10 @@ pipeline_name: "sliding_shack_hartmann"
 
 # backend management
 backend: "auto" # auto, numpy (CPU), or cupy (GPU; falls back to CPU if unavailable)
-numpy_num_workers: 8 # Numpy only, the number of parallel workers to be used
-cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and downloads.
-cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM.
-svd_block_size_mib: null # Target MiB per SVD pixel-block work array (main filtering and sequential SH); null processes all pixels at once.
+numpy_num_workers: 8 # CPU workers; 0 or 1 runs sequentially
+cupy_async: true # GPU pipeline: overlap reading, uploads, computation, and downloads. (cupy)
+cupy_prefetch_depth: 4 # Maximum admitted batches; >= 1. Larger values use more RAM/VRAM. (cupy)
+svd_block_size_mib: null # 8 # Target MiB per SVD pixel-block work array (main filtering and sequential SH); null processes all pixels at once.
 shack_hartmann_sub_aps_process: "parallel" # "sequential": lower RAM/VRAM; "parallel": batched SVD/FFTs, potentially faster but uses more RAM/VRAM.
 
 # saving management
@@ -33,7 +33,7 @@ filter2d_low: 0.03
 
 # SVD filtering
 svd_threshold: 0
-svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold"
+svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold", "effective_rank", "participation_ratio", "energy_fraction"
 svd_remove_dc: true
 svd_filtering: true
 

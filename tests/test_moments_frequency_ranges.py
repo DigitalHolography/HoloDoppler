@@ -29,6 +29,8 @@ def cpu():
 
 def parameters(**changes):
     p = yaml.safe_load((ROOT / "parameters/default_parameters_default.yaml").read_text())
+    p.pop("outputs", None)  # Exercise the legacy computation and saving contract.
+    p.update(pca_compute=False, compute_gaussian_width=False)
     p.update(backend="numpy", batch_size=8, batch_stride=8, first_frame=0,
              end_frame=-1, sampling_freq=1000, low_freq=0, high_freq=450,
              pixel_pitch=[1e-6, 1e-6], z=.1, numpy_num_workers=2,
@@ -134,7 +136,7 @@ def test_range_exports_stream_buffer_preview(tmp_path, monkeypatch, ecc):
     for key in snapshots[0]:
         np.testing.assert_allclose(snapshots[0][key], snapshots[1][key])
     if ecc:
-        assert len(ecc_calls) == 20  # Four main moments plus six per-range maps per run.
+        assert len(ecc_calls) == 26  # Four moments, six range maps, and three SVD maps per run.
     captured.clear()
     main_default.preview(reader.file_path, p)
     path = next(tmp_path.rglob("preview_output.h5"))
@@ -202,7 +204,9 @@ def test_invalid_parameters(changes):
 def test_yaml_defaults():
     normal = yaml.safe_load((ROOT / "parameters/default_parameters_default.yaml").read_text())
     offline = yaml.safe_load((ROOT / "parameters/default_parameters_default_offline.yaml").read_text())
-    assert normal["resize_averaged_images"] is normal["moments_frequency_ranges"] is False
+    assert normal["resize_averaged_images"] is False
+    assert "moments_frequency_ranges" not in normal
+    assert normal["outputs"]["moment*_time_projection"] == ["png"]
     assert "frequency_bands" in normal and "frequency_bands" not in offline
     assert offline["resize_averaged_images"] is True
     assert offline["moments_frequency_ranges"] == [
