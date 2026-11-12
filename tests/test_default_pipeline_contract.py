@@ -42,6 +42,64 @@ def cpu_backend():
     backend.set_backend(previous)
 
 
+@pytest.mark.parametrize("temporal_dc", [False, True])
+@pytest.mark.parametrize("spatial_dc", [False, True])
+@pytest.mark.parametrize("threshold", [-1, 0, 2])
+def test_dc_output_and_filtered_spectrum(monkeypatch, temporal_dc, spatial_dc, threshold):
+    rng = np.random.default_rng(17)
+    frames = (rng.normal(size=(8, 3, 5)) + 1j * rng.normal(size=(8, 3, 5))).astype(np.complex64)
+    frames += np.arange(8)[:, None, None] * (1 + 2j)
+    monkeypatch.setattr(pipeline, "fresnel_transform", lambda *a, **k: frames.copy())
+    transform = Mock(wraps=pipeline.fourier_time_transform)
+    monkeypatch.setattr(pipeline, "fourier_time_transform", transform)
+    p = parameters(svd_threshold=threshold, svd_remove_dc=temporal_dc,
+                   svd_remove_spatial_dc=spatial_dc, svd_block_size_mib=.0002,
+                   outputs={"svd_dc": ["h5"], "svd_dc_spatial": ["h5"]})
+    result = pipeline._process_batch(p, frames)
+    centered = frames.copy()
+    temporal_mean = np.zeros(frames.shape[1:], dtype=frames.dtype)
+    spatial_mean = None
+    if threshold >= 0:
+        if temporal_dc:
+            temporal_mean = centered.mean(axis=0)
+            centered -= temporal_mean
+        if spatial_dc:
+            spatial_mean = centered.mean(axis=(1, 2))
+            centered -= spatial_mean[:, None, None]
+    np.testing.assert_allclose(result["svd_dc"], np.abs(temporal_mean), atol=1e-5)
+    if spatial_mean is None:
+        assert "svd_dc_spatial" not in result
+    else:
+        assert result["svd_dc_spatial"].shape == (frames.shape[0],)
+        np.testing.assert_allclose(result["svd_dc_spatial"], np.abs(spatial_mean), atol=1e-5)
+    assert "pc_sum_static" not in result
+    expected = pipeline.svd_filter(np, backend.linalg, centered, threshold,
+                                   block_size_mib=.0002)
+    np.testing.assert_allclose(transform.call_args.args[2], expected, atol=1e-5)
+    # DC can serve as a reference without computing a temporal spectrum.
+    transform.reset_mock()
+    reference = pipeline._process_batch(dict(p, registration_image="svd_dc"), frames,
+                                        reference_only=True)
+    np.testing.assert_allclose(reference["svd_dc"], result["svd_dc"])
+    transform.assert_not_called()
+
+
+def test_spatial_dc_output_can_be_selected_alone(monkeypatch):
+    frames = np.arange(8 * 3 * 5, dtype=np.float32).reshape(8, 3, 5).astype(np.complex64)
+    monkeypatch.setattr(pipeline, "fresnel_transform", lambda *a, **k: frames.copy())
+    result = pipeline._process_batch(parameters(
+        svd_remove_spatial_dc=True, outputs={"svd_dc_spatial": ["csv"]}), frames)
+    assert "svd_dc" not in result
+    np.testing.assert_allclose(result["svd_dc_spatial"], np.abs(frames.mean(axis=(1, 2))),
+                               rtol=1e-6, atol=1e-5)
+
+
+@pytest.mark.parametrize("value", [1, "true", None])
+def test_invalid_spatial_dc_option(value):
+    with pytest.raises(TypeError, match="svd_remove_spatial_dc"):
+        validate_main_parameters(parameters(svd_remove_spatial_dc=value))
+
+
 @pytest.mark.parametrize("level", [None, 0, 1, 9])
 def test_h5_compression_parameter_valid(level):
     validate_main_parameters(parameters(h5compression=level))

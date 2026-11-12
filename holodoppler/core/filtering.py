@@ -165,6 +165,7 @@ def svd_filter(
     diagnostic=None,
     block_size_mib=8,
     *,
+    remove_spatial_dc=False,
     summary=None,
     effective_rank_multiplier=1.0,
     participation_ratio_multiplier=1.0,
@@ -185,11 +186,19 @@ def svd_filter(
         "energy_fraction". Adaptive modes ignore a nonnegative svd_threshold.
     remove_dc : bool
         Subtract the temporal mean before filtering.
+    remove_spatial_dc : bool
+        Subtract each frame's full spatial mean after temporal mean removal.
     diagnostic : dict, optional
-        Dictionary populated with intermediate results when provided.
+        Dictionary populated with intermediate results when provided. The dc
+        entry contains the combined removed means, with shape (Nt, Ny, Nx)
+        when spatial DC is removed, (Ny, Nx) for temporal DC only, else None.
     summary : dict, optional
         Requested keys (with arbitrary initial values): pc_sum_static,
-        pc_sum_dynamic, svd_eigenvalues. Images sum absolute PC coefficients.
+        pc_sum_dynamic, svd_eigenvalues, svd_dc, svd_dc_spatial. PC images
+        sum absolute coefficients. svd_dc is the absolute temporal mean
+        image (Ny, Nx); svd_dc_spatial is the absolute spatial mean per frame
+        (Nt,), after temporal removal, or None when spatial removal is off.
+        Neither DC summary uses eigenvalue weighting.
     effective_rank_multiplier : float
         Nonnegative multiplier of entropy effective rank, rounded up.
     participation_ratio_multiplier : float
@@ -222,6 +231,7 @@ def svd_filter(
         participation_ratio_multiplier=participation_ratio_multiplier,
         energy_fraction=energy_fraction,
         eigenvalue_weighting=eigenvalue_weighting,
+        remove_spatial_dc=remove_spatial_dc,
     )
     return H if svd_threshold < 0 else filtered
 
@@ -245,19 +255,26 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
                        remove_dc=False, diagnostic=None, shape=None, regularization=0,
                        block_size_mib=8, *, summary=None,
                        effective_rank_multiplier=1.0, energy_fraction=0.9,
-                       eigenvalue_weighting=True, participation_ratio_multiplier=1.0):
+                       eigenvalue_weighting=True, participation_ratio_multiplier=1.0,
+                       remove_spatial_dc=False):
     """Filter time-first data into a time-by-pixel output without changing input."""
     nt, pixels = output.shape
     _validate_adaptive_svd(effective_rank_multiplier, energy_fraction,
                            participation_ratio_multiplier)
     if not isinstance(eigenvalue_weighting, bool):
         raise TypeError("eigenvalue_weighting must be a boolean")
+    if not isinstance(remove_spatial_dc, bool):
+        raise TypeError("remove_spatial_dc must be a boolean")
     if threshold < 0:
         remove_dc = False
+        remove_spatial_dc = False
     block_size = (max(1, pixels) if block_size_mib is None else
                   max(1, int(block_size_mib * 1024**2) // (nt * data.dtype.itemsize)))
     cov = xp.zeros((nt, nt), dtype=data.dtype)
-    dc = xp.empty(pixels, dtype=data.dtype) if remove_dc and diagnostic is not None else None
+    dc_summary = summary is not None and "svd_dc" in summary
+    dc = (xp.empty(pixels, dtype=data.dtype)
+          if remove_dc and (diagnostic is not None or dc_summary) else None)
+    spatial_mean = xp.zeros(nt, dtype=data.dtype) if remove_spatial_dc else None
 
     # Reuse the final output as centered storage. Time-major blocks follow the
     # main pipeline's native layout and avoid a large strided transpose copy.
@@ -275,9 +292,20 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
             block -= mean[None, :]
             if dc is not None:
                 dc[start:stop] = mean
-        cov += block.conj() @ block.T
+        if spatial_mean is not None:
+            spatial_mean += xp.sum(block, axis=1)
+        else:
+            cov += block.conj() @ block.T
         output[:, start:stop] = block
     del block
+    if spatial_mean is not None:
+        # Use every pixel, independently of the workspace block boundaries.
+        spatial_mean /= pixels
+        for start in range(0, pixels, block_size):
+            block = output[:, start:min(start + block_size, pixels)]
+            block -= spatial_mean[:, None]
+            cov += block.conj() @ block.T
+        del block
     if regularization:
         cov[xp.diag_indices(nt)] += regularization
     values, vectors = linalg.eigh(cov)
@@ -318,6 +346,11 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
     if summary is not None:
         if "svd_eigenvalues" in summary:
             summary["svd_eigenvalues"] = values
+        if dc_summary:
+            summary["svd_dc"] = (xp.zeros(shape[1:], dtype=values.dtype) if dc is None
+                                 else xp.abs(dc).reshape(shape[1:]))
+        if "svd_dc_spatial" in summary:
+            summary["svd_dc_spatial"] = None if spatial_mean is None else xp.abs(spatial_mean)
         for name in ("pc_sum_static", "pc_sum_dynamic"):
             if name in summary:
                 projections[name] = xp.empty(pixels, dtype=values.dtype)
@@ -343,13 +376,19 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
     for name, projection in projections.items():
         summary[name] = projection.reshape(shape[1:])
     if diagnostic is not None:
+        removed_dc = None if dc is None else dc.reshape(shape[1:])
+        if spatial_mean is not None:
+            removed_dc = xp.broadcast_to(spatial_mean[:, None], (nt, pixels))
+            if dc is not None:
+                removed_dc = removed_dc + dc[None, :]
+            removed_dc = removed_dc.reshape(shape)
         diagnostic.update({
             "removed_features": removed_features.reshape(*shape[1:], -1),
             "kept_data": output.reshape(shape),
             "eigenvalues": values,
             "covariance": cov,
             "eigenvectors": vectors,
-            "dc": None if dc is None else dc.reshape(shape[1:]),
+            "dc": removed_dc,
         })
 
 

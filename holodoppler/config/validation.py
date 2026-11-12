@@ -255,6 +255,8 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'svd_remove_dc' must be a boolean; got {value!r} ({type(value).__name__})."
         )
+    if not isinstance(parameters.get("svd_remove_spatial_dc", False), bool):
+        raise TypeError("svd_remove_spatial_dc must be a boolean")
 
     value = parameters.get("sampling_freq", 'use_holovibes')
     if isinstance(value, str) and value in ("use_holovibes", "use_metadata"):

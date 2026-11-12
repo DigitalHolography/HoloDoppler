@@ -167,8 +167,11 @@ def test_real_default_entrypoint(tmp_path, monkeypatch, preview, live):
     p = parameters(outputs={"moment0_time_projection": ["h5", "png"],
                             "pc_sum_static": ["h5"], "pc_sum_dynamic": ["h5"],
                             "svd_eigenvalues": ["h5", "csv", "png"],
+                            "svd_dc": ["h5"], "svd_dc_time_projection": ["h5", "png"],
+                            "svd_dc_spatial": ["h5", "csv", "png"],
                             "spectrum_line": ["h5", "csv", "png"],
                             "spectrograms": ["h5"], "averaged_spectrogram": ["h5"]},
+                   svd_remove_dc=True, svd_remove_spatial_dc=True,
                    live_saving=live, numpy_num_workers=0, spectrogram_resize_shape=[4, 6],
                    spectrogram_frequency_binning=2)
     source = reader(tmp_path)
@@ -186,9 +189,14 @@ def test_real_default_entrypoint(tmp_path, monkeypatch, preview, live):
         assert h5["svd_eigenvalues"].shape == (count, 8)
         assert h5["pc_sum_static"].shape == (count, 4, 6)
         assert h5["pc_sum_dynamic"].shape == (count, 4, 6)
-        csv = next(tmp_path.rglob("svd_eigenvalues.csv"))
-        np.testing.assert_allclose(np.loadtxt(csv, delimiter=",", ndmin=2), h5["svd_eigenvalues"])
-        for name in ("spectrum_line", "svd_eigenvalues"):
+        assert h5["svd_dc"].shape == (count, 4, 6)
+        assert h5["svd_dc_spatial"].shape == (count, 8)
+        np.testing.assert_allclose(h5["svd_dc_time_projection"], h5["svd_dc"][:].mean(axis=0))
+        assert next(tmp_path.rglob("svd_dc_time_projection.png")).exists()
+        for name in ("svd_eigenvalues", "svd_dc_spatial"):
+            csv = next(tmp_path.rglob(f"{name}.csv"))
+            np.testing.assert_allclose(np.loadtxt(csv, delimiter=",", ndmin=2), h5[name])
+        for name in ("spectrum_line", "svd_eigenvalues", "svd_dc_spatial"):
             with Image.open(next(tmp_path.rglob(f"{name}.png"))) as image:
                 np.testing.assert_array_equal(np.array(image), cast_png_data(h5[name][:]))
         assert "moment0" not in h5

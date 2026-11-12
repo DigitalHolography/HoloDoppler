@@ -52,7 +52,7 @@ def dataset_kind(name):
         return dataset_kind(name[:-len(PROJECTION)])
     if name in {"spectrograms", "averaged_spectrogram", "sh_psd"}:
         return "spectrum"
-    if name in {"spectrum_line", "svd_eigenvalues"} or any(token in name for token in ("registration", "coefs", "shifts", "flow_index")):
+    if name in {"spectrum_line", "svd_eigenvalues", "svd_dc_spatial"} or any(token in name for token in ("registration", "coefs", "shifts", "flow_index")):
         return "table"
     if name in {"color_Doppler_image", "directional_Doppler_image", "shack_hartmann_autofocus_wavefront_color_image"}:
         return "color"

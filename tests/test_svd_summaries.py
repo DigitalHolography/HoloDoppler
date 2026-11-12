@@ -10,6 +10,68 @@ from holodoppler.saving import OutputClass
 from holodoppler.saving.default_output import DefaultOutput
 
 
+@pytest.mark.parametrize("temporal_dc", [False, True])
+@pytest.mark.parametrize("count", [-1, 0, 2])
+@pytest.mark.parametrize("budget", [None, .0002])
+@pytest.mark.parametrize("dtype", [np.complex64, np.complex128])
+def test_spatial_dc_matches_full_frame_reference(temporal_dc, count, budget, dtype):
+    rng = np.random.default_rng(91)
+    source = (rng.normal(size=(5, 3, 7)) + 1j * rng.normal(size=(5, 3, 7))).astype(dtype)
+    source += np.arange(5)[:, None, None] * (2 + 3j)
+    source += np.arange(7)[None, None, :]
+    source = source.swapaxes(1, 2)  # Spatial means must also work on strided data.
+    original = source.copy()
+    centered = source.copy()
+    temporal_mean = np.zeros(source.shape[1:], dtype=dtype)
+    spatial_mean = None
+    if count >= 0:
+        if temporal_dc:
+            temporal_mean = centered.mean(axis=0)
+            centered -= temporal_mean
+        spatial_mean = centered.mean(axis=(1, 2))
+        centered -= spatial_mean[:, None, None]
+    removed_dc = source - centered
+    matrix = centered.reshape(5, -1)
+    u, _, _ = np.linalg.svd(matrix, full_matrices=False)
+    k = max(count, 0)
+    expected = (matrix - u[:, :k] @ (u[:, :k].conj().T @ matrix)).reshape(source.shape)
+    summary = dict.fromkeys(("svd_dc", "svd_dc_spatial", "svd_eigenvalues"))
+    diagnostic = {}
+    actual = svd_filter(np, np.linalg, source, count, remove_dc=temporal_dc,
+                        remove_spatial_dc=True, summary=summary, diagnostic=diagnostic,
+                        block_size_mib=budget)
+    np.testing.assert_allclose(actual, expected, atol=2e-5)
+    np.testing.assert_array_equal(source, original)
+    np.testing.assert_allclose(summary["svd_dc"], np.abs(temporal_mean), atol=2e-5)
+    if spatial_mean is None:
+        assert summary["svd_dc_spatial"] is None
+    else:
+        assert summary["svd_dc_spatial"].shape == (source.shape[0],)
+        np.testing.assert_allclose(summary["svd_dc_spatial"], np.abs(spatial_mean), atol=2e-5)
+    if count < 0:
+        assert actual is source
+        assert diagnostic["dc"] is None
+    else:
+        np.testing.assert_allclose(diagnostic["dc"], removed_dc, atol=2e-5)
+        np.testing.assert_allclose(diagnostic["covariance"], matrix.conj() @ matrix.T, atol=5e-4)
+        # The combined DC and removed SVD modes reconstruct the original input.
+        removed = (diagnostic["eigenvectors"][:, :k].conj()
+                   @ diagnostic["removed_features"].reshape(-1, k).T
+                   if k else np.zeros_like(matrix))
+        np.testing.assert_allclose(actual + diagnostic["dc"] + removed.reshape(source.shape),
+                                   source, atol=2e-5)
+
+
+@pytest.mark.parametrize("temporal_dc", [False, True])
+def test_dc_summary_without_spatial_removal(temporal_dc):
+    source = np.array([[[1 + 2j, 3 - 4j]], [[5 - 2j, 1 + 8j]]])
+    summary = {"svd_dc": None, "svd_dc_spatial": "uncomputed"}
+    svd_filter(np, np.linalg, source, 0, remove_dc=temporal_dc, summary=summary)
+    expected = np.abs(source.mean(axis=0)) if temporal_dc else np.zeros(source.shape[1:])
+    np.testing.assert_allclose(summary["svd_dc"], expected)
+    assert summary["svd_dc_spatial"] is None
+
+
 @pytest.mark.parametrize("dc", [False, True])
 @pytest.mark.parametrize("count", [-1, 0, 2, 5])
 @pytest.mark.parametrize("budget", [None, .0002])
@@ -56,6 +118,12 @@ def test_weighting_defaults_to_true():
 def test_weighting_requires_boolean(value):
     with pytest.raises(TypeError, match="eigenvalue_weighting"):
         svd_filter(np, np.linalg, np.ones((2, 1, 2)), 1, eigenvalue_weighting=value)
+
+
+@pytest.mark.parametrize("value", [1, "true", None])
+def test_spatial_dc_requires_boolean(value):
+    with pytest.raises(TypeError, match="remove_spatial_dc"):
+        svd_filter(np, np.linalg, np.ones((2, 1, 2)), 0, remove_spatial_dc=value)
 
 
 @pytest.mark.parametrize("mode,options,k", [
@@ -113,36 +181,42 @@ def test_invalid_adaptive_options(options):
 
 
 @pytest.mark.parametrize("mode", ["effective_rank", "participation_ratio", "energy_fraction"])
-def test_gpu_summaries(mode):
+@pytest.mark.parametrize("spatial_dc", [False, True])
+def test_gpu_summaries(mode, spatial_dc):
     cp = pytest.importorskip("cupy")
     if not cp.cuda.is_available():
         pytest.skip("CUDA device unavailable")
     rng = np.random.default_rng(4)
     data = rng.normal(size=(6, 3, 5)) + 1j * rng.normal(size=(6, 3, 5))
-    expected_summary = dict.fromkeys(("pc_sum_static", "pc_sum_dynamic", "svd_eigenvalues"))
+    expected_summary = dict.fromkeys(("pc_sum_static", "pc_sum_dynamic", "svd_eigenvalues", "svd_dc", "svd_dc_spatial"))
     actual_summary = expected_summary.copy()
-    expected = svd_filter(np, np.linalg, data, 0, mode, summary=expected_summary)
-    actual = svd_filter(cp, cp.linalg, cp.asarray(data), 0, mode, summary=actual_summary)
+    options = dict(remove_dc=True, remove_spatial_dc=spatial_dc, block_size_mib=.0002)
+    expected = svd_filter(np, np.linalg, data, 0, mode, summary=expected_summary, **options)
+    actual = svd_filter(cp, cp.linalg, cp.asarray(data), 0, mode, summary=actual_summary, **options)
     np.testing.assert_allclose(cp.asnumpy(actual), expected, atol=1e-10)
     for name, value in actual_summary.items():
-        np.testing.assert_allclose(cp.asnumpy(value), expected_summary[name], atol=1e-10)
+        if value is None:
+            assert expected_summary[name] is None
+        else:
+            np.testing.assert_allclose(cp.asnumpy(value), expected_summary[name], atol=1e-10)
 
 
 @pytest.mark.parametrize("explicit", [False, True])
 @pytest.mark.parametrize("streaming", [False, True])
-def test_eigenvalue_exports(tmp_path, explicit, streaming):
+@pytest.mark.parametrize("name", ["svd_eigenvalues", "svd_dc_spatial"])
+def test_numerical_vector_exports(tmp_path, explicit, streaming, name):
     values = np.array([[9., 3., 1., 0.], [8., 4., 2., 1.]])
     params = {"num_saving_workers": 0}
     cls = OutputClass
     if explicit:
-        params["outputs"] = {"svd_eigenvalues": ["h5", "csv"]}
+        params["outputs"] = {name: ["h5", "csv"]}
         cls = DefaultOutput
     with cls(SimpleNamespace(file_path=tmp_path / "input.raw"), params) as output:
         if streaming:
             for i, row in enumerate(values):
-                output.add_batch({"svd_eigenvalues": row}, i)
+                output.add_batch({name: row}, i)
         else:
-            output.write_static("svd_eigenvalues", values)
+            output.write_static(name, values)
     with h5py.File(next(output.target_dir.glob("h5/*.h5"))) as h5:
-        np.testing.assert_array_equal(h5["svd_eigenvalues"], values)
-    np.testing.assert_array_equal(np.loadtxt(output.target_dir / "csv/svd_eigenvalues.csv", delimiter=","), values)
+        np.testing.assert_array_equal(h5[name], values)
+    np.testing.assert_array_equal(np.loadtxt(output.target_dir / "csv" / f"{name}.csv", delimiter=","), values)

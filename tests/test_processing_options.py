@@ -117,8 +117,8 @@ def test_main_svd_and_registration_receive_budgets(parameters, monkeypatch, budg
     main_default._process_one_batch(parameters, frames)
     assert svd.call_args.kwargs['block_size_mib'] == budget
     assert svd.call_args.kwargs['participation_ratio_multiplier'] == .5
-    # Four existing scalar maps plus the two global SVD component projections.
-    assert shifts.call_count == 6
+    # Five scalar maps, two global SVD component projections, and removed DC.
+    assert shifts.call_count == 8
     assert all(call.kwargs['block_size_mib'] == budget for call in shifts.call_args_list)
 
 

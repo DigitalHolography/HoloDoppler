@@ -47,6 +47,7 @@ svd_participation_ratio_multiplier: 1.0 # Leading count = ceil(multiplier * part
 svd_energy_fraction: 0.9 # Cumulative covariance energy removed in energy_fraction mode.
 svd_pc_sum_eigenvalue_weighting: true # Weight static/dynamic PC amplitudes by covariance eigenvalues.
 svd_remove_dc: true
+svd_remove_spatial_dc: false # Subtract each frame's spatial mean after temporal DC removal.
 
 # Welch spectral averaging (after SVD; input batching stays unchanged)
 welch_enabled: false
@@ -150,6 +151,9 @@ outputs:
   pc_sum_dynamic: [avi]
   pc_sum_dynamic_time_projection: [png]
   svd_eigenvalues: [h5, csv]
+  svd_dc: [avi]
+  svd_dc_time_projection: [png]
+  svd_dc_spatial: [h5, csv] # Per-frame spatial DC amplitude; available when svd_remove_spatial_dc is true.
   spectrum_line: [h5, csv]
   spectrograms: [h5] # Per-batch PSD resized, frequency-selected and binned using spectrogram_* settings.
   # Full PSD averaged over all batches, after translation when image_registration is true; ECC is not applied.

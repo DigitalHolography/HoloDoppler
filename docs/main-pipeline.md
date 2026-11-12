@@ -407,8 +407,15 @@ maps, including numerical HDF5 data.
 
 The global SVD also provides `pc_sum_static` and `pc_sum_dynamic`: real images
 summing absolute temporal PC coefficients over removed and retained components,
-respectively. These use the input after optional temporal DC subtraction, before
+respectively. These use the input after optional temporal and spatial DC subtraction, before
 local SVD or spectral processing. They sum amplitudes, rather than powers.
+`svd_dc` is the 2D absolute temporal mean image removed by `svd_remove_dc`.
+When `svd_remove_spatial_dc: true`, `svd_dc_spatial` is a separate 1D vector:
+the absolute spatial mean of each frame after optional temporal-mean removal.
+The spatial mean covers the entire image regardless of the SVD workspace block
+size. Both DC outputs show amplitudes without eigenvalue weighting.
+HDF5 and CSV store `svd_dc_spatial` as `(batches, frames_per_batch)`; its PNG
+stacks batches as rows. It is omitted when spatial removal is disabled.
 `svd_eigenvalues` contains descending, unnormalized covariance eigenvalues;
 HDF5 and CSV use shape `(batches, temporal_components)`, with one batch per row.
 The default and offline profiles enable these exports. Existing explicit `outputs`
@@ -421,11 +428,16 @@ outputs:
   pc_sum_dynamic: [avi]
   pc_sum_dynamic_time_projection: [png]
   svd_eigenvalues: [h5, csv, png]
+  svd_dc: [avi]
+  svd_dc_time_projection: [png]
+  svd_dc_spatial: [h5, csv, png]
 ```
 
 The `_time_projection` PNGs average the component-sum images across batches.
 Negative `svd_threshold` still disables filtering; requested diagnostics then use
 uncentered input, with zero static projection and all components in dynamic.
+`svd_dc` is zero when temporal removal is disabled or the threshold is negative.
+`svd_dc_spatial` is omitted when the threshold is negative.
 
 Adaptive global SVD modes can replace `number_of_values`:
 
