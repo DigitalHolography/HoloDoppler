@@ -94,6 +94,43 @@ def test_spatial_dc_output_can_be_selected_alone(monkeypatch):
                                rtol=1e-6, atol=1e-5)
 
 
+@pytest.mark.parametrize("rules, selected", [
+    (None, False), ({}, False), ({"eigen_spectrogram": []}, False),
+    ({"eigen_spectrogram": ["h5"]}, True), ({"eigen_*": ["h5"]}, True),
+    ({"eigen_*": ["h5"], "eigen_spectrogram": [],
+      "eigen_spectrogram_time_projection": []}, False),
+])
+def test_eigen_spectrogram_selection(monkeypatch, rules, selected):
+    frames = np.random.default_rng(21).normal(size=(8, 3, 5)).astype(np.complex64)
+    monkeypatch.setattr(pipeline, "fresnel_transform", lambda *a, **k: frames.copy())
+    eigen_fft = Mock(wraps=np.fft.fft)
+    monkeypatch.setattr(np.fft, "fft", eigen_fft)
+    p = parameters()
+    if rules is not None:
+        p["outputs"] = rules
+    result = pipeline._process_batch(p, frames)
+    assert ("eigen_spectrogram" in result) == selected
+    assert eigen_fft.call_count == int(selected)
+
+
+def test_eigen_spectrogram_preserved_by_spatial_operations(monkeypatch):
+    frames = np.random.default_rng(21).normal(size=(8, 3, 5)).astype(np.complex64)
+    monkeypatch.setattr(pipeline, "fresnel_transform", lambda *a, **k: frames.copy())
+    monkeypatch.setattr(pipeline, "_prepare_batch_frames", lambda p, f, phase, res: (f, phase))
+    monkeypatch.setattr(pipeline, "register_images_shifts", lambda *a, **kw: (1., 2.))
+    # A visible change to spatial arrays catches accidental spectrum registration.
+    monkeypatch.setattr(pipeline, "apply_register_images_shifts", lambda xp, value, **kw: value + 10)
+    p = parameters(square=True, image_registration=True,
+                   outputs={"eigen_spectrogram": ["h5"], "moment0ff": ["h5"]})
+    expected = pipeline._process_batch(p, frames)["eigen_spectrogram"]
+    result, _ = pipeline._process_one_batch(p, frames, registration_ref=np.ones((3, 5)))
+    resize = Mock(wraps=pipeline.resize_frames)
+    monkeypatch.setattr(pipeline, "resize_frames", resize)
+    finished = pipeline._finalize_spatial_result(result, p)
+    np.testing.assert_array_equal(finished["eigen_spectrogram"], expected)
+    assert all(call.args[2] is not result["eigen_spectrogram"] for call in resize.call_args_list)
+
+
 @pytest.mark.parametrize("value", [1, "true", None])
 def test_invalid_spatial_dc_option(value):
     with pytest.raises(TypeError, match="svd_remove_spatial_dc"):

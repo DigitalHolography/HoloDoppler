@@ -418,7 +418,27 @@ HDF5 and CSV store `svd_dc_spatial` as `(batches, frames_per_batch)`; its PNG
 stacks batches as rows. It is omitted when spatial removal is disabled.
 `svd_eigenvalues` contains descending, unnormalized covariance eigenvalues;
 HDF5 and CSV use shape `(batches, temporal_components)`, with one batch per row.
-The default and offline profiles enable these exports. Existing explicit `outputs`
+
+The optional `eigen_spectrogram` output stores the power spectrum of every main
+SVD temporal mode, including both removed and retained modes. Enable it with
+`outputs: {eigen_spectrogram: [h5]}`; it is disabled in the shipped profiles and
+is not computed by legacy configurations without `outputs`. Each batch provides
+a real 2D `(mode, frequency)` array; HDF5 stacks these as `(batch, mode, frequency)`.
+Rows follow the descending eigenvalues in `svd_eigenvalues`. Columns follow
+`fftshift(fftfreq(batch_size, d=1/fs))`, where
+`fs = sampling_freq / (skip_every or 1)` in Hz.
+
+The computation is the squared magnitude of an orthonormal FFT of the conjugated
+covariance eigenvectors, preserving the frequency sign of the reconstruction time
+modes. Each row sums approximately to one, including zero-energy modes whose
+eigenvectors are arbitrary. Values are linear power per bin, without eigenvalue
+weighting, tapering, Welch averaging, or logarithmic scaling. The modes use the
+main SVD's temporal/spatial DC preprocessing before rejection; a negative
+`svd_threshold` uses uncentered input. Spatial registration, resizing, and the
+`spectrogram_*` options do not modify this array.
+
+The default and offline profiles enable the PC, DC, and eigenvalue exports above.
+Existing explicit `outputs`
 configurations must select the new names, for example:
 
 ```yaml

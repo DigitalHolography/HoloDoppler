@@ -335,6 +335,8 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
                    and ((reference_only and target == name) or
                        (not reference_only and ("outputs" not in parameters or
                                                 _output_needed(parameters, name))))}
+    if not reference_only and _output_needed(parameters, "eigen_spectrogram"):
+        svd_summary["eigen_spectrogram"] = None
     holograms_f = svd_filter(
         backend.xp, backend.linalg, holograms.astype(xp.complex64, copy=False),
         parameters["svd_threshold"],
@@ -960,7 +962,7 @@ def _finalize_spatial_result(result, parameters):
     if parameters.get("square", False):
         for key, value in result.items():
             if (value.ndim == 2 and not key.startswith("shack_hartmann_")
-                    and key not in {"registration", "registration_ecc"}):
+                    and key not in {"registration", "registration_ecc", "eigen_spectrogram"}):
                 size = max(value.shape)
                 result[key] = resize_frames(backend.xp, backend.zoom, value, size, size)
     finish_doppler_images(result, backend.xp, parameters)

@@ -157,6 +157,7 @@ outputs:
   pc_sum_dynamic: [avi]
   pc_sum_dynamic_time_projection: [png]
   svd_eigenvalues: [h5, csv, png]
+  eigen_spectrogram: [h5] # Set to [h5] to save (batch, mode, frequency).
   svd_dc: [avi]
   svd_dc_time_projection: [png]
   svd_dc_spatial: [h5, csv, png] # Per-frame spatial DC amplitude; available when svd_remove_spatial_dc is true.

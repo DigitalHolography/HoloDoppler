@@ -188,7 +188,7 @@ def test_gpu_summaries(mode, spatial_dc):
         pytest.skip("CUDA device unavailable")
     rng = np.random.default_rng(4)
     data = rng.normal(size=(6, 3, 5)) + 1j * rng.normal(size=(6, 3, 5))
-    expected_summary = dict.fromkeys(("pc_sum_static", "pc_sum_dynamic", "svd_eigenvalues", "svd_dc", "svd_dc_spatial"))
+    expected_summary = dict.fromkeys(("pc_sum_static", "pc_sum_dynamic", "svd_eigenvalues", "eigen_spectrogram", "svd_dc", "svd_dc_spatial"))
     actual_summary = expected_summary.copy()
     options = dict(remove_dc=True, remove_spatial_dc=spatial_dc, block_size_mib=.0002)
     expected = svd_filter(np, np.linalg, data, 0, mode, summary=expected_summary, **options)
@@ -220,3 +220,56 @@ def test_numerical_vector_exports(tmp_path, explicit, streaming, name):
     with h5py.File(next(output.target_dir.glob("h5/*.h5"))) as h5:
         np.testing.assert_array_equal(h5[name], values)
     np.testing.assert_array_equal(np.loadtxt(output.target_dir / "csv" / f"{name}.csv", delimiter=","), values)
+
+
+@pytest.mark.parametrize("nt", [7, 8])
+@pytest.mark.parametrize("threshold", [-1, 0, 2])
+def test_eigen_spectrogram_signed_modes(nt, threshold):
+    bins = np.roll(np.rint(np.fft.fftfreq(nt) * nt).astype(int), 2)
+    modes = np.exp(2j * np.pi * np.arange(nt)[:, None] * bins / nt) / np.sqrt(nt)
+    energies = np.arange(nt, 0, -1)
+    source = (modes * np.sqrt(energies)).reshape(nt, 1, nt)
+    summary = dict.fromkeys(("eigen_spectrogram", "svd_eigenvalues"))
+    expected_filtered = svd_filter(np, np.linalg, source, threshold)
+    actual = svd_filter(np, np.linalg, source, threshold, summary=summary)
+    np.testing.assert_allclose(actual, expected_filtered, atol=1e-12)
+    if threshold < 0:
+        assert actual is source
+    spectrum = summary["eigen_spectrogram"]
+    assert spectrum.shape == (nt, nt)
+    assert np.isrealobj(spectrum) and np.all(spectrum >= 0)
+    frequencies = np.fft.fftshift(np.fft.fftfreq(nt)) * nt
+    expected = np.isclose(bins[:, None], frequencies[None, :]).astype(float)
+    np.testing.assert_allclose(spectrum, expected, atol=1e-12)
+    np.testing.assert_allclose(spectrum.sum(axis=1), 1, atol=1e-12)
+    np.testing.assert_allclose(summary["svd_eigenvalues"], energies, atol=1e-12)
+
+
+@pytest.mark.parametrize("temporal_dc", [False, True])
+@pytest.mark.parametrize("spatial_dc", [False, True])
+@pytest.mark.parametrize("threshold", [-1, 2])
+def test_eigen_spectrogram_resolves_input_power(temporal_dc, spatial_dc, threshold):
+    rng = np.random.default_rng(72)
+    source = rng.normal(size=(8, 3, 5)) + 1j * rng.normal(size=(8, 3, 5))
+    centered = source.copy()
+    if threshold >= 0:
+        if temporal_dc:
+            centered -= centered.mean(axis=0)
+        if spatial_dc:
+            centered -= centered.mean(axis=(1, 2), keepdims=True)
+    summary = dict.fromkeys(("eigen_spectrogram", "svd_eigenvalues"))
+    svd_filter(np, np.linalg, source, threshold, summary=summary,
+               remove_dc=temporal_dc, remove_spatial_dc=spatial_dc)
+    expected = np.fft.fftshift(
+        (abs(np.fft.fft(centered, axis=0, norm="ortho"))**2).sum(axis=(1, 2)))
+    np.testing.assert_allclose(
+        summary["svd_eigenvalues"] @ summary["eigen_spectrogram"], expected, atol=1e-12)
+    np.testing.assert_allclose(summary["eigen_spectrogram"].sum(axis=1), 1, atol=1e-12)
+
+
+def test_eigen_spectrogram_fft_is_optional(monkeypatch):
+    def unexpected_fft(*args, **kwargs):
+        pytest.fail("Unrequested eigenvector FFT")
+    monkeypatch.setattr(np.fft, "fft", unexpected_fft)
+    svd_filter(np, np.linalg, np.ones((8, 2, 3)), 2,
+               summary={"svd_eigenvalues": None})

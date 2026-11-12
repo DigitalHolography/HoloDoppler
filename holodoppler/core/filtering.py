@@ -194,11 +194,15 @@ def svd_filter(
         when spatial DC is removed, (Ny, Nx) for temporal DC only, else None.
     summary : dict, optional
         Requested keys (with arbitrary initial values): pc_sum_static,
-        pc_sum_dynamic, svd_eigenvalues, svd_dc, svd_dc_spatial. PC images
+        pc_sum_dynamic, svd_eigenvalues, eigen_spectrogram, svd_dc, svd_dc_spatial. PC images
         sum absolute coefficients. svd_dc is the absolute temporal mean
         image (Ny, Nx); svd_dc_spatial is the absolute spatial mean per frame
         (Nt,), after temporal removal, or None when spatial removal is off.
         Neither DC summary uses eigenvalue weighting.
+        eigen_spectrogram contains unit-energy mode power spectra (Nt, Nt):
+        rows follow descending eigenvalues; columns follow centered signed FFT
+        frequencies, fftshift(fftfreq(Nt, d=1/fs)), for effective sample rate fs.
+        It uses no taper, Welch averaging, or eigenvalue weighting.
     effective_rank_multiplier : float
         Nonnegative multiplier of entropy effective rank, rounded up.
     participation_ratio_multiplier : float
@@ -346,6 +350,12 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
     if summary is not None:
         if "svd_eigenvalues" in summary:
             summary["svd_eigenvalues"] = values
+        if "eigen_spectrogram" in summary:
+            # This covariance stores conjugated reconstruction time modes.
+            modes_fft = xp.fft.fft(vectors.conj(), axis=0, norm="ortho")
+            summary["eigen_spectrogram"] = xp.fft.fftshift(
+                xp.abs(modes_fft) ** 2, axes=0).T
+            del modes_fft
         if dc_summary:
             summary["svd_dc"] = (xp.zeros(shape[1:], dtype=values.dtype) if dc is None
                                  else xp.abs(dc).reshape(shape[1:]))

@@ -50,7 +50,7 @@ def dataset_kind(name):
     """Semantic registry: frequency/spatial axes must never masquerade as RGB."""
     if name.endswith(PROJECTION):
         return dataset_kind(name[:-len(PROJECTION)])
-    if name in {"spectrograms", "averaged_spectrogram", "sh_psd"}:
+    if name in {"spectrograms", "averaged_spectrogram", "sh_psd", "eigen_spectrogram"}:
         return "spectrum"
     if name in {"spectrum_line", "svd_eigenvalues", "svd_dc_spatial"} or any(token in name for token in ("registration", "coefs", "shifts", "flow_index")):
         return "table"

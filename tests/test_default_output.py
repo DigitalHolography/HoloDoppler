@@ -60,15 +60,17 @@ def test_independent_video_formats(tmp_path, monkeypatch, fmt):
     assert not list((out.target_dir / "png").glob("*.png"))
 
 
-def test_incompatible_warns_once_and_preserves_h5(tmp_path, monkeypatch):
+@pytest.mark.parametrize("name, shape", [("spectrograms", (8, 4, 3)),
+                                        ("eigen_spectrogram", (4, 4))])
+def test_incompatible_warns_once_and_preserves_h5(tmp_path, monkeypatch, name, shape):
     warning = Mock()
     monkeypatch.setattr("holodoppler.saving.default_output.logger.warning", warning)
-    with DefaultOutput(reader(tmp_path), {"outputs": {"spectrograms": ["h5", "avi", "csv", "png"]}}) as out:
+    with DefaultOutput(reader(tmp_path), {"outputs": {name: ["h5", "avi", "csv", "png"]}}) as out:
         for i in range(2):
-            out.add("spectrograms", np.ones((8, 4, 3)), i)
+            out.add(name, np.ones(shape), i)
     assert warning.call_count == 3
     with h5py.File(next(out.target_dir.glob("h5/*.h5"))) as h5:
-        assert h5["spectrograms"].shape == (2, 8, 4, 3)
+        assert h5[name].shape == (2, *shape)
 
 
 def test_cancel_skips_projection(tmp_path):
@@ -145,9 +147,13 @@ def test_pipeline_modes(tmp_path, monkeypatch, live, ecc, workers):
     backend.set_backend("numpy")
     p = parameters(live_saving=live, image_registration_with_ecc=ecc,
                    numpy_num_workers=0, num_saving_workers=workers,
-                   outputs={"moment0": ["h5"], "moment0_time_projection": ["h5"]})
+                   square=True,
+                   outputs={"moment0": ["h5"], "moment0_time_projection": ["h5"],
+                            "eigen_spectrogram": ["h5"]})
+    spectrum = np.arange(64, dtype=float).reshape(8, 8) / 64
     monkeypatch.setattr(pipeline, "_process_one_batch", lambda *a, **kw:
-                        ({"moment0": np.ones((4, 6)), "moment0ff": np.ones((4, 6))}, None))
+                        ({"moment0": np.ones((6, 6)), "moment0ff": np.ones((6, 6)),
+                          "eigen_spectrogram": spectrum.copy()}, None))
     monkeypatch.setattr(pipeline, "register_with_ecc", lambda *a, **kw: np.zeros((2, 2)))
     monkeypatch.setattr(pipeline, "apply_ecc_registration", lambda images, *a, **kw: images * 2)
     source = reader(tmp_path)
@@ -155,8 +161,9 @@ def test_pipeline_modes(tmp_path, monkeypatch, live, ecc, workers):
     with DefaultOutput(source, p) as out:
         pipeline._process_to_output(source, p, [0, 8], out, None)
     with h5py.File(next(out.target_dir.glob("h5/*.h5"))) as h5:
-        assert h5["moment0"].shape == (2, 4, 6)
+        assert h5["moment0"].shape == (2, 6, 6)
         np.testing.assert_array_equal(h5["moment0_time_projection"], 2 if ecc else 1)
+        np.testing.assert_array_equal(h5["eigen_spectrogram"], np.stack([spectrum] * 2))
 
 
 @pytest.mark.parametrize("preview", [False, True])
@@ -167,6 +174,7 @@ def test_real_default_entrypoint(tmp_path, monkeypatch, preview, live):
     p = parameters(outputs={"moment0_time_projection": ["h5", "png"],
                             "pc_sum_static": ["h5"], "pc_sum_dynamic": ["h5"],
                             "svd_eigenvalues": ["h5", "csv", "png"],
+                            "eigen_spectrogram": ["h5"],
                             "svd_dc": ["h5"], "svd_dc_time_projection": ["h5", "png"],
                             "svd_dc_spatial": ["h5", "csv", "png"],
                             "spectrum_line": ["h5", "csv", "png"],
@@ -187,6 +195,8 @@ def test_real_default_entrypoint(tmp_path, monkeypatch, preview, live):
     with h5py.File(next(tmp_path.rglob("*_output.h5"))) as h5:
         count = 1 if preview else 2
         assert h5["svd_eigenvalues"].shape == (count, 8)
+        assert h5["eigen_spectrogram"].shape == (count, 8, 8)
+        np.testing.assert_allclose(h5["eigen_spectrogram"][:].sum(axis=-1), 1, atol=1e-6)
         assert h5["pc_sum_static"].shape == (count, 4, 6)
         assert h5["pc_sum_dynamic"].shape == (count, 4, 6)
         assert h5["svd_dc"].shape == (count, 4, 6)
