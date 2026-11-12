@@ -2,6 +2,8 @@
 Shack-Hartmann wavefront sensing
 """
 
+from numbers import Integral
+
 from .propagation import (
     build_fresnel_kernel_in,
     build_angular_kernel,
@@ -32,14 +34,19 @@ def construct_subapertures_fresnel(
     sub_aps_process="sequential",
     svd_block_size_mib=8,
     svd_regularization=1e-12,
+    pca_index_range=None,
 ):
     """Construct Fresnel subaperture images sequentially or in backend batches.
 
     Sequential mode finishes one tile at a time to minimize RAM/VRAM. Parallel
     mode batches propagation, SVD, and FFTs for throughput, using much more memory.
+    A PCA index range instead sums propagated component magnitudes, bypassing
+    SVD filtering and temporal FFT/frequency selection.
     """
     _validate_subaperture_mode(sub_aps_process)
     nt, ny, nx = U0.shape
+    if pca_index_range is not None:
+        _validate_pca_index_range(pca_index_range, nt)
     sub_ny, sub_nx = ny // ny_subabs, nx // nx_subabs
     crop_ny, crop_nx = sub_ny * ny_subabs, sub_nx * nx_subabs
     y0, x0 = (ny - crop_ny) // 2, (nx - crop_nx) // 2
@@ -47,10 +54,17 @@ def construct_subapertures_fresnel(
         xp, z_prop, ensure_yx_pixel_pitch(pixel_pitch), wavelength, ny, nx,
         zero_padding=None,
     )
-    bands = symmetric_frequency_slices(time_window, fs, low_freq, high_freq)
+    bands = (symmetric_frequency_slices(time_window, fs, low_freq, high_freq)
+             if pca_index_range is None else None)
     if sub_aps_process == "parallel":
         field = U0[:, y0:y0 + crop_ny, x0:x0 + crop_nx] * kernel[:, y0:y0 + crop_ny, x0:x0 + crop_nx]
         tiles = field.reshape(nt, ny_subabs, sub_ny, nx_subabs, sub_nx).transpose(1, 3, 2, 4, 0)
+        if pca_index_range is not None:
+            spatial = fft.fftshift(
+                fft.fft2(tiles.transpose(0, 1, 4, 2, 3), axes=(-2, -1)),
+                axes=(-2, -1))
+            del tiles, field
+            return _subaperture_pca_sum(xp, spatial, pca_index_range)
         filtered = svd_filter_batched(
             xp, tiles, svd_threshold, parallel=True,
             block_size_mib=svd_block_size_mib, regularization=svd_regularization,
@@ -73,6 +87,12 @@ def construct_subapertures_fresnel(
         for x in range(nx_subabs):
             xs = slice(x0 + x * sub_nx, x0 + (x + 1) * sub_nx)
             field = U0[:, ys, xs] * kernel[:, ys, xs]
+            if pca_index_range is not None:
+                spatial = fft.fftshift(fft.fft2(field, axes=(-2, -1)), axes=(-2, -1))
+                del field
+                result[y, x] = _subaperture_pca_sum(xp, spatial, pca_index_range)
+                del spatial
+                continue
             tiled = field.transpose(1, 2, 0)[None, None, ...]
             filtered = svd_filter_batched(
                 xp, tiled, svd_threshold, block_size_mib=svd_block_size_mib,
@@ -111,14 +131,19 @@ def construct_subapertures_angular(
     sub_aps_process="sequential",
     svd_block_size_mib=8,
     svd_regularization=1e-12,
+    pca_index_range=None,
 ):
     """Construct angular subapertures in sequential or batched backend mode.
 
     Angular propagation needs the full spatial Fourier stack in either mode;
     sequential mode bounds the following inverse FFT, SVD, and temporal FFT work.
+    With a PCA index range, sum component magnitudes after propagation instead
+    of SVD filtering and temporal FFT/frequency selection.
     """
     _validate_subaperture_mode(sub_aps_process)
     nt, ny, nx = U0.shape
+    if pca_index_range is not None:
+        _validate_pca_index_range(pca_index_range, nt)
     sub_ny, sub_nx = ny // ny_subabs, nx // nx_subabs
     kernel = build_angular_kernel(
         xp, z_prop, ensure_yx_pixel_pitch(pixel_pitch), wavelength, ny, nx,
@@ -129,7 +154,8 @@ def construct_subapertures_angular(
     crop_ny, crop_nx = sub_ny * ny_subabs, sub_nx * nx_subabs
     y0, x0 = (ny - crop_ny) // 2, (nx - crop_nx) // 2
     spectrum = fft.fftshift(spectrum[:, y0:y0 + crop_ny, x0:x0 + crop_nx], axes=(-2, -1))
-    bands = symmetric_frequency_slices(time_window, fs, low_freq, high_freq)
+    bands = (symmetric_frequency_slices(time_window, fs, low_freq, high_freq)
+             if pca_index_range is None else None)
 
     if sub_aps_process == "parallel":
         tiles = spectrum.reshape(nt, ny_subabs, sub_ny, nx_subabs, sub_nx).transpose(0, 1, 3, 2, 4)
@@ -137,6 +163,9 @@ def construct_subapertures_angular(
         del spectrum
         field = fft.ifft2(tiles, axes=(-2, -1))
         del tiles
+        if pca_index_range is not None:
+            return _subaperture_pca_sum(
+                xp, field.transpose(1, 2, 0, 3, 4), pca_index_range)
         filtered = svd_filter_batched(
             xp, field.transpose(1, 2, 3, 4, 0), svd_threshold, parallel=True,
             block_size_mib=svd_block_size_mib, regularization=svd_regularization,
@@ -156,6 +185,10 @@ def construct_subapertures_angular(
             shifted = fft.ifftshift(spectrum[:, ys, xs], axes=(-2, -1))
             field = fft.ifft2(shifted, axes=(-2, -1))
             del shifted
+            if pca_index_range is not None:
+                result[y, x] = _subaperture_pca_sum(xp, field, pca_index_range)
+                del field
+                continue
             filtered = svd_filter_batched(
                 xp, field.transpose(1, 2, 0)[None, None, ...], svd_threshold,
                 block_size_mib=svd_block_size_mib, regularization=svd_regularization,
@@ -166,6 +199,34 @@ def construct_subapertures_angular(
             result[y, x] = _subaperture_power(xp, temporal, bands, axis=0)
             del temporal
     return result
+
+
+def _validate_pca_index_range(index_range, nt=None):
+    name = "shack_hartmann_pca_index_range"
+    if (not isinstance(index_range, (list, tuple)) or len(index_range) != 2
+            or any(isinstance(v, bool) or not isinstance(v, Integral) for v in index_range)):
+        raise TypeError(f"{name} must contain two integers")
+    start, end = index_range
+    if not 0 <= start < end:
+        raise ValueError(f"{name} must satisfy 0 <= start < end")
+    if nt is not None and end > nt:
+        raise ValueError(f"{name} end ({end}) exceeds the supplied frame count ({nt})")
+
+
+def _subaperture_pca_sum(xp, field, index_range):
+    """PCA magnitude sums for (..., time, y, x), in ascending eigenvalue order.
+
+    Matches pca_time_transform / pca_sum: no DC removal, eigenvalue weighting,
+    or normalization by component count. Leading axes batch subapertures.
+    """
+    nt, ny, nx = field.shape[-3:]
+    matrix = field.reshape(*field.shape[:-3], nt, ny * nx).swapaxes(-1, -2)
+    covariance = matrix.conj().swapaxes(-1, -2) @ matrix
+    _, vectors = xp.linalg.eigh(covariance)
+    start, end = index_range
+    projected = matrix @ vectors[..., start:end]
+    return xp.sum(xp.abs(projected), axis=-1).reshape(
+        *field.shape[:-3], ny, nx).astype(xp.float32)
 
 
 def _validate_subaperture_mode(mode):

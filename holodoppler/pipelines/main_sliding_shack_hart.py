@@ -269,6 +269,9 @@ def _process_one_batch(
         # If sliding accumulation is requested, construct U separately
         # so that the last N U arrays can be accumulated.
         prop_method = parameters["spatial_propagation"]
+        pca_index_range = (parameters.get("shack_hartmann_pca_index_range", [0, 16])
+                           if parameters.get("shack_hartmann_image", "moment0") == "pca_sum"
+                           else None)
 
         if prop_method == "Fresnel":
             U = construct_subapertures_fresnel(
@@ -288,6 +291,7 @@ def _process_one_batch(
                 sub_aps_process=parameters.get("shack_hartmann_sub_aps_process", "sequential"),
                 svd_block_size_mib=parameters.get("svd_block_size_mib", 8),
                 svd_regularization=parameters.get("shack_hartmann_svd_regularization", 1e-12),
+                pca_index_range=pca_index_range,
             )
 
         elif prop_method == "AngularSpectrum":
@@ -308,6 +312,7 @@ def _process_one_batch(
                 sub_aps_process=parameters.get("shack_hartmann_sub_aps_process", "sequential"),
                 svd_block_size_mib=parameters.get("svd_block_size_mib", 8),
                 svd_regularization=parameters.get("shack_hartmann_svd_regularization", 1e-12),
+                pca_index_range=pca_index_range,
             )
 
         else:

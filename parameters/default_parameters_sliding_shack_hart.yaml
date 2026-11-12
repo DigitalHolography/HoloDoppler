@@ -66,6 +66,8 @@ contrast_low_max_percent: [0.5, 99.5]
 contrast_gamma: 1.0
 
 # Shack-Hartmann wavefront sensing
+shack_hartmann_image: "moment0" # "moment0": SVD/frequency power; "pca_sum": PCA magnitude sum without SVD/frequency filtering.
+shack_hartmann_pca_index_range: [0, 16] # PCA components [start, end), ascending eigenvalues; end <= frames used for SH/autofocus.
 shack_hartmann: true # Enable Live (every batch) Shack-Hartmann processing
 shack_hartmann_nx_subap: 5 # Number of subapertures in X
 shack_hartmann_ny_subap: 5 # Number of subapertures in Y

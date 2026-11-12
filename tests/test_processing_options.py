@@ -97,7 +97,8 @@ def test_default_forwards_subaperture_options(parameters, monkeypatch, method, b
                         lambda *a, **k: (np.zeros((2, 2)), np.zeros((2, 2))))
     assert main_default._process_shack_hartmann(parameters, np.ones((8, 6, 8), np.float32)) is None
     assert constructor.call_args.kwargs == dict(sub_aps_process='parallel',
-                                               svd_block_size_mib=budget, svd_regularization=.002)
+                                               svd_block_size_mib=budget, svd_regularization=.002,
+                                               pca_index_range=None)
 
 
 @pytest.mark.parametrize('budget', [.125, None])

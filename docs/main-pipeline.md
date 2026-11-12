@@ -128,6 +128,27 @@ spectrum propagation and estimates their displacements. It uses either the
 graph-Laplacian or the alternative displacement method, then fits the selected
 Zernike modes. The correction is `exp(-1j * phase)`.
 
+Set `shack_hartmann_image: pca_sum` to construct each subaperture image from
+PCA component magnitudes instead of the default `moment0` band power:
+
+```yaml
+shack_hartmann_image: pca_sum
+shack_hartmann_pca_index_range: [0, 16]
+```
+
+The range is zero-based with an exclusive end, in ascending eigenvalue order,
+matching `pca_sum`. PCA is computed independently on each propagated subaperture
+over all supplied frames, with no DC removal. Selected component magnitudes are
+summed without eigenvalue weighting. This bypasses Shack-Hartmann SVD filtering,
+the temporal FFT, and frequency selection; `low_freq`, `high_freq`,
+`shack_hartmann_svd_threshold`, and `shack_hartmann_svd_regularization` do not
+affect these subimages. Main Doppler processing retains its own filtering.
+The range end must fit every frame stack used for sensing, including autofocus
+or separate registration references. This option works for Fresnel and angular
+spectrum propagation, sequential and parallel subapertures, autofocus, and
+sliding Shack-Hartmann accumulation. It is independent of `pca_compute`,
+`pca_time_window`, and the full-image PCA range.
+
 Autofocus rejects missing/nonfinite coefficients, absence of mode 4, excessive
 absolute Z4, or a missing/nonfinite phase. Rejection logs a warning and continues
 without correction; it does **not** fall back to per-batch Shack-Hartmann.

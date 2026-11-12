@@ -5,6 +5,7 @@ from math import isfinite
 
 from holodoppler.logging import logger
 from holodoppler.core.filtering import _welch_window, _validate_adaptive_svd
+from holodoppler.core.shack_hartmann import _validate_pca_index_range
 
 
 def validate_main_parameters(parameters):
@@ -418,6 +419,13 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'shack_hartmann' must be a boolean; got {value!r} ({type(value).__name__})."
         )
+
+    value = parameters.get("shack_hartmann_image", "moment0")
+    if not isinstance(value, str):
+        raise TypeError("shack_hartmann_image must be a string")
+    if value not in ("moment0", "pca_sum"):
+        raise ValueError("shack_hartmann_image must be 'moment0' or 'pca_sum'")
+    _validate_pca_index_range(parameters.get("shack_hartmann_pca_index_range", [0, 16]))
 
     value = parameters.get("shack_hartmann_sub_aps_process", "sequential")
     if not isinstance(value, str):

@@ -99,6 +99,8 @@ square: true
 resize_averaged_images: false # Double temporal-average PNG width and height only.
 
 # Shack-Hartmann wavefront sensing
+shack_hartmann_image: "moment0" # "moment0": SVD/frequency power; "pca_sum": PCA magnitude sum without SVD/frequency filtering.
+shack_hartmann_pca_index_range: [0, 16] # PCA components [start, end), ascending eigenvalues; end <= frames used for SH/autofocus.
 shack_hartmann_autofocus: true # Compute correction once using registration_ref_first_frame and shack_hartmann_autofocus_batch_size, then reuse it for following batches
 shack_hartmann_autofocus_z4_threshold_rad: 1.5 # Reject autofocus when abs(Z4) exceeds this limit in radians
 shack_hartmann_autofocus_batch_size: 512 # Number of frames used to compute the autofocus correction
