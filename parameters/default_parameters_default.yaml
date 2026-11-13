@@ -48,7 +48,7 @@ svd_participation_ratio_multiplier: 0.05 # Leading count = ceil(multiplier * par
 svd_energy_fraction: 0.9 # Cumulative covariance energy removed in energy_fraction mode.
 svd_pc_sum_eigenvalue_weighting: true # Weight static/dynamic PC amplitudes by covariance eigenvalues.
 svd_remove_dc: true
-svd_remove_spatial_dc: false # Subtract each frame's spatial mean after temporal DC removal.
+svd_remove_spatial_dc: true # Subtract each frame's spatial mean after temporal DC removal.
 
 # Welch spectral averaging (after SVD; input batching stays unchanged)
 welch_enabled: false
@@ -143,17 +143,17 @@ pca_index_range: [0, 16] # Python slice: exclusive upper bound
 outputs:
   # moment*_range_* additionally require matching moments_frequency_ranges entries.
   "moment*": [h5, avi, mp4]
-  "moment*_time_projection": [png]
+  "moment*_time_projection": [h5, png]
   # Gaussian spectral width before main SVD and main frequency filtering; uses its own filter settings.
-  gaussian_width: [h5, avi, mp4]
+  gaussian_width: [avi, mp4]
   gaussian_width_time_projection: [png]
   # PCA magnitude projection before SVD (full nonoverlapping packets only).
   # pca_sum requires pca_flatfield: false. With true, use pca_sum_ff and pca_sum_ff_time_projection instead.
-  pca_sum: [h5, avi]
+  pca_sum: [avi]
   "pca_sum_time_projection": [png]
   # Requires matching frequency_bands entries; selecting a name does not define a band.
   "band_*": [h5, avi, mp4]
-  "band_*_time_projection": [png]
+  "band_*_time_projection": [h5, png]
   pc_sum_static: [avi]
   pc_sum_static_time_projection: [png]
   pc_sum_dynamic: [avi]
@@ -162,7 +162,7 @@ outputs:
   eigen_spectrogram: [h5] # Set to [h5] to save (batch, mode, frequency).
   svd_dc: [avi]
   svd_dc_time_projection: [png]
-  svd_dc_spatial: [h5, csv, png] # Per-frame spatial DC amplitude; available when svd_remove_spatial_dc is true.
+  svd_dc_spatial: [png] # Per-frame spatial DC amplitude; available when svd_remove_spatial_dc is true.
   spectrum_line: [h5, csv, png]
   spectrograms: [h5] # Per-batch PSD resized, frequency-selected and binned using spectrogram_* settings.
   # Full PSD averaged over all batches, after translation when image_registration is true; ECC is not applied.
