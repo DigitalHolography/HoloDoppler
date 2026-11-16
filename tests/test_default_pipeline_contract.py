@@ -25,6 +25,7 @@ def parameters(**updates):
         backend="numpy", sampling_freq=800, pixel_pitch=[1e-6, 1e-6], z=.1,
         batch_size=8, batch_stride=8, first_frame=0, end_frame=-1,
         low_freq=0, high_freq=400, svd_threshold=0, svd_remove_dc=False,
+        svd_remove_nyquist_modes=False,
         square=False, frequency_bands=[], image_registration=False,
         image_registration_with_ecc=False, shack_hartmann=False,
         shack_hartmann_autofocus=False, color_Doppler_image=False,
@@ -112,6 +113,47 @@ def test_eigen_spectrogram_selection(monkeypatch, rules, selected):
     result = pipeline._process_batch(p, frames)
     assert ("eigen_spectrogram" in result) == selected
     assert eigen_fft.call_count == int(selected)
+
+
+@pytest.mark.parametrize("reference_only", [False, True])
+def test_nyquist_pipeline_options(monkeypatch, reference_only):
+    from test_svd_nyquist import source_modes
+    frames, _, _ = source_modes(32)
+    frames = frames.astype(np.complex64)
+    monkeypatch.setattr(pipeline, "fresnel_transform", lambda *a, **k: frames.copy())
+    transform = Mock(wraps=pipeline.fourier_time_transform)
+    monkeypatch.setattr(pipeline, "fourier_time_transform", transform)
+    p = parameters(batch_size=32, svd_remove_spatial_dc=False,
+                   svd_remove_nyquist_modes=True, svd_nyquist_width_bins=1.,
+                   svd_nyquist_energy_fraction=.8, registration_image="pc_sum_dynamic",
+                   outputs={"pc_sum_dynamic": ["h5"]})
+    expected_summary = {"pc_sum_dynamic": None}
+    expected = pipeline.svd_filter(np, backend.linalg, frames, 0, remove_nyquist_modes=True,
+                                   nyquist_width_bins=1., nyquist_energy_fraction=.8,
+                                   summary=expected_summary)
+    result = pipeline._process_batch(p, frames, reference_only=reference_only)
+    np.testing.assert_allclose(result["pc_sum_dynamic"], expected_summary["pc_sum_dynamic"], atol=1e-5)
+    if reference_only:
+        transform.assert_not_called()
+    else:
+        np.testing.assert_allclose(transform.call_args.args[2], expected, atol=1e-5)
+
+
+@pytest.mark.parametrize("key,value,error", [
+    ("svd_remove_nyquist_modes", 1, TypeError),
+    ("svd_nyquist_width_bins", True, TypeError),
+    ("svd_nyquist_width_bins", "2", TypeError),
+    ("svd_nyquist_width_bins", 0, ValueError),
+    ("svd_nyquist_width_bins", -1, ValueError),
+    ("svd_nyquist_width_bins", float("inf"), ValueError),
+    ("svd_nyquist_energy_fraction", None, TypeError),
+    ("svd_nyquist_energy_fraction", 0, ValueError),
+    ("svd_nyquist_energy_fraction", 1.1, ValueError),
+    ("svd_nyquist_energy_fraction", float("nan"), ValueError),
+])
+def test_nyquist_parameter_validation(key, value, error):
+    with pytest.raises(error, match=key):
+        validate_main_parameters(parameters(**{key: value}))
 
 
 def test_eigen_spectrogram_preserved_by_spatial_operations(monkeypatch):
@@ -332,7 +374,8 @@ def test_block_svd_follows_global(monkeypatch, enabled, dc, global_threshold):
     monkeypatch.setattr(pipeline, "fourier_time_transform", transform)
     pipeline._process_batch(parameters(svd_filter_by_bloc=enabled,
         svd_filter_by_bloc_window_size=2, svd_filter_by_bloc_threshold=0,
-        svd_threshold=global_threshold, svd_remove_dc=dc), data)
+        svd_threshold=global_threshold, svd_remove_dc=dc,
+        svd_remove_spatial_dc=False), data)
     expected = svd_filter(np, np.linalg, data, global_threshold, remove_dc=dc)
     global_filter.assert_called_once()
     assert local_filter.call_count == int(enabled)

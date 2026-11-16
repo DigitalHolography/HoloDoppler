@@ -349,6 +349,9 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
         participation_ratio_multiplier=parameters.get("svd_participation_ratio_multiplier", 1.0),
         energy_fraction=parameters.get("svd_energy_fraction", 0.9),
         eigenvalue_weighting=parameters.get("svd_pc_sum_eigenvalue_weighting", True),
+        remove_nyquist_modes=parameters.get("svd_remove_nyquist_modes", False),
+        nyquist_width_bins=parameters.get("svd_nyquist_width_bins", 2.0),
+        nyquist_energy_fraction=parameters.get("svd_nyquist_energy_fraction", 0.5),
     )
     output_dict.update({name: value for name, value in svd_summary.items() if value is not None})
     if reference_only and target in svd_summary:

@@ -48,6 +48,9 @@ svd_energy_fraction: 0.9 # Cumulative covariance energy removed in energy_fracti
 svd_pc_sum_eigenvalue_weighting: true # Weight static/dynamic PC amplitudes by covariance eigenvalues.
 svd_remove_dc: true
 svd_remove_spatial_dc: false # Subtract each frame's spatial mean after temporal DC removal.
+svd_remove_nyquist_modes: false # Reject whole modes concentrated near +/-fs/2; negative svd_threshold bypasses this.
+svd_nyquist_width_bins: 2.0 # Gaussian standard deviation in FFT bins, wrapping across the Nyquist edge.
+svd_nyquist_energy_fraction: 0.5 # Reject when Gaussian-weighted mode power fraction reaches this value.
 
 # Welch spectral averaging (after SVD; input batching stays unchanged)
 welch_enabled: false

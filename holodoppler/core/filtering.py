@@ -171,6 +171,9 @@ def svd_filter(
     participation_ratio_multiplier=1.0,
     energy_fraction=0.9,
     eigenvalue_weighting=True,
+    remove_nyquist_modes=False,
+    nyquist_width_bins=2.0,
+    nyquist_energy_fraction=0.5,
 ):
     """SVD clutter filtering using temporal covariance eigendecomposition.
 
@@ -192,6 +195,8 @@ def svd_filter(
         Dictionary populated with intermediate results when provided. The dc
         entry contains the combined removed means, with shape (Nt, Ny, Nx)
         when spatial DC is removed, (Ny, Nx) for temporal DC only, else None.
+        rejected_modes is a Boolean mask in descending eigenvalue order;
+        removed_features follows the True entries of that mask.
     summary : dict, optional
         Requested keys (with arbitrary initial values): pc_sum_static,
         pc_sum_dynamic, svd_eigenvalues, eigen_spectrogram, svd_dc, svd_dc_spatial. PC images
@@ -212,6 +217,13 @@ def svd_filter(
     eigenvalue_weighting : bool
         Weight absolute PC coefficients by nonnegative covariance eigenvalues
         in both summary images (default True). Does not change filtered data.
+    remove_nyquist_modes : bool
+        Also reject modes concentrated near the Nyquist frequency. Disabled
+        with a negative svd_threshold. Exported mode spectra remain unmodified.
+    nyquist_width_bins : float
+        Gaussian standard deviation in FFT bins for circular Nyquist weighting.
+    nyquist_energy_fraction : float
+        Reject modes whose Gaussian-weighted power fraction reaches this value.
 
     block_size_mib : positive float or None, optional
         Target size in MiB for each pixel-block work array, not total memory.
@@ -236,6 +248,9 @@ def svd_filter(
         energy_fraction=energy_fraction,
         eigenvalue_weighting=eigenvalue_weighting,
         remove_spatial_dc=remove_spatial_dc,
+        remove_nyquist_modes=remove_nyquist_modes,
+        nyquist_width_bins=nyquist_width_bins,
+        nyquist_energy_fraction=nyquist_energy_fraction,
     )
     return H if svd_threshold < 0 else filtered
 
@@ -255,16 +270,34 @@ def _validate_adaptive_svd(effective_rank_multiplier, energy_fraction,
             raise ValueError(f"Invalid {name}: {value}")
 
 
+def _validate_nyquist_svd(remove_nyquist_modes, nyquist_width_bins,
+                          nyquist_energy_fraction):
+    from numbers import Real
+    from math import isfinite
+
+    if not isinstance(remove_nyquist_modes, bool):
+        raise TypeError("svd_remove_nyquist_modes must be a boolean")
+    for name, value in (("svd_nyquist_width_bins", nyquist_width_bins),
+                        ("svd_nyquist_energy_fraction", nyquist_energy_fraction)):
+        if isinstance(value, bool) or not isinstance(value, Real):
+            raise TypeError(f"{name} must be a real number")
+        if not isfinite(value) or value <= 0 or (name.endswith("fraction") and value > 1):
+            raise ValueError(f"Invalid {name}: {value}")
+
+
 def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
                        remove_dc=False, diagnostic=None, shape=None, regularization=0,
                        block_size_mib=8, *, summary=None,
                        effective_rank_multiplier=1.0, energy_fraction=0.9,
                        eigenvalue_weighting=True, participation_ratio_multiplier=1.0,
-                       remove_spatial_dc=False):
+                       remove_spatial_dc=False, remove_nyquist_modes=False,
+                       nyquist_width_bins=2.0, nyquist_energy_fraction=0.5):
     """Filter time-first data into a time-by-pixel output without changing input."""
     nt, pixels = output.shape
     _validate_adaptive_svd(effective_rank_multiplier, energy_fraction,
                            participation_ratio_multiplier)
+    _validate_nyquist_svd(remove_nyquist_modes, nyquist_width_bins,
+                          nyquist_energy_fraction)
     if not isinstance(eigenvalue_weighting, bool):
         raise TypeError("eigenvalue_weighting must be a boolean")
     if not isinstance(remove_spatial_dc, bool):
@@ -345,6 +378,25 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
     else:
         raise ValueError(f"Unknown filter_mode: {mode}")
 
+    retained = vectors[:, selected.shape[1]:]
+    rejected = None
+    spectra = None
+    if ((remove_nyquist_modes and threshold >= 0)
+            or (summary is not None and "eigen_spectrogram" in summary)):
+        # This covariance stores conjugated reconstruction time modes.
+        modes_fft = xp.fft.fft(vectors.conj(), axis=0, norm="ortho")
+        spectra = xp.abs(modes_fft) ** 2
+        del modes_fft
+    if remove_nyquist_modes and threshold >= 0:
+        # Circular distance from +/-fs/2, including the half-bin offset for odd Nt.
+        distance = (0.5 - xp.abs(xp.fft.fftfreq(nt))) * nt
+        weights = xp.exp(-0.5 * (distance / nyquist_width_bins) ** 2)
+        scores = xp.sum(spectra * weights[:, None], axis=0) / xp.sum(spectra, axis=0)
+        rejected = ((xp.arange(nt) < selected.shape[1])
+                    | (scores >= nyquist_energy_fraction))
+        selected = vectors[:, rejected]
+        retained = vectors[:, ~rejected]
+
     removed_features = (xp.empty((pixels, selected.shape[1]), dtype=data.dtype)
                         if diagnostic is not None else None)
     conjugate = selected.conj()
@@ -353,11 +405,7 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
         if "svd_eigenvalues" in summary:
             summary["svd_eigenvalues"] = values
         if "eigen_spectrogram" in summary:
-            # This covariance stores conjugated reconstruction time modes.
-            modes_fft = xp.fft.fft(vectors.conj(), axis=0, norm="ortho")
-            summary["eigen_spectrogram"] = xp.fft.fftshift(
-                xp.abs(modes_fft) ** 2, axes=0).T
-            del modes_fft
+            summary["eigen_spectrogram"] = xp.fft.fftshift(spectra, axes=0).T
         if dc_summary:
             summary["svd_dc"] = (xp.zeros(shape[1:], dtype=values.dtype) if dc is None
                                  else xp.abs(dc).reshape(shape[1:]))
@@ -366,15 +414,19 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
         for name in ("pc_sum_static", "pc_sum_dynamic"):
             if name in summary:
                 projections[name] = xp.empty(pixels, dtype=values.dtype)
+    del spectra
     for start in range(0, pixels, block_size):
         stop = min(start + block_size, pixels)
         block = output[:, start:stop]
         count = selected.shape[1]
         for name, projection in projections.items():
-            basis = vectors[:, :count] if name == "pc_sum_static" else vectors[:, count:]
+            basis = selected if name == "pc_sum_static" else retained
             amplitudes = xp.abs(basis.T @ block)
             if eigenvalue_weighting:
-                weights = values[:count] if name == "pc_sum_static" else values[count:]
+                if rejected is None:
+                    weights = values[:count] if name == "pc_sum_static" else values[count:]
+                else:
+                    weights = values[rejected if name == "pc_sum_static" else ~rejected]
                 amplitudes *= xp.maximum(weights, 0)[:, None]
             projection[start:stop] = xp.sum(amplitudes, axis=0)
         if selected.shape[1]:
@@ -400,6 +452,8 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
             "eigenvalues": values,
             "covariance": cov,
             "eigenvectors": vectors,
+            "rejected_modes": (xp.arange(nt) < selected.shape[1]
+                               if rejected is None else rejected),
             "dc": removed_dc,
         })
 

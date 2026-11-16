@@ -458,6 +458,23 @@ main SVD's temporal/spatial DC preprocessing before rejection; a negative
 `svd_threshold` uses uncentered input. Spatial registration, resizing, and the
 `spectrogram_*` options do not modify this array.
 
+The shipped default and offline profiles enable `svd_remove_nyquist_modes`.
+This rejects entire main SVD modes concentrated near the Nyquist edge, in
+addition to the existing SVD rejection. Set it to `false` to disable it;
+configurations missing the option retain the previous behavior. A negative
+`svd_threshold` bypasses both rejection mechanisms.
+For each mode, the filter measures the power fraction weighted by
+`exp(-0.5 * (d / svd_nyquist_width_bins)**2)`, where `d` is circular distance
+from Nyquist in FFT bins. Neighbours wrap across both frequency-axis ends;
+odd batch lengths use their actual half-bin distances from Nyquist.
+The default width is `2.0` bins and modes scoring at least
+`svd_nyquist_energy_fraction` (default `0.5`) are removed completely.
+Static/dynamic PC summaries and reconstruction diagnostics use this combined
+rejection selection. Eigenvalues and `eigen_spectrogram` retain all original
+modes, including rejected modes, with unchanged ordering and normalization.
+The internal reconstruction diagnostic `rejected_modes` identifies the columns
+of `eigenvectors` associated with `removed_features`.
+
 The default and offline profiles enable the PC, DC, and eigenvalue exports above.
 Existing explicit `outputs`
 configurations must select the new names, for example:

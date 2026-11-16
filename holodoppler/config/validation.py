@@ -4,7 +4,7 @@ from numbers import Integral, Real
 from math import isfinite
 
 from holodoppler.logging import logger
-from holodoppler.core.filtering import _welch_window, _validate_adaptive_svd
+from holodoppler.core.filtering import _welch_window, _validate_adaptive_svd, _validate_nyquist_svd
 from holodoppler.core.shack_hartmann import _validate_pca_index_range
 
 
@@ -258,6 +258,9 @@ def validate_main_parameters(parameters):
         )
     if not isinstance(parameters.get("svd_remove_spatial_dc", False), bool):
         raise TypeError("svd_remove_spatial_dc must be a boolean")
+    _validate_nyquist_svd(parameters.get("svd_remove_nyquist_modes", False),
+                          parameters.get("svd_nyquist_width_bins", 2.0),
+                          parameters.get("svd_nyquist_energy_fraction", 0.5))
 
     value = parameters.get("sampling_freq", 'use_holovibes')
     if isinstance(value, str) and value in ("use_holovibes", "use_metadata"):
