@@ -104,7 +104,10 @@ class DefaultOutput(OutputClass):
             allowed.add("png")
         image = ((kind == "image" and value.ndim == 2) or
                  (kind == "color" and value.ndim == 3 and value.shape[-1] in (3, 4)))
-        if image and not np.iscomplexobj(value):
+        # Each eigen spectrum is a grayscale (mode, frequency) video frame.
+        # Keep its spectral kind so cubes cannot be mistaken for RGB images.
+        eigen_frame = name == "eigen_spectrogram" and value.ndim == 2
+        if (image or eigen_frame) and not np.iscomplexobj(value):
             allowed.update(("avi", "mp4") if temporal else ("png",))
         requested = selected_formats(self.parameters, name)
         for fmt in sorted(requested - allowed):

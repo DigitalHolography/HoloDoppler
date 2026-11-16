@@ -61,7 +61,7 @@ def test_independent_video_formats(tmp_path, monkeypatch, fmt):
 
 
 @pytest.mark.parametrize("name, shape", [("spectrograms", (8, 4, 3)),
-                                        ("eigen_spectrogram", (4, 4))])
+                                        ("eigen_spectrogram", (8, 4, 3))])
 def test_incompatible_warns_once_and_preserves_h5(tmp_path, monkeypatch, name, shape):
     warning = Mock()
     monkeypatch.setattr("holodoppler.saving.default_output.logger.warning", warning)
@@ -71,6 +71,49 @@ def test_incompatible_warns_once_and_preserves_h5(tmp_path, monkeypatch, name, s
     assert warning.call_count == 3
     with h5py.File(next(out.target_dir.glob("h5/*.h5"))) as h5:
         assert h5[name].shape == (2, *shape)
+
+
+@pytest.mark.parametrize("formats", [["avi"], ["mp4"], ["avi", "mp4"]])
+@pytest.mark.parametrize("workers", [0, 2])
+@pytest.mark.parametrize("size", [3, 4, 5])
+def test_eigen_spectrogram_video_frames(tmp_path, monkeypatch, formats, workers, size):
+    writers = {fmt: Mock() for fmt in formats}
+    open_video = Mock(side_effect=lambda name, fmt: writers[fmt])
+    monkeypatch.setattr(DefaultOutput, "_open_video",
+                        lambda self, name, fmt: open_video(name, fmt))
+    warning = Mock()
+    monkeypatch.setattr("holodoppler.saving.default_output.logger.warning", warning)
+    name = "eigen_spectrogram"
+    spectra = [np.eye(size, dtype=np.float32),
+               np.roll(np.eye(size, dtype=np.float32), 1, axis=1)]
+    p = {"outputs": {name: ["h5", *formats]}, "num_saving_workers": workers}
+    with DefaultOutput(reader(tmp_path), p) as out:
+        for t, spectrum in enumerate(spectra):
+            out.add(name, spectrum, t)
+    warning.assert_not_called()
+    assert sorted(call.args for call in open_video.call_args_list) == [
+        (name, fmt) for fmt in sorted(formats)]
+    for writer in writers.values():
+        assert writer.append_data.call_count == len(spectra)
+        writer.close.assert_called_once()
+        for call, spectrum in zip(writer.append_data.call_args_list, spectra):
+            frame = call.args[0]
+            # Frequency axes of length 3/4 stay grayscale; odd sizes are padded.
+            expected = np.zeros((size + size % 2, size + size % 2, 3), dtype=np.uint8)
+            expected[:size, :size] = (spectrum[..., None] * 255).astype(np.uint8)
+            np.testing.assert_array_equal(frame, expected)
+    with h5py.File(next(out.target_dir.glob("h5/*.h5"))) as h5:
+        np.testing.assert_array_equal(h5[name], np.stack(spectra))
+    assert not list((out.target_dir / "png").glob("*.png"))
+
+
+def test_complex_eigen_spectrogram_rejects_video(tmp_path, monkeypatch):
+    open_video = Mock()
+    monkeypatch.setattr(DefaultOutput, "_open_video", open_video)
+    name = "eigen_spectrogram"
+    with DefaultOutput(reader(tmp_path), {"outputs": {name: ["h5", "avi", "mp4"]}}) as out:
+        out.add(name, np.eye(4, dtype=np.complex64), 0)
+    open_video.assert_not_called()
 
 
 def test_cancel_skips_projection(tmp_path):
@@ -145,11 +188,14 @@ def test_pipeline_modes(tmp_path, monkeypatch, live, ecc, workers):
     from test_default_pipeline_contract import parameters
     from holodoppler import backend
     backend.set_backend("numpy")
+    writers = {fmt: Mock() for fmt in ("avi", "mp4")}
+    monkeypatch.setattr(DefaultOutput, "_open_video",
+                        lambda self, name, fmt: writers[fmt])
     p = parameters(live_saving=live, image_registration_with_ecc=ecc,
                    numpy_num_workers=0, num_saving_workers=workers,
                    square=True,
                    outputs={"moment0": ["h5"], "moment0_time_projection": ["h5"],
-                            "eigen_spectrogram": ["h5"]})
+                            "eigen_spectrogram": ["h5", "avi", "mp4"]})
     spectrum = np.arange(64, dtype=float).reshape(8, 8) / 64
     monkeypatch.setattr(pipeline, "_process_one_batch", lambda *a, **kw:
                         ({"moment0": np.ones((6, 6)), "moment0ff": np.ones((6, 6)),
@@ -164,6 +210,9 @@ def test_pipeline_modes(tmp_path, monkeypatch, live, ecc, workers):
         assert h5["moment0"].shape == (2, 6, 6)
         np.testing.assert_array_equal(h5["moment0_time_projection"], 2 if ecc else 1)
         np.testing.assert_array_equal(h5["eigen_spectrogram"], np.stack([spectrum] * 2))
+    for writer in writers.values():
+        assert writer.append_data.call_count == 2
+        writer.close.assert_called_once()
 
 
 @pytest.mark.parametrize("preview", [False, True])

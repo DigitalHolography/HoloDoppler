@@ -338,7 +338,9 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
                 count = min(nt, ceil(multiplier * rank))
             else:
                 tolerance = xp.finfo(values.dtype).eps * nt
-                count = min(nt, int(xp.searchsorted(xp.cumsum(p), energy_fraction - tolerance)) + 1)
+                # CuPy searchsorted rejects NumPy float32 scalar cutoffs.
+                cutoff = float(energy_fraction - tolerance)
+                count = min(nt, int(xp.searchsorted(xp.cumsum(p), cutoff)) + 1)
         selected = vectors[:, :count]
     else:
         raise ValueError(f"Unknown filter_mode: {mode}")

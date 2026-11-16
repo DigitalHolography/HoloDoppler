@@ -147,6 +147,27 @@ def test_adaptive_counts(mode, options, k):
     np.testing.assert_allclose(actual, expected, atol=1e-12)
 
 
+@pytest.mark.parametrize("backend", ["numpy", "cupy"])
+@pytest.mark.parametrize("dtype", [np.complex64, np.complex128])
+@pytest.mark.parametrize("fraction,k", [(.7, 1), (.9, 2), (1., 3)])
+def test_energy_fraction_counts_across_backends(backend, dtype, fraction, k):
+    xp = np
+    if backend == "cupy":
+        xp = pytest.importorskip("cupy")
+        if not xp.cuda.is_available():
+            pytest.skip("CUDA device unavailable")
+    data = np.diag(np.sqrt([7., 2., 1., 0.])).reshape(4, 2, 2).astype(dtype)
+    diagnostic = {}
+    actual = svd_filter(xp, xp.linalg, xp.asarray(data), 23, "energy_fraction",
+                        energy_fraction=fraction, diagnostic=diagnostic)
+    if backend == "cupy":
+        actual = xp.asnumpy(actual)
+    expected = data.copy()
+    expected[:k] = 0
+    np.testing.assert_allclose(actual, expected, atol=1e-6)
+    assert diagnostic["removed_features"].shape[-1] == k
+
+
 @pytest.mark.parametrize("mode", ["effective_rank", "participation_ratio", "energy_fraction"])
 def test_zero_energy(mode):
     summary = {"pc_sum_static": None, "pc_sum_dynamic": None}
