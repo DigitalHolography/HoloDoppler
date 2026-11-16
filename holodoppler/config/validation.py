@@ -303,6 +303,12 @@ def validate_main_parameters(parameters):
             f"Parameter 'frequency_bands' must be a sequence of real-number pairs; got {value!r} ({type(value).__name__})."
         )
 
+    value = parameters.get("cumsum_threshold", 0.75)
+    if not isinstance(value, Real) or isinstance(value, bool):
+        raise TypeError("Parameter 'cumsum_threshold' must be a real number in (0, 1].")
+    if not isfinite(value) or not 0 < value <= 1:
+        raise ValueError("Parameter 'cumsum_threshold' must be finite and in (0, 1].")
+
     value = parameters.get("resize_averaged_images", False)
     if not isinstance(value, bool):
         raise TypeError("Parameter 'resize_averaged_images' must be a boolean.")

@@ -42,7 +42,7 @@ svd_filter_by_bloc_parallel: false # Process all windows together when true.
 svd_filter_by_bloc_mib_block_size: 8 # Temporary memory target; null batches all windows.
 svd_filter_by_bloc_threshold: 0 # Leading components removed; zero skips SVD.
 svd_threshold: 23
-svd_filter_mode: "effective_rank" # Options: "number_of_values", "amplitude_threshold", "effective_rank", "participation_ratio", "energy_fraction"
+svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold", "effective_rank", "participation_ratio", "energy_fraction"
 svd_effective_rank_multiplier: 0.25 # Leading count = ceil(multiplier * entropy effective rank).
 svd_participation_ratio_multiplier: 0.5 # Leading count = ceil(multiplier * participation ratio).
 svd_energy_fraction: 0.5 # Cumulative covariance energy removed in energy_fraction mode.
@@ -72,6 +72,9 @@ compute_gaussian_width_svd_filter_mode: "number_of_values" # Or "amplitude_thres
 sampling_freq: "use_holovibes" # Sampling frequency in Hz
 low_freq: 6000 # Low frequency cutoff in Hz
 high_freq: 18300 # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
+
+# Full-PSD absolute-frequency power quantile in Hz (ignores low_freq/high_freq).
+cumsum_threshold: 0.75 # Cumulative fraction in (0, 1].
 
 # Frequency bands for different cutoffs of the psd in Hz. It will give the average of the psd in the symmetric frequency range
 frequency_bands:
@@ -161,6 +164,12 @@ outputs:
   # Requires matching frequency_bands entries; selecting a name does not define a band.
   "band_*": [h5, avi, mp4]
   "band_*_time_projection": [h5, png]
+  # Last configured band / band 0; invalid pixels are zero.
+  band_ratio: [avi, mp4]
+  band_ratio_time_projection: [png]
+  # First absolute frequency reaching cumsum_threshold of full PSD power.
+  cumsum: [avi, mp4]
+  cumsum_time_projection: [png]
   pc_sum_static: [avi]
   pc_sum_static_time_projection: [png]
   pc_sum_dynamic: [avi]

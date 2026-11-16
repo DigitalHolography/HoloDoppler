@@ -18,6 +18,25 @@ def moment_khz(xp, A, freqs, n):
     return xp.sum(A * ((freqs[..., xp.newaxis, xp.newaxis] / 1000) ** n), axis=0)
 
 
+def cumsum_frequency(xp, psd, sampling_freq, threshold=0.75):
+    """First absolute frequency (Hz) reaching a fraction of full PSD power.
+
+    Fold FFT-ordered signed bins before accumulating, counting DC and Nyquist
+    once. Invalid or zero-power spectra produce zero. The input is unchanged.
+    """
+    nt = psd.shape[0]
+    folded = psd[:nt // 2 + 1].astype(xp.float64, copy=True)
+    paired = (nt - 1) // 2
+    if paired:
+        folded[1:paired + 1] += psd[-paired:][::-1]
+    valid = xp.all(xp.isfinite(psd) & (psd >= 0), axis=0)
+    xp.cumsum(folded, axis=0, out=folded)
+    total = folded[-1]
+    valid &= xp.isfinite(total) & (total > 0)
+    index = xp.argmax(folded >= threshold * total[None, ...], axis=0)
+    return xp.where(valid, index * (sampling_freq / nt), 0.0)
+
+
 def neg_spectral_entropy(xp, spectrum, f1, f2, fs):
     """Match spectral_negentropy: sum(abs(SH) * log(abs(SH))) in a band.
 

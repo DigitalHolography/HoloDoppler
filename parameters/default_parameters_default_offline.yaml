@@ -71,6 +71,9 @@ sampling_freq: "use_metadata" # Sampling frequency in Hz
 low_freq: 6000 # Low frequency cutoff in Hz
 high_freq: "use_metadata" # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
 
+# Full-PSD absolute-frequency power quantile in Hz (ignores low_freq/high_freq).
+cumsum_threshold: 0.75 # Cumulative fraction in (0, 1].
+
 # Output moment0, moment1 and moment0ff for each symmetric range in Hz (media only, no H5).
 moments_frequency_ranges:
   - [1000, 2000]
@@ -151,6 +154,12 @@ outputs:
   # Requires matching frequency_bands entries; selecting a name does not define a band.
   "band_*": [h5, avi, mp4]
   "band_*_time_projection": [png]
+  # Last configured band / band 0; invalid pixels are zero.
+  band_ratio: [avi, mp4]
+  band_ratio_time_projection: [png]
+  # First absolute frequency reaching cumsum_threshold of full PSD power.
+  cumsum: [avi, mp4]
+  cumsum_time_projection: [png]
   pc_sum_static: [avi]
   pc_sum_static_time_projection: [png]
   pc_sum_dynamic: [avi]

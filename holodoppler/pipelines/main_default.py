@@ -24,7 +24,7 @@ from holodoppler.core.image_utils import (
     gaussian_flatfield,
     resize_frames,
 )
-from holodoppler.core.moments import moments, gaussian_width, neg_spectral_entropy
+from holodoppler.core.moments import moments, gaussian_width, neg_spectral_entropy, cumsum_frequency
 from holodoppler.core.plots import plot_phase_with_slopes_rgb
 from holodoppler.core.processing import run_batches
 from holodoppler.core.progress import check_cancelled
@@ -129,6 +129,9 @@ def _reference_output_key(parameters, result):
     if getattr(result.get(key), "ndim", None) == 2:
         return key
     available = {"moment0", "moment0ff", "moment1", "moment2", "neg_spectral_entropy"}
+    available.add("cumsum")
+    if parameters.get("frequency_bands"):
+        available.add("band_ratio")
     available.update({"pc_sum_static", "pc_sum_dynamic", "svd_dc"})
     if parameters.get("compute_gaussian_width", True):
         available.add("gaussian_width")
@@ -150,6 +153,14 @@ def _reference_from_psd(parameters, psd, target):
     """Compute just the selected image, retaining normal-batch precision."""
     xp = backend.xp
     fs = parameters["sampling_freq"] / (parameters.get("skip_every") or 1)
+
+    if target == "cumsum":
+        return {target: cumsum_frequency(xp, psd, fs, parameters.get("cumsum_threshold", 0.75))}
+    if target == "band_ratio":
+        bands = parameters["frequency_bands"]
+        first = _mean_band(psd, fs, *bands[0])
+        last = first if len(bands) == 1 else _mean_band(psd, fs, *bands[-1])
+        return {target: _band_ratio(first, last)}
 
     def selected_moment(low, high, order):
         indices, frequencies = frequency_symmetric_filtering(
@@ -441,17 +452,26 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     # ------------------------------------------------------------
     # Frequency bands
     # ------------------------------------------------------------
+    bands = parameters.get("frequency_bands", [])
+    ratio_needed = bool(bands) and _output_needed(parameters, "band_ratio")
+    ratio_bands = {}
     for k, (f1, f2) in enumerate(
-        parameters.get("frequency_bands", [])
+        bands
     ):
-        if "outputs" in parameters and not _output_needed(parameters, f"band_{k}_{f1}_{f2}"):
+        selected = "outputs" not in parameters or _output_needed(parameters, f"band_{k}_{f1}_{f2}")
+        dependency = ratio_needed and k in (0, len(bands) - 1)
+        if not selected and not dependency:
             continue
-        slices = symmetric_frequency_slices(nt_sub, fs, f1, f2)
-        count = sum(part.stop - part.start for part in slices)
-        summed = _band_moments(psd, fs, f1, f2, [0])[0]
-        output_dict[f"band_{k}_{f1}_{f2}"] = (
-            summed / count if count else xp.full_like(summed, xp.nan)
-        )
+        image = _mean_band(psd, fs, f1, f2)
+        if selected:
+            output_dict[f"band_{k}_{f1}_{f2}"] = image
+        if dependency:
+            ratio_bands[k] = image
+    if ratio_needed:
+        output_dict["band_ratio"] = _band_ratio(ratio_bands[0], ratio_bands[len(bands) - 1])
+    if _output_needed(parameters, "cumsum"):
+        output_dict["cumsum"] = cumsum_frequency(
+            xp, psd, fs, parameters.get("cumsum_threshold", 0.75))
 
     for k, (f1, f2) in enumerate(parameters.get("moments_frequency_ranges") or ()):
         if "outputs" in parameters and not any(
@@ -489,6 +509,20 @@ def _fixed_fresnel_kernel(parameters, phase_term):
         backend.xp, parameters["z"], tuple(parameters["pixel_pitch"]),
         parameters["wavelength"], ny, nx,
     ) * phase_term).astype(backend.xp.complex64, copy=False)
+
+
+def _mean_band(psd, sampling_freq, low, high):
+    slices = symmetric_frequency_slices(psd.shape[0], sampling_freq, low, high)
+    count = sum(part.stop - part.start for part in slices)
+    summed = _band_moments(psd, sampling_freq, low, high, [0])[0]
+    return summed / count if count else backend.xp.full_like(summed, backend.xp.nan)
+
+
+def _band_ratio(first, last):
+    xp = backend.xp
+    valid = xp.isfinite(first) & xp.isfinite(last) & (first != 0)
+    ratio = xp.where(valid, last, 0) / xp.where(valid, first, 1)
+    return xp.where(xp.isfinite(ratio), ratio, 0)
 
 
 def _band_moments(psd, sampling_freq, low, high, orders):
@@ -905,7 +939,7 @@ def _process_one_batch(
         for key, value in list(res.items()):
 
             if (
-                key in {"neg_spectral_entropy", "gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "sh_psd", "pca_sum", "pca_sum_ff", "pc_sum_static", "pc_sum_dynamic", "svd_dc"}
+                key in {"cumsum", "neg_spectral_entropy", "gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "sh_psd", "pca_sum", "pca_sum_ff", "pc_sum_static", "pc_sum_dynamic", "svd_dc"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                            "_directional_Doppler_pos", "_directional_Doppler_neg"}
@@ -1219,7 +1253,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
         for key in output :
             check_cancelled(progress_callback)
             if (
-                key in {"neg_spectral_entropy", "gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "pca_sum", "pca_sum_ff", "pc_sum_static", "pc_sum_dynamic", "svd_dc"}
+                key in {"cumsum", "neg_spectral_entropy", "gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "pca_sum", "pca_sum_ff", "pc_sum_static", "pc_sum_dynamic", "svd_dc"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                                             "_directional_Doppler_pos", "_directional_Doppler_neg"}

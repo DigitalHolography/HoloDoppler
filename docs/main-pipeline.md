@@ -539,6 +539,29 @@ Parallel mode ignores this memory target and can require substantial RAM/VRAM.
 
 ## Explicit default output configuration
 
+The optional `band_ratio` image divides the last configured `frequency_bands`
+entry's mean PSD power by the first entry's mean PSD power, per pixel and batch.
+Band order follows the list. Source bands are computed even if their exports
+are disabled. Zero denominators, empty bands, and nonfinite values produce zero.
+With one band, valid pixels are one; with no bands, the ratio is unavailable.
+
+The optional `cumsum` image gives the first absolute frequency in Hz reaching
+`cumsum_threshold` of each pixel's full PSD power (default `0.75`, valid range
+`(0, 1]`). It folds positive and negative frequencies together, counts DC and
+Nyquist once, and accumulates from zero frequency upward without interpolation.
+It uses the PSD after main filtering, FFT or Welch, and optional corner
+compensation; `low_freq` and `high_freq` do not limit this calculation. Frequency
+values account for frame skipping and Welch segment length. Invalid or
+zero-power spectra produce zero.
+
+Both default presets export these images as AVI and MP4, with temporal-average
+PNGs selected independently by `band_ratio_time_projection` and
+`cumsum_time_projection`. Projections average per-batch ratios or threshold
+frequencies after registration. Either image can also be a registration
+reference. Exact rules override `band_*` wildcards; set both an image's formats
+and its projection's formats to `[]` to disable it, unless registration needs it.
+HDF5 can be requested through the same output rules.
+
 The default profiles use `DefaultOutput` and an `outputs` mapping. For example:
 
 ```yaml
