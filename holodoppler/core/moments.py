@@ -18,6 +18,20 @@ def moment_khz(xp, A, freqs, n):
     return xp.sum(A * ((freqs[..., xp.newaxis, xp.newaxis] / 1000) ** n), axis=0)
 
 
+def neg_spectral_entropy(xp, spectrum, f1, f2, fs):
+    """Match spectral_negentropy: sum(abs(SH) * log(abs(SH))) in a band.
+
+    The frequency axis is first; both band endpoints are inclusive. No
+    normalization is applied. Zero bins contribute zero; None f2 has no cap.
+    """
+    if spectrum.ndim != 3 or spectrum.shape[0] == 0:
+        raise ValueError("neg_spectral_entropy requires a (frequency, height, width) spectrum with at least one bin")
+    frequencies = xp.abs(xp.fft.fftfreq(spectrum.shape[0], d=1 / fs))
+    mask = (frequencies >= f1) & (frequencies <= (xp.inf if f2 is None else f2))
+    p = xp.abs(spectrum).astype(xp.float64) * mask[:, None, None]
+    return xp.sum(p * xp.log(xp.where(p > 0, p, 1)), axis=0)
+
+
 def gaussian_width(xp, psd, sampling_freq):
     """Intrinsic Gaussian FWHM in Hz; match MATLAB's zero-invalid behavior.
 

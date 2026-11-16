@@ -24,7 +24,7 @@ from holodoppler.core.image_utils import (
     gaussian_flatfield,
     resize_frames,
 )
-from holodoppler.core.moments import moments, gaussian_width
+from holodoppler.core.moments import moments, gaussian_width, neg_spectral_entropy
 from holodoppler.core.plots import plot_phase_with_slopes_rgb
 from holodoppler.core.processing import run_batches
 from holodoppler.core.progress import check_cancelled
@@ -128,7 +128,7 @@ def _reference_output_key(parameters, result):
     key = parameters.get("registration_image", "moment0ff")
     if getattr(result.get(key), "ndim", None) == 2:
         return key
-    available = {"moment0", "moment0ff", "moment1", "moment2"}
+    available = {"moment0", "moment0ff", "moment1", "moment2", "neg_spectral_entropy"}
     available.update({"pc_sum_static", "pc_sum_dynamic", "svd_dc"})
     if parameters.get("compute_gaussian_width", True):
         available.add("gaussian_width")
@@ -369,7 +369,18 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     # ------------------------------------------------------------
     # Temporal Fourier transform
     # ------------------------------------------------------------
+    spectrum_f = None
+    if ((reference_only and target == "neg_spectral_entropy") or
+            (not reference_only and _output_needed(parameters, "neg_spectral_entropy"))):
+        spectrum_f = fourier_time_transform(xp, fft, holograms_f)
+        output_dict["neg_spectral_entropy"] = neg_spectral_entropy(
+            xp, spectrum_f, parameters["low_freq"], parameters.get("high_freq"),
+            parameters["sampling_freq"] / (parameters.get("skip_every") or 1),
+        )
+        if reference_only:
+            return output_dict
     if parameters.get("welch_enabled", False):
+        del spectrum_f
         psd = welch_power_spectrum(
             xp, fft, holograms_f,
             batch_size=parameters.get("welch_batch_size", 32),
@@ -377,7 +388,8 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
             windowing=parameters.get("welch_windowing"),
         )
     else:
-        spectrum_f = fourier_time_transform(xp, fft, holograms_f)
+        if spectrum_f is None:
+            spectrum_f = fourier_time_transform(xp, fft, holograms_f)
         psd = xp.abs(spectrum_f)
         del spectrum_f
         xp.square(psd, out=psd)
@@ -890,7 +902,7 @@ def _process_one_batch(
         for key, value in list(res.items()):
 
             if (
-                key in {"gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "sh_psd", "pca_sum", "pca_sum_ff", "pc_sum_static", "pc_sum_dynamic", "svd_dc"}
+                key in {"neg_spectral_entropy", "gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "sh_psd", "pca_sum", "pca_sum_ff", "pc_sum_static", "pc_sum_dynamic", "svd_dc"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                            "_directional_Doppler_pos", "_directional_Doppler_neg"}
@@ -1204,7 +1216,7 @@ def _process_to_output(file_reader, parameters, batch_indices, destination,
         for key in output :
             check_cancelled(progress_callback)
             if (
-                key in {"gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "pca_sum", "pca_sum_ff", "pc_sum_static", "pc_sum_dynamic", "svd_dc"}
+                key in {"neg_spectral_entropy", "gaussian_width", "moment0ff", "moment0", "moment1", "moment2", "pca_sum", "pca_sum_ff", "pc_sum_static", "pc_sum_dynamic", "svd_dc"}
                 or key.startswith(("moment0_range_", "moment1_range_", "moment0ff_range_"))
                 or "band_" in key or key in {"_color_Doppler_low", "_color_Doppler_high",
                                             "_directional_Doppler_pos", "_directional_Doppler_neg"}

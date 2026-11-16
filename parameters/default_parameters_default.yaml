@@ -42,7 +42,7 @@ svd_filter_by_bloc_parallel: false # Process all windows together when true.
 svd_filter_by_bloc_mib_block_size: 8 # Temporary memory target; null batches all windows.
 svd_filter_by_bloc_threshold: 0 # Leading components removed; zero skips SVD.
 svd_threshold: 23
-svd_filter_mode: "energy_fraction" # Options: "number_of_values", "amplitude_threshold", "effective_rank", "participation_ratio", "energy_fraction"
+svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold", "effective_rank", "participation_ratio", "energy_fraction"
 svd_effective_rank_multiplier: 0.05 # Leading count = ceil(multiplier * entropy effective rank).
 svd_participation_ratio_multiplier: 0.05 # Leading count = ceil(multiplier * participation ratio).
 svd_energy_fraction: 0.1 # Cumulative covariance energy removed in energy_fraction mode.
@@ -141,6 +141,10 @@ pca_index_range: [0, 16] # Python slice: exclusive upper bound
 # are noted below. Projections are means of output batches.
 # Unavailable exact names warn at finalization; wildcard rules do not warn for missing matches.
 outputs:
+  # Post-SVD full-batch FFT magnitude, inclusive low_freq/high_freq window.
+  # sum(abs(SH) * ln(abs(SH))); no normalization, Welch, or corner compensation.
+  neg_spectral_entropy: [avi, mp4] # Enable with [h5, avi, mp4].
+  neg_spectral_entropy_time_projection: [png] # Enable with [png].
   # moment*_range_* additionally require matching moments_frequency_ranges entries.
   "moment*": [h5, avi, mp4]
   "moment*_time_projection": [h5, png]
