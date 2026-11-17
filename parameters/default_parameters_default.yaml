@@ -163,7 +163,7 @@ outputs:
   "pca_sum_time_projection": [png]
   # Requires matching frequency_bands entries; selecting a name does not define a band.
   "band_*": [h5, avi, mp4]
-  "band_*_time_projection": [h5, png]
+  "band_*_time_projection": [png]
   # Last configured band / band 0; invalid pixels are zero.
   band_ratio: [avi, mp4]
   band_ratio_time_projection: [png]
