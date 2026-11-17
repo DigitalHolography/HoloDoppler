@@ -60,9 +60,9 @@ welch_batch_size: 256 # FFT segment length in selected frames; positive integer,
 welch_stride: 128 # Spacing between segment starts in selected frames.
 
 # Gaussian spectral width filtering
-compute_gaussian_width_prefilter_low_freq: 0 # zero means no high pass filtering
+compute_gaussian_width_prefilter_low_freq: 200 # zero means no high pass filtering
 compute_gaussian_width_prefilter_order: 4
-compute_gaussian_width_prefilter_max_freq: 18300 # option to reject high freqs, null is none
+compute_gaussian_width_prefilter_max_freq: 17500 # option to reject high freqs, null is none
 compute_gaussian_width_svd_filter: true # SVD on complex time data after frequency prefiltering; Gaussian width uses FFT, not Welch.
 compute_gaussian_width_svd_threshold: 5 # Leading modes removed; used only when the filter is enabled.
 compute_gaussian_width_svd_remove_dc: true # Subtract the temporal mean before Gaussian-width SVD.
