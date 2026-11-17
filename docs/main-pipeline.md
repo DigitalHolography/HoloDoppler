@@ -128,6 +128,27 @@ spectrum propagation and estimates their displacements. It uses either the
 graph-Laplacian or the alternative displacement method, then fits the selected
 Zernike modes. The correction is `exp(-1j * phase)`.
 
+Set `shack_hartmann_image: pca_sum` to construct each subaperture image from
+PCA component magnitudes instead of the default `moment0` band power:
+
+```yaml
+shack_hartmann_image: pca_sum
+shack_hartmann_pca_index_range: [0, 16]
+```
+
+The range is zero-based with an exclusive end, in ascending eigenvalue order,
+matching `pca_sum`. PCA is computed independently on each propagated subaperture
+over all supplied frames, with no DC removal. Selected component magnitudes are
+summed without eigenvalue weighting. This bypasses Shack-Hartmann SVD filtering,
+the temporal FFT, and frequency selection; `low_freq`, `high_freq`,
+`shack_hartmann_svd_threshold`, and `shack_hartmann_svd_regularization` do not
+affect these subimages. Main Doppler processing retains its own filtering.
+The range end must fit every frame stack used for sensing, including autofocus
+or separate registration references. This option works for Fresnel and angular
+spectrum propagation, sequential and parallel subapertures, autofocus, and
+sliding Shack-Hartmann accumulation. It is independent of `pca_compute`,
+`pca_time_window`, and the full-image PCA range.
+
 Autofocus rejects missing/nonfinite coefficients, absence of mode 4, excessive
 absolute Z4, or a missing/nonfinite phase. Rejection logs a warning and continues
 without correction; it does **not** fall back to per-batch Shack-Hartmann.
@@ -403,7 +424,97 @@ Invalid estimates return zero, matching the MATLAB implementation (despite its
 comment promising NaN). Outputs are registered and saved alongside other scalar
 maps, including numerical HDF5 data.
 
-### Local block SVD
+### Global and Local block SVD
+
+The global SVD also provides `pc_sum_static` and `pc_sum_dynamic`: real images
+summing absolute temporal PC coefficients over removed and retained components,
+respectively. These use the input after optional temporal and spatial DC subtraction, before
+local SVD or spectral processing. They sum amplitudes, rather than powers.
+`svd_dc` is the 2D absolute temporal mean image removed by `svd_remove_dc`.
+When `svd_remove_spatial_dc: true`, `svd_dc_spatial` is a separate 1D vector:
+the absolute spatial mean of each frame after optional temporal-mean removal.
+The spatial mean covers the entire image regardless of the SVD workspace block
+size. Both DC outputs show amplitudes without eigenvalue weighting.
+HDF5 and CSV store `svd_dc_spatial` as `(batches, frames_per_batch)`; its PNG
+stacks batches as rows. It is omitted when spatial removal is disabled.
+`svd_eigenvalues` contains descending, unnormalized covariance eigenvalues;
+HDF5 and CSV use shape `(batches, temporal_components)`, with one batch per row.
+
+The optional `eigen_spectrogram` output stores the power spectrum of every main
+SVD temporal mode, including both removed and retained modes. Enable it with
+`outputs: {eigen_spectrogram: [h5]}`; it is disabled in the shipped profiles and
+is not computed by legacy configurations without `outputs`. Each batch provides
+a real 2D `(mode, frequency)` array; HDF5 stacks these as `(batch, mode, frequency)`.
+Rows follow the descending eigenvalues in `svd_eigenvalues`. Columns follow
+`fftshift(fftfreq(batch_size, d=1/fs))`, where
+`fs = sampling_freq / (skip_every or 1)` in Hz.
+
+The computation is the squared magnitude of an orthonormal FFT of the conjugated
+covariance eigenvectors, preserving the frequency sign of the reconstruction time
+modes. Each row sums approximately to one, including zero-energy modes whose
+eigenvectors are arbitrary. Values are linear power per bin, without eigenvalue
+weighting, tapering, Welch averaging, or logarithmic scaling. The modes use the
+main SVD's temporal/spatial DC preprocessing before rejection; a negative
+`svd_threshold` uses uncentered input. Spatial registration, resizing, and the
+`spectrogram_*` options do not modify this array.
+
+The shipped default and offline profiles enable `svd_remove_nyquist_modes`.
+This rejects entire main SVD modes concentrated near the Nyquist edge, in
+addition to the existing SVD rejection. Set it to `false` to disable it;
+configurations missing the option retain the previous behavior. A negative
+`svd_threshold` bypasses both rejection mechanisms.
+For each mode, the filter measures the power fraction weighted by
+`exp(-0.5 * (d / svd_nyquist_width_bins)**2)`, where `d` is circular distance
+from Nyquist in FFT bins. Neighbours wrap across both frequency-axis ends;
+odd batch lengths use their actual half-bin distances from Nyquist.
+The default width is `2.0` bins and modes scoring at least
+`svd_nyquist_energy_fraction` (default `0.5`) are removed completely.
+Static/dynamic PC summaries and reconstruction diagnostics use this combined
+rejection selection. Eigenvalues and `eigen_spectrogram` retain all original
+modes, including rejected modes, with unchanged ordering and normalization.
+The internal reconstruction diagnostic `rejected_modes` identifies the columns
+of `eigenvectors` associated with `removed_features`.
+
+The default and offline profiles enable the PC, DC, and eigenvalue exports above.
+Existing explicit `outputs`
+configurations must select the new names, for example:
+
+```yaml
+outputs:
+  pc_sum_static: [avi]
+  pc_sum_static_time_projection: [png]
+  pc_sum_dynamic: [avi]
+  pc_sum_dynamic_time_projection: [png]
+  svd_eigenvalues: [h5, csv, png]
+  svd_dc: [avi]
+  svd_dc_time_projection: [png]
+  svd_dc_spatial: [h5, csv, png]
+```
+
+The `_time_projection` PNGs average the component-sum images across batches.
+Negative `svd_threshold` still disables filtering; requested diagnostics then use
+uncentered input, with zero static projection and all components in dynamic.
+`svd_dc` is zero when temporal removal is disabled or the threshold is negative.
+`svd_dc_spatial` is omitted when the threshold is negative.
+
+Adaptive global SVD modes can replace `number_of_values`:
+
+- `svd_filter_mode: effective_rank` removes
+  `ceil(svd_effective_rank_multiplier * exp(-sum(p * log(p))))` components,
+  capped at the temporal dimension. The multiplier defaults to `1.0` and must
+  be finite and nonnegative.
+- `svd_filter_mode: participation_ratio` removes
+  `ceil(svd_participation_ratio_multiplier / sum(p**2))` leading components,
+  capped at the temporal dimension. This rank equals `(sum(lambda)**2) / sum(lambda**2)`.
+  The multiplier defaults to `1.0` and must be finite and nonnegative; zero removes no modes.
+- `svd_filter_mode: energy_fraction` removes the smallest leading count reaching
+  `svd_energy_fraction` of total covariance energy (default `0.9`, range `(0, 1]`).
+
+Here `p` is the normalized nonnegative eigenvalue spectrum; zero entries do not
+contribute to entropy. Numerical negative eigenvalues are clipped only for rank
+selection; exported values remain raw. Zero-energy input removes zero modes.
+All three modes ignore a nonnegative `svd_threshold`. The shared filter supports these
+modes in other pipelines too; the new saved summaries belong to the default pipeline.
 
 Set `svd_filter_by_bloc: true` to apply local SVD after global SVD in the default pipeline.
 `svd_filter_by_bloc_window_size` is the square window side in pixels (default 5);
@@ -428,6 +539,29 @@ Parallel mode ignores this memory target and can require substantial RAM/VRAM.
 
 ## Explicit default output configuration
 
+The optional `band_ratio` image divides the last configured `frequency_bands`
+entry's mean PSD power by the first entry's mean PSD power, per pixel and batch.
+Band order follows the list. Source bands are computed even if their exports
+are disabled. Zero denominators, empty bands, and nonfinite values produce zero.
+With one band, valid pixels are one; with no bands, the ratio is unavailable.
+
+The optional `cumsum` image gives the first absolute frequency in Hz reaching
+`cumsum_threshold` of each pixel's full PSD power (default `0.75`, valid range
+`(0, 1]`). It folds positive and negative frequencies together, counts DC and
+Nyquist once, and accumulates from zero frequency upward without interpolation.
+It uses the PSD after main filtering, FFT or Welch, and optional corner
+compensation; `low_freq` and `high_freq` do not limit this calculation. Frequency
+values account for frame skipping and Welch segment length. Invalid or
+zero-power spectra produce zero.
+
+Both default presets export these images as AVI and MP4, with temporal-average
+PNGs selected independently by `band_ratio_time_projection` and
+`cumsum_time_projection`. Projections average per-batch ratios or threshold
+frequencies after registration. Either image can also be a registration
+reference. Exact rules override `band_*` wildcards; set both an image's formats
+and its projection's formats to `[]` to disable it, unless registration needs it.
+HDF5 can be requested through the same output rules.
+
 The default profiles use `DefaultOutput` and an `outputs` mapping. For example:
 
 ```yaml
@@ -436,7 +570,7 @@ outputs:
   moment0_time_projection: [h5, png]
   "band_*": [h5, mp4]
   "band_*_time_projection": [png]
-  spectrum_line: [h5, csv]
+  spectrum_line: [h5, csv, png]
   spectrograms: [h5]
   averaged_spectrogram: [h5]
 ```
@@ -466,7 +600,12 @@ selecting `spectrograms_time_projection` averages the cropped/binned spectrogram
 which differ from the full-spectrum aggregate.
 
 HDF5 accepts numerical datasets. AVI/MP4 accept temporal grayscale or RGB/RGBA
-images; PNG accepts static images and image projections. CSV accepts scalar,
+images; PNG accepts real-valued static vectors, tables, images, and image
+projections. Any real-valued temporal vector also supports PNG: rows are completed
+batches and columns are vector entries (for example, frequency bins for
+`spectrum_line` or components for `svd_eigenvalues`). These grayscale images are
+saved at finalization in both live and buffered modes; a single batch has shape
+`(1, N)`. Vector time projections likewise become one-row images. CSV accepts scalar,
 vector, and table datasets, including spectrum lines and registration traces;
 spatial images and spectral cubes are not flattened into CSV. A spectral cube
 cannot become a video merely because its last axis happens to have length 3 or 4.

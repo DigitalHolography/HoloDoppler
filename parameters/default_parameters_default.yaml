@@ -42,28 +42,39 @@ svd_filter_by_bloc_parallel: false # Process all windows together when true.
 svd_filter_by_bloc_mib_block_size: 8 # Temporary memory target; null batches all windows.
 svd_filter_by_bloc_threshold: 0 # Leading components removed; zero skips SVD.
 svd_threshold: 23
-svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold"
+svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold", "effective_rank", "participation_ratio", "energy_fraction"
+svd_effective_rank_multiplier: 0.25 # Leading count = ceil(multiplier * entropy effective rank).
+svd_participation_ratio_multiplier: 0.5 # Leading count = ceil(multiplier * participation ratio).
+svd_energy_fraction: 0.5 # Cumulative covariance energy removed in energy_fraction mode.
+svd_pc_sum_eigenvalue_weighting: true # Weight static/dynamic PC amplitudes by covariance eigenvalues.
 svd_remove_dc: true
+svd_remove_nyquist_modes: true # Reject whole modes concentrated near +/-fs/2; negative svd_threshold bypasses this.
+svd_nyquist_width_bins: 5.0 # Gaussian standard deviation in FFT bins, wrapping across the Nyquist edge.
+svd_nyquist_energy_fraction: 0.5 # Reject when Gaussian-weighted mode power fraction reaches this value.
+svd_remove_spatial_dc: true # Subtract each frame's spatial mean after temporal DC removal.
 
 # Welch spectral averaging (after SVD; input batching stays unchanged)
 welch_enabled: false
 welch_windowing: null # Named periodic taper (e.g. hann, hamming); null applies no taper.
-welch_batch_size: 32 # FFT segment length in selected frames; positive integer, never null.
-welch_stride: 32 # Spacing between segment starts in selected frames.
+welch_batch_size: 256 # FFT segment length in selected frames; positive integer, never null.
+welch_stride: 128 # Spacing between segment starts in selected frames.
 
-# Gaussian spectral width before SVD, before frequency filtering
-compute_gaussian_width: false
-compute_gaussian_width_prefilter_low_freq: 1000
+# Gaussian spectral width filtering
+compute_gaussian_width_prefilter_low_freq: 200 # zero means no high pass filtering
 compute_gaussian_width_prefilter_order: 4
-compute_gaussian_width_svd_filter: false # SVD on complex time data after frequency prefiltering; Gaussian width uses FFT, not Welch.
-compute_gaussian_width_svd_threshold: 0 # Leading modes removed; used only when the filter is enabled.
-compute_gaussian_width_svd_remove_dc: false # Subtract the temporal mean before Gaussian-width SVD.
+compute_gaussian_width_prefilter_max_freq: 17500 # option to reject high freqs, null is none
+compute_gaussian_width_svd_filter: true # SVD on complex time data after frequency prefiltering; Gaussian width uses FFT, not Welch.
+compute_gaussian_width_svd_threshold: 5 # Leading modes removed; used only when the filter is enabled.
+compute_gaussian_width_svd_remove_dc: true # Subtract the temporal mean before Gaussian-width SVD.
 compute_gaussian_width_svd_filter_mode: "number_of_values" # Or "amplitude_threshold"; independent of main SVD.
 
 # Temporal sampling
 sampling_freq: "use_holovibes" # Sampling frequency in Hz
 low_freq: 6000 # Low frequency cutoff in Hz
 high_freq: 18300 # High frequency cutoff in Hz "use_holovibes" sampling_freq/2
+
+# Full-PSD absolute-frequency power quantile in Hz (ignores low_freq/high_freq).
+cumsum_threshold: 0.75 # Cumulative fraction in (0, 1].
 
 # Frequency bands for different cutoffs of the psd in Hz. It will give the average of the psd in the symmetric frequency range
 frequency_bands:
@@ -94,10 +105,11 @@ square: true
 resize_averaged_images: false # Double temporal-average PNG width and height only.
 
 # Shack-Hartmann wavefront sensing
+shack_hartmann_image: "moment0" # "moment0": SVD/frequency power; "pca_sum": PCA magnitude sum without SVD/frequency filtering.
+shack_hartmann_pca_index_range: [0, 16] # PCA components [start, end), ascending eigenvalues; end <= frames used for SH/autofocus.
 shack_hartmann_autofocus: true # Compute correction once using registration_ref_first_frame and shack_hartmann_autofocus_batch_size, then reuse it for following batches
 shack_hartmann_autofocus_z4_threshold_rad: 1.5 # Reject autofocus when abs(Z4) exceeds this limit in radians
 shack_hartmann_autofocus_batch_size: 512 # Number of frames used to compute the autofocus correction
-shack_hartmann: false # Enable Live (every batch) Shack-Hartmann processing
 shack_hartmann_nx_subap: 5 # Number of subapertures in X
 shack_hartmann_ny_subap: 5 # Number of subapertures in Y
 shack_hartmann_svd_threshold: 10
@@ -110,47 +122,85 @@ shack_hartmann_zernike_fit: true # Other option is shack_hartmann_southwell_inte
 shack_hartmann_zernike_fit_modes: [4,5,6] # Number of the Zernike modes to use in the fit in Null ordering
 
 # Doppler images
-color_Doppler_image: true # Save color Doppler video and its temporal-average PNG.
 color_Doppler_use_lab: false # false: decorrelation stretch of [high, low, low]; true: Lab composite using moment0 lightness.
 color_Doppler_low_frequency_band: [6000, 12150] # Symmetric low-frequency power band in Hz.
 color_Doppler_high_frequency_band: [12150, 18300] # Symmetric high-frequency power band in Hz.
-directional_Doppler_image: true # Save HSV directional Doppler video and its temporal-average PNG.
 directional_Doppler_frequency_band: null # null uses [low_freq, high_freq]; otherwise [low, high] in Hz.
 directional_Doppler_gaussian_width: 35.0 # Gaussian flatfield sigma in pixels; 0 disables smoothing.
 directional_Doppler_hues: [1.0, 0.66] # [positive, negative] HSV hues; red / blue (default).
 
 #spectrograms
-save_spectograms: true
 spectrogram_resize_shape: [128, 128]
 spectrogram_resize_order: 1
 spectrogram_frequency_start: 0
 spectrogram_frequency_end: 0.5
 spectrogram_frequency_binning: 4
-save_averaged_spectrogram: true # this outputs a powerspectrum density averaged over all the batches and registered (with translation only if image_registration is on, it doesn't work with ecc registration)
 
-# PCA magnitude projection before SVD (full nonoverlapping packets only)
-pca_compute: false
+# PCA projection settings
 pca_flatfield: false # Emit pca_sum_ff instead of pca_sum, using registration_flatfield_gw.
 pca_time_window: 32
 pca_index_range: [0, 16] # Python slice: exclusive upper bound
 
 # Explicit exports. Exact names override globs; last matching glob wins.
 # Empty lists disable an output. Omitted outputs are not exported.
-# Selecting optional outputs enables their computation; legacy compute flags are
-# used only when this section is absent. Projections are means of output batches.
+# Selecting optional outputs enables their computation; additional requirements
+# are noted below. Projections are means of output batches.
+# Unavailable exact names warn at finalization; wildcard rules do not warn for missing matches.
 outputs:
+  # Post-SVD full-batch FFT magnitude, inclusive low_freq/high_freq window.
+  # sum(abs(SH) * ln(abs(SH))); no normalization, Welch, or corner compensation.
+  neg_spectral_entropy: [avi, mp4] # Enable with [h5, avi, mp4].
+  neg_spectral_entropy_time_projection: [png] # Enable with [png].
+  # moment*_range_* additionally require matching moments_frequency_ranges entries.
   "moment*": [h5, avi, mp4]
-  "moment*_time_projection": [png]
+  "moment*_time_projection": [h5, png]
+  # Gaussian spectral width before main SVD and main frequency filtering; uses its own filter settings.
+  gaussian_width: [avi, mp4]
+  gaussian_width_time_projection: [png]
+  # PCA magnitude projection before SVD (full nonoverlapping packets only).
+  # pca_sum requires pca_flatfield: false. With true, use pca_sum_ff and pca_sum_ff_time_projection instead.
+  pca_sum: [avi]
+  "pca_sum_time_projection": [png]
+  # Requires matching frequency_bands entries; selecting a name does not define a band.
   "band_*": [h5, avi, mp4]
-  "band_*_time_projection": [png]
-  spectrum_line: [h5, csv]
-  spectrograms: [h5]
+  "band_*_time_projection": [h5, png]
+  # Last configured band / band 0; invalid pixels are zero.
+  band_ratio: [avi, mp4]
+  band_ratio_time_projection: [png]
+  # First absolute frequency reaching cumsum_threshold of full PSD power.
+  cumsum: [avi, mp4]
+  cumsum_time_projection: [png]
+  pc_sum_static: [avi]
+  pc_sum_static_time_projection: [png]
+  pc_sum_dynamic: [avi]
+  pc_sum_dynamic_time_projection: [png]
+  svd_eigenvalues: [h5, csv, png]
+  eigen_spectrogram: [h5, avi, mp4] # Set to [h5] to save (batch, mode, frequency).
+  svd_dc: [avi]
+  svd_dc_time_projection: [png]
+  svd_dc_spatial: [png] # Per-frame spatial DC amplitude; available when svd_remove_spatial_dc is true.
+  spectrum_line: [h5, csv, png]
+  spectrograms: [h5] # Per-batch PSD resized, frequency-selected and binned using spectrogram_* settings.
+  # Full PSD averaged over all batches, after translation when image_registration is true; ECC is not applied.
   averaged_spectrogram: [h5]
+  # Color Doppler video and its temporal-average PNG.
   color_Doppler_image: [avi, mp4]
   color_Doppler_image_time_projection: [png]
+  # HSV directional Doppler video and its temporal-average PNG.
   directional_Doppler_image: [avi, mp4]
   directional_Doppler_image_time_projection: [png]
+  # registration requires image_registration: true.
+  # registration_ecc requires image_registration_with_ecc: true and full processing (not preview).
   "registration*": [h5, csv]
+  # Selecting these outputs enables live (every batch) Shack-Hartmann processing.
+  # Requires shack_hartmann_autofocus: false; autofocus suppresses live processing even if its correction is rejected.
+  # shack_hartmann_sub_images: [h5]
+  # shack_hartmann_shifts: [h5]
+  # Coefficients and wavefront phase additionally require shack_hartmann_zernike_fit: true.
+  # shack_hartmann_zernike_coefs: [h5, csv]
+  # shack_hartmann_wavefront_phase: [h5, avi, mp4]
+  # Requires shack_hartmann_autofocus: true; selecting diagnostics does not enable the correction.
+  # Coefficients and wavefront color image additionally require shack_hartmann_zernike_fit: true.
   "shack_hartmann_autofocus_*": [h5]
   shack_hartmann_autofocus_zernike_coefs: [h5, csv]
   shack_hartmann_autofocus_wavefront_color_image: [png]

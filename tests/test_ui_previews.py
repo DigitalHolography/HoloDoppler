@@ -32,10 +32,10 @@ def test_display_only_preview_does_not_save(tmp_path, monkeypatch, name):
     reader, _ = reader_for(tmp_path, frames)
     module = import_module("holodoppler.pipelines.main_" + ("sliding_shack_hart" if name == "sliding_shack_hartmann" else name))
     monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
-    if name == "default":
+    if name in {"default", "lsci"}:
         monkeypatch.setattr(module, "get_reader", lambda _: reader)
     save = Mock(return_value=tmp_path)
-    monkeypatch.setattr(module if name == "default" else pipeline, "save_outputs", save)
+    monkeypatch.setattr(module if name in {"default", "lsci"} else pipeline, "save_outputs", save)
     monkeypatch.setattr(pipeline, "OutputClass", Mock(side_effect=AssertionError("must not open outputs")))
     p = parameters(name, numpy_num_workers=0, compute_gaussian_width=False, lsci_resize_factor=1, lsci_nbh_s=3,
                    lsci_enable_spatial=True, lsci_enable_temporal=False, lsci_enable_spatiotemporal=False)

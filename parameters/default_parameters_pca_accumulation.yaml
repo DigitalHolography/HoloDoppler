@@ -11,8 +11,8 @@ shack_hartmann_sub_aps_process: "parallel" # "sequential": lower RAM/VRAM; "para
 
 # saving management
 h5_datasets: [] # Optional H5 contrast outputs: [MEAN, RATIO, STD]. These are produced by LSCI.
-h5compression: null # Gzip compression level for these datasets: 0-9; null disables compression.
 live_saving: true # false saves all outputs after processing; ECC still buffers when true.
+h5compression: null # HDF5 gzip level: 0 disables compression; 1-9 compress numerical outputs.
 overwrite_option: "erase"
 num_saving_workers: 2
 saving_queue_depth: null # Outstanding batches/jobs, including active writes; null = twice the worker count.

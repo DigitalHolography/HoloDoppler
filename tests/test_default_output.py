@@ -5,10 +5,12 @@ from unittest.mock import Mock
 import h5py
 import numpy as np
 import pytest
+from PIL import Image
 
 from holodoppler.saving.default_output import (
     DefaultOutput, computation_parameters, selected_formats, validate_outputs,
 )
+from holodoppler.saving.media import cast_png_data
 
 
 def reader(tmp_path):
@@ -58,15 +60,60 @@ def test_independent_video_formats(tmp_path, monkeypatch, fmt):
     assert not list((out.target_dir / "png").glob("*.png"))
 
 
-def test_incompatible_warns_once_and_preserves_h5(tmp_path, monkeypatch):
+@pytest.mark.parametrize("name, shape", [("spectrograms", (8, 4, 3)),
+                                        ("eigen_spectrogram", (8, 4, 3))])
+def test_incompatible_warns_once_and_preserves_h5(tmp_path, monkeypatch, name, shape):
     warning = Mock()
     monkeypatch.setattr("holodoppler.saving.default_output.logger.warning", warning)
-    with DefaultOutput(reader(tmp_path), {"outputs": {"spectrograms": ["h5", "avi", "csv"]}}) as out:
+    with DefaultOutput(reader(tmp_path), {"outputs": {name: ["h5", "avi", "csv", "png"]}}) as out:
         for i in range(2):
-            out.add("spectrograms", np.ones((8, 4, 3)), i)
-    assert warning.call_count == 2
+            out.add(name, np.ones(shape), i)
+    assert warning.call_count == 3
     with h5py.File(next(out.target_dir.glob("h5/*.h5"))) as h5:
-        assert h5["spectrograms"].shape == (2, 8, 4, 3)
+        assert h5[name].shape == (2, *shape)
+
+
+@pytest.mark.parametrize("formats", [["avi"], ["mp4"], ["avi", "mp4"]])
+@pytest.mark.parametrize("workers", [0, 2])
+@pytest.mark.parametrize("size", [3, 4, 5])
+def test_eigen_spectrogram_video_frames(tmp_path, monkeypatch, formats, workers, size):
+    writers = {fmt: Mock() for fmt in formats}
+    open_video = Mock(side_effect=lambda name, fmt: writers[fmt])
+    monkeypatch.setattr(DefaultOutput, "_open_video",
+                        lambda self, name, fmt: open_video(name, fmt))
+    warning = Mock()
+    monkeypatch.setattr("holodoppler.saving.default_output.logger.warning", warning)
+    name = "eigen_spectrogram"
+    spectra = [np.eye(size, dtype=np.float32),
+               np.roll(np.eye(size, dtype=np.float32), 1, axis=1)]
+    p = {"outputs": {name: ["h5", *formats]}, "num_saving_workers": workers}
+    with DefaultOutput(reader(tmp_path), p) as out:
+        for t, spectrum in enumerate(spectra):
+            out.add(name, spectrum, t)
+    warning.assert_not_called()
+    assert sorted(call.args for call in open_video.call_args_list) == [
+        (name, fmt) for fmt in sorted(formats)]
+    for writer in writers.values():
+        assert writer.append_data.call_count == len(spectra)
+        writer.close.assert_called_once()
+        for call, spectrum in zip(writer.append_data.call_args_list, spectra):
+            frame = call.args[0]
+            # Frequency axes of length 3/4 stay grayscale; odd sizes are padded.
+            expected = np.zeros((size + size % 2, size + size % 2, 3), dtype=np.uint8)
+            expected[:size, :size] = (spectrum[..., None] * 255).astype(np.uint8)
+            np.testing.assert_array_equal(frame, expected)
+    with h5py.File(next(out.target_dir.glob("h5/*.h5"))) as h5:
+        np.testing.assert_array_equal(h5[name], np.stack(spectra))
+    assert not list((out.target_dir / "png").glob("*.png"))
+
+
+def test_complex_eigen_spectrogram_rejects_video(tmp_path, monkeypatch):
+    open_video = Mock()
+    monkeypatch.setattr(DefaultOutput, "_open_video", open_video)
+    name = "eigen_spectrogram"
+    with DefaultOutput(reader(tmp_path), {"outputs": {name: ["h5", "avi", "mp4"]}}) as out:
+        out.add(name, np.eye(4, dtype=np.complex64), 0)
+    open_video.assert_not_called()
 
 
 def test_cancel_skips_projection(tmp_path):
@@ -76,6 +123,52 @@ def test_cancel_skips_projection(tmp_path):
     out.close()
     with h5py.File(next(out.target_dir.glob("h5/*.h5"))) as h5:
         assert "moment0_time_projection" not in h5
+
+
+@pytest.mark.parametrize("name", ["spectrum_line", "svd_eigenvalues", "registration"])
+@pytest.mark.parametrize("batches", [1, 3])
+@pytest.mark.parametrize("workers", [0, 2])
+def test_vector_png_stacks_batch_rows(tmp_path, name, batches, workers):
+    p = {"outputs": {name: ["h5", "csv", "png"]}, "num_saving_workers": workers}
+    expected = np.arange(batches * 8, dtype=np.float32).reshape(batches, 8)
+    value = np.empty(8, dtype=np.float32)
+    with DefaultOutput(reader(tmp_path), p) as out:
+        for t, row in enumerate(expected):
+            value[:] = row
+            out.add(name, value, t)
+        value[:] = -1  # The PNG must retain submitted rows, even without workers.
+        assert not (out.target_dir / "png" / f"{name}.png").exists()
+    with Image.open(out.target_dir / "png" / f"{name}.png") as image:
+        np.testing.assert_array_equal(np.array(image), cast_png_data(expected))
+    with h5py.File(next(out.target_dir.glob("h5/*.h5"))) as h5:
+        np.testing.assert_array_equal(h5[name], expected)
+    np.testing.assert_array_equal(
+        np.loadtxt(out.target_dir / "csv" / f"{name}.csv", delimiter=",", ndmin=2), expected)
+
+
+@pytest.mark.parametrize("name", ["spectrum_line", "svd_eigenvalues", "registration", "custom_diagnostic"])
+@pytest.mark.parametrize("shape", [(8,), (2, 8)])
+def test_static_vector_png(tmp_path, name, shape):
+    value = np.arange(np.prod(shape), dtype=np.float32).reshape(shape)
+    with DefaultOutput(reader(tmp_path), {"outputs": {name: ["png"]}}) as out:
+        out.write_static(name, value)
+    with Image.open(out.target_dir / "png" / f"{name}.png") as image:
+        np.testing.assert_array_equal(np.array(image), cast_png_data(np.atleast_2d(value)))
+
+
+@pytest.mark.parametrize("name", ["spectrum_line", "custom_diagnostic"])
+def test_vector_png_projection_and_cancellation(tmp_path, name):
+    p = {"outputs": {name: ["png"], name + "_time_projection": ["png"]}}
+    rows = np.arange(16, dtype=np.float32).reshape(2, 8)
+    with DefaultOutput(reader(tmp_path), p) as out:
+        for t, row in enumerate(rows):
+            out.add(name, row, t)
+    with Image.open(out.target_dir / "png" / f"{name}_time_projection.png") as image:
+        np.testing.assert_array_equal(np.array(image), cast_png_data(rows.mean(axis=0, keepdims=True)))
+    cancelled = DefaultOutput(reader(tmp_path), p, custom_relative_path="cancelled")
+    cancelled.add(name, rows[0], 0)
+    cancelled.close(finalize=False)
+    assert not list((cancelled.target_dir / "png").glob("*.png"))
 
 
 def test_optional_computation_and_reference():
@@ -95,11 +188,18 @@ def test_pipeline_modes(tmp_path, monkeypatch, live, ecc, workers):
     from test_default_pipeline_contract import parameters
     from holodoppler import backend
     backend.set_backend("numpy")
+    writers = {fmt: Mock() for fmt in ("avi", "mp4")}
+    monkeypatch.setattr(DefaultOutput, "_open_video",
+                        lambda self, name, fmt: writers[fmt])
     p = parameters(live_saving=live, image_registration_with_ecc=ecc,
                    numpy_num_workers=0, num_saving_workers=workers,
-                   outputs={"moment0": ["h5"], "moment0_time_projection": ["h5"]})
+                   square=True,
+                   outputs={"moment0": ["h5"], "moment0_time_projection": ["h5"],
+                            "eigen_spectrogram": ["h5", "avi", "mp4"]})
+    spectrum = np.arange(64, dtype=float).reshape(8, 8) / 64
     monkeypatch.setattr(pipeline, "_process_one_batch", lambda *a, **kw:
-                        ({"moment0": np.ones((4, 6)), "moment0ff": np.ones((4, 6))}, None))
+                        ({"moment0": np.ones((6, 6)), "moment0ff": np.ones((6, 6)),
+                          "eigen_spectrogram": spectrum.copy()}, None))
     monkeypatch.setattr(pipeline, "register_with_ecc", lambda *a, **kw: np.zeros((2, 2)))
     monkeypatch.setattr(pipeline, "apply_ecc_registration", lambda images, *a, **kw: images * 2)
     source = reader(tmp_path)
@@ -107,17 +207,29 @@ def test_pipeline_modes(tmp_path, monkeypatch, live, ecc, workers):
     with DefaultOutput(source, p) as out:
         pipeline._process_to_output(source, p, [0, 8], out, None)
     with h5py.File(next(out.target_dir.glob("h5/*.h5"))) as h5:
-        assert h5["moment0"].shape == (2, 4, 6)
+        assert h5["moment0"].shape == (2, 6, 6)
         np.testing.assert_array_equal(h5["moment0_time_projection"], 2 if ecc else 1)
+        np.testing.assert_array_equal(h5["eigen_spectrogram"], np.stack([spectrum] * 2))
+    for writer in writers.values():
+        assert writer.append_data.call_count == 2
+        writer.close.assert_called_once()
 
 
 @pytest.mark.parametrize("preview", [False, True])
-def test_real_default_entrypoint(tmp_path, monkeypatch, preview):
+@pytest.mark.parametrize("live", [False, True])
+def test_real_default_entrypoint(tmp_path, monkeypatch, preview, live):
     from holodoppler.pipelines import main_default as pipeline
     from test_default_pipeline_contract import parameters
     p = parameters(outputs={"moment0_time_projection": ["h5", "png"],
+                            "pc_sum_static": ["h5"], "pc_sum_dynamic": ["h5"],
+                            "svd_eigenvalues": ["h5", "csv", "png"],
+                            "eigen_spectrogram": ["h5"],
+                            "svd_dc": ["h5"], "svd_dc_time_projection": ["h5", "png"],
+                            "svd_dc_spatial": ["h5", "csv", "png"],
+                            "spectrum_line": ["h5", "csv", "png"],
                             "spectrograms": ["h5"], "averaged_spectrogram": ["h5"]},
-                   numpy_num_workers=0, spectrogram_resize_shape=[4, 6],
+                   svd_remove_dc=True, svd_remove_spatial_dc=True,
+                   live_saving=live, numpy_num_workers=0, spectrogram_resize_shape=[4, 6],
                    spectrogram_frequency_binning=2)
     source = reader(tmp_path)
     frames = np.random.default_rng(42).normal(size=(16, 4, 6)).astype(np.float32)
@@ -130,6 +242,22 @@ def test_real_default_entrypoint(tmp_path, monkeypatch, preview):
     else:
         pipeline.process(source.file_path, p)
     with h5py.File(next(tmp_path.rglob("*_output.h5"))) as h5:
+        count = 1 if preview else 2
+        assert h5["svd_eigenvalues"].shape == (count, 8)
+        assert h5["eigen_spectrogram"].shape == (count, 8, 8)
+        np.testing.assert_allclose(h5["eigen_spectrogram"][:].sum(axis=-1), 1, atol=1e-6)
+        assert h5["pc_sum_static"].shape == (count, 4, 6)
+        assert h5["pc_sum_dynamic"].shape == (count, 4, 6)
+        assert h5["svd_dc"].shape == (count, 4, 6)
+        assert h5["svd_dc_spatial"].shape == (count, 8)
+        np.testing.assert_allclose(h5["svd_dc_time_projection"], h5["svd_dc"][:].mean(axis=0))
+        assert next(tmp_path.rglob("svd_dc_time_projection.png")).exists()
+        for name in ("svd_eigenvalues", "svd_dc_spatial"):
+            csv = next(tmp_path.rglob(f"{name}.csv"))
+            np.testing.assert_allclose(np.loadtxt(csv, delimiter=",", ndmin=2), h5[name])
+        for name in ("spectrum_line", "svd_eigenvalues", "svd_dc_spatial"):
+            with Image.open(next(tmp_path.rglob(f"{name}.png"))) as image:
+                np.testing.assert_array_equal(np.array(image), cast_png_data(h5[name][:]))
         assert "moment0" not in h5
         assert h5["moment0_time_projection"].shape == (4, 6)
         assert h5["spectrograms"].shape[0] == (1 if preview else 2)

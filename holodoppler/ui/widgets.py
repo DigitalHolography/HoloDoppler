@@ -78,6 +78,7 @@ class SettingsEditor(ttk.Frame):
         "image_registration_type": ("translation_rotation_scale", "translation"),
         "backend": ("auto", "numpy", "cupy"),
         "shack_hartmann_graph_ref": ("central_sub_ap", "ref_from_registration", "none"),
+        "shack_hartmann_image": ("moment0", "pca_sum"),
     }
 
     def __init__(self, master: tk.Misc, *, theme: str, on_apply: Callable[[dict[str, Any]], None] | None = None) -> None:

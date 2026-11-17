@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 center = True          # subtract temporal mean
 n_modes = 10            # number of modes to display
 
-DATA_PATH = r"Z:\261021\261021_DEY_13.holo"
+DATA_PATH = r"D:\ZA\260113_AUZ0752_2.holo"
 
 from holodoppler.file_reader import FileReaderFactory
 
@@ -31,9 +31,9 @@ reader = FileReaderFactory.create(DATA_PATH)
 data = reader.read_frames(0,512).copy().astype(np.float64)
 
 
-from holodoppler.core.propagation import fresnel_transform
+# from holodoppler.core.propagation import fresnel_transform
 
-data = fresnel_transform(np, np.fft, data, 0.5, 20e-6, 852e-9)
+# data = fresnel_transform(np, np.fft, data, 0.5, 20e-6, 852e-9)
 
 
 # ------------------------------------------------------------
@@ -45,7 +45,7 @@ X = data.reshape(nt, ny * nx).T      # (pixels, time)
 
 pixel_mean = X.mean(axis=1, keepdims=True)
 X -= pixel_mean
-remove_spatial_mean = False
+remove_spatial_mean = True
 if remove_spatial_mean:
     frame_mean = X.mean(axis=0, keepdims=True)
     X -= frame_mean
@@ -158,7 +158,7 @@ for k in range(n_modes):
 
     coeff = S[k] * Vt[k]
 
-    axes[k].plot(time, np.abs(coeff), lw=2)
+    axes[k].plot(time, (coeff), lw=2)
 
     axes[k].set_ylabel(f"Mode {k+1}")
     axes[k].grid(alpha=.3)

@@ -50,9 +50,9 @@ def dataset_kind(name):
     """Semantic registry: frequency/spatial axes must never masquerade as RGB."""
     if name.endswith(PROJECTION):
         return dataset_kind(name[:-len(PROJECTION)])
-    if name in {"spectrograms", "averaged_spectrogram", "sh_psd"}:
+    if name in {"spectrograms", "averaged_spectrogram", "sh_psd", "eigen_spectrogram"}:
         return "spectrum"
-    if name == "spectrum_line" or any(token in name for token in ("registration", "coefs", "shifts", "flow_index")):
+    if name in {"spectrum_line", "svd_eigenvalues", "svd_dc_spatial"} or any(token in name for token in ("registration", "coefs", "shifts", "flow_index")):
         return "table"
     if name in {"color_Doppler_image", "directional_Doppler_image", "shack_hartmann_autofocus_wavefront_color_image"}:
         return "color"
@@ -87,6 +87,7 @@ class DefaultOutput(OutputClass):
     def __init__(self, file_reader, parameters, **kwargs):
         validate_outputs(parameters)
         self._projections = {}
+        self._png_rows = {}
         self._seen = set()
         self._warned = set()
         super().__init__(file_reader, parameters, save_to_h5=any(
@@ -98,9 +99,15 @@ class DefaultOutput(OutputClass):
         allowed = {"h5"}
         if kind == "table" and value.ndim <= (1 if temporal else 2):
             allowed.add("csv")
+        if (value.ndim in ((1,) if temporal else (1, 2))
+                and not np.iscomplexobj(value)):
+            allowed.add("png")
         image = ((kind == "image" and value.ndim == 2) or
                  (kind == "color" and value.ndim == 3 and value.shape[-1] in (3, 4)))
-        if image and not np.iscomplexobj(value):
+        # Each eigen spectrum is a grayscale (mode, frequency) video frame.
+        # Keep its spectral kind so cubes cannot be mistaken for RGB images.
+        eigen_frame = name == "eigen_spectrogram" and value.ndim == 2
+        if (image or eigen_frame) and not np.iscomplexobj(value):
             allowed.update(("avi", "mp4") if temporal else ("png",))
         requested = selected_formats(self.parameters, name)
         for fmt in sorted(requested - allowed):
@@ -124,6 +131,9 @@ class DefaultOutput(OutputClass):
             total += value
             self._projections[name] = (total, count + 1)
         formats = self._formats(name, value, True)
+        if "png" in formats:
+            # Keep batch rows until finalization; the producer may reuse its array.
+            self._png_rows.setdefault(name, []).append(value.copy())
         if "h5" in formats:
             self._hdf5_writer.append(name, value, t)
         state = self._streams.setdefault(name, {"csv": None, "media": None})
@@ -145,6 +155,7 @@ class DefaultOutput(OutputClass):
         if "csv" in formats:
             data.save_csv(self.target_dir / "csv" / f"{name}.csv", np.atleast_1d(value))
         if "png" in formats:
+            value = np.atleast_2d(value)
             if name.endswith(PROJECTION):
                 media._save_average_png(self.target_dir / "png" / f"{name}.png", value,
                                        self.parameters.get("resize_averaged_images", False))
@@ -158,6 +169,9 @@ class DefaultOutput(OutputClass):
             if self._scheduler:
                 self._scheduler.close(cancel=not finalize)
             if finalize:
+                for name, rows in self._png_rows.items():
+                    media.save_image_png(self.target_dir / "png" / f"{name}.png",
+                                         np.stack(rows))
                 for name, (total, count) in self._projections.items():
                     self._write_static(name + PROJECTION, total / count)
                 for name, formats in self.parameters["outputs"].items():
@@ -168,4 +182,5 @@ class DefaultOutput(OutputClass):
             raise
         finally:
             self._projections.clear()
+            self._png_rows.clear()
         super().close(finalize=finalize)

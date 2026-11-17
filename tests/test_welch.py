@@ -17,6 +17,8 @@ from holodoppler.pipelines import main_default as pipeline
 def parameters(**updates):
     path = Path(__file__).resolve().parents[1] / "parameters/default_parameters_default.yaml"
     p = yaml.safe_load(path.read_text())
+    p.pop("outputs", None)  # Exercise the legacy computation and saving contract.
+    p.update(pca_compute=False, compute_gaussian_width=False)
     p.update(backend="numpy", z=.1, pixel_pitch=[1e-6, 1e-6], sampling_freq=800,
              batch_size=11, batch_stride=11, welch_enabled=True,
              welch_batch_size=4, welch_stride=3, low_freq=0, high_freq=400,

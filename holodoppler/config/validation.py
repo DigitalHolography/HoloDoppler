@@ -4,7 +4,8 @@ from numbers import Integral, Real
 from math import isfinite
 
 from holodoppler.logging import logger
-from holodoppler.core.filtering import _welch_window
+from holodoppler.core.filtering import _welch_window, _validate_adaptive_svd, _validate_nyquist_svd
+from holodoppler.core.shack_hartmann import _validate_pca_index_range
 
 
 def validate_main_parameters(parameters):
@@ -243,10 +244,23 @@ def validate_main_parameters(parameters):
         )
 
     value = parameters.get("svd_remove_dc", True)
+    if parameters.get("svd_filter_mode", "number_of_values") not in {
+            "number_of_values", "amplitude_threshold", "effective_rank", "participation_ratio", "energy_fraction"}:
+        raise ValueError("Unknown svd_filter_mode")
+    _validate_adaptive_svd(parameters.get("svd_effective_rank_multiplier", 1.0),
+                           parameters.get("svd_energy_fraction", 0.9),
+                           parameters.get("svd_participation_ratio_multiplier", 1.0))
+    if not isinstance(parameters.get("svd_pc_sum_eigenvalue_weighting", True), bool):
+        raise TypeError("svd_pc_sum_eigenvalue_weighting must be a boolean")
     if not (isinstance(value, bool)):
         raise TypeError(
             f"Parameter 'svd_remove_dc' must be a boolean; got {value!r} ({type(value).__name__})."
         )
+    if not isinstance(parameters.get("svd_remove_spatial_dc", False), bool):
+        raise TypeError("svd_remove_spatial_dc must be a boolean")
+    _validate_nyquist_svd(parameters.get("svd_remove_nyquist_modes", False),
+                          parameters.get("svd_nyquist_width_bins", 2.0),
+                          parameters.get("svd_nyquist_energy_fraction", 0.5))
 
     value = parameters.get("sampling_freq", 'use_holovibes')
     if isinstance(value, str) and value in ("use_holovibes", "use_metadata"):
@@ -288,6 +302,12 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'frequency_bands' must be a sequence of real-number pairs; got {value!r} ({type(value).__name__})."
         )
+
+    value = parameters.get("cumsum_threshold", 0.75)
+    if not isinstance(value, Real) or isinstance(value, bool):
+        raise TypeError("Parameter 'cumsum_threshold' must be a real number in (0, 1].")
+    if not isfinite(value) or not 0 < value <= 1:
+        raise ValueError("Parameter 'cumsum_threshold' must be finite and in (0, 1].")
 
     value = parameters.get("resize_averaged_images", False)
     if not isinstance(value, bool):
@@ -408,6 +428,13 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'shack_hartmann' must be a boolean; got {value!r} ({type(value).__name__})."
         )
+
+    value = parameters.get("shack_hartmann_image", "moment0")
+    if not isinstance(value, str):
+        raise TypeError("shack_hartmann_image must be a string")
+    if value not in ("moment0", "pca_sum"):
+        raise ValueError("shack_hartmann_image must be 'moment0' or 'pca_sum'")
+    _validate_pca_index_range(parameters.get("shack_hartmann_pca_index_range", [0, 16]))
 
     value = parameters.get("shack_hartmann_sub_aps_process", "sequential")
     if not isinstance(value, str):
