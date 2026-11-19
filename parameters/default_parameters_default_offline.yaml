@@ -23,7 +23,7 @@ batch_stride: 512
 end_frame: -1 # -1 means process all frames
 
 # Propagation parameters
-spatial_propagation: "Fresnel" # Options: "Fresnel" or "AngularSpectrum"
+spatial_propagation: "Fresnel" # Options: Fresnel, AngularSpectrum, ScalableAngularSpectrum (SAS requires shack_hartmann and shack_hartmann_autofocus: false)
 z: 1.25 # Propagation distance in meters
 wavelength: 852.0e-9 # Wavelength in meters
 pixel_pitch: "use_metadata" # Pixel pitch in meters [y, x]

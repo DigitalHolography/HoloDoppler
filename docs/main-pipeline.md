@@ -173,11 +173,28 @@ is estimated per processing batch, and for a separately processed reference.
 
 `_process_one_batch()` wraps `_process_batch()` and translation registration.
 
+Select `spatial_propagation: "ScalableAngularSpectrum"` for the bandlimited
+three-FFT Scalable Angular Spectrum (SAS) method of
+[Heintzmann, Loetgering and Wechsler (2023)](https://doi.org/10.1364/OPTICA.497809).
+Set both `shack_hartmann: false` and `shack_hartmann_autofocus: false`;
+the default presets enable autofocus, and SAS currently rejects both forms of
+wavefront estimation. SAS is available in the default pipeline, previews, and
+registration references, on NumPy and CuPy. Fresnel remains the default.
+
+The core `scalable_angular_spectrum_transform()` uses orthonormal FFTs and returns
+complex64 fields. By default it omits the final global and quadratic spatial
+phase, which does not change temporal power spectra or intensity images.
+Direct callers can set `use_output_kernel=True` to include these phase factors;
+no radiometric amplitude factor is applied. The pipeline always omits them,
+independently of `Fresnel_use_ouput_kernel`. The precompensation bandlimit can
+cause vignetting at large propagation distances; SAS does not guarantee an
+unvignetted field for arbitrary distances or input spectra.
+
 1. **Optional spatial filtering:** `filter_2d()` applies a spatial FFT, removes
    a central elliptical low-frequency region, and transforms back.
 2. **Optional live wavefront estimate:** used only when fixed autofocus is
    disabled and `shack_hartmann` is enabled.
-3. **Spatial propagation:** Fresnel or angular spectrum reconstructs complex
+3. **Spatial propagation:** Fresnel, angular spectrum, or scalable angular spectrum reconstructs complex
    holograms, applying the supplied phase correction when present.
 4. **SVD clutter rejection:** holograms are cast to complex64. The implementation
    forms an `N × N` temporal covariance, eigendecomposes it, and projects away

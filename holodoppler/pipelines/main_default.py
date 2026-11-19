@@ -29,6 +29,7 @@ from holodoppler.core.plots import plot_phase_with_slopes_rgb
 from holodoppler.core.processing import run_batches
 from holodoppler.core.progress import check_cancelled
 from holodoppler.core.propagation import (
+    scalable_angular_spectrum_transform,
     angular_spectrum_transform,
     angular_spectrum_transform_with_phase,
     build_fresnel_kernel_in,
@@ -219,7 +220,14 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
     # ------------------------------------------------------------
     # Spatial propagation
     # ------------------------------------------------------------
-    if propagation_kernel is not None:
+    if prop_method == "ScalableAngularSpectrum":
+        if phase_term is not None or propagation_kernel is not None:
+            raise ValueError("ScalableAngularSpectrum does not support wavefront correction")
+        holograms = scalable_angular_spectrum_transform(
+            xp, fft, frames, parameters["z"], parameters["pixel_pitch"],
+            parameters["wavelength"],
+        )
+    elif propagation_kernel is not None:
         holograms = fresnel_transform(
             xp, fft, frames, parameters["z"], parameters["pixel_pitch"],
             parameters["wavelength"],
