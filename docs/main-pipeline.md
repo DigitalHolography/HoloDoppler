@@ -116,6 +116,31 @@ by `N`. Batch cadence is instead `sampling_freq / batch_stride`.
 
 ## 2. Wavefront correction and registration references
 
+### Symmetric propagation padding
+
+For `Fresnel` and `AngularSpectrum`, set `zero_padding: [pad_y, pad_x]` to
+add zeros to both sides of each spatial axis. For example, `[10, 20]` changes
+`(H, W)` to `(H + 20, W + 40)`. Values must be nonnegative integers; either
+axis may be zero. The default `false`, `null`, and `[0, 0]` disable padding.
+
+CLI overrides also accept bracketed lists for any parameter:
+
+```bash
+holodoppler process path/to/recording.holo --zero_padding=[10,10]
+holodoppler preview path/to/recording.holo --zero_padding='[10, 10]'
+```
+
+Lists may be nested and may include numbers, quoted strings, booleans, `null`,
+and trailing commas. Quote the entire list when it contains spaces.
+
+The Fresnel input kernel and any wavefront phase correction are applied before
+padding. Output Fresnel and angular-spectrum kernels use the padded dimensions.
+Propagation returns the full padded field, which feeds downstream processing;
+existing output resizing settings still apply. Preview and registration references
+use the same padding. Shack–Hartmann wavefront estimation remains unpadded.
+`ScalableAngularSpectrum` retains its own fixed padding and rejects positive
+`zero_padding` values.
+
 ### Fixed Shack-Hartmann autofocus
 
 When enabled, `_get_autofocus_phase_term()` reads a reference starting at

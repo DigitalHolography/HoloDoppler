@@ -1,12 +1,23 @@
 """Argument parsing for the HoloDoppler command-line interface."""
 
 import argparse
+import ast
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union  # noqa: UP035
+from typing import Any, Dict, List, Optional, Tuple  # noqa: UP035
 
 DEFAULT_PARAMETERS_PATH = Path("parameters/default_parameters_default.yaml")
 DEBUG_CONFIG_FILENAME = ".debug_paths.json"
 GUI_COMMAND = "gui"
+
+
+class _CLIArgumentParser(argparse.ArgumentParser):
+    def _parse_optional(self, arg_string):
+        result = super()._parse_optional(arg_string)
+        if result is None and arg_string.startswith("--") and "=" in arg_string:
+            # argparse otherwise treats unknown --key='[1, 2]' as a positional
+            # because its value contains spaces, consuming the optional config.
+            return super()._parse_optional(arg_string.split("=", 1)[0])
+        return result
 
 
 def _existing_file(value: str) -> Path:
@@ -17,8 +28,29 @@ def _existing_file(value: str) -> Path:
     return path
 
 
-def _convert_dynamic_value(value: str) -> Union[int, float, bool, str, None]:
-    """Convert numeric, boolean, and null values; preserve other strings."""
+class _ListConstants(ast.NodeTransformer):
+    """Allow CLI boolean/null spellings inside otherwise literal lists."""
+
+    def visit_Name(self, node):
+        constants = {"true": True, "false": False, "null": None}
+        if node.id.lower() in constants:
+            return ast.Constant(value=constants[node.id.lower()])
+        return node
+
+
+def _convert_dynamic_value(value: str) -> Any:
+    """Convert scalar values and bracketed literal lists; preserve other strings."""
+    stripped = value.strip()
+    if stripped.startswith("[") and stripped.endswith("]"):
+        try:
+            expression = _ListConstants().visit(ast.parse(stripped, mode="eval"))
+            result = ast.literal_eval(expression)
+        except (SyntaxError, ValueError, TypeError):
+            pass  # Preserve malformed/nonliteral values just like other strings.
+        else:
+            if isinstance(result, list):
+                return result
+
     if value.lower() == "null":
         return None
 
@@ -140,13 +172,16 @@ def _add_dynamic_options_note(parser: argparse.ArgumentParser) -> None:
         "  --option=value    Equivalent key/value syntax\n"
         "  Numeric values are converted to int or float.\n"
         "  true/false become booleans; null becomes None (case-insensitive).\n"
+        "  Bracketed lists support numbers, quoted strings, booleans, null,\n"
+        "  nested lists, and trailing commas, e.g. --zero_padding=[10,10].\n"
+        "  Quote the whole value if it contains spaces: --option='[1, 2]'.\n"
         "Example: --threshold 0.5 --batch-size 512 --output-dir ./results"
     )
 
 
 def _build_main_parser() -> argparse.ArgumentParser:
     """Build the CLI parser."""
-    main_parser = argparse.ArgumentParser(
+    main_parser = _CLIArgumentParser(
         prog="holodoppler",
         description="HoloDoppler: Holographic Doppler signal processing toolkit.",
         epilog=(

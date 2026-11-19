@@ -93,6 +93,8 @@ def test_pipeline_uses_pca_subimages(monkeypatch, method, mode, sliding):
     frames = np.random.default_rng(86).normal(size=(8, 17, 22)).astype(np.float32)
     expected = reference_subimages(frames, method, [2, 6])
     p = parameters(spatial_propagation=method, shack_hartmann_sub_aps_process=mode)
+    if not sliding:
+        p['zero_padding'] = [2, 5]  # Main propagation padding must not affect SH.
     module = main_sliding_shack_hart if sliding else main_default
     captured = []
     def displacements(xp, fft, images, **kwargs):

@@ -8,6 +8,30 @@ from numbers import Integral, Real
 from .image_utils import pad_array_centrally
 
 
+def _validate_zero_padding(zero_padding):
+    """Return nonnegative per-side padding (y, x), with legacy disabled values."""
+    if zero_padding is False or zero_padding is None:
+        return (0, 0)
+    if not isinstance(zero_padding, (list, tuple)):
+        raise TypeError("zero_padding must be False, None, or a pair of integers")
+    if len(zero_padding) != 2:
+        raise ValueError("zero_padding must contain exactly two values [pad_y, pad_x]")
+    for value in zero_padding:
+        if isinstance(value, bool) or not isinstance(value, Integral):
+            raise TypeError("zero_padding values must be nonnegative integers")
+        if value < 0:
+            raise ValueError("zero_padding values must be nonnegative")
+    return tuple(int(value) for value in zero_padding)
+
+
+def _pad_propagation_field(xp, frames, zero_padding):
+    pad_y, pad_x = _validate_zero_padding(zero_padding)
+    if pad_y or pad_x:
+        ny, nx = frames.shape[-2:]
+        return pad_array_centrally(xp, frames, (ny + 2 * pad_y, nx + 2 * pad_x))
+    return frames
+
+
 def _validate_sas_parameters(z, pixel_pitch, wavelength):
     """Validate forward SAS optical parameters and return a hashable pitch."""
     if isinstance(pixel_pitch, Real) and not isinstance(pixel_pitch, bool):
@@ -219,8 +243,14 @@ def fresnel_transform(
     use_output_kernel=True,
     input_kernel=None,
 ):
-    """Apply Fresnel propagation, optionally reusing a corrected input kernel."""
+    """Apply Fresnel propagation, optionally reusing a corrected input kernel.
 
+    ``zero_padding=[pad_y, pad_x]`` adds that many zeros to each side of the
+    final two axes after applying the input kernel. False/None disables it.
+    Returns the full padded field, preserving leading batch dimensions.
+    """
+
+    zero_padding = _validate_zero_padding(zero_padding)
     pixel_pitch = ensure_yx_pixel_pitch(pixel_pitch)
     ny, nx = frames.shape[-2:]
     kernel_in = input_kernel
@@ -229,12 +259,12 @@ def fresnel_transform(
             xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
         )
 
-    if zero_padding:
-
-        frames = pad_array_centrally(xp, frames, zero_padding)
+    if frames.ndim == 2 and kernel_in.ndim == 3 and kernel_in.shape[0] == 1:
+        kernel_in = kernel_in[0]
+    frames = _pad_propagation_field(xp, frames * kernel_in, zero_padding)
 
     result = fft.fftshift(
-        fft.fft2(frames * kernel_in, axes=(-1, -2), norm="ortho"), axes=(-1, -2)
+        fft.fft2(frames, axes=(-1, -2), norm="ortho"), axes=(-1, -2)
     )
 
     if use_output_kernel:
@@ -242,7 +272,7 @@ def fresnel_transform(
         kernel_out = build_fresnel_kernel_out(
             xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
         )
-        result = result * kernel_out
+        result = result * kernel_out[0]
 
     return result
 
@@ -258,7 +288,12 @@ def fresnel_transform_with_phase(
     zero_padding=False,
     use_output_kernel=True,
 ):
-    """Apply Fresnel transform with phase correction"""
+    """Apply Fresnel propagation with phase correction before zero padding.
+
+    ``zero_padding=[pad_y, pad_x]`` specifies zeros per side of each spatial
+    axis; False/None disables padding. Returns the full padded field with all
+    leading batch dimensions preserved, as in :func:`fresnel_transform`.
+    """
 
     pixel_pitch = ensure_yx_pixel_pitch(pixel_pitch)
     ny, nx = frames.shape[-2:]
@@ -266,41 +301,33 @@ def fresnel_transform_with_phase(
         xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
     )
 
-    if zero_padding:
-        ny, nx = frames.shape[-2:]
-        frames = pad_array_centrally(xp, frames, zero_padding)
-    corrected_kernel = (kernel_in * phase_term).astype(xp.complex64, copy=False)
-    result = fft.fftshift(
-        fft.fft2(frames * corrected_kernel, axes=(-1, -2), norm="ortho"),
-        axes=(-1, -2),
+    corrected_kernel = (kernel_in[0] * phase_term).astype(xp.complex64, copy=False)
+    return fresnel_transform(
+        xp, fft, frames, z, pixel_pitch, wavelength,
+        zero_padding=zero_padding, use_output_kernel=use_output_kernel,
+        input_kernel=corrected_kernel,
     )
-
-    if use_output_kernel:
-        kernel_out = build_fresnel_kernel_out(
-            xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
-        )
-        result = result * kernel_out
-
-    return result
 
 
 def angular_spectrum_transform(
     xp, fft, frames, z, pixel_pitch, wavelength, zero_padding=False
 ):
-    """Apply Angular Spectrum transform"""
+    """Apply angular-spectrum propagation with optional symmetric zero padding.
+
+    ``zero_padding=[pad_y, pad_x]`` adds zeros to each side of the final two
+    axes; False/None disables it. Returns the full padded field and preserves
+    leading batch dimensions. Padding preserves the input field's dtype.
+    """
 
     pixel_pitch = ensure_yx_pixel_pitch(pixel_pitch)
+    frames = _pad_propagation_field(xp, frames, zero_padding)
     ny, nx = frames.shape[-2:]
     kernel = build_angular_kernel(
         xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
     )
 
-    if zero_padding:
-
-        frames = pad_array_centrally(xp, frames, zero_padding)
-
     tmp = fft.fft2(frames, axes=(-1, -2), norm="ortho")
-    tmp = tmp * fft.fftshift(kernel, axes=(-1, -2))
+    tmp = tmp * fft.fftshift(kernel[0], axes=(-1, -2))
 
     return fft.ifft2(tmp, axes=(-1, -2), norm="ortho")
 
@@ -308,30 +335,13 @@ def angular_spectrum_transform(
 def angular_spectrum_transform_with_phase(
     xp, fft, frames, z, pixel_pitch, wavelength, phase_term, zero_padding=False
 ):
-    """Apply Angular Spectrum transform with phase correction"""
+    """Apply angular-spectrum propagation with phase correction before padding.
 
-    pixel_pitch = ensure_yx_pixel_pitch(pixel_pitch)
-    ny, nx = frames.shape[-2:]
-    kernel = build_angular_kernel(
-        xp, z, pixel_pitch, wavelength, ny, nx, zero_padding=None
-    )
-
-    # print("multiplying frames")
-
-    frames = frames * phase_term
-
-    # print(frames.dtype)
-
-    # import matplotlib.pyplot as plt
-    # plt.imshow(xp.angle(frames[0]).get())
-    # plt.show()
-
-    if zero_padding:
-
-        frames = pad_array_centrally(xp, frames, zero_padding)
-
-    return fft.ifft2(
-        fft.fft2(frames, axes=(-1, -2), norm="ortho")
-        * fft.fftshift(kernel, axes=(-1, -2)),
-        norm="ortho",
+    ``zero_padding=[pad_y, pad_x]`` specifies zeros per side of each spatial
+    axis; False/None disables it. Returns the full padded field with all
+    leading batch dimensions preserved.
+    """
+    return angular_spectrum_transform(
+        xp, fft, frames * phase_term, z, pixel_pitch, wavelength,
+        zero_padding=zero_padding,
     )

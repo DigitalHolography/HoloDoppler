@@ -6,7 +6,7 @@ from math import isfinite
 from holodoppler.logging import logger
 from holodoppler.core.filtering import _welch_window, _validate_adaptive_svd, _validate_nyquist_svd
 from holodoppler.core.shack_hartmann import _validate_pca_index_range
-from holodoppler.core.propagation import _validate_sas_parameters
+from holodoppler.core.propagation import _validate_sas_parameters, _validate_zero_padding
 
 
 def validate_main_parameters(parameters):
@@ -191,7 +191,10 @@ def validate_main_parameters(parameters):
             f"Parameter 'pixel_pitch' must be a pair of real numbers [y, x]; got {value!r} ({type(value).__name__})."
         )
 
+    zero_padding = _validate_zero_padding(parameters.get("zero_padding", False))
     if parameters.get("spatial_propagation") == "ScalableAngularSpectrum":
+        if any(zero_padding):
+            raise ValueError("ScalableAngularSpectrum does not support zero_padding")
         _validate_sas_parameters(parameters["z"], parameters["pixel_pitch"],
                                  parameters.get("wavelength", 8.52e-07))
         if parameters.get("shack_hartmann", False) or parameters.get("shack_hartmann_autofocus", False):

@@ -233,6 +233,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
             parameters["wavelength"],
             use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
             input_kernel=propagation_kernel,
+            zero_padding=parameters.get("zero_padding", False),
         )
     elif phase_term is not None:
         if prop_method == "Fresnel":
@@ -245,6 +246,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
                 parameters["wavelength"],
                 phase_term,
                 use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
+                zero_padding=parameters.get("zero_padding", False),
             )
 
         elif prop_method == "AngularSpectrum":
@@ -256,6 +258,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
                 parameters["pixel_pitch"],
                 parameters["wavelength"],
                 phase_term,
+                zero_padding=parameters.get("zero_padding", False),
             )
 
         else:
@@ -273,6 +276,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
                 parameters["pixel_pitch"],
                 parameters["wavelength"],
                 use_output_kernel=parameters["Fresnel_use_ouput_kernel"],
+                zero_padding=parameters.get("zero_padding", False),
             )
 
         elif prop_method == "AngularSpectrum":
@@ -283,6 +287,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
                 parameters["z"],
                 parameters["pixel_pitch"],
                 parameters["wavelength"],
+                zero_padding=parameters.get("zero_padding", False),
             )
 
         else:

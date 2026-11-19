@@ -30,6 +30,7 @@ z: "use_holovibes" # Propagation distance in meters
 wavelength: 852.0e-9 # Wavelength in meters
 pixel_pitch: "use_holovibes" # Pixel pitch in meters [y, x]
 Fresnel_use_ouput_kernel: false # Fresnel specific. Use output kernel for Fresnel transform
+zero_padding: false # Fresnel/AngularSpectrum: [pad_y, pad_x] zeros per side; false/null disables. Not used by Shack-Hartmann.
 
 # Filtering 2D frequencies
 filter2d: false
