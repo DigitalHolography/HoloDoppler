@@ -62,6 +62,7 @@ def test_complex_field_matches_dense_reference(shape, final_phase):
     np.testing.assert_array_equal(fields, original)
     assert actual.shape == fields.shape
     assert actual.dtype == np.complex64
+    assert actual.flags.c_contiguous
     assert np.isfinite(actual).all()
 
 

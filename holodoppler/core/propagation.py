@@ -101,7 +101,9 @@ def scalable_angular_spectrum_transform(
                                   axes=(-2, -1), norm="ortho"), axes=(-2, -1))
     if phase_out is not None:
         result = result * phase_out
-    return result[..., sy:sy + ny, sx:sx + nx].astype(xp.complex64, copy=False)
+    # Release the padded allocation instead of retaining it behind a crop view.
+    return result[..., sy:sy + ny, sx:sx + nx].astype(xp.complex64, copy=True)
+
 
 def ensure_yx_pixel_pitch(pixel_pitch):
     if isinstance(pixel_pitch, (int, float)):
