@@ -7,6 +7,10 @@ from tkinter import messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 from typing import Any, Callable
 
+import yaml
+
+from .constants import DEFAULT_PARAMETERS_NAME
+from .paths import parameters_dir
 from .theme import configure_plain_widget
 
 
@@ -22,57 +26,6 @@ class ParameterField:
 
 
 class SettingsEditor(ttk.Frame):
-    GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-        (
-            "Processing",
-            (
-                "pipeline_name",
-                "backend",
-                "batch_size",
-                "batch_stride",
-                "accumulation",
-                "time_window",
-                "time_stride",
-                "time_slide",
-                "sh_time_accumulation",
-                "num_workers",
-                "first_frame",
-                "end_frame",
-            ),
-        ),
-        ("Optics", ("wavelength", "pixel_pitch", "spatial_propagation", "zero_padding", "z")),
-        ("Registration", ("image_registration", "image_registration_type", "registration_", "apply_registration")),
-        ("Shack-Hartmann", ("shack_hartmann",)),
-        ("Doppler images", ("color_Doppler_", "directional_Doppler_")),
-        (
-            "Frequency",
-            (
-                "time_transform",
-                "sampling_freq",
-                "low_freq",
-                "high_freq",
-                "frequency_bands",
-                "f_bins",
-                "filter2d",
-                "pca_",
-                "svd_",
-            ),
-        ),
-        (
-            "Output",
-            (
-                "saving_to_folder",
-                "square",
-                "transpose",
-                "flip_x",
-                "flip_y",
-                "contrast",
-                "smoothing",
-                "debug",
-            ),
-        ),
-    )
-
     CHOICES: dict[str, tuple[str, ...]] = {
         "spatial_propagation": ("Fresnel", "AngularSpectrum", "None"),
         "image_registration_type": ("translation_rotation_scale", "translation"),
@@ -96,20 +49,17 @@ class SettingsEditor(ttk.Frame):
         self.fields.clear()
         self.selected_key = None
 
-        grouped = self._group_parameters(parameters)
         first_item: str | None = None
-        for group_name, items in grouped.items():
-            group_id = self.tree.insert("", "end", text=group_name, values=("",), open=True, tags=("group",))
-            for key, value in items:
-                item_id = self.tree.insert(
-                    group_id,
-                    "end",
-                    text=key,
-                    values=(self._display_field_value(key, value),),
-                    tags=("parameter",),
-                )
-                self.fields[key] = ParameterField(key=key, original=value, value=value, item_id=item_id)
-                first_item = first_item or item_id
+        for key, value in self._ordered_parameters(parameters):
+            item_id = self.tree.insert(
+                "",
+                "end",
+                text=key,
+                values=(self._display_field_value(key, value),),
+                tags=("parameter",),
+            )
+            self.fields[key] = ParameterField(key=key, original=value, value=value, item_id=item_id)
+            first_item = first_item or item_id
 
         self._clear_editor("Select a parameter to edit it.")
         if first_item is not None:
@@ -140,7 +90,6 @@ class SettingsEditor(ttk.Frame):
         self.tree.grid(row=0, column=0, sticky="nsew")
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<Double-1>", self._focus_editor)
-        self.tree.tag_configure("group", font=("Segoe UI", 10, "bold"))
 
         y_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
         y_scroll.grid(row=0, column=1, sticky="ns")
@@ -329,22 +278,12 @@ class SettingsEditor(ttk.Frame):
                 return choice_value
         return label
 
-    def _group_parameters(self, parameters: dict[str, Any]) -> dict[str, list[tuple[str, Any]]]:
-        grouped: dict[str, list[tuple[str, Any]]] = {name: [] for name, _patterns in self.GROUPS}
-        grouped["Other"] = []
-
-        for key, value in parameters.items():
-            group_name = self._group_for_key(key)
-            grouped[group_name].append((key, value))
-
-        return {name: items for name, items in grouped.items() if items}
-
-    def _group_for_key(self, key: str) -> str:
-        for group_name, patterns in self.GROUPS:
-            for pattern in patterns:
-                if key == pattern or key.startswith(pattern):
-                    return group_name
-        return "Other"
+    @staticmethod
+    def _ordered_parameters(parameters: dict[str, Any]) -> list[tuple[str, Any]]:
+        """Follow the shipped default YAML, appending extra keys in input order."""
+        defaults = yaml.safe_load((parameters_dir() / DEFAULT_PARAMETERS_NAME).read_text(encoding="utf-8"))
+        keys = dict.fromkeys((*defaults, *parameters))
+        return [(key, parameters[key]) for key in keys if key in parameters]
 
 
 def _pipeline_choice_pairs() -> tuple[tuple[str, str], ...]:

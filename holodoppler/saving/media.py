@@ -4,10 +4,13 @@ from __future__ import annotations
 import shutil
 import subprocess
 import time
+from collections import deque
+from numbers import Real
 from pathlib import Path
 from typing import Any, Iterable, Literal
 
 import numpy as np
+import cv2
 from PIL import Image
 
 from holodoppler.core.image_utils import resize_frames
@@ -16,6 +19,59 @@ from . import data as numerical
 from . import policy
 
 VideoWriter = Literal["imageio", "cmd", "pyav"]
+
+
+def validate_video_temporal_sigma(value):
+    """Temporal display blur width in output frames; zero disables filtering."""
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise TypeError("video_temporal_sigma must be a finite nonnegative number")
+    if not np.isfinite(value) or value < 0:
+        raise ValueError("video_temporal_sigma must be a finite nonnegative number")
+    return float(value)
+
+
+class _TemporalGaussian:
+    """Centered Gaussian on display frames, with bounded storage and nearest edges."""
+
+    def __init__(self, sigma):
+        sigma = validate_video_temporal_sigma(sigma)
+        self.radius = int(4 * sigma + 0.5)
+        offsets = np.arange(-self.radius, self.radius + 1)
+        self.weights = np.exp(-0.5 * (offsets / sigma) ** 2) if sigma else np.ones(1)
+        self.weights /= self.weights.sum()
+        self.frames = deque()
+        self.start = self.count = self.next = 0
+
+    def append(self, frame):
+        if not self.radius:
+            return [frame]
+        self.frames.append(frame.copy())
+        self.count += 1
+        return list(self._emit(self.count - self.radius))
+
+    def _emit(self, stop):
+        while self.next < stop:
+            total = np.zeros_like(self.frames[0], dtype=np.float64)
+            for offset, weight in zip(range(-self.radius, self.radius + 1), self.weights):
+                index = min(max(self.next + offset, 0), self.count - 1)
+                # Native mixed-type accumulation avoids a full float64 temporary
+                # and a separate NumPy addition for every neighboring frame.
+                cv2.addWeighted(self.frames[index - self.start], float(weight),
+                                total, 1., 0., dst=total, dtype=cv2.CV_64F)
+            self.next += 1
+            while self.start < max(0, self.next - self.radius):
+                self.frames.popleft()
+                self.start += 1
+            np.rint(total, out=total)
+            np.clip(total, 0, 255, out=total)
+            yield total.astype(np.uint8)
+
+    def finish(self):
+        return self._emit(self.count)
+
+    def clear(self):
+        self.frames.clear()
+
 
 
 def normalize_float_array_to_uint8(data: np.ndarray) -> np.ndarray:
@@ -357,6 +413,7 @@ def save_video(
     ffmpeg: str | None = None,
     codec: str = "mjpeg",
     writer: VideoWriter = "imageio",
+    video_temporal_sigma: float = 0,
 ) -> None:
     """
     Save a video using ImageIO, FFmpeg CLI, or PyAV.
@@ -378,6 +435,24 @@ def save_video(
 
     if suffix == ".mp4":
         codec = "libx264"
+
+    sigma = validate_video_temporal_sigma(video_temporal_sigma)
+    if sigma:
+        frames = video_to_uint8(data)
+        # Keep float64 work limited to one image instead of a full video.
+        temporal_filter = _TemporalGaussian(sigma)
+        data = np.empty_like(frames)
+        index = 0
+        try:
+            for frame in frames:
+                for filtered in temporal_filter.append(frame):
+                    data[index] = filtered
+                    index += 1
+            for filtered in temporal_filter.finish():
+                data[index] = filtered
+                index += 1
+        finally:
+            temporal_filter.clear()
     
     if writer == "imageio":
         save_video_imageio(
@@ -614,6 +689,7 @@ def save_videos(
     video_keys: Iterable[str] | None = None,
     video_formats: Iterable[str] = ("avi",),
     writer: VideoWriter = "cmd",
+    video_temporal_sigma: float = 0,
 ) -> None:
     """Save selected videos as AVI and/or MP4. Saves avi in mjpeg for now and mp4 in libx264"""
     avi_dir = numerical.ensure_directory(Path(target_dir) / "avi")
@@ -651,6 +727,7 @@ def save_videos(
                 ffmpeg=ffmpeg,
                 codec=codec,
                 writer=writer,
+                video_temporal_sigma=video_temporal_sigma,
             )
             logger.info("Saved video: %s (%.1fs)", path, time.time() - start)
 
@@ -673,7 +750,8 @@ class MediaStream:
     """Own encoders, first-frame display levels, and an unquantized average."""
 
     def __init__(self, target_dir: Path, name: str, open_encoder, *, resize_averaged_images: bool = False,
-                 formats=("avi", "mp4"), save_average=True):
+                 formats=("avi", "mp4"), save_average=True, video_temporal_sigma=0):
+        self.temporal_filter = _TemporalGaussian(video_temporal_sigma)
         self.formats = formats
         self.save_average = save_average
         self.target_dir = target_dir
@@ -707,17 +785,35 @@ class MediaStream:
             frame = (np.clip((clean - low) / (high - low), 0., 1.) * 255.).astype(np.uint8)
         else:
             frame = np.zeros(value.shape, dtype=np.uint8)
-        if frame.ndim == 2:
-            frame = np.repeat(frame[..., None], 3, axis=-1)
-        frame = make_even_dimensions(frame[None, ..., :3])[0]
-        for writer in self.writers:
-            writer.append_data(np.ascontiguousarray(frame))
+        if frame.ndim == 3:
+            frame = frame[..., :3]
+        frame = make_even_dimensions(frame[None])[0]
+        for filtered in self.temporal_filter.append(frame):
+            self._write_frame(filtered)
         if self.save_average:
             self.total += value
         self.count += 1
 
+    def _write_frame(self, frame):
+        # Filter grayscale once rather than independently filtering three copies.
+        if frame.ndim == 2:
+            frame = np.repeat(frame[..., None], 3, axis=-1)
+        frame = np.ascontiguousarray(frame)
+        for writer in self.writers:
+            writer.append_data(frame)
+
     def close(self, *, finalize: bool = True) -> None:
         errors = []
+        try:
+            if finalize:
+                for frame in self.temporal_filter.finish():
+                    self._write_frame(frame)
+        except Exception as exc:
+            errors.append(exc)
+        try:
+            self.temporal_filter.clear()
+        except Exception as exc:
+            errors.append(exc)
         for writer in self.writers:
             try:
                 writer.close()
@@ -737,12 +833,14 @@ class MediaStream:
             raise RuntimeError(f"Failed to finalize media output {self.name!r}") from errors[0]
 
 
-def media_jobs(target_dir: Path, name: str, value: np.ndarray, fps: float, *, resize_averaged_images: bool = False):
+def media_jobs(target_dir: Path, name: str, value: np.ndarray, fps: float, *, resize_averaged_images: bool = False,
+               video_temporal_sigma=0):
     """Describe static image or complete-video exports for any execution mode."""
     formats = policy.output_formats(name, value)
     for fmt in ("avi", "mp4"):
         if fmt in formats:
-            yield save_video, (target_dir / fmt / f"{name}.{fmt}", value, fps), {"writer": "imageio"}
+            yield save_video, (target_dir / fmt / f"{name}.{fmt}", value, fps), {
+                "writer": "imageio", "video_temporal_sigma": video_temporal_sigma}
     if "png" in formats:
         callback = save_image_png if policy.is_image(value) else save_video_average_png
         kwargs = {} if policy.is_image(value) else {"resize_averaged_images": resize_averaged_images}

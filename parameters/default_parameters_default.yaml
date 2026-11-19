@@ -11,6 +11,7 @@ shack_hartmann_sub_aps_process: "parallel" # "sequential": lower RAM/VRAM; "para
 
 # saving management
 live_saving: true # false saves all outputs after processing; ECC still buffers when true.
+video_temporal_sigma: 1.0 # AVI/MP4 temporal Gaussian blur sigma in output frames; try 1.0 for smoother videos. 0 disables; H5/PNG unchanged.
 h5compression: 0 # HDF5 gzip level: 0 disables compression; 1-9 compress numerical outputs.
 overwrite_option: "erase"
 num_saving_workers: 2

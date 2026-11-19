@@ -39,6 +39,17 @@ unquantized temporal sum used for the final PNG. `CsvStream` writes one
 flattened row per temporal batch. Complete/static CSV arrays retain their
 existing first-axis rows and flatten trailing dimensions into columns.
 
+Set `video_temporal_sigma: 1.0` in the processing YAML for smoother AVI and
+MP4 exports. The value is the Gaussian standard deviation in output frames;
+`0` (the default) disables it. Filtering affects only display frames, after
+display scaling, and never changes HDF5, CSV, PNG averages, or processing
+results. Spatial pixels and color channels are not mixed. Both streaming and
+buffered exports use a centered Gaussian truncated at four sigma, repeating
+the nearest frame at the ends. Streaming waits for that many future frames
+and keeps at most a window of `2 * int(4 * sigma + 0.5) + 1` frames per video;
+finalization flushes the remaining frames without changing the frame count
+or playback rate.
+
 `OutputClass` validates submissions before dispatch. It waits for queued
 writes before closing format writers, suppresses final averages on failure,
 and propagates background errors. Queue capacity is acquired before input

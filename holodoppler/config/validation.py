@@ -13,6 +13,8 @@ def validate_main_parameters(parameters):
 
     from holodoppler.saving.default_output import validate_outputs
     validate_outputs(parameters)
+    from holodoppler.saving.media import validate_video_temporal_sigma
+    validate_video_temporal_sigma(parameters.get("video_temporal_sigma", 0))
 
     value = parameters.get("skip_every")
     if value is not None:

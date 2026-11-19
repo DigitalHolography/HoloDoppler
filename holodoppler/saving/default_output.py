@@ -145,7 +145,8 @@ class DefaultOutput(OutputClass):
         if videos:
             if state["media"] is None:
                 state["media"] = media.MediaStream(self.target_dir, name,
-                    lambda fmt: self._open_video(name, fmt), formats=sorted(videos), save_average=False)
+                    lambda fmt: self._open_video(name, fmt), formats=sorted(videos), save_average=False,
+                    video_temporal_sigma=self.video_temporal_sigma)
             state["media"].append(value)
 
     def _write_static(self, name, value):

@@ -162,6 +162,7 @@ def save_videos_parallel(
     video_formats: Iterable[str] = ("avi",),
     writer: VideoWriter = "cmd",
     max_workers: int = 8,
+    video_temporal_sigma: float = 0,
 ) -> None:
     """
     Save selected videos as AVI and/or MP4 in parallel.
@@ -215,6 +216,7 @@ def save_videos_parallel(
             ffmpeg=ffmpeg,
             codec=codec,
             writer=writer,
+            video_temporal_sigma=video_temporal_sigma,
         )
 
         elapsed = time.perf_counter() - start

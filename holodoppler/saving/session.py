@@ -176,6 +176,8 @@ class OutputClass:
     def __init__(self, file_reader, parameters=None, custom_path=None,
                  custom_relative_path=None, save_to_h5=True):
         self.parameters = parameters or {}
+        self.video_temporal_sigma = media.validate_video_temporal_sigma(
+            self.parameters.get("video_temporal_sigma", 0))
         self.num_saving_workers, self.saving_queue_depth = scheduler._saving_options(
             self.parameters.get("num_saving_workers", 0),
             self.parameters.get("saving_queue_depth"))
@@ -290,6 +292,7 @@ class OutputClass:
             if state["media"] is None:
                 state["media"] = media.MediaStream(
                     self.target_dir, name, lambda fmt: self._open_video(name, fmt),
+                    video_temporal_sigma=self.video_temporal_sigma,
                     resize_averaged_images=self.parameters.get("resize_averaged_images", False))
             state["media"].append(value)
 
@@ -302,6 +305,7 @@ class OutputClass:
         else:
             for callback, args, kwargs in media.media_jobs(
                 self.target_dir, name, value, self.fps,
+                video_temporal_sigma=self.video_temporal_sigma,
                 resize_averaged_images=self.parameters.get("resize_averaged_images", False)):
                 callback(*args, **kwargs)
 
@@ -373,6 +377,7 @@ def save_outputs(
     """
     start_time = time.time()
     parameters = parameters or {}
+    video_temporal_sigma = media.validate_video_temporal_sigma(parameters.get("video_temporal_sigma", 0))
     if num_saving_workers is not None:
         num_saving_workers, saving_queue_depth = scheduler._saving_options(
             num_saving_workers, saving_queue_depth)
@@ -401,6 +406,7 @@ def save_outputs(
         fps=fps,
         video_formats=("avi","mp4"),
         writer="imageio",
+        video_temporal_sigma=video_temporal_sigma,
     )
 
     media.save_pngs(
@@ -441,6 +447,7 @@ def _bundle_saving_jobs(target_dir, file_reader, output, parameters, fps, save_t
             yield data.save_csv, (target_dir / "csv" / f"{name}.csv", value), {}
             continue
         yield from media.media_jobs(target_dir, name, value, fps,
+                                    video_temporal_sigma=parameters.get("video_temporal_sigma", 0),
                                     resize_averaged_images=parameters.get("resize_averaged_images", False))
     yield data.save_metadata, (target_dir,), {"file_reader": file_reader, "parameters": parameters}
     if save_to_h5:
