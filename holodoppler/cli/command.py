@@ -154,7 +154,7 @@ def _resolve_input_path(provided_path: Optional[Path]) -> Path:
         "Please either:\n"
         "  1. Provide a file path as an argument\n"
         f"  2. Set HOLOFILEPATH in {DEBUG_CONFIG_FILENAME}\n"
-        "  3. Use --batch to process multiple files from a list"
+        "  3. Use --batch to process multiple files from a list or folder"
     )
 
 
@@ -205,6 +205,25 @@ def _read_batch_file(batch_file: Path) -> List[Path]:
             "Please ensure the file contains at least one valid input file."
         )
 
+    return paths
+
+
+def _read_batch_paths(batch_path: Path) -> List[Path]:
+    """Read a file list or collect supported files directly inside a folder."""
+    if not batch_path.is_dir():
+        return _read_batch_file(batch_path)
+
+    try:
+        paths = sorted(
+            (path for path in batch_path.iterdir()
+             if path.suffix.lower() in {".holo", ".cine"} and path.is_file()),
+            key=lambda path: path.name,
+        )
+    except OSError as exc:
+        raise SystemExit(f"Error reading batch folder '{batch_path}': {exc}") from exc
+
+    if not paths:
+        raise SystemExit(f"No .holo or .cine files found in batch folder: {batch_path}")
     return paths
 
 
@@ -282,7 +301,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 else PipelineMode.PROCESS
             )
 
-            file_paths = _read_batch_file(args.batch)
+            file_paths = _read_batch_paths(args.batch)
             return _batch_process(file_paths, parameters, mode)
 
         input_path = _resolve_input_path(args.filepath)

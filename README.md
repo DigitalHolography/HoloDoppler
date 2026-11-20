@@ -84,6 +84,12 @@ holodoppler process --batch "path/to/files.txt" "./parameters/default_parameters
 ```
 
 Give a `.txt` file with one `.holo` or `.cine` path per line.
+You can also give a folder to process all `.holo` and `.cine` files directly
+inside it, without searching subfolders:
+
+```bash
+holodoppler process --batch "path/to/recordings" "./parameters/default_parameters_debug.json"
+```
 
 ### Processing and saving workers in the default pipeline
 

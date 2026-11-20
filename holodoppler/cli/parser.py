@@ -28,6 +28,14 @@ def _existing_file(value: str) -> Path:
     return path
 
 
+def _existing_batch_path(value: str) -> Path:
+    """Validate that the batch source is a file or directory."""
+    path = Path(value).expanduser().resolve()
+    if not (path.is_file() or path.is_dir()):
+        raise argparse.ArgumentTypeError(f"Batch file or folder does not exist: {path}")
+    return path
+
+
 class _ListConstants(ast.NodeTransformer):
     """Allow CLI boolean/null spellings inside otherwise literal lists."""
 
@@ -158,9 +166,12 @@ def _add_batch_argument(parser: argparse.ArgumentParser) -> None:
     """Add the special batch-processing option."""
     parser.add_argument(
         "--batch",
-        type=_existing_file,
-        metavar="BATCH_FILE",
-        help="Text file containing input file paths, one per line.",
+        type=_existing_batch_path,
+        metavar="BATCH_PATH",
+        help=(
+            "Text file containing input file paths, one per line, or a folder "
+            "of .holo and .cine files (subfolders are not searched)."
+        ),
     )
 
 
@@ -189,6 +200,7 @@ def _build_main_parser() -> argparse.ArgumentParser:
             "  holodoppler preview input.holo config.yaml\n"
             "  holodoppler process input.holo config.yaml --threshold 0.5\n"
             "  holodoppler preview --batch file_list.txt config.yaml\n"
+            "  holodoppler process --batch recordings/ config.yaml\n"
             "  holodoppler gui"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
