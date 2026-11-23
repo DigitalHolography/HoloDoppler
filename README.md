@@ -160,6 +160,47 @@ except Exception:
     raise
 ```
 
+### Paint manual artery, vein, and optic-disc masks
+
+```powershell
+python scripts/h5_mask_painter.py "path/to/sample.holo"
+```
+
+You can also pass the `sample` run folder, `sample_HD`, its `h5` folder,
+or an HDF5 file directly. With no argument, use **Open file** or **Open run folder**.
+For a recording, the app opens the alphabetically first HDF5 in
+`sample/sample_HD/h5/`. It displays the time average of `moment0ff`, falling
+back to `moment0`, including datasets inside groups. Arrays remain in native
+`(NT, NY, NX)` order; masks are `(NY, NX)` without transposing or flipping.
+The mean is computed in batches. Display contrast uses the 1st–99th percentiles;
+gamma and overlay opacity affect only the display.
+
+Paint **Artery**, then **Next mask** for **Vein**, then **Optic disc**.
+Left-drag paints, right-drag erases; adjust radius in pixels. Use the toolbar
+for zoom/pan, and deactivate its tool to resume painting. Undo/redo retains up
+to 30 edits. Layers are independent, allowing artery/vein crossings.
+**Soft value [0,1]** paints probabilities (sometimes called logits by DopplerView).
+Binary masks use `value > 0.5`; fractional layers are also saved for further editing.
+
+**Save** writes the EyeFlow companion
+`sample/sample_DV/h5/sample_DV.h5`; `--output PATH` or **Save as** changes it.
+Existing masks at that destination are reopened automatically. Saving updates
+the DopplerView paths `segmentation/Retina/{artery_mask,vein_mask,vessel_mask,
+vessel_segmentation_logits}` and `segmentation/OpticDisc/{mask,center,width,height}`.
+Vessel support is the union of artery and vein. Optic-disc center is `(x,y)`
+and dimensions come from the painted bounding box; empty discs have no geometry.
+Fractional layers use a `_probability` suffix alongside each painted mask.
+EyeFlow thresholds `vessel_segmentation_logits` at `> 0.1`, so low-confidence
+soft pixels can enter its vessel support even when excluded from binary masks.
+
+The output has `provenance/manual = true`, `annotation_method = manual_brush`,
+source HDF5/background names, and a UTC timestamp. Mask datasets also carry
+manual annotation attributes. Saving is atomic and retains unrelated existing
+DV fields, but removes old retinal topology labels because painting invalidates
+them. Previously computed DV analyses are not recalculated. This supplies manual
+segmentation inputs; it does not generate DopplerView topology or analysis results.
+The original HD file is never modified.
+
 ## License
 
 This project is licensed under the GNU General Public License v3.0 only. See [LICENSE](LICENSE).

@@ -35,6 +35,9 @@ def test_symmetric_band_and_full_field_mean(tmp_path, normalization, divisor):
     entry = viewer.load_comparison(source, 50, 100, normalization)
     assert entry['path'] == path
     assert entry['fs'] == 400
+    # Energy uses raw power across ALL bins, independent of display normalization/band.
+    assert entry['energy'] == pytest.approx(values.mean(axis=(1, 2)).sum() / 400)
+    assert entry['dc_energy'] == pytest.approx(values[0].mean() / 400)
     # Stored FFT order is [0, 50, 100, 150, -200, -150, -100, -50].
     np.testing.assert_allclose(entry['image'], values[[1, 2, 6, 7]].mean(axis=0) / divisor)
     np.testing.assert_array_equal(entry['frequency'], [-200, -150, -100, -50, 50, 100, 150])
@@ -51,6 +54,8 @@ def test_dc_exclusion_and_different_grids(tmp_path):
     images, spectra = Figure(), Figure()
     viewer.plot_comparisons(entries, images, spectra)
     assert len(spectra.axes[0].lines) == 2
+    assert f"E={entries[0]['energy']:.4g}" in spectra.axes[0].lines[0].get_label()
+    assert f"E_DC={entries[0]['dc_energy']:.4g}" in spectra.axes[0].lines[0].get_label()
     assert [len(line.get_xdata()) for line in spectra.axes[0].lines] == [7, 4]
     assert [ax.images[0].get_array().shape for ax in images.axes if ax.images] == [(2, 3), (3, 1)]
 
@@ -76,3 +81,54 @@ def test_ambiguous_and_missing_outputs(tmp_path):
         viewer.resolve_h5(source)
     with pytest.raises(FileNotFoundError, match='H5 folder'):
         viewer.resolve_h5(tmp_path / 'missing.holo')
+
+
+def test_roi_spectrum_energy_and_clear(tmp_path):
+    source, _, values = make_h5(tmp_path, skip=2)
+    full = viewer.load_comparison(source, 50, 100, 'none')
+    roi = viewer.select_roi(full, (1, 3, 0, 1))
+    expected = values[:, 0:1, 1:3].mean(axis=(1, 2))
+    np.testing.assert_allclose(roi['power'], expected[roi['order']])
+    assert roi['energy'] == pytest.approx(expected.sum() / 400)
+    assert roi['dc_energy'] == pytest.approx(expected[0] / 400)
+    np.testing.assert_array_equal(roi['image'], full['image'])
+    assert full['roi'] is None
+    for mode in viewer.NORMALIZATIONS:
+        viewer.normalize_entry(roi, mode)
+        assert roi['energy'] == pytest.approx(expected.sum() / 400)
+    viewer.normalize_entry(roi, 'none')
+    restored = viewer.select_roi(roi, None)
+    np.testing.assert_allclose(restored['power'], full['power'])
+    assert restored['roi'] is None
+    images, spectra = Figure(), Figure()
+    viewer.plot_comparisons([roi], images, spectra)
+    assert 'ROI x[1:3], y[0:1]' in spectra.axes[0].lines[0].get_label()
+    assert len(images.axes[0].patches) == 1
+
+
+def test_roi_clipping_and_no_overlap(tmp_path):
+    source, _, values = make_h5(tmp_path)
+    full = viewer.load_comparison(source, 0, 400, 'none')
+    clipped = viewer.select_roi(full, (-2, 20, 1, 10))
+    assert clipped['roi'] == (0, 3, 1, 2)
+    np.testing.assert_allclose(clipped['mean'], values[:, 1:2, :].mean(axis=(1, 2)))
+    with pytest.raises(ValueError, match='does not overlap'):
+        viewer.select_roi(full, (5, 10, 0, 2))
+
+
+@pytest.mark.parametrize('mode', ['unit_area', 'peak'])
+def test_shape_normalization_and_zero_spectra(tmp_path, mode):
+    source, path, values = make_h5(tmp_path)
+    entry = viewer.load_comparison(source, 0, 400, mode)
+    if mode == 'unit_area':
+        assert entry['power'].sum() * 100 == pytest.approx(1)
+        expected = values[1:].mean(axis=0) / (values[1:].sum(axis=0) * 100)
+    else:
+        assert entry['power'].max() == pytest.approx(1)
+        expected = values[1:].mean(axis=0) / values[1:].max(axis=0)
+    np.testing.assert_allclose(entry['image'], expected)
+    with h5py.File(path, 'r+') as handle:
+        handle['averaged_spectrogram'][:] = 0
+    zero = viewer.load_comparison(source, 0, 400, mode)
+    np.testing.assert_array_equal(zero['power'], 0)
+    np.testing.assert_array_equal(zero['image'], 0)

@@ -1,4 +1,4 @@
-"""Compare band-averaged images and full-field spectra from several recordings.
+"""Compare band-averaged images and full-field or ROI spectra from recordings.
 
 Run directly for a file picker, edit FILEPATHS below, or use::
 
@@ -18,14 +18,17 @@ import h5py
 import numpy as np
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.figure import Figure
+from matplotlib.patches import Rectangle
+from matplotlib.widgets import RectangleSelector
 
 
 # Startup settings: recording paths and a symmetric absolute-frequency band (Hz).
 FILEPATHS = []
 FREQUENCY_RANGE_HZ = (0, 10000)
-# Same default as h5_roi_spectra; also supports 'none', 'num_freq_squared', 'density'.
-# 'density' divides unnormalized FFT power by N * effective_fs (power/Hz).
-PSD_NORMALIZATION = 'num_freq'
+# Supports the six modes listed in NORMALIZATIONS below.
+# Match h5_roi_spectra's 'density' mode: divide by N * effective_fs.
+PSD_NORMALIZATION = 'density'
+NORMALIZATIONS = ('none', 'num_freq', 'num_freq_squared', 'density', 'unit_area', 'peak')
 # Effective fs already includes skip_every. Future skip-dependent absolute-power
 # compensation must follow the saved FFT/window normalization; do not assume
 # multiplying power by skip_every recovers power lost to decimation/aliasing.
@@ -34,6 +37,47 @@ PSD_NORMALIZATION = 'num_freq'
 def validate_band(low, high):
     if not np.isfinite([low, high]).all() or not 0 <= low < high:
         raise ValueError('Band must satisfy 0 <= minimum < maximum, in Hz.')
+
+
+def normalize_entry(entry, normalization):
+    """Normalize cached raw values; energy always uses raw orthonormal FFT power."""
+    n, fs = entry['mean'].size, entry['fs']
+    nonzero = np.fft.fftfreq(n) != 0
+    raw = entry['mean'][nonzero]
+    divisors = {'none': 1, 'num_freq': n, 'num_freq_squared': n**2,
+                'density': n * fs, 'unit_area': raw.sum() * fs / n,
+                'peak': raw.max() if raw.size else 0}
+    if normalization not in divisors:
+        raise ValueError(f'Unknown normalization: {normalization}')
+    divisor = divisors[normalization]
+    entry['power'] = entry['mean'][entry['order']] / (divisor if divisor != 0 else 1)
+    image_divisor = (entry['pixel_sum'] * fs / n if normalization == 'unit_area' else
+                     entry['pixel_peak'] if normalization == 'peak' else divisor)
+    entry['image'] = np.divide(entry['raw_image'], image_divisor,
+                               out=np.zeros_like(entry['raw_image']), where=image_divisor != 0)
+    entry.update(normalization=normalization, energy=entry['mean'].sum() / fs,
+                 dc_energy=entry['mean'][0] / fs)
+    return entry
+
+
+def select_roi(entry, roi):
+    """Use common pixel bounds (x0, x1, y0, y1), clipped to each image's size."""
+    result = entry.copy()
+    if roi is None:
+        result.update(mean=entry['full_mean'], roi=None)
+    else:
+        ny, nx = entry['raw_image'].shape
+        x0, x1, y0, y1 = roi
+        x0, x1 = max(0, x0), min(nx, x1)
+        y0, y1 = max(0, y0), min(ny, y1)
+        if x0 >= x1 or y0 >= y1:
+            raise ValueError(f"ROI does not overlap {entry['label']} ({nx} x {ny} pixels).")
+        with h5py.File(entry['path'], 'r') as handle:
+            data = handle['averaged_spectrogram']
+            mean = np.array([np.asarray(data[k, y0:y1, x0:x1], dtype=np.float64).mean()
+                             for k in range(data.shape[0])])
+        result.update(mean=mean, roi=(x0, x1, y0, y1))
+    return normalize_entry(result, entry['normalization'])
 
 
 def resolve_h5(filepath):
@@ -86,26 +130,27 @@ def load_comparison(filepath, low, high, normalization=PSD_NORMALIZATION):
         if not selected.any():
             raise ValueError(f'No nonzero bins in {low:g}-{high:g} Hz; '
                              f'effective fs={fs:g} Hz, bin width={fs / n:g} Hz.')
-        divisors = {'none': 1, 'num_freq': n, 'num_freq_squared': n**2,
-                    'density': n * fs}
-        if normalization not in divisors:
-            raise ValueError(f'Unknown normalization: {normalization}')
-        divisor = divisors[normalization]
         image = np.zeros(spectrum.shape[1:], dtype=np.float64)
+        pixel_sum = np.zeros_like(image)
+        pixel_peak = np.zeros_like(image)
         mean = np.empty(n, dtype=np.float64)
         for index in range(n):
             plane = np.asarray(spectrum[index], dtype=np.float64)
             mean[index] = plane.mean()
+            if frequency[index] != 0:
+                pixel_sum += plane
+                np.maximum(pixel_peak, plane, out=pixel_peak)
             if selected[index]:
                 image += plane
-        image /= int(selected.sum()) * divisor
+        image /= int(selected.sum())
         order = np.argsort(frequency)
         order = order[frequency[order] != 0]
-        return dict(path=path, label=Path(filepath).stem, image=image,
-                    frequency=frequency[order], power=mean[order] / divisor,
-                    fs=fs, skip=skip, band=(low, high), normalization=normalization,
+        return normalize_entry(dict(path=path, label=Path(filepath).stem,
+                    raw_image=image, pixel_sum=pixel_sum, pixel_peak=pixel_peak,
+                    mean=mean, full_mean=mean, order=order, roi=None,
+                    frequency=frequency[order], fs=fs, skip=skip, band=(low, high),
                     selected_bins=int(selected.sum()),
-                    covered_high=min(high, fs / 2))
+                    covered_high=min(high, fs / 2)), normalization)
 
 
 def plot_comparisons(entries, image_figure, spectrum_figure):
@@ -129,15 +174,24 @@ def plot_comparisons(entries, image_figure, spectrum_figure):
         ax.set_xlabel('x (pixel)')
         ax.set_ylabel('y (pixel)')
         image_figure.colorbar(artist, ax=ax, label='Mean spectral value')
+        if entry['roi'] is not None:
+            x0, x1, y0, y1 = entry['roi']
+            ax.add_patch(Rectangle((x0 - 0.5, y0 - 0.5), x1 - x0, y1 - y0,
+                                   edgecolor='tab:red', facecolor='none', linewidth=2))
+        region = ('full field' if entry['roi'] is None else
+                  f"ROI x[{entry['roi'][0]}:{entry['roi'][1]}], y[{entry['roi'][2]}:{entry['roi'][3]}]")
         curve_ax.plot(entry['frequency'], entry['power'],
-                      label=f"{entry['label']} (fs={entry['fs']:g} Hz, skip={entry['skip']:g})")
-    image_figure.suptitle('Symmetric-band mean images (individual color scales)')
-    curve_ax.set_title(f"Full-field mean spectra ({entries[0]['normalization']}; DC excluded)")
+                      label=f"{entry['label']} — {region} (fs={entry['fs']:g} Hz, skip={entry['skip']:g}, "
+                            f"E={entry['energy']:.4g}, E_DC={entry['dc_energy']:.4g})")
+    image_figure.suptitle('Symmetric-band mean images — drag to select ROI (individual color scales)')
+    scope = 'Full-field' if entries[0]['roi'] is None else 'ROI'
+    curve_ax.set_title(f"{scope} mean spectra ({entries[0]['normalization']}; DC excluded)")
     curve_ax.set_xlabel('Frequency (Hz)')
     curve_ax.set_ylabel('Mean power/Hz' if entries[0]['normalization'] == 'density'
                         else 'Mean spectral value')
     curve_ax.grid(True, alpha=0.3)
     curve_ax.legend(fontsize=9)
+    return list(axes.flat)[:len(entries)]
 
 
 class App:
@@ -145,6 +199,9 @@ class App:
         self.root = tk.Tk()
         self.root.title('H5 recording comparison')
         self.paths = list(map(str, paths))
+        self.entries = []
+        self.selectors = []
+        self.roi = None
         bar = ttk.Frame(self.root)
         bar.pack(fill='x', padx=6, pady=6)
         ttk.Button(bar, text='Choose recordings / H5 files', command=self.choose).pack(side='left')
@@ -156,6 +213,16 @@ class App:
         ttk.Entry(bar, textvariable=self.high, width=10).pack(side='left')
         self.compare_button = ttk.Button(bar, text='Compare', command=self.compare)
         self.compare_button.pack(side='left', padx=8)
+        options = ttk.Frame(self.root)
+        options.pack(fill='x', padx=6)
+        ttk.Label(options, text='Normalization:').pack(side='left')
+        self.normalization = tk.StringVar(value=PSD_NORMALIZATION)
+        dropdown = ttk.Combobox(options, textvariable=self.normalization,
+                                values=NORMALIZATIONS, state='readonly', width=20)
+        dropdown.pack(side='left', padx=6)
+        dropdown.bind('<<ComboboxSelected>>', self.change_normalization)
+        ttk.Button(options, text='Clear ROI / full field', command=self.clear_roi).pack(side='left')
+        ttk.Label(options, text='Drag on any image; same pixel bounds apply to all files.').pack(side='left', padx=8)
         self.status = tk.StringVar(value='Select several recording paths or H5 files.')
         ttk.Label(self.root, textvariable=self.status).pack(fill='x', padx=6)
         self.image_figure = Figure(figsize=(11, 6), constrained_layout=True)
@@ -177,7 +244,67 @@ class App:
                                             filetypes=[('All files', '*.*')])
         if paths:
             self.paths = list(paths)
+            self.roi = None
             self.compare()
+
+    def redraw(self):
+        for selector in self.selectors:
+            selector.disconnect_events()
+        self.selectors.clear()
+        if not self.entries:
+            self.image_figure.clear()
+            self.image_canvas.draw_idle()
+            if self.spectrum_window is not None and self.spectrum_window.winfo_exists():
+                self.spectrum_figure.clear()
+                self.spectrum_canvas.draw_idle()
+            return
+        if self.spectrum_window is None or not self.spectrum_window.winfo_exists():
+            self.spectrum_window = tk.Toplevel(self.root)
+            self.spectrum_window.title('Mean spectra comparison')
+            self.spectrum_figure = Figure(figsize=(10, 6), constrained_layout=True)
+            self.spectrum_canvas = self.add_canvas(self.spectrum_window, self.spectrum_figure)
+        axes = plot_comparisons(self.entries, self.image_figure, self.spectrum_figure)
+        for ax in axes:
+            self.selectors.append(RectangleSelector(
+                ax, self.on_select, button=[1], useblit=False,
+                minspanx=1, minspany=1, spancoords='pixels'))
+        self.image_canvas.draw_idle()
+        self.spectrum_canvas.draw_idle()
+        self.spectrum_window.deiconify()
+        self.status.set(f'{len(self.entries)}/{len(self.paths)} files plotted; '
+                        f'normalization: {self.normalization.get()}; '
+                        + ('full field' if self.roi is None else f'ROI {self.roi}'))
+
+    def change_normalization(self, event=None):
+        for entry in self.entries:
+            normalize_entry(entry, self.normalization.get())
+        self.redraw()
+
+    def on_select(self, start, end):
+        coordinates = (start.xdata, end.xdata, start.ydata, end.ydata)
+        if any(value is None for value in coordinates):
+            return
+        x0, x1 = sorted(int(np.floor(value + 0.5)) for value in coordinates[:2])
+        y0, y1 = sorted(int(np.floor(value + 0.5)) for value in coordinates[2:])
+        roi = (x0, x1 + 1, y0, y1 + 1)
+        self.root.config(cursor='watch')
+        self.root.update_idletasks()
+        try:
+            entries = [select_roi(entry, roi) for entry in self.entries]
+        except (OSError, ValueError, KeyError) as exc:
+            messagebox.showerror('Cannot select ROI', str(exc), parent=self.root)
+            self.root.after_idle(self.redraw)
+        else:
+            self.entries, self.roi = entries, roi
+            # Rebuild selectors after the current mouse-release callback completes.
+            self.root.after_idle(self.redraw)
+        finally:
+            self.root.config(cursor='')
+
+    def clear_roi(self):
+        self.entries = [select_roi(entry, None) for entry in self.entries]
+        self.roi = None
+        self.redraw()
 
     def compare(self):
         try:
@@ -197,23 +324,14 @@ class App:
                 self.status.set(f'Loading {index}/{len(self.paths)}: {path}')
                 self.root.update_idletasks()
                 try:
-                    entries.append(load_comparison(path, low, high))
+                    entry = load_comparison(path, low, high, self.normalization.get())
+                    entries.append(select_roi(entry, self.roi) if self.roi is not None else entry)
                 except (OSError, ValueError, KeyError, TypeError) as exc:
                     problems.append(f'{path}\n{exc}')
-            if entries:
-                if self.spectrum_window is None or not self.spectrum_window.winfo_exists():
-                    self.spectrum_window = tk.Toplevel(self.root)
-                    self.spectrum_window.title('Full-field mean spectra')
-                    self.spectrum_figure = Figure(figsize=(10, 6), constrained_layout=True)
-                    self.spectrum_canvas = self.add_canvas(self.spectrum_window,
-                                                          self.spectrum_figure)
-                plot_comparisons(entries, self.image_figure, self.spectrum_figure)
-                self.image_canvas.draw_idle()
-                self.spectrum_canvas.draw_idle()
-                self.spectrum_window.deiconify()
-                self.spectrum_window.lift()
-            self.status.set(f'{len(entries)}/{len(self.paths)} files plotted; '
-                            f'normalization: {PSD_NORMALIZATION}')
+            self.entries = entries
+            self.redraw()
+            if not entries:
+                self.status.set('No files could be plotted.')
         finally:
             self.compare_button.config(state='normal')
             self.root.config(cursor='')

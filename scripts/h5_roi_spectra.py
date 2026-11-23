@@ -26,7 +26,7 @@ from scipy.optimize import OptimizeWarning, curve_fit
 # 'peak'       : divide by max(non-DC spectrum) (peak becomes 1)
 
 # Unit-area and peak modes compare shapes, removing absolute power differences.
-PSD_NORMALIZATION = 'num_freq' # choose this one or replace with a skip_every based normalisation because its really the fact that frames where skipped that reduce total power.
+PSD_NORMALIZATION = 'density' # choose this one or replace with a skip_every based normalisation because its really the fact that frames where skipped that reduce total power.
 
 
 def gaussian_model(frequency, K, A, W):
