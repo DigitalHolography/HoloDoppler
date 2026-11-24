@@ -43,6 +43,7 @@ svd_filter_by_bloc_mib_block_size: 8 # Temporary memory target; null batches all
 svd_filter_by_bloc_threshold: 0 # Leading components removed; zero skips SVD.
 svd_threshold: 23
 svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold", "effective_rank", "participation_ratio", "energy_fraction"
+svd_inverse_selection: false # Keep otherwise rejected modes (including Nyquist rejection) when true; DC removal is unchanged.
 svd_effective_rank_multiplier: 0.25 # Leading count = ceil(multiplier * entropy effective rank).
 svd_participation_ratio_multiplier: 0.5 # Leading count = ceil(multiplier * participation ratio).
 svd_energy_fraction: 0.5 # Cumulative covariance energy removed in energy_fraction mode.
@@ -139,7 +140,7 @@ spectrogram_frequency_binning: 4
 # PCA projection settings
 pca_flatfield: false # Emit pca_sum_ff instead of pca_sum, using registration_flatfield_gw.
 pca_time_window: 32
-pca_index_range: [0, 16] # Python slice: exclusive upper bound
+pca_index_range: [0, 16] # Ascending eigenvalues, exclusive end; also accepts [0, 0.1*"effective rank"] (ceil, per packet).
 
 # Explicit exports. Exact names override globs; last matching glob wins.
 # Empty lists disable an output. Omitted outputs are not exported.
@@ -189,6 +190,11 @@ outputs:
   # HSV directional Doppler video and its temporal-average PNG.
   # directional_Doppler_image: [avi, mp4]
   # directional_Doppler_image_time_projection: [png]
+  # Separate directional M0 maps; enable independently with [avi] or [h5, avi].
+  directional_Doppler_m0_positive: []
+  directional_Doppler_m0_negative: []
+  directional_Doppler_m0_positive_time_projection: [] # Enable with [png].
+  directional_Doppler_m0_negative_time_projection: [] # Enable with [png].
   # registration requires image_registration: true.
   # registration_ecc requires image_registration_with_ecc: true and full processing (not preview).
   "registration*": [h5, csv]

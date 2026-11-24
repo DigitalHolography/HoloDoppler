@@ -3,6 +3,9 @@ Filtering operations: SVD, frequency filtering
 """
 
 from functools import cache
+from math import ceil, isfinite
+from numbers import Integral
+import re
 
 import numpy as np
 from scipy.signal.windows import get_window
@@ -174,6 +177,7 @@ def svd_filter(
     remove_nyquist_modes=False,
     nyquist_width_bins=2.0,
     nyquist_energy_fraction=0.5,
+    svd_inverse_selection=False,
 ):
     """SVD clutter filtering using temporal covariance eigendecomposition.
 
@@ -189,6 +193,10 @@ def svd_filter(
         "energy_fraction". Adaptive modes ignore a nonnegative svd_threshold.
     remove_dc : bool
         Subtract the temporal mean before filtering.
+    svd_inverse_selection : bool
+        Keep the otherwise rejected eigenmodes, removing their complement.
+        Applies after Nyquist rejection; DC removal is unchanged. Negative
+        svd_threshold still disables filtering.
     remove_spatial_dc : bool
         Subtract each frame's full spatial mean after temporal mean removal.
     diagnostic : dict, optional
@@ -235,6 +243,8 @@ def svd_filter(
     H_filtered : array
         Filtered data with the same shape as H.
     """
+    if not isinstance(svd_inverse_selection, bool):
+        raise TypeError("svd_inverse_selection must be a boolean")
     if svd_threshold < 0 and summary is None:
         return H
 
@@ -251,6 +261,7 @@ def svd_filter(
         remove_nyquist_modes=remove_nyquist_modes,
         nyquist_width_bins=nyquist_width_bins,
         nyquist_energy_fraction=nyquist_energy_fraction,
+        svd_inverse_selection=svd_inverse_selection,
     )
     return H if svd_threshold < 0 else filtered
 
@@ -291,7 +302,8 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
                        effective_rank_multiplier=1.0, energy_fraction=0.9,
                        eigenvalue_weighting=True, participation_ratio_multiplier=1.0,
                        remove_spatial_dc=False, remove_nyquist_modes=False,
-                       nyquist_width_bins=2.0, nyquist_energy_fraction=0.5):
+                       nyquist_width_bins=2.0, nyquist_energy_fraction=0.5,
+                       svd_inverse_selection=False):
     """Filter time-first data into a time-by-pixel output without changing input."""
     nt, pixels = output.shape
     _validate_adaptive_svd(effective_rank_multiplier, energy_fraction,
@@ -394,6 +406,13 @@ def _svd_filter_matrix(xp, linalg, data, output, threshold, mode,
         scores = xp.sum(spectra * weights[:, None], axis=0) / xp.sum(spectra, axis=0)
         rejected = ((xp.arange(nt) < selected.shape[1])
                     | (scores >= nyquist_energy_fraction))
+        selected = vectors[:, rejected]
+        retained = vectors[:, ~rejected]
+
+    if svd_inverse_selection and threshold >= 0:
+        if rejected is None:
+            rejected = xp.arange(nt) < selected.shape[1]
+        rejected = ~rejected
         selected = vectors[:, rejected]
         retained = vectors[:, ~rejected]
 
@@ -638,16 +657,72 @@ def welch_power_spectrum(xp, fft, H, batch_size=32, stride=32, windowing=None):
     return total
 
 
+def _pca_rank_multiplier(value):
+    """Parse a rank expression without evaluating arbitrary Python code."""
+    match = re.fullmatch(
+        r'''\s*(?:([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*\*\s*)?(?:"effective rank"|'effective rank'|effective_rank|effective rank)\s*''',
+        value,
+    )
+    if match is None:
+        raise ValueError('pca_index_range bounds must be integers or expressions like 0.1*"effective rank"')
+    multiplier = float(match.group(1) or 1)
+    if not isfinite(multiplier):
+        raise ValueError("pca_index_range effective rank multiplier must be finite")
+    return multiplier
+
+
+def validate_pca_index_range(index_range, window):
+    """Validate full-image PCA bounds; rank expressions resolve per packet."""
+    if not isinstance(index_range, (list, tuple)) or len(index_range) != 2:
+        raise TypeError("pca_index_range must contain two bounds")
+    for value in index_range:
+        if isinstance(value, str):
+            _pca_rank_multiplier(value)
+        elif isinstance(value, bool) or not isinstance(value, Integral):
+            raise TypeError("pca_index_range bounds must be integers or effective rank expressions")
+        elif not 0 <= value <= window:
+            raise ValueError("pca_index_range must satisfy 0 <= start < end <= pca_time_window")
+    start, end = index_range
+    if not isinstance(start, str) and not isinstance(end, str) and start >= end:
+        raise ValueError("pca_index_range must satisfy 0 <= start < end <= pca_time_window")
+
+
+def _resolve_pca_index_range(xp, index_range, eigenvalues):
+    energy = xp.maximum(eigenvalues, 0)
+    total = float(xp.sum(energy))
+    rank = 0.0
+    if total > 0:
+        positive = energy[energy > 0] / total
+        rank = float(xp.exp(-xp.sum(positive * xp.log(positive))))
+    size = eigenvalues.shape[0]
+    bounds = []
+    for value in index_range:
+        if isinstance(value, str):
+            scaled = _pca_rank_multiplier(value) * rank
+            value = size if scaled >= size else ceil(scaled)
+        bounds.append(int(value))
+    if bounds[0] > bounds[1]:
+        raise ValueError("pca_index_range resolves to start > end")
+    return tuple(bounds)
+
+
 def pca_packet_mean(xp, holograms, window, index_range):
     """Average PCA magnitude sums over complete, consecutive time packets."""
-    start, end = index_range
+    validate_pca_index_range(index_range, window)
+    adaptive = any(isinstance(value, str) for value in index_range)
     count = holograms.shape[0] // window
     if count == 0:
         raise ValueError("pca_time_window must fit within the supplied frame stack")
     total = None
     for offset in range(0, count * window, window):
-        projected = pca_time_transform(
-            xp, holograms[offset:offset + window], remove_dc=False)
+        packet = holograms[offset:offset + window]
+        if adaptive:
+            projected, eigenvalues = pca_time_transform(
+                xp, packet, remove_dc=False, return_eigenvalues=True)
+            start, end = _resolve_pca_index_range(xp, index_range, eigenvalues)
+        else:
+            projected = pca_time_transform(xp, packet, remove_dc=False)
+            start, end = index_range
         image = xp.sum(xp.abs(projected[start:end]), axis=0)
         if total is None:
             total = image
@@ -656,7 +731,7 @@ def pca_packet_mean(xp, holograms, window, index_range):
     return total / count
 
 
-def pca_time_transform(xp, H, remove_dc=False):
+def pca_time_transform(xp, H, remove_dc=False, *, return_eigenvalues=False):
     if remove_dc:
         dc = xp.mean(H, axis=0)
         H = H - dc
@@ -667,7 +742,8 @@ def pca_time_transform(xp, H, remove_dc=False):
 
     S, V = xp.linalg.eigh(cov)
 
-    return (H2 @ V).T.reshape(sz)
+    projected = (H2 @ V).T.reshape(sz)
+    return (projected, S) if return_eigenvalues else projected
 
 
 def corner_compensation(xp, psd):

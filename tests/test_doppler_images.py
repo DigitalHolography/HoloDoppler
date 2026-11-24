@@ -254,6 +254,68 @@ def test_disabled_outputs_do_not_compute_directional(monkeypatch):
     assert not any("Doppler" in key for key in result)
 
 
+@pytest.mark.parametrize("side", ["positive", "negative"])
+@pytest.mark.parametrize("projection_only", [False, True])
+def test_select_directional_scalar_independently(side, projection_only):
+    from holodoppler.saving.default_output import computation_parameters
+    name = f"directional_Doppler_m0_{side}"
+    selected = name + "_time_projection" if projection_only else name
+    p = computation_parameters(params(outputs={selected: ["png"] if projection_only else ["avi"]},
+                                      directional_Doppler_image=False, square=True))
+    assert p["directional_Doppler_image"] is True
+    frames = np.random.default_rng(97).uniform(1, 100, (8, 6, 10)).astype(np.float32)
+    raw = main_default._process_batch(p, frames)
+    internal = "_directional_Doppler_pos" if side == "positive" else "_directional_Doppler_neg"
+    expected = main_default.resize_frames(np, backend.zoom, raw[internal], 10, 10)
+    result = main_default._finalize_spatial_result(raw, p)
+    np.testing.assert_allclose(result[name], expected)
+    other = "negative" if side == "positive" else "positive"
+    assert f"directional_Doppler_m0_{other}" not in result
+    assert not any(key.startswith("_directional_") for key in result)
+
+
+@pytest.mark.parametrize("live", [False, True])
+@pytest.mark.parametrize("ecc", [False, True])
+def test_separate_directional_exports(tmp_path, monkeypatch, live, ecc):
+    names = ("directional_Doppler_m0_positive", "directional_Doppler_m0_negative")
+    rules = {name: ["h5", "avi"] for name in names}
+    rules.update({name + "_time_projection": ["h5", "png"] for name in names})
+    p = params(outputs=rules, directional_Doppler_image=False, live_saving=live,
+               square=True, image_registration_with_ecc=ecc, numpy_num_workers=0)
+    frames = np.random.default_rng(98).uniform(1, 100, (16, 6, 10)).astype(np.float32)
+    reader = SimpleNamespace(file_path=tmp_path / "input.raw", extension=".raw", total_frames=16,
+                             read_frames=lambda first_frame, batch_size, **kw:
+                             frames[first_frame:first_frame + batch_size].copy())
+    monkeypatch.setattr(main_default, "get_reader", lambda _: reader)
+    monkeypatch.setattr(main_default, "register_with_ecc", lambda values, **kw: np.zeros((len(values), 12)))
+    monkeypatch.setattr(main_default, "apply_ecc_registration", lambda values, *args, **kw:
+                        np.roll(values, 1, axis=-1))
+    main_default.process(reader.file_path, p)
+    path = next(tmp_path.rglob("*_output.h5"))
+    with h5py.File(path) as handle:
+        assert "directional_Doppler_image" not in handle
+        for name in names:
+            assert handle[name].shape == (2, 10, 10)
+            assert np.isfinite(handle[name][:]).all()
+            np.testing.assert_allclose(handle[name + "_time_projection"], handle[name][:].mean(axis=0), rtol=1e-6)
+            assert next(tmp_path.rglob(name + "_time_projection.png")).exists()
+            video = cv2.VideoCapture(str(next(tmp_path.rglob(name + ".avi"))))
+            try:
+                count = 0
+                while True:
+                    ok, frame = video.read()
+                    if not ok:
+                        break
+                    assert frame.shape == (10, 10, 3)
+                    np.testing.assert_array_equal(frame[..., 0], frame[..., 1])
+                    np.testing.assert_array_equal(frame[..., 0], frame[..., 2])
+                    count += 1
+                assert count == 2
+            finally:
+                video.release()
+    assert not list(tmp_path.rglob("directional_Doppler_image.avi"))
+
+
 def test_rgb_average_does_not_renormalize_channels():
     video = np.array([[[[10, 20, 40]]], [[[20, 40, 80]]]], np.uint8)
     np.testing.assert_array_equal(saving.average_video(video), [[[15, 30, 60]]])

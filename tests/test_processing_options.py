@@ -123,6 +123,27 @@ def test_main_svd_and_registration_receive_budgets(parameters, monkeypatch, budg
     assert all(call.kwargs['block_size_mib'] == budget for call in shifts.call_args_list)
 
 
+@pytest.mark.parametrize('value', [0, 1, 'true', None])
+def test_reject_invalid_inverse_selection(parameters, value):
+    parameters['svd_inverse_selection'] = value
+    with pytest.raises(TypeError, match='svd_inverse_selection'):
+        validate_main_parameters(parameters)
+
+
+@pytest.mark.parametrize('inverse', [False, True])
+def test_main_forwards_inverse_selection(parameters, monkeypatch, inverse):
+    manager = backend.BackendManager('numpy')
+    for name in ('xp', 'fft', 'linalg', 'gaussian_filter'):
+        monkeypatch.setattr(backend, name, getattr(manager, name))
+    parameters.update(svd_inverse_selection=inverse, shack_hartmann_autofocus=False,
+                      image_registration=False)
+    svd = Mock(wraps=filtering.svd_filter)
+    monkeypatch.setattr(main_default, 'svd_filter', svd)
+    frames = np.random.default_rng(15).random((8, 6, 8)).astype(np.float32)
+    main_default._process_one_batch(parameters, frames)
+    assert svd.call_args.kwargs['svd_inverse_selection'] is inverse
+
+
 @pytest.mark.parametrize('value', [-1, float('nan'), float('inf'), True, 'one'])
 def test_reject_invalid_participation_ratio_multiplier(parameters, value):
     parameters['svd_filter_mode'] = 'participation_ratio'

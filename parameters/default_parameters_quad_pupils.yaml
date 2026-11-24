@@ -31,6 +31,7 @@ filter2d_low: 0.02
 # SVD filtering
 svd_threshold: 2
 svd_filter_mode: "number_of_values" # Options: "number_of_values", "amplitude_threshold", "effective_rank", "participation_ratio", "energy_fraction"
+svd_inverse_selection: false # Keep otherwise rejected modes (including Nyquist rejection) when true; DC removal is unchanged.
 svd_remove_dc: true
 
 # Temporal sampling

@@ -365,6 +365,7 @@ def _process_batch(parameters, frames, phase_term=None, output_dict=None,
         backend.xp, backend.linalg, holograms.astype(xp.complex64, copy=False),
         parameters["svd_threshold"],
         filter_mode=parameters["svd_filter_mode"],
+        svd_inverse_selection=parameters.get("svd_inverse_selection", False),
         remove_dc=parameters["svd_remove_dc"],
         remove_spatial_dc=parameters.get("svd_remove_spatial_dc", False),
         block_size_mib=parameters.get("svd_block_size_mib", 8),
@@ -1032,6 +1033,12 @@ def _finalize_spatial_result(result, parameters):
                     and key not in {"registration", "registration_ecc", "eigen_spectrogram"}):
                 size = max(value.shape)
                 result[key] = resize_frames(backend.xp, backend.zoom, value, size, size)
+    # Export the same registered/resized scalar maps used for the HSV composite.
+    if "outputs" in parameters:
+        for name, internal in (("directional_Doppler_m0_positive", "_directional_Doppler_pos"),
+                               ("directional_Doppler_m0_negative", "_directional_Doppler_neg")):
+            if internal in result and _output_needed(parameters, name):
+                result[name] = result[internal]
     finish_doppler_images(result, backend.xp, parameters)
     return result
 

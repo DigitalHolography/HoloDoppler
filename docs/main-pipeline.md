@@ -283,6 +283,7 @@ additional calibration and conventions outside this function.
 | `registration`, `registration_ecc` | Translation shifts and optional ECC transformations |
 | `color_Doppler_image` | RGB composite from Gaussian-normalized low/high positive-frequency magnitude bands |
 | `directional_Doppler_image` | HSV-derived RGB encoding of positive/negative spectrum maps |
+| `directional_Doppler_m0_positive`, `directional_Doppler_m0_negative` | Separate grayscale M0+/M0− maps used by the directional composite |
 | `shack_hartmann_*` | Optional wavefront, subaperture, coefficient and shift diagnostics |
 
 With ECC disabled, `_finalize_spatial_result()` optionally resizes scalar maps
@@ -435,6 +436,21 @@ With `pca_compute: true`, setting `pca_flatfield: true` applies Gaussian flatfie
 correction using `registration_flatfield_gw` and emits only `pca_sum_ff` instead
 of `pca_sum`. Both PCA variants support numerical and media exports.
 
+`pca_index_range` accepts integer bounds or effective rank expressions:
+
+```yaml
+pca_index_range: [0, 0.1*"effective rank"]
+```
+
+Each complete `pca_time_window` packet resolves its own bounds using entropy
+effective rank `exp(-sum(p * log(p)))`, where `p` is the normalized nonnegative
+PCA covariance eigenvalue spectrum. Expression bounds round up and are capped
+at the packet size. Components retain ascending eigenvalue order and the upper
+bound is exclusive, just as for integer slices. A zero-energy packet has rank
+zero; equal resolved bounds produce a zero image, and reversed bounds raise an
+error. Either bound may use an expression. To quote the entire expression in
+YAML, use `[0, '0.1*"effective rank"']`.
+
 The `pca_accumulation` pipeline always emits both `pca_sum` and `pca_sum_ff`.
 Each output averages PCA magnitude sums from `accumulation` consecutive
 `batch_size`-frame packets, using the `pca_range` component slice. Flatfield
@@ -539,6 +555,15 @@ uncentered input, with zero static projection and all components in dynamic.
 `svd_dc` is zero when temporal removal is disabled or the threshold is negative.
 `svd_dc_spatial` is omitted when the threshold is negative.
 
+`svd_inverse_selection` defaults to `false`. Set it to `true` to keep the
+eigenmodes the global filter would otherwise remove and remove their complement.
+For example, `svd_threshold: 5` with `number_of_values` then keeps the five
+largest modes and removes the lower modes. This applies to all selection modes,
+including the combined Nyquist rejection. Temporal/spatial DC removal is unchanged,
+and a negative threshold still bypasses filtering. Static/dynamic PC summaries and
+diagnostics follow the actual removed/retained sets. Independent local,
+Shack-Hartmann, and Gaussian-width SVD filters retain their own behavior.
+
 Adaptive global SVD modes can replace `number_of_values`:
 
 - `svd_filter_mode: effective_rank` removes
@@ -616,6 +641,19 @@ outputs:
   spectrograms: [h5]
   averaged_spectrogram: [h5]
 ```
+
+To save M0+ and M0− as separate grayscale videos, add these entries to `outputs`:
+
+```yaml
+  directional_Doppler_m0_positive: [avi]
+  directional_Doppler_m0_negative: [avi]
+```
+
+Either map can be selected independently, without exporting the combined
+`directional_Doppler_image`. They use `directional_Doppler_frequency_band` and
+the same energy-preserving flatfield normalization as the color composite,
+after registration and resizing. Use `[h5, avi]` to retain numerical maps too,
+or select their `_time_projection` outputs with `[png]` for average images.
 
 Exact names override glob rules, including an empty list to disable a dataset.
 Otherwise the last matching glob wins. Omitted datasets are not exported.

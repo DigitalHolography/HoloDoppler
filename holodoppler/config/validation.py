@@ -4,7 +4,10 @@ from numbers import Integral, Real
 from math import isfinite
 
 from holodoppler.logging import logger
-from holodoppler.core.filtering import _welch_window, _validate_adaptive_svd, _validate_nyquist_svd
+from holodoppler.core.filtering import (
+    _welch_window, _validate_adaptive_svd, _validate_nyquist_svd,
+    validate_pca_index_range,
+)
 from holodoppler.core.shack_hartmann import _validate_pca_index_range
 from holodoppler.core.propagation import _validate_sas_parameters, _validate_zero_padding
 
@@ -96,11 +99,7 @@ def validate_main_parameters(parameters):
     if window <= 0:
         raise ValueError("pca_time_window must be positive")
     bounds = parameters.get("pca_index_range", [0, 16])
-    if (not isinstance(bounds, (list, tuple)) or len(bounds) != 2
-            or any(isinstance(v, bool) or not isinstance(v, Integral) for v in bounds)):
-        raise TypeError("pca_index_range must contain two integers")
-    if not 0 <= bounds[0] < bounds[1] <= window:
-        raise ValueError("pca_index_range must satisfy 0 <= start < end <= pca_time_window")
+    validate_pca_index_range(bounds, window)
     if parameters.get("pca_compute", False) and window > parameters.get("batch_size", 256):
         raise ValueError("pca_time_window must not exceed batch_size")
 
@@ -251,6 +250,9 @@ def validate_main_parameters(parameters):
         raise TypeError(
             f"Parameter 'svd_threshold' must be a real number; got {value!r} ({type(value).__name__})."
         )
+
+    if not isinstance(parameters.get("svd_inverse_selection", False), bool):
+        raise TypeError("svd_inverse_selection must be a boolean")
 
     value = parameters.get("svd_filter_mode", 'number_of_values')
     if not (isinstance(value, str)):

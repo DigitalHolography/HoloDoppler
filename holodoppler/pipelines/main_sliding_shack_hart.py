@@ -127,6 +127,7 @@ def _process_batch(
             backend.xp, backend.linalg, holograms,
             parameters["svd_threshold"],
             filter_mode=parameters["svd_filter_mode"],
+            svd_inverse_selection=parameters.get("svd_inverse_selection", False),
             effective_rank_multiplier=parameters.get("svd_effective_rank_multiplier", 1.0),
             participation_ratio_multiplier=parameters.get("svd_participation_ratio_multiplier", 1.0),
             energy_fraction=parameters.get("svd_energy_fraction", 0.9),
