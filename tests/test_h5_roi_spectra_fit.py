@@ -112,3 +112,34 @@ def test_r_squared_matches_residuals():
                                      *[maps[name][0, 0] for name in ('K', 'A', 'W')])
     expected = 1 - np.sum((y - predicted)**2) / np.sum((y - y.mean())**2)
     assert maps['R²'][0, 0] == pytest.approx(expected)
+
+
+def test_pixelwise_unit_area_before_roi_mean():
+    # Bright and dim pixels occupy different bins; DC must not set their weight.
+    spectrum = np.array([[[1e6, 2e6]], [[90, 0]], [[0, 2]], [[0, 0]]], dtype=float)
+    frequency = np.fft.fftshift(np.fft.fftfreq(4, d=1 / 8))
+    _, values, _, integral = viewer.prepare_roi_spectrum(spectrum, frequency, 8, True)
+    # df=2 Hz; each pixel has unit area, so each contributes 0.25 in its bin.
+    np.testing.assert_allclose(values, [0.25, 0, 0.25])
+    assert integral == pytest.approx(1)
+    np.testing.assert_array_equal(spectrum[0], [[1e6, 2e6]])
+
+
+@pytest.mark.parametrize('mode', ['none', 'num_freq', 'density', 'unit_area', 'peak'])
+def test_pixelwise_disabled_preserves_existing_normalization(mode):
+    entry, _ = make_entry()
+    actual = viewer.prepare_roi_spectrum(entry['spectrum'], entry['freq'], entry['fs'],
+                                         False, mode)
+    expected = viewer.prepare_spectrum(entry['spectrum'].mean(axis=(1, 2)),
+                                       entry['freq'], entry['fs'], mode)
+    for result, reference in zip(actual, expected):
+        np.testing.assert_allclose(result, reference)
+
+
+def test_pixelwise_zero_area_pixels():
+    spectrum = np.zeros((4, 1, 2))
+    spectrum[0] = 100  # DC-only pixels have zero non-DC area.
+    frequency = np.fft.fftshift(np.fft.fftfreq(4, d=1 / 8))
+    _, values, bin_sum, integral = viewer.prepare_roi_spectrum(spectrum, frequency, 8, True)
+    np.testing.assert_array_equal(values, 0)
+    assert bin_sum == integral == 0

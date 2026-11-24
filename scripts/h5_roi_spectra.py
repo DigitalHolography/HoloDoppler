@@ -147,6 +147,24 @@ def prepare_spectrum(mean, frequency, fs, normalization=PSD_NORMALIZATION):
     return frequency[nonzero], psd, bin_sum, bin_sum * df
 
 
+def prepare_roi_spectrum(spectrum, frequency, fs, pixelwise=False,
+                         normalization=PSD_NORMALIZATION):
+    """Optionally give each pixel unit non-DC area before averaging the ROI.
+
+    Stored spectra are in FFT order (DC at index zero). Zero-area pixels stay
+    zero and remain in the spatial average. Unit-area mode replaces the global
+    display normalization, so the averaged curve is not normalized twice.
+    """
+    if not pixelwise:
+        return prepare_spectrum(spectrum.mean(axis=(1, 2)), frequency, fs, normalization)
+    divisor = spectrum[1:].sum(axis=0, dtype=np.float64) * (fs / spectrum.shape[0])
+    mean = np.empty(spectrum.shape[0], dtype=np.float64)
+    for index, plane in enumerate(spectrum):
+        values = np.divide(plane, divisor, out=np.zeros_like(divisor), where=divisor != 0)
+        mean[index] = values.mean()
+    return prepare_spectrum(mean, frequency, fs, normalization='none')
+
+
 def frequency_range_image(entry, lower, upper, symmetric=False, difference=False):
     """Sum normalized, non-DC PSD bins per pixel in the requested Hz range."""
     if not np.isfinite([lower, upper]).all() or lower > upper:
@@ -291,6 +309,10 @@ class App:
         self.log_log = tk.BooleanVar(value=False)
         tk.Checkbutton(bar, text='Log-log', variable=self.log_log,
                        command=self.update_spectrum_scale).pack(side='left')
+        self.pixelwise_normalization = tk.BooleanVar(value=False)
+        tk.Checkbutton(bar, text='Pixelwise unit-area (exclude DC)',
+                       variable=self.pixelwise_normalization,
+                       command=self.update_roi_spectra).pack(side='left')
         self.fig = Figure(figsize=(11, 5), constrained_layout=True)
         self.image_ax, self.spectrum_ax = self.fig.subplots(1, 2)
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
@@ -404,7 +426,7 @@ class App:
                                           useblit=True, interactive=False,
                                           minspanx=1, minspany=1, spancoords='data')
         self.root.title(title)
-        self.update_spectrum_scale()
+        self.update_roi_spectra()
         self.canvas.draw_idle()
 
     def fit_pixels(self):
@@ -427,6 +449,24 @@ class App:
         self.spectrum_ax.autoscale_view()
         self.canvas.draw_idle()
 
+    def update_roi_spectra(self):
+        """Recompute existing ROI curves when pixelwise normalization is toggled."""
+        pixelwise = self.pixelwise_normalization.get()
+        mode = 'pixelwise unit-area' if pixelwise else PSD_NORMALIZATION
+        self.spectrum_ax.set_title(f'Mean spectrum per ROI ({mode})')
+        for _, lines in self.rois:
+            for line in lines:
+                entry = line.source_entry
+                x0, x1, y0, y1 = line.roi_bounds
+                frequency, psd, bin_sum, integral = prepare_roi_spectrum(
+                    entry['spectrum'][:, y0:y1, x0:x1], entry['freq'], entry['fs'],
+                    pixelwise=pixelwise)
+                line.spectrum_data = (frequency, psd)
+                line.set_label(line.base_label + f' | sum={bin_sum:.5g}, integral={integral:.5g}')
+        if self.rois:
+            self.spectrum_ax.legend(fontsize='small')
+        self.update_spectrum_scale()
+
     def select(self, start, end):
         if self.moment is None or start.xdata is None or end.xdata is None or start.ydata is None or end.ydata is None:
             return
@@ -444,21 +484,17 @@ class App:
         self.image_ax.add_patch(rect)
         lines = []
         for i, entry in enumerate(self.entries):
-            mean = entry['spectrum'][:, y0:y1, x0:x1].mean(axis=(1, 2))
-            frequency, psd, bin_sum, integral = prepare_spectrum(
-                mean, entry['freq'], entry['fs'])
             label = (f'ROI {roi_number}' if len(self.entries) == 1 else
                      f"ROI {roi_number} — {entry['label']}")
-            # Report both conventions so bin power and density can be compared.
-            label += f' | sum={bin_sum:.5g}, integral={integral:.5g}'
-            line, = self.spectrum_ax.plot(frequency, psd,
+            line, = self.spectrum_ax.plot([], [],
                                           color=color, linestyle=['-', '--', '-.', ':'][i % 4],
                                           alpha=0.95, label=label)
-            line.spectrum_data = (frequency, psd)
+            line.source_entry = entry
+            line.roi_bounds = (x0, x1, y0, y1)
+            line.base_label = label
             lines.append(line)
         self.rois.append((rect, lines))
-        self.update_spectrum_scale()
-        self.spectrum_ax.legend(fontsize='small')
+        self.update_roi_spectra()
         self.canvas.draw_idle()
 
     def clear(self):
