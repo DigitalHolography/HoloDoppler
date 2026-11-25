@@ -242,12 +242,16 @@ def fresnel_transform(
     zero_padding=False,
     use_output_kernel=True,
     input_kernel=None,
+    *,
+    center=True,
 ):
     """Apply Fresnel propagation, optionally reusing a corrected input kernel.
 
     ``zero_padding=[pad_y, pad_x]`` adds that many zeros to each side of the
     final two axes after applying the input kernel. False/None disables it.
     Returns the full padded field, preserving leading batch dimensions.
+    With center=False, callers can shift reduced images instead of the field.
+    The output kernel requires centered coordinates.
     """
 
     zero_padding = _validate_zero_padding(zero_padding)
@@ -263,9 +267,11 @@ def fresnel_transform(
         kernel_in = kernel_in[0]
     frames = _pad_propagation_field(xp, frames * kernel_in, zero_padding)
 
-    result = fft.fftshift(
-        fft.fft2(frames, axes=(-1, -2), norm="ortho"), axes=(-1, -2)
-    )
+    if not center and use_output_kernel:
+        raise ValueError("The Fresnel output kernel requires a centered transform")
+    result = fft.fft2(frames, axes=(-1, -2), norm="ortho")
+    if center:
+        result = fft.fftshift(result, axes=(-1, -2))
 
     if use_output_kernel:
         ny, nx = frames.shape[-2:]

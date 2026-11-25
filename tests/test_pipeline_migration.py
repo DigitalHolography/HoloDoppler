@@ -58,7 +58,7 @@ def reader_for(tmp_path, frames):
 
 
 def test_registry_and_imports():
-    expected = {"default", "lsci", "pca_accumulation", "sliding_shack_hartmann", "split_apertures"}
+    expected = {"default", "fast", "lsci", "pca_accumulation", "sliding_shack_hartmann", "split_apertures"}
     assert set(pipelines) == expected | {f"preview_{name}" for name in expected}
     for name in expected:
         module_name = "sliding_shack_hart" if name == "sliding_shack_hartmann" else name
@@ -228,6 +228,8 @@ def test_profiles_follow_default_order_and_comments():
         keys = [key for key in yaml.safe_load(text) if key in order]
         assert keys == sorted(keys, key=order.index), path.name
         for key, comment in shared_comments(text).items():
+            if path.name == "default_parameters_fast.yaml" and key in {"pca_index_range", "shack_hartmann_autofocus"}:
+                continue
             if key in comments:
                 assert comment == comments[key], (path.name, key)
 

@@ -26,11 +26,12 @@ uv sync --all-extras
 
 ### Processing pipelines
 
-Available pipeline names are `default`, `lsci`, `pca_accumulation`,
+Available pipeline names are `default`, `fast`, `lsci`, `pca_accumulation`,
 `sliding_shack_hartmann`, and `split_apertures`. Each supports preview and
 processing with the profiles in `parameters/`.
 
-For Laser Doppler Holography rendering keep using the `default` pipeline.
+Use `fast` for contiguous Fresnel processing with FFT moments or PCA maps,
+grouped accumulation, and deferred saving. [Fast pipeline guide](docs/fast-pipeline.md).
 
 See [How the main pipeline works](docs/main-pipeline.md) for the processing
 stages, data flow, execution modes, and remaining design concerns. 

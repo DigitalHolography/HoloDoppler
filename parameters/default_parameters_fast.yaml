@@ -1,0 +1,18 @@
+pipeline_name: fast
+backend: auto # auto, numpy (CPU), or cupy (GPU; falls back to CPU if unavailable)
+first_frame: 0
+end_frame: -1 # -1 means process all frames
+z: use_holovibes # Propagation distance in meters
+wavelength: 852.0e-9 # Wavelength in meters
+pixel_pitch: use_holovibes # Pixel pitch in meters [y, x]
+sampling_freq: use_holovibes # Sampling frequency in Hz
+image_registration: false
+shack_hartmann_autofocus: false # Fit once from the first complete accumulation group.
+pca_index_range: [0, 16] # Ascending eigenvalues, exclusive end. Used in PCA mode.
+
+time_window: 64
+accu: 4
+mode: fft
+frequency_ranges: [[4, 31], [33, 60]]
+svd_filter: 0 # Positive removes largest modes, negative removes smallest.
+# Optional outputs mapping. Defaults to uncompressed HDF5 for each active map.
