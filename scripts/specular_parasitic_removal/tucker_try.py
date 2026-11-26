@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import tensorly as tl
 from tensorly.decomposition import tucker
-from holodoppler.file_reader import FileReaderFactory
+from holodoppler.file_reader import FileReader
 
 # ============================================================
 # PARAMETERS
@@ -17,7 +17,7 @@ frame = 100
 # ============================================================
 # LOAD DATA
 # ============================================================
-reader = FileReaderFactory.create(DATA_PATH)
+reader = FileReader(DATA_PATH)
 M = reader.read_frames(0, n_frames).astype(np.float32)
 
 nt, ny, nx = M.shape

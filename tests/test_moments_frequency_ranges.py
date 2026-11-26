@@ -93,7 +93,7 @@ def test_range_exports_stream_buffer_preview(tmp_path, monkeypatch, ecc):
     frames = np.random.default_rng(4).random((16, 6, 10)).astype(np.float32)
     reader = SimpleNamespace(file_path=tmp_path / "input.raw", extension=".raw", total_frames=16,
                              read_frames=lambda first_frame, batch_size, **k: frames[first_frame:first_frame + batch_size].copy())
-    monkeypatch.setattr(main_default, "get_reader", lambda _: reader)
+    monkeypatch.setattr(main_default, "FileReader", lambda _: reader)
     monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *a: Mock())
     monkeypatch.setattr(media, "save_video", lambda *a, **k: None)
     monkeypatch.setattr(main_default, "register_with_ecc", lambda values, **k: np.zeros((len(values), 12)))

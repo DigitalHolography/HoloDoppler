@@ -236,7 +236,7 @@ def test_real_default_entrypoint(tmp_path, monkeypatch, preview, live):
     source.extension = ".raw"
     source.total_frames = len(frames)
     source.read_frames = lambda first_frame, batch_size, **kw: frames[first_frame:first_frame+batch_size]
-    monkeypatch.setattr(pipeline, "get_reader", lambda _: source)
+    monkeypatch.setattr(pipeline, "FileReader", lambda _: source)
     if preview:
         pipeline.preview(source.file_path, p)
     else:

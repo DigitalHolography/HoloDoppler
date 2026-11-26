@@ -129,7 +129,7 @@ def test_entrypoints_preserve_input_batching(monkeypatch, preview):
         return frames[first_frame:first_frame + batch_size].copy()
 
     reader = SimpleNamespace(extension=".raw", total_frames=22, read_frames=read)
-    monkeypatch.setattr(pipeline, "get_reader", lambda path: reader)
+    monkeypatch.setattr(pipeline, "FileReader", lambda path: reader)
     monkeypatch.setattr(pipeline, "fresnel_transform", lambda xp, fft, data, *a, **k: data.astype(np.complex64))
     monkeypatch.setattr(pipeline, "svd_filter", lambda xp, linalg, data, *a, **k: data)
     monkeypatch.setattr(pipeline, "save_outputs", lambda **kw: saved.update(kw["output"]))

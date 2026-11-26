@@ -24,9 +24,9 @@ n_modes = 10            # number of modes to display
 
 DATA_PATH = r"D:\ZA\260113_AUZ0752_2.holo"
 
-from holodoppler.file_reader import FileReaderFactory
+from holodoppler.file_reader import FileReader
 
-reader = FileReaderFactory.create(DATA_PATH)
+reader = FileReader(DATA_PATH)
 
 data = reader.read_frames(0,512).copy().astype(np.float64)
 

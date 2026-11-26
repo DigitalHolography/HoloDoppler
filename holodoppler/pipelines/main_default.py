@@ -52,7 +52,7 @@ from holodoppler.core.zernike import (
     fit_zernike_angular_spectrum,
     fit_zernike_fresnel,
 )
-from holodoppler.file_reader import get_reader
+from holodoppler.file_reader import FileReader
 from holodoppler.saving.default_output import needed as _output_needed
 from holodoppler.logging import logger
 from holodoppler.saving import (
@@ -85,7 +85,7 @@ def _prepare_input(file_path, parameters, *, preview=False, preview_reference=Fa
     from holodoppler.saving.default_output import computation_parameters
     parameters = computation_parameters(parameters)
     backend.set_backend(parameters.get("backend", "auto"))
-    reader = get_reader(file_path)
+    reader = FileReader(file_path)
     if reader.extension == ".holo":
         parameters = update_from_holo_footer(parameters, reader.footer)
     elif reader.extension == ".cine":

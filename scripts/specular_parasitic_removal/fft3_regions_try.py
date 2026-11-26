@@ -3,7 +3,7 @@ from scipy import ndimage
 
 import matplotlib.pyplot as plt
 
-from holodoppler.file_reader import FileReaderFactory
+from holodoppler.file_reader import FileReader
 
 # ============================================================
 # PARAMETERS
@@ -23,7 +23,7 @@ center = True  # subtract temporal mean at every pixel
 # ============================================================
 # LOAD DATA
 # ============================================================
-reader = FileReaderFactory.create(DATA_PATH)
+reader = FileReader(DATA_PATH)
 M = reader.read_frames(0, n_frames).copy().astype(np.float64)
 
 nt, ny, nx = M.shape

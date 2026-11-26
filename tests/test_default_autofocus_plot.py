@@ -47,7 +47,7 @@ def test_autofocus_png(tmp_path, monkeypatch, entrypoint, autofocus, skip_every,
         extension=".raw", total_frames=12, file_path=tmp_path / "input.raw",
         read_frames=Mock(side_effect=lambda **kwargs: frames.copy()),
     )
-    monkeypatch.setattr(main_default, "get_reader", lambda path: reader)
+    monkeypatch.setattr(main_default, "FileReader", lambda path: reader)
 
     phase = np.arange(12 * 18, dtype=np.float32).reshape(12, 18) / 10
     shifts_y = np.array([[1, np.nan], [0, -1]], dtype=np.float32)

@@ -13,9 +13,9 @@ dt = 1.0           # time between frames
 
 DATA_PATH = r"/data/Lourds/langevin/data/AUZOS.holo"
 
-from holodoppler.file_reader import FileReaderFactory
+from holodoppler.file_reader import FileReader
 
-reader = FileReaderFactory.create(DATA_PATH)
+reader = FileReader(DATA_PATH)
 
 data1 = reader.read_frames(0,512).copy().astype(np.float64)
 data2 = reader.read_frames(512,512).copy().astype(np.float64)

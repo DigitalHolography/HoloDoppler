@@ -6,9 +6,9 @@ from matplotlib.patches import Rectangle
 
 DATA_PATH = r"Y:\260113_IOP_BP\260113_FIY0713.holo"
 
-from holodoppler.file_reader import FileReaderFactory
+from holodoppler.file_reader import FileReader
 
-reader = FileReaderFactory.create(DATA_PATH)
+reader = FileReader(DATA_PATH)
 
 data = reader.read_frames(0,512).copy().astype(np.float64)
 

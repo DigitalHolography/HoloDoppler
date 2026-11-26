@@ -27,7 +27,7 @@ def input_reader(tmp_path, monkeypatch, frames=None):
         return frames[first_frame:first_frame + step * batch_size:step].copy()
     reader = SimpleNamespace(extension='.raw', total_frames=len(frames),
                              file_path=tmp_path / 'input.raw', read_frames=Mock(side_effect=read), close=Mock())
-    monkeypatch.setattr(pipeline, 'get_reader', lambda _: reader)
+    monkeypatch.setattr(pipeline, 'FileReader', lambda _: reader)
     return reader
 
 

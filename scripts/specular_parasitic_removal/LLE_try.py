@@ -5,7 +5,7 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import LocallyLinearEmbedding
 from sklearn.cluster import KMeans
 from matplotlib.widgets import Slider, Button
-from holodoppler.file_reader import FileReaderFactory
+from holodoppler.file_reader import FileReader
 
 # ==================================================
 # SETTINGS
@@ -22,7 +22,7 @@ NORMALIZE_TRACES = True
 # ==================================================
 # LOAD DATA: M(time, y, x)
 # ==================================================
-reader = FileReaderFactory.create(DATA_PATH)
+reader = FileReader(DATA_PATH)
 M = reader.read_frames(0, N_FRAMES).astype(np.float32)
 
 nt, ny, nx = M.shape

@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.ndimage import maximum_filter
 
-from holodoppler.file_reader import FileReaderFactory
+from holodoppler.file_reader import FileReader
 
 # ============================================================
 # PARAMETERS
@@ -32,7 +32,7 @@ peak_width = (2, 3*f_width_factor, 3*f_width_factor)      # (ft, fy, fx)
 # ============================================================
 # LOAD DATA
 # ============================================================
-reader = FileReaderFactory.create(DATA_PATH)
+reader = FileReader(DATA_PATH)
 M = reader.read_frames(0, n_frames).copy().astype(np.float64)
 
 nt, ny, nx = M.shape

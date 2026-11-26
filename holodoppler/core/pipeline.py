@@ -11,7 +11,7 @@ from holodoppler.core.image_utils import resize_frames
 from holodoppler.core.processing import run_batches
 from holodoppler.core.progress import check_cancelled
 from holodoppler.core.registration import apply_ecc_registration, register_with_ecc
-from holodoppler.file_reader import get_reader
+from holodoppler.file_reader import FileReader
 from holodoppler.saving import OutputClass, save_outputs, calculate_fps
 
 
@@ -35,7 +35,7 @@ def validate_reference_batch(reader, first, size, label, skip_every=None):
 def prepare_input(file_path, parameters):
     parameters = dict(parameters)
     backend.set_backend(parameters.get("backend", "auto"))
-    reader = get_reader(file_path)
+    reader = FileReader(file_path)
     if reader.extension == ".holo":
         parameters = update_from_holo_footer(parameters, reader.footer)
     elif reader.extension == ".cine":

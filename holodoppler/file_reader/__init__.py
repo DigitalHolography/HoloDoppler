@@ -1,1 +1,1 @@
-from .file_reader import FileReaderFactory, get_reader
+from .base import FileReader

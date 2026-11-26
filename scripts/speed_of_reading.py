@@ -1,4 +1,4 @@
-from holodoppler.file_reader import FileReaderFactory
+from holodoppler.file_reader import FileReader
 from tqdm import tqdm
 import numpy as np
 
@@ -11,7 +11,7 @@ batch_stride = 256
 
 # -------------------- SSD  ---------------------
 
-reader = FileReaderFactory.create(FILE_PATH_ON_SSD)
+reader = FileReader(FILE_PATH_ON_SSD)
 
 print(FILE_PATH_ON_SSD,  reader.header)
 
@@ -37,7 +37,7 @@ if num_batch <= 0:
 
 # -------------------- NAS  ---------------------
 
-reader = FileReaderFactory.create(FILE_PATH_ON_NAS)
+reader = FileReader(FILE_PATH_ON_NAS)
 
 print(FILE_PATH_ON_NAS,  reader.header)
 

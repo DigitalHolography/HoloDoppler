@@ -50,7 +50,7 @@ def test_packet_average_matches_default_before_flatfield(monkeypatch, method):
 def test_live_registration_uses_first_accumulated_image(tmp_path, monkeypatch, workers):
     frames = np.arange(1, 13, dtype=np.float32)[:, None, None] * np.ones((12, 3, 5), np.float32)
     reader, calls = reader_for(tmp_path, frames)
-    monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
+    monkeypatch.setattr(pipeline, "FileReader", lambda _: reader)
     monkeypatch.setattr(pca, "fresnel_transform", lambda xp, fft, frames, *a, **k: frames)
     monkeypatch.setattr(filtering, "pca_time_transform", lambda xp, frames, **k: frames)
     monkeypatch.setattr(pca, "gaussian_flatfield", lambda image, *a: image ** 2)
@@ -92,7 +92,7 @@ def test_live_registration_uses_first_accumulated_image(tmp_path, monkeypatch, w
 def test_skip_end_frame_and_explicit_fps(tmp_path, monkeypatch):
     frames = np.arange(24, dtype=np.float32)[:, None, None] * np.ones((24, 3, 5), np.float32)
     reader, calls = reader_for(tmp_path, frames)
-    monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
+    monkeypatch.setattr(pipeline, "FileReader", lambda _: reader)
     monkeypatch.setattr(pca, "fresnel_transform", lambda xp, fft, frames, *a, **k: frames)
     monkeypatch.setattr(filtering, "pca_time_transform", lambda xp, frames, **k: frames)
     monkeypatch.setattr(pca, "gaussian_flatfield", lambda image, *a: image)

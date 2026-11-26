@@ -3,11 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button, Slider
 
-from holodoppler.file_reader import FileReaderFactory
+from holodoppler.file_reader import FileReader
 
 DATA_PATH = r"Y:\260113_IOP_BP\260113_FIY0713.holo"
 
-reader = FileReaderFactory.create(DATA_PATH)
+reader = FileReader(DATA_PATH)
 data = reader.read_frames(0, 512).copy().astype(np.float32)
 
 # Optional: subtract temporal mean at each pixel

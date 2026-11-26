@@ -72,8 +72,8 @@ def test_registry_and_imports():
 def test_streamed_and_buffered_outputs_match(tmp_path, monkeypatch, name, propagation, registration):
     frames = np.random.default_rng(123).uniform(10, 100, (17, 8, 10)).astype(np.float32)
     reader, _ = reader_for(tmp_path, frames)
-    monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
-    monkeypatch.setattr(import_module("holodoppler.pipelines.main_lsci"), "get_reader", lambda _: reader)
+    monkeypatch.setattr(pipeline, "FileReader", lambda _: reader)
+    monkeypatch.setattr(import_module("holodoppler.pipelines.main_lsci"), "FileReader", lambda _: reader)
     monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
     monkeypatch.setattr(saving_media, "save_video", lambda *args, **kwargs: None)
     module_name = "sliding_shack_hart" if name == "sliding_shack_hartmann" else name
@@ -114,7 +114,7 @@ def test_pca_means_full_groups_and_stride(tmp_path, monkeypatch, accumulation, s
     from holodoppler.pipelines import main_pca_accumulation as pca
     frames = np.arange(5, dtype=np.float32)[:, None, None] * np.ones((5, 3, 4), np.float32)
     reader, calls = reader_for(tmp_path, frames)
-    monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
+    monkeypatch.setattr(pipeline, "FileReader", lambda _: reader)
     monkeypatch.setattr(pca, "fresnel_transform", lambda xp, fft, frames, *a, **k: frames)
     monkeypatch.setattr(pca, "gaussian_flatfield", lambda image, *a: image + 10)
     saved = []
@@ -193,8 +193,8 @@ def test_skip_and_reference_bounds(tmp_path):
 def test_default_pipeline_uses_main_validation(tmp_path, monkeypatch, changes, match):
     from holodoppler.pipelines import main_default as default
     reader, _ = reader_for(tmp_path, np.ones((4, 3, 4), np.float32))
-    monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
-    monkeypatch.setattr(default, "get_reader", lambda _: reader)
+    monkeypatch.setattr(pipeline, "FileReader", lambda _: reader)
+    monkeypatch.setattr(default, "FileReader", lambda _: reader)
     with pytest.raises((ValueError, TypeError), match=match):
         default._prepare_input(reader.file_path, parameters("default", **changes))
 
@@ -202,7 +202,7 @@ def test_default_pipeline_uses_main_validation(tmp_path, monkeypatch, changes, m
 @pytest.mark.parametrize("name", ["pca_accumulation", "sliding_shack_hartmann", "split_apertures"])
 def test_shared_input_does_not_apply_default_validation(tmp_path, monkeypatch, name):
     reader, _ = reader_for(tmp_path, np.ones((4, 3, 4), np.float32))
-    monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
+    monkeypatch.setattr(pipeline, "FileReader", lambda _: reader)
     p = parameters(name, pixel_pitch="unused default-only setting")
     assert pipeline.prepare_input(reader.file_path, p) == (reader, p)
 
@@ -293,7 +293,7 @@ def test_pca_ecc_runs_after_averaging_before_resizing(tmp_path, monkeypatch, liv
     from holodoppler.pipelines import main_pca_accumulation as pca
     frames = np.arange(5, dtype=np.float32)[:, None, None] * np.ones((5, 3, 4))
     reader, _ = reader_for(tmp_path, frames)
-    monkeypatch.setattr(pipeline, "get_reader", lambda _: reader)
+    monkeypatch.setattr(pipeline, "FileReader", lambda _: reader)
     monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
     monkeypatch.setattr(saving_media, "save_video", lambda *args, **kwargs: None)
     monkeypatch.setattr(pca, "fresnel_transform", lambda xp, fft, frames, *a, **k: frames)

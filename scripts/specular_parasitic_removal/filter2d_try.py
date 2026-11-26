@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
 
-from holodoppler.file_reader import FileReaderFactory
+from holodoppler.file_reader import FileReader
 from holodoppler.core.propagation import fresnel_transform
 
 DATA_PATH = r"Z:\260310_CHOROID\260310_AUZ0752_8.holo"
@@ -10,7 +10,7 @@ radius = 3
 display_in_time = True
 
 # Load and propagate
-reader = FileReaderFactory.create(DATA_PATH)
+reader = FileReader(DATA_PATH)
 data = reader.read_frames(0, 512).copy().astype(np.float64)
 data = fresnel_transform(np, np.fft, data, 0.5, 20e-6, 852e-9)
 

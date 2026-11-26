@@ -301,7 +301,7 @@ def test_cli_backend_override_reaches_each_default_entrypoint(monkeypatch, mode,
     args = SimpleNamespace(tictoc=False, debug=False, backend=selection, dynamic_options={})
     p = _apply_cli_overrides(parameters(), args)
     reader = SimpleNamespace(extension=".raw", total_frames=0)
-    monkeypatch.setattr(pipeline, "get_reader", lambda path: reader)
+    monkeypatch.setattr(pipeline, "FileReader", lambda path: reader)
     choose = Mock(wraps=backend.set_backend)
     monkeypatch.setattr(backend, "set_backend", choose)
     # Force deterministic CPU fallback while still checking the requested selection.

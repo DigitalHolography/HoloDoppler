@@ -10,7 +10,7 @@ from holodoppler.core.image_utils import resize_frames
 from holodoppler.core.processing import run_batches
 from holodoppler.core.progress import check_cancelled
 from holodoppler.core.registration import apply_ecc_registration, register_with_ecc
-from holodoppler.file_reader import get_reader
+from holodoppler.file_reader import FileReader
 from holodoppler.saving import OutputClass, save_outputs
 
 def _validate(p):
@@ -139,7 +139,7 @@ def _run(file_path, parameters, preview_mode=False, progress_callback=None, *, s
     parameters["batch_stride"] = parameters["lsci_time_window_stride"]
     parameters["output_frame_stride"] = parameters["lsci_time_window_stride"]
     backend.set_backend(parameters.get("backend", "auto"))
-    reader = get_reader(file_path)
+    reader = FileReader(file_path)
     p = parameters
     if reader.extension == ".holo":
         p = update_from_holo_footer(p, reader.footer)

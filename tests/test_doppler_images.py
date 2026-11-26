@@ -212,7 +212,7 @@ def test_default_doppler_video_average_and_preview(tmp_path, monkeypatch, square
     reader = SimpleNamespace(file_path=tmp_path / "input.raw", extension=".raw", total_frames=24,
                              read_frames=lambda first_frame, batch_size, skip_every=None:
                              frames[first_frame:first_frame + batch_size * (skip_every or 1):skip_every or 1].copy())
-    monkeypatch.setattr(main_default, "get_reader", lambda _: reader)
+    monkeypatch.setattr(main_default, "FileReader", lambda _: reader)
     monkeypatch.setattr(saving.OutputClass, "_open_video", lambda *args: Mock())
     monkeypatch.setattr(saving_media, "save_video", lambda *args, **kwargs: None)
     monkeypatch.setattr(main_default, "register_with_ecc", lambda values, **kwargs: np.zeros((len(values), 12)))
@@ -286,7 +286,7 @@ def test_separate_directional_exports(tmp_path, monkeypatch, live, ecc):
     reader = SimpleNamespace(file_path=tmp_path / "input.raw", extension=".raw", total_frames=16,
                              read_frames=lambda first_frame, batch_size, **kw:
                              frames[first_frame:first_frame + batch_size].copy())
-    monkeypatch.setattr(main_default, "get_reader", lambda _: reader)
+    monkeypatch.setattr(main_default, "FileReader", lambda _: reader)
     monkeypatch.setattr(main_default, "register_with_ecc", lambda values, **kw: np.zeros((len(values), 12)))
     monkeypatch.setattr(main_default, "apply_ecc_registration", lambda values, *args, **kw:
                         np.roll(values, 1, axis=-1))
