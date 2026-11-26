@@ -1,7 +1,6 @@
 """Contiguous Fresnel processing with device-side image accumulation."""
 
-from math import isfinite
-from numbers import Integral, Real
+from numbers import Integral
 from time import perf_counter
 from types import SimpleNamespace
 
@@ -11,42 +10,16 @@ from holodoppler import backend
 from holodoppler.core.batching import calculate_batch_indices
 from holodoppler.core.filtering import fourier_time_transform
 from holodoppler.core.image_utils import gaussian_flatfield
-from holodoppler.core.pipeline import prepare_input
+from holodoppler.config.pipelines.fast_config import FastConfig, FFT_MAPS, PCA_MAPS, _range
+from holodoppler.file_reader import FileReader
 from holodoppler.core.processing import run_batches
 from holodoppler.core.progress import check_cancelled
-from holodoppler.core.propagation import build_fresnel_kernel_in, ensure_yx_pixel_pitch, fresnel_transform
+from holodoppler.core.propagation import build_fresnel_kernel_in, fresnel_transform
 from holodoppler.core.registration import apply_register_images_shifts, register_images_shifts
 from holodoppler.core.shack_hartmann import calculate_displacements_graph_laplacian
 from holodoppler.core.zernike import fit_zernike_fresnel
 from holodoppler.logging import logger
-from holodoppler.saving.default_output import DefaultOutput, validate_outputs
-
-FFT_MAPS = ("moment0", "moment1", "moment2", "moment0ff")
-PCA_MAPS = ("pca_sum", "pca_sum_ff")
-
-
-def _integer(value, name, minimum):
-    if isinstance(value, bool) or not isinstance(value, Integral) or value < minimum:
-        raise ValueError(f"{name} must be an integer >= {minimum}")
-    return int(value)
-
-
-def _number(value, name, *, signed=False):
-    if (isinstance(value, bool) or not isinstance(value, Real) or not isfinite(value)
-            or (value == 0 if signed else value <= 0)):
-        raise ValueError(f"Invalid or unresolved {name}: {value!r}")
-    return float(value)
-
-
-def _range(bounds, size, name):
-    if not isinstance(bounds, (list, tuple)) or len(bounds) != 2:
-        raise ValueError(f"{name} must contain [start, end]")
-    start = _integer(bounds[0], name, 0)
-    end = _integer(bounds[1], name, start + 1)
-    if end > size:
-        raise ValueError(f"{name} end must be <= time_window ({size})")
-    return start, end
-
+from holodoppler.saving.pipelines.fast_output import FastOutput
 
 def _frequency_slices(ranges, size):
     if not isinstance(ranges, (list, tuple)) or not ranges:
@@ -155,39 +128,17 @@ def _autofocus(reader, starts, size, kernel, reducer, parameters, progress):
 
 
 def _run(file_path, parameters, *, preview=False, save=True, progress_callback=None):
-    reader, p = prepare_input(file_path, parameters)
-    with reader:
-        return _run_prepared(reader, p, preview, save, progress_callback)
+    with FileReader(file_path) as reader:
+        config = FastConfig.from_parameters(parameters, reader)
+        backend.set_backend(config.backend)
+        return _run_prepared(reader, config, preview, save, progress_callback)
 
 
 def _run_prepared(reader, p, preview, save, progress_callback):
     check_cancelled(progress_callback)
-    size = _integer(p.get("time_window", 64), "time_window", 1)
-    accu = _integer(p.get("accu", 1), "accu", 1)
-    mode = p.get("mode", "fft")
-    if mode not in ("fft", "pca"):
-        raise ValueError("mode must be fft or pca")
-    for key in ("image_registration", "shack_hartmann_autofocus"):
-        if not isinstance(p.get(key, False), bool):
-            raise ValueError(f"{key} must be a boolean")
-    p["sampling_freq"] = _number(p.get("sampling_freq"), "sampling_freq")
-    p["z"] = _number(p.get("z"), "z", signed=True)
-    p["wavelength"] = _number(p.get("wavelength", 852e-9), "wavelength")
-    pitch = p.get("pixel_pitch")
-    if isinstance(pitch, bool) or not isinstance(pitch, (list, tuple, Real)):
-        raise ValueError(f"Invalid or unresolved pixel_pitch: {pitch!r}")
-    pitch = ensure_yx_pixel_pitch(float(pitch) if isinstance(pitch, Real) else pitch)
-    if len(pitch) != 2:
-        raise ValueError("pixel_pitch must be a scalar or [y, x]")
-    p["pixel_pitch"] = tuple(_number(value, "pixel_pitch") for value in pitch)
-    p["output_frame_stride"] = size * accu
-    p["output_fps"] = p["sampling_freq"] / p["output_frame_stride"]
-    p.setdefault("h5compression", 0)
-
+    size, accu, mode = p.time_window, p.accu, p.mode
     names = FFT_MAPS if mode == "fft" else PCA_MAPS
     flat_name = names[-1]
-    p.setdefault("outputs", {name: ["h5"] for name in names})
-    validate_outputs(p)
     reducer = _temporal_reducer(p, size)
     groups = calculate_batch_indices(
         p.get("first_frame", 0), p.get("end_frame", -1), size * accu, size * accu,
@@ -209,9 +160,7 @@ def _run_prepared(reader, p, preview, save, progress_callback):
     xp, fft = backend.xp, backend.fft
     kernel = build_fresnel_kernel_in(xp, p["z"], p["pixel_pitch"], p["wavelength"], *reader.frame_shape)
     cached = {}
-    if p.get("shack_hartmann_autofocus"):
-        if min(reader.frame_shape) < 5:
-            raise ValueError("Fast autofocus requires both image dimensions to be at least 5")
+    if p.shack_hartmann_autofocus:
         kernel, cached = _autofocus(reader, starts[:accu], size, kernel, reducer, p,
                                     progress_callback)
 
@@ -267,15 +216,9 @@ def _run_prepared(reader, p, preview, save, progress_callback):
     target = None
     if save:
         save_start = perf_counter()
-        with DefaultOutput(reader, p, custom_relative_path="preview" if preview else None) as writer:
+        with FastOutput(reader, p, preview=preview) as writer:
             target = str(writer.target_dir)
-            for index in range(len(groups)):
-                check_cancelled(progress_callback)
-                if preview:
-                    for name, images in buffers.items():
-                        writer.write_static(name, images[index])
-                else:
-                    writer.add_batch({name: images[index] for name, images in buffers.items()}, index)
+            writer.write_buffers(buffers, len(groups), progress_callback)
         logger.info("Fast exported %d images in %.2f s", len(groups), perf_counter() - save_start)
     if preview:
         return buffers["moment0ff" if mode == "fft" else "pca_sum"][0]

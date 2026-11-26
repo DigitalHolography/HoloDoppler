@@ -8,8 +8,19 @@ holodoppler preview recording.holo parameters/default_parameters_fast.yaml --mod
 Fast reads contiguous, nonoverlapping windows of `time_window` frames. It averages
 `accu` windows into one image and drops incomplete trailing groups. Preview uses
 the first complete group. The output rate is `sampling_freq / (time_window * accu)`.
-The preset resolves optical parameters from a Holo recording. For other
-recordings, supply the distance, pixel pitch, and sampling frequency explicitly.
+Parameters are an unchecked dictionary, typically loaded from a YAML or JSON
+file. The fast pipeline combines a copy with recording metadata into one fixed,
+validated `FastConfig` before processing. Either `use_holovibes` or
+`use_metadata` requests a value from the input recording; both spellings work
+for Holo and Cine files. Holo metadata can supply distance, wavelength, pixel
+pitch, and sampling frequency; Cine metadata can supply pixel pitch and
+sampling frequency. Supply unavailable values explicitly. Missing metadata or
+an invalid value raises an error before output is created. Partial dictionaries
+retain the existing programmatic defaults and are not merged with the preset.
+
+`FastOutput` manages output selection and saving for this pipeline. The config
+and output classes live in `config/pipelines/fast_config.py` and
+`saving/pipelines/fast_output.py`, respectively.
 
 FFT mode exports `moment0`, `moment1`, `moment2`, and `moment0ff`. The moments
 use power weighted by signed frequencies in Hz to the corresponding order.
