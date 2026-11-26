@@ -1,6 +1,6 @@
 """Paint manual DopplerView-compatible masks over time-averaged HD moments.
 
-Run: python scripts/h5_mask_painter.py [file_path] [--output masks.h5]
+Run: python scripts/h5_exploration/h5_mask_painter.py [file_path] [--output masks.h5]
 file_path may be a recording, run folder, *_HD folder, h5 folder, or HDF5.
 """
 

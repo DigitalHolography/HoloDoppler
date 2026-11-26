@@ -164,7 +164,7 @@ except Exception:
 ### Paint manual artery, vein, and optic-disc masks
 
 ```powershell
-python scripts/h5_mask_painter.py "path/to/sample.holo"
+python scripts/h5_exploration/h5_mask_painter.py "path/to/sample.holo"
 ```
 
 You can also pass the `sample` run folder, `sample_HD`, its `h5` folder,

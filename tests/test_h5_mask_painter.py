@@ -8,7 +8,7 @@ import pytest
 
 
 spec = importlib.util.spec_from_file_location(
-    'h5_mask_painter', Path(__file__).resolve().parents[1] / 'scripts/h5_mask_painter.py')
+    'h5_mask_painter', Path(__file__).resolve().parents[1] / 'scripts/h5_exploration/h5_mask_painter.py')
 painter = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(painter)
 

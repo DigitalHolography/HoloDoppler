@@ -1,4 +1,4 @@
-"""Tkinter H5 ROI spectrum viewer, including skip_every comparisons."""
+"""Tkinter H5 ROI spectrum viewer, including skip_every and fs comparisons."""
 import json
 import queue
 import threading
@@ -16,8 +16,19 @@ from matplotlib.patches import Rectangle
 from matplotlib.widgets import RectangleSelector
 from scipy.optimize import OptimizeWarning, curve_fit
 
+try:
+    from scripts.h5_exploration.h5_compare_spectra import resolve_h5
+    from scripts.h5_exploration.h5_spectra_normalization import (
+        PSD_NORMALIZATION, effective_sampling_frequency,
+        normalization_divisor, normalize_spectrum)
+except ModuleNotFoundError:  # Direct execution from the scripts directory.
+    from h5_compare_spectra import resolve_h5
+    from h5_spectra_normalization import (
+        PSD_NORMALIZATION, effective_sampling_frequency,
+        normalization_divisor, normalize_spectrum)
 
-# Hard-coded normalization choice (N includes the DC bin; fs includes skip_every):
+
+# Shared normalization choice (N includes DC; fs = sampling_freq / skip_every):
 # 'none'       : unchanged stored spectrum
 # 'num_freq'   : divide by N
 # 'num_freq_squared': divide by N**2 (power per bin for an unnormalized FFT)
@@ -26,7 +37,7 @@ from scipy.optimize import OptimizeWarning, curve_fit
 # 'peak'       : divide by max(non-DC spectrum) (peak becomes 1)
 
 # Unit-area and peak modes compare shapes, removing absolute power differences.
-PSD_NORMALIZATION = 'density' # choose this one or replace with a skip_every based normalisation because its really the fact that frames where skipped that reduce total power.
+# Set PSD_NORMALIZATION in h5_spectra_normalization.py for both viewers.
 
 
 def gaussian_model(frequency, K, A, W):
@@ -125,24 +136,7 @@ def prepare_spectrum(mean, frequency, fs, normalization=PSD_NORMALIZATION):
     num_freq = mean.size
     df = fs / num_freq
     nonzero = frequency != 0
-    psd = np.asarray(np.fft.fftshift(mean)[nonzero], dtype=np.float64)
-    if normalization == 'none':
-        divisor = 1.0
-    elif normalization == 'num_freq':
-        divisor = num_freq
-    elif normalization == 'num_freq_squared':
-        divisor = num_freq**2
-    elif normalization == 'density':
-        divisor = num_freq * fs
-    elif normalization == 'unit_area':
-        divisor = psd.sum() * df
-    elif normalization == 'peak':
-        divisor = psd.max() if psd.size else 0.0
-    else:
-        raise ValueError(f'Unknown PSD_NORMALIZATION: {normalization!r}')
-    # Leave an all-zero spectrum at zero in shape-normalization modes.
-    if divisor != 0:
-        psd = psd / divisor
+    psd = np.fft.fftshift(normalize_spectrum(mean, fs, normalization))[nonzero]
     bin_sum = psd.sum()
     return frequency[nonzero], psd, bin_sum, bin_sum * df
 
@@ -156,7 +150,8 @@ def prepare_roi_spectrum(spectrum, frequency, fs, pixelwise=False,
     display normalization, so the averaged curve is not normalized twice.
     """
     if not pixelwise:
-        return prepare_spectrum(spectrum.mean(axis=(1, 2)), frequency, fs, normalization)
+        return prepare_spectrum(spectrum.mean(axis=(1, 2), dtype=np.float64),
+                                frequency, fs, normalization)
     divisor = spectrum[1:].sum(axis=0, dtype=np.float64) * (fs / spectrum.shape[0])
     mean = np.empty(spectrum.shape[0], dtype=np.float64)
     for index, plane in enumerate(spectrum):
@@ -188,21 +183,10 @@ def frequency_range_image(entry, lower, upper, symmetric=False, difference=False
                  - spectrum[negative].sum(axis=0, dtype=np.float64))
     else:
         image = spectrum[selected].sum(axis=0, dtype=np.float64)
-    if PSD_NORMALIZATION == 'none':
-        divisor = 1.0
-    elif PSD_NORMALIZATION == 'num_freq':
-        divisor = num_freq
-    elif PSD_NORMALIZATION == 'num_freq_squared':
-        divisor = num_freq**2
-    elif PSD_NORMALIZATION == 'density':
-        divisor = num_freq * entry['fs']
-    elif PSD_NORMALIZATION == 'unit_area':
-        divisor = spectrum[frequency != 0].sum(axis=0, dtype=np.float64)
-        divisor *= entry['fs'] / num_freq
-    elif PSD_NORMALIZATION == 'peak':
-        divisor = spectrum[frequency != 0].max(axis=0)
-    else:
-        raise ValueError(f'Unknown PSD_NORMALIZATION: {PSD_NORMALIZATION!r}')
+    divisor = normalization_divisor(
+        PSD_NORMALIZATION, num_freq, entry['fs'],
+        spectrum[1:].sum(axis=0, dtype=np.float64) if PSD_NORMALIZATION == 'unit_area' else 0,
+        spectrum[1:].max(axis=0) if PSD_NORMALIZATION == 'peak' else 0)
     return np.divide(image, divisor, out=np.zeros_like(image), where=divisor != 0)
 
 
@@ -272,12 +256,7 @@ def load_h5(path, require_moment=True):
         if isinstance(raw, np.ndarray) and raw.ndim == 0:
             raw = raw.item()
         params = json.loads(raw.decode('utf-8') if isinstance(raw, bytes) else str(raw))
-        skip = float(params.get('skip_every', 1))
-        if not np.isfinite(skip) or skip <= 0:
-            raise ValueError('skip_every must be a positive number')
-        fs = float(params['sampling_freq']) / skip
-        if not np.isfinite(fs) or fs <= 0:
-            raise ValueError('Corrected sampling frequency must be positive')
+        fs, skip = effective_sampling_frequency(params)
         moment = None
         if require_moment:
             moment = dataset(f, ('moment0ff',))[:]
@@ -303,6 +282,7 @@ class App:
         bar.pack(fill='x')
         tk.Button(bar, text='Open H5', command=self.open).pack(side='left')
         tk.Button(bar, text='skip_every_comparison', command=self.skip_every_comparison).pack(side='left')
+        tk.Button(bar, text='fs_comparison', command=self.fs_comparison).pack(side='left')
         tk.Button(bar, text='Clear ROIs', command=self.clear).pack(side='left')
         self.fit_button = tk.Button(bar, text='Fit pixels', command=self.fit_pixels, state='disabled')
         self.fit_button.pack(side='left')
@@ -338,6 +318,28 @@ class App:
         entry['label'] = Path(path).stem
         self.display([entry], entry['moment'], 'H5 ROI spectra — ' + path)
 
+    def fs_comparison(self):
+        paths = filedialog.askopenfilenames(
+            title='Select recordings for fs comparison (or their H5 files)',
+            filetypes=[('Recording / HDF5 files', '*.holo *.cine *.h5 *.hdf5'),
+                       ('All files', '*.*')])
+        if not paths:
+            return
+        entries, problems = [], []
+        seen = set()
+        for source in paths:
+            try:
+                path = resolve_h5(source).resolve()
+                if path in seen:
+                    continue
+                entry = load_h5(path, require_moment=False)
+                entry['label'] = f'{Path(source).stem} (fs={entry["fs"]:g} Hz)'
+                entries.append(entry)
+                seen.add(path)
+            except Exception as exc:
+                problems.append(f'{source}: {exc}')
+        self.display_comparison(entries, problems, 'H5 ROI spectra — fs comparison')
+
     def skip_every_comparison(self):
         folder = filedialog.askdirectory(title='Select parent folder containing skip* folders')
         if not folder:
@@ -370,6 +372,17 @@ class App:
             messagebox.showerror('No usable H5 files',
                                  'No valid files found in skip*/h5 folders.\n' + '\n'.join(problems[:15]))
             return
+        for entry in entries:
+            entry['label'] += f" (skip_every={entry['skip']:g})"
+        self.display_comparison(
+            entries, problems, 'H5 ROI spectra — skip_every comparison — ' + str(parent))
+
+    def display_comparison(self, entries, problems, title):
+        """Share ROI geometry and a compatible moment image across comparisons."""
+        if not entries:
+            messagebox.showerror('No usable H5 files',
+                                 'No valid comparison files found.\n' + '\n'.join(problems[:15]))
+            return
         shape = entries[0]['spectrum'].shape[1:]
         valid = []
         for entry in entries:
@@ -381,8 +394,7 @@ class App:
         if not entries:
             messagebox.showerror('No comparable H5 files', 'Spatial dimensions do not match.')
             return
-        # First moment0ff image found in the accepted files. If unavailable there,
-        # inspect the skipped files in search order as a fallback.
+        # First compatible moment0ff image found in the accepted files.
         moment = None
         for entry in entries:
             try:
@@ -397,11 +409,10 @@ class App:
                 moment = None
                 problems.append(f"{entry['path']}: cannot use moment0ff ({exc})")
         if moment is None:
-            messagebox.showerror('No moment0ff', 'Could not find a compatible moment0ff image.')
+            messagebox.showerror('No moment0ff', 'Could not find a compatible moment0ff image.\n'
+                                 + '\n'.join(problems[:15]))
             return
-        for entry in entries:
-            entry['label'] += f" (skip_every={entry['skip']:g})"
-        self.display(entries, moment, 'H5 ROI spectra — skip_every comparison — ' + str(parent))
+        self.display(entries, moment, title)
         if problems:
             messagebox.showwarning('Some folders/files were skipped',
                                    '\n'.join(problems[:20]) +

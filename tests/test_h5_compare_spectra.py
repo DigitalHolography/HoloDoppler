@@ -10,9 +10,14 @@ import pytest
 
 
 spec = importlib.util.spec_from_file_location(
-    'h5_compare_spectra', Path(__file__).resolve().parents[1] / 'scripts/h5_compare_spectra.py')
+    'h5_compare_spectra', Path(__file__).resolve().parents[1] / 'scripts/h5_exploration/h5_compare_spectra.py')
 viewer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(viewer)
+
+roi_spec = importlib.util.spec_from_file_location(
+    'h5_roi_spectra', Path(__file__).resolve().parents[1] / 'scripts/h5_exploration/h5_roi_spectra.py')
+roi_viewer = importlib.util.module_from_spec(roi_spec)
+roi_spec.loader.exec_module(roi_viewer)
 
 
 def make_h5(tmp_path, name='recording', fs=800, skip=1, shape=(8, 2, 3)):
@@ -132,3 +137,37 @@ def test_shape_normalization_and_zero_spectra(tmp_path, mode):
     zero = viewer.load_comparison(source, 0, 400, mode)
     np.testing.assert_array_equal(zero['power'], 0)
     np.testing.assert_array_equal(zero['image'], 0)
+
+
+@pytest.mark.parametrize('mode', viewer.NORMALIZATIONS)
+@pytest.mark.parametrize('n,skip', [(8, 1), (9, 3), (8, None)])
+def test_normalization_matches_roi_viewer(tmp_path, monkeypatch, mode, n, skip):
+    source, path, values = make_h5(tmp_path, skip=skip, shape=(n, 2, 3))
+    # Float32 storage and unequal pixel intensities exercise spatial averaging.
+    values = (values**1.3).astype(np.float32)
+    values[0] = 1e8  # DC must not affect shape normalization.
+    values[:, 1, 2] = 0
+    with h5py.File(path, 'r+') as handle:
+        del handle['averaged_spectrogram']
+        handle['averaged_spectrogram'] = values
+    comparison = viewer.load_comparison(source, 0, 10000, mode)
+    roi_entry = roi_viewer.load_h5(path, require_moment=False)
+    assert comparison['fs'] == roi_entry['fs'] == 800 / (skip or 1)
+    for roi in (None, (1, 3, 0, 1)):
+        selected = viewer.select_roi(comparison, roi)
+        spectrum = values if roi is None else values[:, 0:1, 1:3]
+        frequency, power, _, _ = roi_viewer.prepare_roi_spectrum(
+            spectrum, roi_entry['freq'], roi_entry['fs'], normalization=mode)
+        np.testing.assert_array_equal(selected['frequency'], frequency)
+        np.testing.assert_array_equal(selected['power'], power)
+    monkeypatch.setattr(roi_viewer, 'PSD_NORMALIZATION', mode)
+    image = roi_viewer.frequency_range_image(roi_entry, 0, 10000, symmetric=True)
+    # ROI viewer sums bins; comparison viewer averages them. Divisors are identical.
+    np.testing.assert_allclose(comparison['image'], image / comparison['selected_bins'])
+
+
+@pytest.mark.parametrize('skip', [0, -1, 1.5, float('inf')])
+def test_roi_viewer_rejects_same_invalid_skip(tmp_path, skip):
+    _, path, _ = make_h5(tmp_path, skip=skip)
+    with pytest.raises(ValueError, match='skip_every'):
+        roi_viewer.load_h5(path, require_moment=False)

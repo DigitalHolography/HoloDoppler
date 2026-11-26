@@ -1,14 +1,16 @@
 """Numerical fitting checks without starting the Tk application."""
 import importlib.util
+import json
 from pathlib import Path
 import threading
 
 import numpy as np
+import h5py
 import pytest
 
 
 spec = importlib.util.spec_from_file_location(
-    'h5_roi_spectra', Path(__file__).resolve().parents[1] / 'scripts/h5_roi_spectra.py')
+    'h5_roi_spectra', Path(__file__).resolve().parents[1] / 'scripts/h5_exploration/h5_roi_spectra.py')
 viewer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(viewer)
 
@@ -143,3 +145,64 @@ def test_pixelwise_zero_area_pixels():
     _, values, bin_sum, integral = viewer.prepare_roi_spectrum(spectrum, frequency, 8, True)
     np.testing.assert_array_equal(values, 0)
     assert bin_sum == integral == 0
+
+
+def write_comparison_h5(path, fs=1280, skip=1, shape=(16, 2, 2), moment=True):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with h5py.File(path, 'w') as handle:
+        handle['averaged_spectrogram'] = np.ones(shape)
+        handle['HD_parameters'] = json.dumps({'sampling_freq': fs, 'skip_every': skip})
+        if moment:
+            handle['moment0ff'] = np.ones((2, *shape[1:]))
+    return path
+
+
+def test_fs_comparison_recording_paths_and_direct_h5(tmp_path, monkeypatch):
+    recording = tmp_path / 'fast.holo'
+    recording.touch()
+    associated = write_comparison_h5(tmp_path / 'fast/fast_HD/h5/output.h5')
+    direct = write_comparison_h5(tmp_path / 'slow.hdf5', fs=640, skip=2,
+                                 shape=(8, 2, 2))
+    monkeypatch.setattr(viewer.filedialog, 'askopenfilenames',
+                        lambda **kwargs: (str(recording), str(associated), str(direct)))
+    monkeypatch.setattr(viewer.messagebox, 'showerror', lambda *args: pytest.fail(str(args)))
+    monkeypatch.setattr(viewer.messagebox, 'showwarning', lambda *args: pytest.fail(str(args)))
+    app = viewer.App.__new__(viewer.App)
+    displayed = []
+    app.display = lambda *args: displayed.append(args)
+    app.fs_comparison()
+    entries, moment, title = displayed[0]
+    assert len(entries) == 2  # Selecting a recording and its H5 does not duplicate curves.
+    assert entries[0]['path'] == associated.resolve()
+    assert entries[0]['label'] == 'fast (fs=1280 Hz)'
+    assert entries[1]['label'] == 'slow (fs=320 Hz)'
+    np.testing.assert_allclose(entries[1]['freq'],
+                               np.fft.fftshift(np.fft.fftfreq(8, d=1 / 320)))
+    np.testing.assert_array_equal(moment, np.ones((2, 2)))
+    assert 'fs comparison' in title
+
+
+def test_fs_comparison_skips_bad_sources_and_finds_moment(tmp_path, monkeypatch):
+    first = write_comparison_h5(tmp_path / 'first.h5', moment=False)
+    mismatch = write_comparison_h5(tmp_path / 'wrong_size.h5', shape=(16, 3, 3))
+    good = write_comparison_h5(tmp_path / 'good.h5')
+    missing = tmp_path / 'missing.holo'
+    monkeypatch.setattr(viewer.filedialog, 'askopenfilenames',
+                        lambda **kwargs: tuple(map(str, (missing, first, mismatch, good))))
+    monkeypatch.setattr(viewer.messagebox, 'showerror', lambda *args: pytest.fail(str(args)))
+    warnings = []
+    monkeypatch.setattr(viewer.messagebox, 'showwarning', lambda *args: warnings.append(args))
+    app = viewer.App.__new__(viewer.App)
+    displayed = []
+    app.display = lambda *args: displayed.append(args)
+    app.fs_comparison()
+    assert [entry['path'] for entry in displayed[0][0]] == [first.resolve(), good.resolve()]
+    assert 'spatial dimensions differ' in warnings[0][1]
+    assert 'H5 folder not found' in warnings[0][1]
+
+
+def test_fs_comparison_cancel_preserves_display(monkeypatch):
+    monkeypatch.setattr(viewer.filedialog, 'askopenfilenames', lambda **kwargs: ())
+    app = viewer.App.__new__(viewer.App)
+    app.display = lambda *args: pytest.fail('Cancelled selection changed the display')
+    app.fs_comparison()

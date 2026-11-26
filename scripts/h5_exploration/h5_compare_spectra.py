@@ -2,7 +2,7 @@
 
 Run directly for a file picker, edit FILEPATHS below, or use::
 
-    python scripts/h5_compare_spectra.py recording1.holo recording2.holo --band 1000 10000
+    python scripts/h5_exploration/h5_compare_spectra.py recording1.holo recording2.holo --band 1000 10000
 
 For recording /data/name.holo, look in /data/name/name_HD/h5/ for its H5.
 Direct H5 paths are also accepted. Stored spectra must be in unshifted FFT
@@ -21,17 +21,21 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Rectangle
 from matplotlib.widgets import RectangleSelector
 
+try:
+    from scripts.h5_exploration.h5_spectra_normalization import (
+        NORMALIZATIONS, PSD_NORMALIZATION, effective_sampling_frequency,
+        normalization_divisor, normalize_spectrum)
+except ModuleNotFoundError:  # Direct execution from the scripts directory.
+    from h5_spectra_normalization import (
+        NORMALIZATIONS, PSD_NORMALIZATION, effective_sampling_frequency,
+        normalization_divisor, normalize_spectrum)
+
 
 # Startup settings: recording paths and a symmetric absolute-frequency band (Hz).
 FILEPATHS = []
 FREQUENCY_RANGE_HZ = (0, 10000)
-# Supports the six modes listed in NORMALIZATIONS below.
-# Match h5_roi_spectra's 'density' mode: divide by N * effective_fs.
-PSD_NORMALIZATION = 'density'
-NORMALIZATIONS = ('none', 'num_freq', 'num_freq_squared', 'density', 'unit_area', 'peak')
-# Effective fs already includes skip_every. Future skip-dependent absolute-power
-# compensation must follow the saved FFT/window normalization; do not assume
-# multiplying power by skip_every recovers power lost to decimation/aliasing.
+# Normalization settings are shared with h5_roi_spectra.
+# Density divides by N * fs_eff, where fs_eff = sampling_freq / skip_every.
 
 
 def validate_band(low, high):
@@ -42,17 +46,9 @@ def validate_band(low, high):
 def normalize_entry(entry, normalization):
     """Normalize cached raw values; energy always uses raw orthonormal FFT power."""
     n, fs = entry['mean'].size, entry['fs']
-    nonzero = np.fft.fftfreq(n) != 0
-    raw = entry['mean'][nonzero]
-    divisors = {'none': 1, 'num_freq': n, 'num_freq_squared': n**2,
-                'density': n * fs, 'unit_area': raw.sum() * fs / n,
-                'peak': raw.max() if raw.size else 0}
-    if normalization not in divisors:
-        raise ValueError(f'Unknown normalization: {normalization}')
-    divisor = divisors[normalization]
-    entry['power'] = entry['mean'][entry['order']] / (divisor if divisor != 0 else 1)
-    image_divisor = (entry['pixel_sum'] * fs / n if normalization == 'unit_area' else
-                     entry['pixel_peak'] if normalization == 'peak' else divisor)
+    entry['power'] = normalize_spectrum(entry['mean'], fs, normalization)[entry['order']]
+    image_divisor = normalization_divisor(
+        normalization, n, fs, entry['pixel_sum'], entry['pixel_peak'])
     entry['image'] = np.divide(entry['raw_image'], image_divisor,
                                out=np.zeros_like(entry['raw_image']), where=image_divisor != 0)
     entry.update(normalization=normalization, energy=entry['mean'].sum() / fs,
@@ -112,14 +108,7 @@ def load_comparison(filepath, low, high, normalization=PSD_NORMALIZATION):
         if isinstance(raw, np.ndarray) and raw.ndim == 0:
             raw = raw.item()
         parameters = json.loads(raw)
-        sampling_freq = float(parameters['sampling_freq'])
-        skip_value = parameters.get('skip_every', 1)
-        skip = float(1 if skip_value is None else skip_value)
-        if not np.isfinite(skip) or skip <= 0 or skip != int(skip):
-            raise ValueError('skip_every must be a positive integer (or null).')
-        fs = sampling_freq / skip
-        if not np.isfinite(fs) or fs <= 0:
-            raise ValueError('sampling_freq must be finite and positive.')
+        fs, skip = effective_sampling_frequency(parameters)
         spectrum = handle['averaged_spectrogram']
         if spectrum.ndim != 3 or any(size == 0 for size in spectrum.shape):
             raise ValueError('averaged_spectrogram must have shape (frequency, y, x).')
